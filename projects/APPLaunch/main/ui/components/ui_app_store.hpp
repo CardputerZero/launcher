@@ -581,13 +581,15 @@ private:
 
     void event_handler(lv_event_t *e)
     {
-        // lv_event_code_t event_code = lv_event_get_code(e);
+        lv_event_code_t event_code = lv_event_get_code(e);
+        if (event_code == (lv_event_code_t)LV_EVENT_KEYBOARD) {
+            struct key_item *elm = (struct key_item *)lv_event_get_param(e);
+            printf("[store] LV_EVENT_KEYBOARD code=%u state=%u\n", elm->key_code, elm->key_state);
+        }
         if (IS_KEY_RELEASED(e))
         {
             uint32_t key = LV_EVENT_KEYBOARD_GET_KEY(e);
-
-
-            printf("Enter key:%d\n", key);
+            printf("[store] key released: %d\n", key);
 
             // ---- 详情面板模式 ----
             if (in_detail_view_)
