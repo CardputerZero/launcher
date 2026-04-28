@@ -12,6 +12,7 @@
 #include "compat/input_keys.h"
 #include <nlohmann/json.hpp>
 #include "hal/hal_paths.h"
+#include "hal/hal_process.h"
 struct store_app_info
 {
     std::string name;
@@ -21,6 +22,8 @@ struct store_app_info
     std::string class_name;
     std::string description;
     std::string url;
+    std::string exec;
+    bool terminal = false;
 };
 
 class UIStorePage : public app_base
@@ -268,6 +271,8 @@ private:
                     info.class_name  = j.value("class_name",  "");
                     info.description = j.value("description", "");
                     info.url         = j.value("url",         "");
+                    info.exec        = j.value("exec",        "");
+                    info.terminal    = j.value("terminal",    false);
 
                     if (info.name.empty())
                     {
@@ -352,6 +357,43 @@ private:
             {
                 current_list.push_back(it);
             }
+        }
+    }
+
+    // ==================== 启动选中的应用 ====================
+    void launch_selected_app()
+    {
+        uint16_t sel = lv_roller_get_selected(ui_obj_["ui_roller"]);
+        if (sel >= (uint16_t)current_list.size()) return;
+        auto app_it = *std::next(current_list.begin(), sel);
+
+        if (app_it->exec.empty()) return;
+
+        printf("[store] Launching: %s\n", app_it->exec.c_str());
+
+        if (app_it->terminal) {
+            auto p = std::make_shared<UIConsolePage>();
+            console_page_ = p;
+            p->go_back_home = [this]() {
+                console_page_.reset();
+                lv_disp_load_scr(this->ui_root);
+                lv_indev_set_group(lv_indev_get_next(NULL), this->key_group);
+            };
+            lv_disp_load_scr(p->get_ui());
+            lv_indev_set_group(lv_indev_get_next(NULL), p->get_key_group());
+            p->exec(app_it->exec);
+        } else {
+            lv_timer_enable(false);
+            lv_refr_now(lv_disp_get_default());
+            LVGL_RUN_FLAGE = 0;
+
+            int ret = hal_process_exec_blocking(app_it->exec.c_str(), &LVGL_HOME_KEY_FLAGE);
+            printf("[store] App exited with code %d\n", ret);
+
+            LVGL_RUN_FLAGE = 1;
+            lv_timer_enable(true);
+            lv_obj_invalidate(lv_screen_active());
+            lv_refr_now(lv_disp_get_default());
         }
     }
 
@@ -607,7 +649,8 @@ private:
                     show_detail_panel();
                 break;
             case KEY_ENTER:
-                /* code */
+                if (!current_list.empty())
+                    launch_selected_app();
                 break;
             case KEY_F5:
                 start_store_refresh();
