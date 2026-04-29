@@ -272,7 +272,6 @@ private:
         port_hint_lbl_ = make_label(c, "Type IP, ENTER:scan  ESC:back", 0, 98, 0x555555, &lv_font_montserrat_10);
 
         // Enable text input mode
-        DIRECTION_KEY_MODE = 0;
         view_state_ = ViewState::INPUT;
     }
 
@@ -393,7 +392,6 @@ private:
     {
         if (view_state_ == ViewState::INPUT) {
             if (key == KEY_ESC) {
-                DIRECTION_KEY_MODE = 1;
                 view_state_ = ViewState::SUB;
                 close_sub_page();
                 return;
@@ -427,7 +425,6 @@ private:
                 lv_obj_scroll_by(port_result_cont_, 0, -20, LV_ANIM_ON);
             break;
         case KEY_ESC:
-            DIRECTION_KEY_MODE = 1;
             close_sub_page();
             break;
         default:
@@ -537,7 +534,6 @@ private:
 
         ping_hint_lbl_ = make_label(c, "Type host, ENTER:ping  ESC:back", 0, 98, 0x555555, &lv_font_montserrat_10);
 
-        DIRECTION_KEY_MODE = 0;
         view_state_ = ViewState::INPUT;
     }
 
@@ -617,7 +613,6 @@ private:
     {
         if (view_state_ == ViewState::INPUT) {
             if (key == KEY_ESC) {
-                DIRECTION_KEY_MODE = 1;
                 view_state_ = ViewState::SUB;
                 close_sub_page();
                 return;
@@ -650,7 +645,6 @@ private:
                 lv_obj_scroll_by(ping_result_cont_, 0, -20, LV_ANIM_ON);
             break;
         case KEY_ESC:
-            DIRECTION_KEY_MODE = 1;
             close_sub_page();
             break;
         default:
@@ -960,7 +954,6 @@ private:
             break;
 
         case KEY_ESC:
-            DIRECTION_KEY_MODE = 1;
             close_sub_page();
             break;
 

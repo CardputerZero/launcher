@@ -16,7 +16,6 @@
 //    - 底部文字输入区, 键盘输入字符, ENTER 发送
 //    - 发送后自动回复 (canned responses via LVGL timer)
 //    - BACKSPACE 删除末字符, ESC 返回主页
-//    - DIRECTION_KEY_MODE = 0 启用原始按键输入
 // ============================================================
 
 class UIchatPage : public app_base
@@ -30,7 +29,6 @@ class UIchatPage : public app_base
 public:
     UIchatPage() : app_base()
     {
-        DIRECTION_KEY_MODE = 0;
         creat_UI();
         event_handler_init();
         // seed a welcome message
@@ -44,7 +42,6 @@ public:
             lv_timer_delete(reply_timer_);
             reply_timer_ = nullptr;
         }
-        DIRECTION_KEY_MODE = 1;
     }
 
 private:
@@ -301,7 +298,6 @@ private:
     {
         switch (key) {
         case KEY_ESC:
-            DIRECTION_KEY_MODE = 1;
             if (go_back_home) go_back_home();
             return;
 

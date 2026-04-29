@@ -537,15 +537,24 @@ private:
     }
 
 
+    static uint32_t fzxc_to_arrow(uint32_t key)
+    {
+        switch (key) {
+        case KEY_F: return KEY_UP;
+        case KEY_X: return KEY_DOWN;
+        case KEY_Z: return KEY_LEFT;
+        case KEY_C: return KEY_RIGHT;
+        default:    return key;
+        }
+    }
+
     void event_handler(lv_event_t *e)
     {
         // lv_event_code_t event_code = lv_event_get_code(e);
         if (IS_KEY_RELEASED(e))
         {
-            uint32_t key = LV_EVENT_KEYBOARD_GET_KEY(e);
-
-
-            printf("Enter key:%d\n", key);
+            uint32_t key = fzxc_to_arrow(LV_EVENT_KEYBOARD_GET_KEY(e));
+            printf("[store] key released: %d\n", key);
 
             // ---- 详情面板模式 ----
             if (in_detail_view_)

@@ -54,7 +54,6 @@ public:
     ~UIMeshPage()
     {
         if (heartbeat_timer_) lv_timer_delete(heartbeat_timer_);
-        DIRECTION_KEY_MODE = 1;
     }
 
 private:
@@ -334,7 +333,6 @@ private:
     {
         view_state_ = ViewState::INPUT;
         msg_input_buf_.clear();
-        DIRECTION_KEY_MODE = 0;
 
         lv_obj_t *bg = ui_obj_["bg"];
 
@@ -366,7 +364,6 @@ private:
             input_overlay_ = nullptr;
         }
         msg_input_lbl_ = nullptr;
-        DIRECTION_KEY_MODE = 1;
         view_state_ = ViewState::MAIN;
     }
 

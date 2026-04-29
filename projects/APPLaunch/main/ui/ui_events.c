@@ -302,13 +302,25 @@ void app_launch(lv_event_t *e)
     cpp_app_launch();
 }
 
+static uint32_t fzxc_to_arrow(uint32_t key)
+{
+    switch (key) {
+    case KEY_F: return KEY_UP;
+    case KEY_X: return KEY_DOWN;
+    case KEY_Z: return KEY_LEFT;
+    case KEY_C: return KEY_RIGHT;
+    default:    return key;
+    }
+}
+
 void main_key_switch(lv_event_t *e)
 {
 
     struct key_item *elm = (struct key_item *)lv_event_get_param(e);
+    uint32_t code = fzxc_to_arrow(elm->key_code);
     if (elm->key_state)
     {
-        switch (elm->key_code)
+        switch (code)
         {
         case KEY_UP:
             break;
@@ -324,7 +336,7 @@ void main_key_switch(lv_event_t *e)
             break;
         }
     }
-    else if (elm->key_code == KEY_ENTER)
+    else if (code == KEY_ENTER)
     {
         app_launch(NULL);
     }

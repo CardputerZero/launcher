@@ -1,5 +1,6 @@
 #pragma once
 #include "ui_app_page.hpp"
+#include "compat/input_keys.h"
 #include <unordered_map>
 #include <string>
 #include <vector>
@@ -298,10 +299,21 @@ private:
         UIIpPanelPage *self = static_cast<UIIpPanelPage *>(lv_event_get_user_data(e));
         if (self) self->event_handler(e);
     }
+    static uint32_t fzxc_to_lv_arrow(uint32_t key)
+    {
+        switch (key) {
+        case KEY_F: return LV_KEY_UP;
+        case KEY_X: return LV_KEY_DOWN;
+        case KEY_Z: return LV_KEY_LEFT;
+        case KEY_C: return LV_KEY_RIGHT;
+        default:    return key;
+        }
+    }
+
     void event_handler(lv_event_t *e)
     {
         if (lv_event_get_code(e) != LV_EVENT_KEY) return;
-        uint32_t key = lv_event_get_key(e);
+        uint32_t key = fzxc_to_lv_arrow(lv_event_get_key(e));
 
         int count = (int)iface_list_.size();
         switch (key)

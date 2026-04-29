@@ -30,7 +30,6 @@ class UISSHPage : public app_base
 public:
     UISSHPage() : app_base()
     {
-        DIRECTION_KEY_MODE = 0;
         fields_.resize(3);
         fields_[0] = {"Host", "192.168.1.1"};
         fields_[1] = {"Port", "22"};
@@ -42,7 +41,6 @@ public:
     ~UISSHPage()
     {
         console_page_.reset();
-        DIRECTION_KEY_MODE = 1;
     }
 
 private:
@@ -230,7 +228,6 @@ private:
         auto self_go_home = this->go_back_home;
         console_page_->go_back_home = [this, self_go_home]() {
             // Return to the SSH input view
-            DIRECTION_KEY_MODE = 0;
             console_page_.reset();
             // Switch screen back to our root
             lv_disp_load_scr(this->get_ui());
@@ -290,7 +287,6 @@ private:
                 break;
 
             case KEY_ESC:
-                DIRECTION_KEY_MODE = 1;
                 if (go_back_home) go_back_home();
                 break;
 

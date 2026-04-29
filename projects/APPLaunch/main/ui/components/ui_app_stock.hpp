@@ -339,11 +339,22 @@ private:
         UIStockPage *self = static_cast<UIStockPage *>(lv_event_get_user_data(e));
         if (self) self->event_handler(e);
     }
+    static uint32_t fzxc_to_arrow(uint32_t key)
+    {
+        switch (key) {
+        case KEY_F: return KEY_UP;
+        case KEY_X: return KEY_DOWN;
+        case KEY_Z: return KEY_LEFT;
+        case KEY_C: return KEY_RIGHT;
+        default:    return key;
+        }
+    }
+
     void event_handler(lv_event_t *e)
     {
         if (IS_KEY_RELEASED(e))
         {
-            uint32_t key = LV_EVENT_KEYBOARD_GET_KEY(e);
+            uint32_t key = fzxc_to_arrow(LV_EVENT_KEYBOARD_GET_KEY(e));
             switch (view_state_) {
             case ViewState::MAIN: handle_main_key(key); break;
             case ViewState::SUB:  handle_sub_key(key);  break;
