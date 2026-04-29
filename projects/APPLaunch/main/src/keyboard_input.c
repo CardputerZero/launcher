@@ -33,6 +33,24 @@ volatile int LVGL_HOME_KEY_FLAGE = 0;
 volatile int LVGL_RUN_FLAGE = 1;
 volatile uint32_t LV_EVENT_KEYBOARD;
 volatile int DIRECTION_KEY_MODE = 1;
+static volatile int keyboard_paused_flag = 0;
+
+#if !LV_USE_SDL
+static struct libinput *g_libinput = NULL;
+
+void keyboard_pause(void) {
+    keyboard_paused_flag = 1;
+    if (g_libinput) libinput_suspend(g_libinput);
+}
+
+void keyboard_resume(void) {
+    if (g_libinput) libinput_resume(g_libinput);
+    keyboard_paused_flag = 0;
+}
+#else
+void keyboard_pause(void) { keyboard_paused_flag = 1; }
+void keyboard_resume(void) { keyboard_paused_flag = 0; }
+#endif
 #if !LV_USE_SDL
 /* ============================================================
  *  参数
@@ -555,15 +573,21 @@ void *keyboard_read_thread(void *argv) {
         { .fd = kc.repeat_fd, .events = POLLIN },
     };
 
+    g_libinput = kc.li;
     printf("开始监听键盘输入 (%s)\n", device_path);
     libinput_dispatch(kc.li);
 
     while (1) {
-        int pr = poll(pfds, 2, -1);
+        if (keyboard_paused_flag) {
+            usleep(50000);
+            continue;
+        }
+        int pr = poll(pfds, 2, 100);
         if (pr < 0) {
             if (errno == EINTR) continue;
             perror("poll"); break;
         }
+        if (pr == 0) continue;
 
         /* 键盘事件 */
         if (pfds[0].revents & POLLIN) {

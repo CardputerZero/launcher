@@ -7,36 +7,83 @@
 #include <cstdio>
 #include <chrono>
 #include <thread>
+#include <linux/input.h>
+
+extern volatile int LVGL_HOME_KEY_FLAGE;
+
+static const char *get_kbd_device()
+{
+    const char *env = getenv("APPLAUNCH_LINUX_KEYBOARD_DEVICE");
+    return env ? env : "/dev/input/by-path/platform-3f804000.i2c-event";
+}
+
+extern void keyboard_pause(void);
+extern void keyboard_resume(void);
 
 int hal_process_exec_blocking(const char *exec_path, volatile int *home_key_flag)
 {
+    keyboard_pause();
+
     pid_t pid = fork();
-    if (pid < 0) return -1;
+    if (pid < 0) { keyboard_resume(); return -1; }
     if (pid == 0) {
         execlp("/bin/sh", "sh", "-c", exec_path, (char *)NULL);
         _exit(127);
     }
+
+    int evdev_fd = open(get_kbd_device(), O_RDONLY | O_NONBLOCK);
+
+    auto home_pressed_since = std::chrono::steady_clock::time_point{};
+    bool home_is_down = false;
     int status = 0;
+
     while (true) {
         int r = waitpid(pid, &status, WNOHANG);
         if (r > 0) break;
-        if (r < 0) return -1;
-        if (home_key_flag && *home_key_flag) {
-            kill(pid, SIGINT);
-            auto start = std::chrono::steady_clock::now();
-            while (waitpid(pid, &status, WNOHANG) == 0) {
-                auto now = std::chrono::steady_clock::now();
-                if (std::chrono::duration_cast<std::chrono::seconds>(now - start).count() >= 3) {
-                    kill(pid, SIGKILL);
-                    waitpid(pid, &status, 0);
-                    break;
+        if (r < 0) { status = -1; break; }
+
+        if (evdev_fd >= 0) {
+            struct input_event ev;
+            while (read(evdev_fd, &ev, sizeof(ev)) == sizeof(ev)) {
+                if (ev.type == EV_KEY && ev.code == KEY_ESC) {
+                    if (ev.value == 1) {
+                        home_is_down = true;
+                        home_pressed_since = std::chrono::steady_clock::now();
+                    } else if (ev.value == 0) {
+                        home_is_down = false;
+                    }
                 }
-                std::this_thread::sleep_for(std::chrono::milliseconds(50));
             }
-            break;
         }
+
+        if (home_is_down) {
+            auto held = std::chrono::steady_clock::now() - home_pressed_since;
+            auto secs = std::chrono::duration_cast<std::chrono::seconds>(held).count();
+            if (secs >= 5) {
+                printf("[hal] HOME held %lds, sending SIGINT to %d\n", (long)secs, pid);
+                kill(pid, SIGINT);
+                auto kill_start = std::chrono::steady_clock::now();
+                while (waitpid(pid, &status, WNOHANG) == 0) {
+                    auto elapsed = std::chrono::steady_clock::now() - kill_start;
+                    if (std::chrono::duration_cast<std::chrono::seconds>(elapsed).count() >= 3) {
+                        printf("[hal] SIGKILL %d\n", pid);
+                        kill(pid, SIGKILL);
+                        waitpid(pid, &status, 0);
+                        break;
+                    }
+                    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                }
+                break;
+            }
+        }
+
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
+
+    if (evdev_fd >= 0) close(evdev_fd);
+
+    keyboard_resume();
+
     if (WIFEXITED(status)) return WEXITSTATUS(status);
     return -1;
 }
