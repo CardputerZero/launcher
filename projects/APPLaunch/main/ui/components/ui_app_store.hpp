@@ -226,6 +226,7 @@ private:
         lv_obj_set_style_bg_color(ui_obj_["ui_roller"], lv_color_hex(0xFFFFFF), LV_PART_SELECTED | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_opa(ui_obj_["ui_roller"], 0, LV_PART_SELECTED | LV_STATE_DEFAULT);
         lv_obj_set_style_text_font(ui_obj_["ui_roller"], &lv_font_montserrat_20, LV_PART_SELECTED | LV_STATE_DEFAULT);
+        lv_obj_add_event_cb(ui_obj_["ui_roller"], UIStorePage::static_roller_key_cb, LV_EVENT_KEY, this);
     }
 
     // ==================== app列表初始化 ====================
@@ -331,6 +332,15 @@ private:
                 current_list.push_back(it);
             }
         }
+    }
+
+    static void static_roller_key_cb(lv_event_t *e)
+    {
+        UIStorePage *self = static_cast<UIStorePage *>(lv_event_get_user_data(e));
+        if (!self) return;
+        uint32_t key = lv_event_get_key(e);
+        if (key == LV_KEY_ENTER && !self->current_list.empty())
+            self->launch_selected_app();
     }
 
     void event_handler_init()
