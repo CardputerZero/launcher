@@ -32,7 +32,6 @@ pthread_mutex_t keyboard_mutex = PTHREAD_MUTEX_INITIALIZER;
 volatile int LVGL_HOME_KEY_FLAGE = 0;
 volatile int LVGL_RUN_FLAGE = 1;
 volatile uint32_t LV_EVENT_KEYBOARD;
-volatile int DIRECTION_KEY_MODE = 1;
 static volatile int keyboard_paused_flag = 0;
 
 #if !LV_USE_SDL

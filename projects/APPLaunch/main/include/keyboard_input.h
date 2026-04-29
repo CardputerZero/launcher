@@ -38,7 +38,7 @@ extern pthread_mutex_t keyboard_mutex;
 extern volatile int LVGL_HOME_KEY_FLAGE;
 extern volatile int LVGL_RUN_FLAGE;
 extern volatile uint32_t LV_EVENT_KEYBOARD;
-extern volatile int DIRECTION_KEY_MODE;
+
 void *keyboard_read_thread(void *argv);
 #ifdef __cplusplus
 }

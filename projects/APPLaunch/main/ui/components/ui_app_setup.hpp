@@ -62,6 +62,7 @@ private:
     std::string wifi_pw_buf_;
     lv_obj_t *pw_input_lbl_ = nullptr;
     lv_obj_t *pw_hint_lbl_  = nullptr;
+    struct key_item *cur_elm_ = nullptr;
 
     // ---- Brightness sub-page state ----
     lv_obj_t *bright_bar_  = nullptr;
@@ -86,6 +87,17 @@ private:
     lv_obj_t *pwr_curr_lbl_ = nullptr;
     lv_obj_t *pwr_temp_lbl_ = nullptr;
     lv_obj_t *pwr_cap_lbl_  = nullptr;
+
+    static uint32_t fzxc_to_arrow(uint32_t key)
+    {
+        switch (key) {
+        case KEY_F: return KEY_UP;
+        case KEY_X: return KEY_DOWN;
+        case KEY_Z: return KEY_LEFT;
+        case KEY_C: return KEY_RIGHT;
+        default:    return key;
+        }
+    }
 
     // ==================== helper: styled label ====================
     static lv_obj_t *make_label(lv_obj_t *parent, const char *text,
@@ -320,7 +332,6 @@ private:
     void show_wifi_pw_input()
     {
         view_state_ = ViewState::WIFI_PW;
-        DIRECTION_KEY_MODE = 0;
         lv_obj_t *content = ui_obj_.count("sub_content") ? ui_obj_["sub_content"] : nullptr;
         if (!content) return;
         lv_obj_clean(content);
@@ -347,7 +358,6 @@ private:
     void handle_wifi_pw_key(uint32_t key)
     {
         if (key == KEY_ESC) {
-            DIRECTION_KEY_MODE = 1;
             view_state_ = ViewState::SUB;
             lv_obj_t *content = ui_obj_.count("sub_content") ? ui_obj_["sub_content"] : nullptr;
             if (content) {
@@ -360,7 +370,6 @@ private:
             if (pw_hint_lbl_)
                 lv_label_set_text(pw_hint_lbl_, "Connecting...");
             int ret = hal_wifi_connect(wifi_pw_ssid_.c_str(), wifi_pw_buf_.c_str());
-            DIRECTION_KEY_MODE = 1;
             view_state_ = ViewState::SUB;
             lv_obj_t *content = ui_obj_.count("sub_content") ? ui_obj_["sub_content"] : nullptr;
             if (content) {
@@ -377,28 +386,10 @@ private:
             wifi_pw_update_display();
             return;
         }
-        // printable characters: translate key_code to char
-        // key codes map to Linux input.h KEY_* values
-        char ch = keycode_to_char(key);
-        if (ch) {
-            wifi_pw_buf_ += ch;
+        if (cur_elm_ && cur_elm_->utf8[0]) {
+            wifi_pw_buf_ += cur_elm_->utf8;
             wifi_pw_update_display();
         }
-    }
-
-    static char keycode_to_char(uint32_t key)
-    {
-        // basic mapping for printable keys
-        if (key >= KEY_1 && key <= KEY_9) return '1' + (key - KEY_1);
-        if (key == KEY_0) return '0';
-        static const char qwerty[] = "qwertyuiop";
-        if (key >= KEY_Q && key <= KEY_P) return qwerty[key - KEY_Q];
-        static const char asdf[] = "asdfghjkl";
-        if (key >= KEY_A && key <= KEY_L) return asdf[key - KEY_A];
-        static const char zxcv[] = "zxcvbnm";
-        if (key >= KEY_Z && key <= KEY_M) return zxcv[key - KEY_Z];
-        if (key == KEY_SPACE) return ' ';
-        return 0;
     }
 
     void wifi_refresh_status()
@@ -894,11 +885,13 @@ private:
     {
         if(IS_KEY_RELEASED(e))
         {
-            uint32_t key = LV_EVENT_KEYBOARD_GET_KEY(e);
+            struct key_item *elm = (struct key_item *)lv_event_get_param(e);
+            cur_elm_ = elm;
+            uint32_t key = elm->key_code;
             switch (view_state_)
             {
-            case ViewState::MAIN:    handle_main_key(key); break;
-            case ViewState::SUB:     handle_sub_key(key);  break;
+            case ViewState::MAIN:    handle_main_key(fzxc_to_arrow(key)); break;
+            case ViewState::SUB:     handle_sub_key(fzxc_to_arrow(key));  break;
             case ViewState::WIFI_PW: handle_sub_key(key);  break;
             }
         }

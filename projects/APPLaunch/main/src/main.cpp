@@ -116,16 +116,6 @@ static void keypad_read_cb(lv_indev_t *indev, lv_indev_data_t *data)
             elm = STAILQ_FIRST(&keyboard_queue);
             STAILQ_REMOVE_HEAD(&keyboard_queue, entries);
 
-            if (DIRECTION_KEY_MODE) {
-                switch (elm->key_code) {
-                case KEY_F: elm->key_code = KEY_UP;    break;
-                case KEY_X: elm->key_code = KEY_DOWN;  break;
-                case KEY_Z: elm->key_code = KEY_LEFT;  break;
-                case KEY_C: elm->key_code = KEY_RIGHT; break;
-                default: break;
-                }
-            }
-
             printf("Read key event from queue: code=%u state=%u\n", elm->key_code, elm->key_state);
             lv_obj_t *root = lv_screen_active();
             if (root) {
