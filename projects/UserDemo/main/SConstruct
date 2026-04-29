@@ -6,7 +6,23 @@ with open(env["PROJECT_TOOL_S"]) as f:
 
 
 SRCS = Glob("src/*.c*")
+SRCS += [
+    AFile("../third_party/RadioLib/src/Hal.cpp"),
+    AFile("../third_party/RadioLib/src/Module.cpp"),
+    AFile("../third_party/RadioLib/src/utils/CRC.cpp"),
+    AFile("../third_party/RadioLib/src/utils/FEC.cpp"),
+    AFile("../third_party/RadioLib/src/utils/Utils.cpp"),
+    AFile("../third_party/RadioLib/src/protocols/PhysicalLayer/PhysicalLayer.cpp"),
+    AFile("../third_party/RadioLib/src/modules/SX126x/SX126x.cpp"),
+    AFile("../third_party/RadioLib/src/modules/SX126x/SX126x_commands.cpp"),
+    AFile("../third_party/RadioLib/src/modules/SX126x/SX126x_config.cpp"),
+    AFile("../third_party/RadioLib/src/modules/SX126x/SX126x_LR_FHSS.cpp"),
+    AFile("../third_party/RadioLib/src/modules/SX126x/SX1262.cpp"),
+]
 INCLUDE = [ADir("."), ADir("include")]
+INCLUDE += [
+    ADir("../third_party/RadioLib/src"),
+]
 PRIVATE_INCLUDE = []
 REQUIREMENTS = ["lvgl_component", "pthread"]
 STATIC_LIB = []

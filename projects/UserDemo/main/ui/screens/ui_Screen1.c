@@ -34,7 +34,7 @@ void ui_Screen1_screen_init(void)
     lv_obj_set_width(ui_TimeLabel, LV_SIZE_CONTENT);   /// 1
     lv_obj_set_height(ui_TimeLabel, LV_SIZE_CONTENT);    /// 1
     lv_obj_set_align(ui_TimeLabel, LV_ALIGN_CENTER);
-    lv_label_set_text(ui_TimeLabel, "15:21");
+    lv_label_set_text(ui_TimeLabel, "15:30");
     lv_obj_set_style_text_color(ui_TimeLabel, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(ui_TimeLabel, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_font(ui_TimeLabel, &lv_font_montserrat_12, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -52,7 +52,7 @@ void ui_Screen1_screen_init(void)
     lv_obj_set_width(ui_Label4, LV_SIZE_CONTENT);   /// 1
     lv_obj_set_height(ui_Label4, LV_SIZE_CONTENT);    /// 1
     lv_obj_set_align(ui_Label4, LV_ALIGN_CENTER);
-    lv_label_set_text(ui_Label4, "96%");
+    lv_label_set_text(ui_Label4, "12%");
     lv_obj_set_style_text_color(ui_Label4, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(ui_Label4, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_font(ui_Label4, &lv_font_montserrat_12, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -63,26 +63,83 @@ void ui_Screen1_screen_init(void)
     lv_obj_set_x(ui_appname, -10);
     lv_obj_set_y(ui_appname, -74);
     lv_obj_set_align(ui_appname, LV_ALIGN_CENTER);
-    lv_label_set_text(ui_appname, "APPNmae");
+    lv_label_set_text(ui_appname, "APPName");
     lv_obj_set_style_text_color(ui_appname, lv_color_hex(0x8D44FF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(ui_appname, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
     ui_apppage = lv_obj_create(ui_Screen1);
     lv_obj_remove_style_all(ui_apppage);
     lv_obj_set_width(ui_apppage, 320);
-    lv_obj_set_height(ui_apppage, 143);
+    lv_obj_set_height(ui_apppage, 150);
     lv_obj_set_x(ui_apppage, 0);
-    lv_obj_set_y(ui_apppage, 13);
+    lv_obj_set_y(ui_apppage, 17);
     lv_obj_set_align(ui_apppage, LV_ALIGN_CENTER);
     lv_obj_clear_flag(ui_apppage, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);      /// Flags
 
     ui_Label2 = lv_label_create(ui_apppage);
-    lv_obj_set_width(ui_Label2, LV_SIZE_CONTENT);   /// 1
-    lv_obj_set_height(ui_Label2, LV_SIZE_CONTENT);    /// 1
-    lv_obj_set_align(ui_Label2, LV_ALIGN_CENTER);
-    lv_label_set_text(ui_Label2, "heloworld");
-    lv_obj_set_style_text_color(ui_Label2, lv_color_hex(0xFF2626), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_width(ui_Label2, 300);
+    lv_obj_set_height(ui_Label2, LV_SIZE_CONTENT);
+    lv_obj_set_x(ui_Label2, 10);
+    lv_obj_set_y(ui_Label2, 8);
+    lv_label_set_long_mode(ui_Label2, LV_LABEL_LONG_WRAP);
+    lv_label_set_text(ui_Label2, "");
+    lv_obj_set_style_text_color(ui_Label2, lv_color_hex(0x8D44FF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(ui_Label2, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_font(ui_Label2, &lv_font_montserrat_12, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+    ui_loraPins = lv_label_create(ui_apppage);
+    lv_obj_set_width(ui_loraPins, 300);
+    lv_obj_set_height(ui_loraPins, LV_SIZE_CONTENT);
+    lv_obj_set_x(ui_loraPins, 10);
+    lv_obj_set_y(ui_loraPins, 34);
+    lv_label_set_long_mode(ui_loraPins, LV_LABEL_LONG_WRAP);
+    lv_label_set_text(ui_loraPins, "SCK=11 MOSI=10 MISO=9 NSS=7");
+    lv_obj_set_style_text_color(ui_loraPins, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_opa(ui_loraPins, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_font(ui_loraPins, &lv_font_montserrat_12, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+    ui_loraDevice = lv_label_create(ui_apppage);
+    lv_obj_set_width(ui_loraDevice, 300);
+    lv_obj_set_height(ui_loraDevice, LV_SIZE_CONTENT);
+    lv_obj_set_x(ui_loraDevice, 10);
+    lv_obj_set_y(ui_loraDevice, 54);
+    lv_label_set_long_mode(ui_loraDevice, LV_LABEL_LONG_WRAP);
+    lv_label_set_text(ui_loraDevice, "433/470M LoRa SPI=/dev/spidev0.1 @ 1MHz");
+    lv_obj_set_style_text_color(ui_loraDevice, lv_color_hex(0xCFCFCF), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_opa(ui_loraDevice, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_font(ui_loraDevice, &lv_font_montserrat_12, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+    ui_loraMode = lv_label_create(ui_apppage);
+    lv_obj_set_width(ui_loraMode, 300);
+    lv_obj_set_height(ui_loraMode, LV_SIZE_CONTENT);
+    lv_obj_set_x(ui_loraMode, 10);
+    lv_obj_set_y(ui_loraMode, 78);
+    lv_label_set_text(ui_loraMode, "Mode: RX");
+    lv_obj_set_style_text_color(ui_loraMode, lv_color_hex(0x00D26A), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_opa(ui_loraMode, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_font(ui_loraMode, &lv_font_montserrat_12, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+    ui_loraStatus = lv_label_create(ui_apppage);
+    lv_obj_set_width(ui_loraStatus, 300);
+    lv_obj_set_height(ui_loraStatus, LV_SIZE_CONTENT);
+    lv_obj_set_x(ui_loraStatus, 10);
+    lv_obj_set_y(ui_loraStatus, 100);
+    lv_label_set_long_mode(ui_loraStatus, LV_LABEL_LONG_WRAP);
+    lv_label_set_text(ui_loraStatus, "RX Data: waiting init");
+    lv_obj_set_style_text_color(ui_loraStatus, lv_color_hex(0xFFD24A), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_opa(ui_loraStatus, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_font(ui_loraStatus, &lv_font_montserrat_12, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+    ui_loraHint = lv_label_create(ui_apppage);
+    lv_obj_set_width(ui_loraHint, 300);
+    lv_obj_set_height(ui_loraHint, LV_SIZE_CONTENT);
+    lv_obj_set_x(ui_loraHint, 10);
+    lv_obj_set_y(ui_loraHint, 126);
+    lv_label_set_long_mode(ui_loraHint, LV_LABEL_LONG_WRAP);
+    lv_label_set_text(ui_loraHint, "Keys: <-/^ RX   ->/v TX   OK=RX refresh / TX send");
+    lv_obj_set_style_text_color(ui_loraHint, lv_color_hex(0x8AA8FF), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_opa(ui_loraHint, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_font(ui_loraHint, &lv_font_montserrat_12, LV_PART_MAIN | LV_STATE_DEFAULT);
 
 
 }

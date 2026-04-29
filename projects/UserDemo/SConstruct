@@ -4,7 +4,7 @@ import shutil
 import socket
 
 
-if False:
+if True:
     if not os.path.exists('build/config/config_tmp.mk'):
         os.makedirs('build/config', exist_ok=True)
         with open('build/config/config_tmp.mk', 'w') as f:
@@ -18,7 +18,7 @@ if False:
 
 
 
-if True:
+if False:
     if not os.path.exists('build/config/config_tmp.mk'):
         os.makedirs('build/config', exist_ok=True)
         with open('build/config/config_tmp.mk', 'w') as f:

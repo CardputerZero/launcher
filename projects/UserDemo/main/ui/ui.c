@@ -20,6 +20,11 @@ lv_obj_t * ui_Label4;
 lv_obj_t * ui_appname;
 lv_obj_t * ui_apppage;
 lv_obj_t * ui_Label2;
+lv_obj_t * ui_loraPins;
+lv_obj_t * ui_loraDevice;
+lv_obj_t * ui_loraMode;
+lv_obj_t * ui_loraStatus;
+lv_obj_t * ui_loraHint;
 // CUSTOM VARIABLES
 
 // EVENTS

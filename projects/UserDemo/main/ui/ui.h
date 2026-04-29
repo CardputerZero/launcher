@@ -31,6 +31,11 @@ extern lv_obj_t * ui_Label4;
 extern lv_obj_t * ui_appname;
 extern lv_obj_t * ui_apppage;
 extern lv_obj_t * ui_Label2;
+extern lv_obj_t * ui_loraPins;
+extern lv_obj_t * ui_loraDevice;
+extern lv_obj_t * ui_loraMode;
+extern lv_obj_t * ui_loraStatus;
+extern lv_obj_t * ui_loraHint;
 // CUSTOM VARIABLES
 
 // EVENTS
