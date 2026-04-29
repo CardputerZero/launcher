@@ -284,6 +284,8 @@ void APPLaunch_lock()
 
 int main(void)
 {
+    setbuf(stdout, NULL);
+    setbuf(stderr, NULL);
 
     lock_file = hal_path_lock_file();
 
