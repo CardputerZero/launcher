@@ -7,6 +7,7 @@
 #include "hal/hal_paths.h"
 #include "hal/hal_filesystem.h"
 #include "hal/hal_process.h"
+#include "hal/hal_settings.h"
 #include <unordered_map>
 #include <list>
 #include <memory>
@@ -105,6 +106,7 @@ private:
     int current_app = 2;
     hal_watcher_t dir_watcher = NULL;
     lv_timer_t *watch_timer = nullptr; // LVGL 3s 定时器
+    lv_timer_t *status_timer = nullptr; // 状态栏刷新定时器
 
 public:
     std::list<app> app_list;
@@ -201,6 +203,10 @@ public:
 
         // 创建 LVGL 3s 定时器，周期性检查目录变化
         watch_timer = lv_timer_create(app_dir_watch_cb, 3000, this);
+
+        // 状态栏定时刷新（时间 + 电量），每5秒更新一次
+        update_home_status_bar();
+        status_timer = lv_timer_create(home_status_timer_cb, 5000, this);
     }
 
     void launch_app()
@@ -480,6 +486,40 @@ public:
     }
 
     // ============================================================
+    // 主页状态栏刷新：时间 + 电量（BQ27220）
+    // ============================================================
+    static void home_status_timer_cb(lv_timer_t *timer)
+    {
+        auto *self = static_cast<app_launch_S *>(lv_timer_get_user_data(timer));
+        if (self) self->update_home_status_bar();
+    }
+
+    void update_home_status_bar()
+    {
+        char time_buf[16];
+        hal_time_str(time_buf, sizeof(time_buf));
+        lv_label_set_text(ui_timeLabel, time_buf);
+
+        hal_battery_info_t bat = hal_battery_read();
+        if (bat.valid) {
+            int soc = bat.soc;
+            if (soc > 100) soc = 100;
+            if (soc < 0) soc = 0;
+            lv_bar_set_value(ui_Bar1, soc, LV_ANIM_ON);
+
+            char pwr_buf[16];
+            snprintf(pwr_buf, sizeof(pwr_buf), "%d%%", soc);
+            lv_label_set_text(ui_powerLabel, pwr_buf);
+
+            uint32_t color = 0x66CC33;
+            if (soc <= 20) color = 0xE74C3C;
+            else if (soc <= 50) color = 0xF39C12;
+            lv_obj_set_style_bg_color(ui_Bar1, lv_color_hex(color),
+                                      LV_PART_INDICATOR | LV_STATE_DEFAULT);
+        }
+    }
+
+    // ============================================================
     // LVGL 定时器回调：检测 inotify 事件，有变化则刷新列表
     // ============================================================
     static void app_dir_watch_cb(lv_timer_t *timer)
@@ -555,6 +595,11 @@ app::app(std::string name,
 // ============================================================
 app_launch_S::~app_launch_S()
 {
+    if (status_timer)
+    {
+        lv_timer_delete(status_timer);
+        status_timer = nullptr;
+    }
     if (watch_timer)
     {
         lv_timer_delete(watch_timer);
