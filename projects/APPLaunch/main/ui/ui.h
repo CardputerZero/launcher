@@ -18,6 +18,7 @@ extern "C" {
 #include "ui_events.h"
 #include "ui_input_group.h"
 #include "keyboard_input.h"
+#include "hal/hal_settings.h"
 
 #define lv_mem_alloc lv_malloc
 #define lv_mem_free   lv_free
@@ -61,6 +62,14 @@ void ui_info_bind();
 #define LV_EVENT_KEYBOARD_GET_KEY_STATE(e) ((struct key_item *)lv_event_get_param(e))->key_state
 #define IS_KEY_PRESSED(e) ((lv_event_get_code(e) == LV_EVENT_KEYBOARD)&&(LV_EVENT_KEYBOARD_GET_KEY_STATE(e) > 0))
 #define IS_KEY_RELEASED(e) ((lv_event_get_code(e) == LV_EVENT_KEYBOARD)&&(LV_EVENT_KEYBOARD_GET_KEY_STATE(e) == 0))
+
+extern volatile uint32_t LV_EVENT_BATTERY;
+
+typedef struct {
+    hal_battery_info_t info;
+} lv_battery_event_data_t;
+
+#define LV_EVENT_BATTERY_GET_INFO(e) (&((lv_battery_event_data_t *)lv_event_get_param(e))->info)
 
 
 #undef UI_DEFINE_OBJECT

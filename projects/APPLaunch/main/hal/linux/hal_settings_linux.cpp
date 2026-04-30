@@ -8,6 +8,7 @@
 #include <sys/ioctl.h>
 #include <linux/i2c.h>
 #include <linux/i2c-dev.h>
+#include <dirent.h>
 
 static int bq27220_read_word(int fd, unsigned char reg)
 {
@@ -30,10 +31,128 @@ static int bq27220_read_word(int fd, unsigned char reg)
     return buf[0] | (buf[1] << 8);
 }
 
+static int bqmon_read_long(const char *path, long *value)
+{
+    if (!path || !value) return 0;
+    FILE *fp = fopen(path, "r");
+    if (!fp) return 0;
+    long v = 0;
+    int ret = fscanf(fp, "%ld", &v);
+    fclose(fp);
+    if (ret != 1) return 0;
+    *value = v;
+    return 1;
+}
+
+static int bqmon_read_string(const char *path, char *buf, size_t len)
+{
+    if (!path || !buf || len == 0) return 0;
+    FILE *fp = fopen(path, "r");
+    if (!fp) return 0;
+    if (!fgets(buf, len, fp)) {
+        fclose(fp);
+        return 0;
+    }
+    fclose(fp);
+    size_t n = strlen(buf);
+    while (n > 0 && (buf[n - 1] == '\n' || buf[n - 1] == '\r'))
+        buf[--n] = 0;
+    return 1;
+}
+
+static double bqmon_current_ma(long current_now)
+{
+    return -(current_now / 1000.0);
+}
+
+static double bqmon_temp_c(long temp)
+{
+    double c = temp / 10.0;
+    if (c > 100.0 || c < -40.0)
+        c = temp / 100.0;
+    return c;
+}
+
+static int bqmon_has_file(const char *dir, const char *name)
+{
+    char path[320];
+    snprintf(path, sizeof(path), "%s/%s", dir, name);
+    return access(path, R_OK) == 0;
+}
+
+static int bqmon_find_power_supply(char *out, size_t out_len)
+{
+    const char *base = "/sys/class/power_supply";
+    DIR *dp = opendir(base);
+    if (!dp) return 0;
+
+    char fallback[320] = {0};
+    struct dirent *ent = NULL;
+    while ((ent = readdir(dp)) != NULL) {
+        if (ent->d_name[0] == '.') continue;
+
+        char dir[320];
+        snprintf(dir, sizeof(dir), "%s/%s", base, ent->d_name);
+        if (!bqmon_has_file(dir, "capacity") ||
+            !bqmon_has_file(dir, "voltage_now") ||
+            !bqmon_has_file(dir, "current_now") ||
+            !bqmon_has_file(dir, "temp") ||
+            !bqmon_has_file(dir, "status"))
+            continue;
+
+        if (strstr(ent->d_name, "bq27220") || strstr(ent->d_name, "bq27")) {
+            snprintf(out, out_len, "%s", dir);
+            closedir(dp);
+            return 1;
+        }
+        if (fallback[0] == 0)
+            snprintf(fallback, sizeof(fallback), "%s", dir);
+    }
+
+    closedir(dp);
+    if (fallback[0]) {
+        snprintf(out, out_len, "%s", fallback);
+        return 1;
+    }
+    return 0;
+}
+
 hal_battery_info_t hal_battery_read(void)
 {
     hal_battery_info_t info;
     memset(&info, 0, sizeof(info));
+
+    char bq_path[256] = {0};
+    long capacity = 0, voltage_uv = 0, current_raw = 0, temp_raw = 0;
+    char status[64] = "Unknown";
+
+    if (bqmon_find_power_supply(bq_path, sizeof(bq_path))) {
+        char path[320];
+        snprintf(path, sizeof(path), "%s/capacity", bq_path);
+        int ok = bqmon_read_long(path, &capacity);
+        snprintf(path, sizeof(path), "%s/voltage_now", bq_path);
+        ok = ok && bqmon_read_long(path, &voltage_uv);
+        snprintf(path, sizeof(path), "%s/current_now", bq_path);
+        ok = ok && bqmon_read_long(path, &current_raw);
+        snprintf(path, sizeof(path), "%s/temp", bq_path);
+        ok = ok && bqmon_read_long(path, &temp_raw);
+        snprintf(path, sizeof(path), "%s/status", bq_path);
+        bqmon_read_string(path, status, sizeof(status));
+
+        if (ok) {
+            double current_ma = bqmon_current_ma(current_raw);
+            double temp_c = bqmon_temp_c(temp_raw);
+
+            info.soc = (int)capacity;
+            info.voltage_mv = (int)(voltage_uv / 1000);
+            info.current_ma = (int)(current_ma >= 0 ? current_ma + 0.5 : current_ma - 0.5);
+            info.avg_current_ma = info.current_ma;
+            info.temperature_c10 = (int)(temp_c >= 0 ? temp_c * 10.0 + 0.5 : temp_c * 10.0 - 0.5);
+            info.flags = (strcmp(status, "Charging") == 0) ? 1 : 0;
+            info.valid = 1;
+            return info;
+        }
+    }
 
     int fd = open("/dev/i2c-1", O_RDWR);
     if (fd < 0) return info;

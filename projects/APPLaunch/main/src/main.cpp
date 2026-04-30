@@ -12,6 +12,7 @@
 #include "keyboard_input.h"
 #include "compat/input_keys.h"
 #include "hal/hal_process.h"
+#include "hal/hal_settings.h"
 // #include "ui/inter_process_comms.h"
 
 // #define BACKWARD_HAS_DW 1
@@ -20,6 +21,19 @@
 
 #include "hal/hal_paths.h"
 static const char* lock_file = NULL;
+volatile uint32_t LV_EVENT_BATTERY;
+
+static void battery_timer_cb(lv_timer_t *timer)
+{
+    (void)timer;
+    lv_obj_t *root = lv_screen_active();
+    if (!root) return;
+
+    lv_battery_event_data_t data;
+    memset(&data, 0, sizeof(data));
+    data.info = hal_battery_read();
+    lv_obj_send_event(root, (lv_event_code_t)LV_EVENT_BATTERY, &data);
+}
 
 
 static const char *getenv_default(const char *name, const char *dflt)
@@ -295,6 +309,8 @@ int main(void)
     lv_linux_indev_init();
 
     LV_EVENT_KEYBOARD = lv_event_register_id();
+    LV_EVENT_BATTERY = lv_event_register_id();
+    lv_timer_create(battery_timer_cb, 3000, NULL);
     /*Create a Demo*/
     // lv_demo_widgets();
     // lv_demo_widgets_start_slideshow();
