@@ -52,6 +52,14 @@ public:
         lv_obj_del(ui_root);
     }
 
+    static void home_battery_event_cb(lv_event_t *e)
+    {
+        home_base *self = static_cast<home_base *>(lv_event_get_user_data(e));
+        if (!self || lv_event_get_code(e) != LV_EVENT_BATTERY) return;
+        const hal_battery_info_t *bat = LV_EVENT_BATTERY_GET_INFO(e);
+        if (bat) self->update_battery_status(*bat);
+    }
+
     static void home_status_timer_cb(lv_timer_t *timer)
     {
         home_base *self = static_cast<home_base *>(lv_timer_get_user_data(timer));
@@ -64,7 +72,10 @@ public:
         hal_time_str(time_buf, sizeof(time_buf));
         lv_label_set_text(ui_TOP_time_Label, time_buf);
 
-        hal_battery_info_t bat = hal_battery_read();
+    }
+
+    void update_battery_status(const hal_battery_info_t &bat)
+    {
         if (bat.valid) {
             int soc = bat.soc;
             if (soc > 100) soc = 100;
@@ -162,6 +173,7 @@ private:
 
     void UI_bind_event()
     {
+        lv_obj_add_event_cb(ui_root, home_battery_event_cb, (lv_event_code_t)LV_EVENT_BATTERY, this);
     }
 };
 
@@ -204,6 +216,14 @@ public:
         lv_obj_del(ui_root);
     }
 
+    static void app_battery_event_cb(lv_event_t *e)
+    {
+        app_base *self = static_cast<app_base *>(lv_event_get_user_data(e));
+        if (!self || lv_event_get_code(e) != LV_EVENT_BATTERY) return;
+        const hal_battery_info_t *bat = LV_EVENT_BATTERY_GET_INFO(e);
+        if (bat) self->update_battery_status(*bat);
+    }
+
     static void app_status_timer_cb(lv_timer_t *timer)
     {
         app_base *self = static_cast<app_base *>(lv_timer_get_user_data(timer));
@@ -215,16 +235,6 @@ public:
         char time_buf[16];
         hal_time_str(time_buf, sizeof(time_buf));
         lv_label_set_text(ui_TOP_time_Label, time_buf);
-
-        hal_battery_info_t bat = hal_battery_read();
-        if (bat.valid) {
-            int soc = bat.soc;
-            if (soc > 100) soc = 100;
-            if (soc < 0) soc = 0;
-            char pwr_buf[16];
-            snprintf(pwr_buf, sizeof(pwr_buf), "%d%%", soc);
-            lv_label_set_text(ui_TOP_power_Label, pwr_buf);
-        }
 
         hal_wifi_status_t ws = hal_wifi_get_status();
         int sig = ws.connected ? ws.signal : 0;
@@ -238,6 +248,18 @@ public:
             lv_color_hex(sig >= 60 ? on_color : off_color), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_color(ui_TOP_SignalStrength_four,
             lv_color_hex(sig >= 80 ? on_color : off_color), LV_PART_MAIN | LV_STATE_DEFAULT);
+    }
+
+    void update_battery_status(const hal_battery_info_t &bat)
+    {
+        if (bat.valid) {
+            int soc = bat.soc;
+            if (soc > 100) soc = 100;
+            if (soc < 0) soc = 0;
+            char pwr_buf[16];
+            snprintf(pwr_buf, sizeof(pwr_buf), "%d%%", soc);
+            lv_label_set_text(ui_TOP_power_Label, pwr_buf);
+        }
     }
 
 private:
@@ -391,5 +413,6 @@ private:
 
     void UI_bind_event()
     {
+        lv_obj_add_event_cb(ui_root, app_battery_event_cb, (lv_event_code_t)LV_EVENT_BATTERY, this);
     }
 };

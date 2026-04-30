@@ -4,6 +4,15 @@
 #include <string>
 #include <vector>
 #include <functional>
+#include <cstdio>
+#include <cstring>
+#include <cstdlib>
+#include <fcntl.h>
+#include <unistd.h>
+#include <dirent.h>
+#include <sys/ioctl.h>
+#include <linux/i2c.h>
+#include <linux/i2c-dev.h>
 #include "hal/hal_settings.h"
 
 // ============================================================
@@ -87,6 +96,21 @@ private:
     lv_obj_t *pwr_curr_lbl_ = nullptr;
     lv_obj_t *pwr_temp_lbl_ = nullptr;
     lv_obj_t *pwr_cap_lbl_  = nullptr;
+    lv_obj_t *pwr_hint_lbl_ = nullptr;
+    lv_obj_t *pwr_calib_row_ = nullptr;
+    lv_timer_t *pwr_timer_ = nullptr;
+    bool power_in_calib_ = false;
+
+    // ---- Battery monitor sub-page labels ----
+    lv_obj_t *bqmon_line_lbl_   = nullptr;
+    lv_obj_t *bqmon_path_lbl_   = nullptr;
+    lv_obj_t *bqmon_status_lbl_ = nullptr;
+
+    // ---- BQ27220 calibration sub-page state ----
+    lv_obj_t *bqcal_info_lbl_   = nullptr;
+    lv_obj_t *bqcal_status_lbl_ = nullptr;
+    lv_obj_t *bqcal_rows_[5]    = {nullptr};
+    int bqcal_sel_ = 0;
 
     static uint32_t fzxc_to_arrow(uint32_t key)
     {
@@ -110,6 +134,34 @@ private:
         lv_obj_set_style_text_color(lbl, lv_color_hex(color), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_text_font(lbl, font, LV_PART_MAIN | LV_STATE_DEFAULT);
         return lbl;
+    }
+
+    static lv_obj_t *make_card(lv_obj_t *parent, int x, int y, int w, int h,
+                               uint32_t bg = 0x161B22, uint32_t border = 0x30363D)
+    {
+        lv_obj_t *card = lv_obj_create(parent);
+        lv_obj_set_size(card, w, h);
+        lv_obj_set_pos(card, x, y);
+        lv_obj_set_style_radius(card, 6, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_color(card, lv_color_hex(bg), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_opa(card, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_border_width(card, 1, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_border_color(card, lv_color_hex(border), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_pad_all(card, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
+        return card;
+    }
+
+    static lv_obj_t *make_metric_card(lv_obj_t *parent, int x, int y, const char *title,
+                                      const char *icon, uint32_t accent)
+    {
+        lv_obj_t *card = make_card(parent, x, y, 142, 36);
+        make_label(card, icon, 7, 3, accent, &lv_font_montserrat_12);
+        make_label(card, title, 26, 2, 0x8B949E, g_font_cn_12 ? g_font_cn_12 : &lv_font_montserrat_12);
+        lv_obj_t *value = make_label(card, "--", 26, 16, 0xF0F6FC, &lv_font_montserrat_12);
+        lv_obj_set_width(value, 108);
+        lv_label_set_long_mode(value, LV_LABEL_LONG_CLIP);
+        return value;
     }
 
     // ==================== helper: progress bar ====================
@@ -582,32 +634,68 @@ private:
     // ==================== Power sub-page ====================
     void build_power_page(lv_obj_t *c)
     {
-        hal_battery_info_t bat = hal_battery_read();
-        char buf[64];
+        power_in_calib_ = false;
+        stop_power_timer();
 
-        snprintf(buf, sizeof(buf), "Battery    : %d%%", bat.soc);
-        pwr_batt_lbl_ = make_label(c, buf, 0, 4, 0x58A6FF);
+        pwr_batt_lbl_ = make_metric_card(c, 0,   0,  "电量", LV_SYMBOL_BATTERY_FULL, 0x3FB950);
+        pwr_volt_lbl_ = make_metric_card(c, 152, 0,  "电压", LV_SYMBOL_CHARGE,       0x58A6FF);
+        pwr_curr_lbl_ = make_metric_card(c, 0,   42, "电流", LV_SYMBOL_REFRESH,      0xD29922);
+        pwr_temp_lbl_ = make_metric_card(c, 152, 42, "温度", LV_SYMBOL_WARNING,      0xF85149);
 
-        snprintf(buf, sizeof(buf), "Voltage    : %d mV", bat.voltage_mv);
-        pwr_volt_lbl_ = make_label(c, buf, 0, 26, 0xE6EDF3);
+        lv_obj_t *status_card = make_card(c, 0, 84, 294, 18, 0x0F1722, 0x1F6FEB);
+        make_label(status_card, LV_SYMBOL_OK, 7, 1, 0x58A6FF, &lv_font_montserrat_10);
+        pwr_cap_lbl_ = make_label(status_card, "状态: --", 26, 0, 0xC9D1D9, g_font_cn_12 ? g_font_cn_12 : &lv_font_montserrat_12);
+        lv_obj_set_width(pwr_cap_lbl_, 258);
+        lv_label_set_long_mode(pwr_cap_lbl_, LV_LABEL_LONG_CLIP);
 
-        snprintf(buf, sizeof(buf), "Current    : %d mA", bat.current_ma);
-        pwr_curr_lbl_ = make_label(c, buf, 0, 48, 0xE6EDF3);
+        pwr_calib_row_ = lv_obj_create(c);
+        lv_obj_set_size(pwr_calib_row_, 294, 18);
+        lv_obj_set_pos(pwr_calib_row_, 0, 108);
+        lv_obj_set_style_radius(pwr_calib_row_, 3, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_border_width(pwr_calib_row_, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_pad_all(pwr_calib_row_, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_color(pwr_calib_row_, lv_color_hex(0x1F3A5F), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_opa(pwr_calib_row_, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_clear_flag(pwr_calib_row_, LV_OBJ_FLAG_SCROLLABLE);
+        make_label(pwr_calib_row_, LV_SYMBOL_RIGHT " Battery Calib", 5, 1, 0xFFFFFF, &lv_font_montserrat_10);
 
-        snprintf(buf, sizeof(buf), "Temperature: %d.%d C", bat.temperature_c10 / 10, abs(bat.temperature_c10 % 10));
-        pwr_temp_lbl_ = make_label(c, buf, 0, 70, 0xE6EDF3);
+        pwr_hint_lbl_ = make_label(c, "Auto refresh 1s   ENTER: calib   ESC: back", 0, 130, 0x6E7681, &lv_font_montserrat_10);
+        refresh_power_page();
+        pwr_timer_ = lv_timer_create(UISetupPage::power_timer_cb, 1000, this);
+    }
 
-        snprintf(buf, sizeof(buf), "Capacity   : %d / %d mAh", bat.remain_mah, bat.full_mah);
-        pwr_cap_lbl_  = make_label(c, buf, 0, 92, 0xE6EDF3);
+    static void power_timer_cb(lv_timer_t *timer)
+    {
+        UISetupPage *self = static_cast<UISetupPage *>(lv_timer_get_user_data(timer));
+        if (self && self->view_state_ == ViewState::SUB && !self->power_in_calib_)
+            self->refresh_power_page();
+    }
 
-        make_label(c, "ENTER: refresh  ESC: back", 0, 114, 0x555555, &lv_font_montserrat_10);
+    void stop_power_timer()
+    {
+        if (pwr_timer_) {
+            lv_timer_delete(pwr_timer_);
+            pwr_timer_ = nullptr;
+        }
     }
 
     void handle_power_key(uint32_t key)
     {
+        if (power_in_calib_) {
+            if (key == KEY_ESC) {
+                lv_obj_t *content = ui_obj_.count("sub_content") ? ui_obj_["sub_content"] : nullptr;
+                if (content) {
+                    lv_obj_clean(content);
+                    build_power_page(content);
+                }
+                return;
+            }
+            handle_bqcal_key(key);
+            return;
+        }
         switch (key) {
         case KEY_ENTER:
-            refresh_power_page();
+            open_power_calib_page();
             break;
         case KEY_ESC:
             close_sub_page();
@@ -619,28 +707,347 @@ private:
 
     void refresh_power_page()
     {
-        hal_battery_info_t bat = hal_battery_read();
-        char buf[64];
+        std::string bq_path = bqmon_find_power_supply();
+        long capacity = 0, voltage_uv = 0, current_raw = 0, temp_raw = 0;
+        char status[64] = "Unknown";
+        bool ok = !bq_path.empty() &&
+                  bqmon_read_long(bq_path + "/capacity", capacity) &&
+                  bqmon_read_long(bq_path + "/voltage_now", voltage_uv) &&
+                  bqmon_read_long(bq_path + "/current_now", current_raw) &&
+                  bqmon_read_long(bq_path + "/temp", temp_raw);
+        if (!bq_path.empty()) bqmon_read_string(bq_path + "/status", status, sizeof(status));
+
+        char buf[96];
         if (pwr_batt_lbl_) {
-            snprintf(buf, sizeof(buf), "Battery    : %d%%", bat.soc);
+            if (ok) snprintf(buf, sizeof(buf), "%ld%%", capacity);
+            else snprintf(buf, sizeof(buf), "--");
             lv_label_set_text(pwr_batt_lbl_, buf);
         }
         if (pwr_volt_lbl_) {
-            snprintf(buf, sizeof(buf), "Voltage    : %d mV", bat.voltage_mv);
+            if (ok) snprintf(buf, sizeof(buf), "%.2f V", voltage_uv / 1000000.0);
+            else snprintf(buf, sizeof(buf), "--");
             lv_label_set_text(pwr_volt_lbl_, buf);
         }
         if (pwr_curr_lbl_) {
-            snprintf(buf, sizeof(buf), "Current    : %d mA", bat.current_ma);
+            if (ok) snprintf(buf, sizeof(buf), "%.2f mA", bqmon_current_ma(current_raw));
+            else snprintf(buf, sizeof(buf), "--");
             lv_label_set_text(pwr_curr_lbl_, buf);
         }
         if (pwr_temp_lbl_) {
-            snprintf(buf, sizeof(buf), "Temperature: %d.%d C", bat.temperature_c10 / 10, abs(bat.temperature_c10 % 10));
+            if (ok) snprintf(buf, sizeof(buf), "%.2f C", bqmon_temp_c(temp_raw));
+            else snprintf(buf, sizeof(buf), "--");
             lv_label_set_text(pwr_temp_lbl_, buf);
         }
         if (pwr_cap_lbl_) {
-            snprintf(buf, sizeof(buf), "Capacity   : %d / %d mAh", bat.remain_mah, bat.full_mah);
+            snprintf(buf, sizeof(buf), "状态: %s", ok ? status : "power_supply not found");
             lv_label_set_text(pwr_cap_lbl_, buf);
         }
+    }
+
+    void open_power_calib_page()
+    {
+        stop_power_timer();
+        power_in_calib_ = true;
+        lv_obj_t *content = ui_obj_.count("sub_content") ? ui_obj_["sub_content"] : nullptr;
+        if (!content) return;
+        lv_obj_clean(content);
+        build_bqcal_page(content);
+    }
+
+    // ==================== BQ27220 battery monitor sub-page ====================
+    void build_bqmon_page(lv_obj_t *c)
+    {
+        bqmon_line_lbl_ = make_label(c, "", 0, 4, 0x58A6FF, &lv_font_montserrat_12);
+        lv_obj_set_width(bqmon_line_lbl_, 292);
+        lv_label_set_long_mode(bqmon_line_lbl_, LV_LABEL_LONG_WRAP);
+
+        bqmon_path_lbl_ = make_label(c, "", 0, 50, 0x888888, &lv_font_montserrat_10);
+        lv_obj_set_width(bqmon_path_lbl_, 292);
+        lv_label_set_long_mode(bqmon_path_lbl_, LV_LABEL_LONG_WRAP);
+
+        bqmon_status_lbl_ = make_label(c, "ENTER: refresh  ESC: back", 0, 104, 0x555555, &lv_font_montserrat_10);
+        refresh_bqmon_page();
+    }
+
+    void handle_bqmon_key(uint32_t key)
+    {
+        switch (key) {
+        case KEY_ENTER:
+        case KEY_R:
+        case KEY_F5:
+            refresh_bqmon_page();
+            break;
+        case KEY_ESC:
+            close_sub_page();
+            break;
+        default:
+            break;
+        }
+    }
+
+    void refresh_bqmon_page()
+    {
+        std::string bq_path = bqmon_find_power_supply();
+        if (bq_path.empty()) {
+            if (bqmon_line_lbl_)
+                lv_label_set_text(bqmon_line_lbl_, "Battery monitor: power_supply node not found");
+            if (bqmon_path_lbl_)
+                lv_label_set_text(bqmon_path_lbl_, "Expected: /sys/class/power_supply/* with capacity/voltage_now/current_now/temp/status");
+            if (bqmon_status_lbl_)
+                lv_label_set_text(bqmon_status_lbl_, "Load bq27220 driver/device-tree first.");
+            return;
+        }
+
+        long capacity = 0, voltage_uv = 0, current_raw = 0, temp_raw = 0;
+        char status[64] = "Unknown";
+        bool ok = bqmon_read_long(bq_path + "/capacity", capacity) &&
+                  bqmon_read_long(bq_path + "/voltage_now", voltage_uv) &&
+                  bqmon_read_long(bq_path + "/current_now", current_raw) &&
+                  bqmon_read_long(bq_path + "/temp", temp_raw);
+        bqmon_read_string(bq_path + "/status", status, sizeof(status));
+
+        char line[192];
+        snprintf(line, sizeof(line), "Power:%ld%% | Volt:%.2fV | Curr:%.2fmA\nTemp:%.2fC | %s",
+                 capacity, voltage_uv / 1000000.0, bqmon_current_ma(current_raw),
+                 bqmon_temp_c(temp_raw), status);
+        if (bqmon_line_lbl_) lv_label_set_text(bqmon_line_lbl_, line);
+
+        char path_buf[192];
+        snprintf(path_buf, sizeof(path_buf), "sysfs: %s", bq_path.c_str());
+        if (bqmon_path_lbl_) lv_label_set_text(bqmon_path_lbl_, path_buf);
+        if (bqmon_status_lbl_)
+            lv_label_set_text(bqmon_status_lbl_, ok ? "ENTER/R: refresh  ESC: back" : "Read failed: check bq27220 sysfs files.");
+    }
+
+    static bool bqmon_read_long(const std::string &path, long &value)
+    {
+        FILE *fp = fopen(path.c_str(), "r");
+        if (!fp) return false;
+        long v = 0;
+        int ret = fscanf(fp, "%ld", &v);
+        fclose(fp);
+        if (ret != 1) return false;
+        value = v;
+        return true;
+    }
+
+    static bool bqmon_read_string(const std::string &path, char *buf, size_t len)
+    {
+        if (!buf || len == 0) return false;
+        FILE *fp = fopen(path.c_str(), "r");
+        if (!fp) return false;
+        if (!fgets(buf, len, fp)) {
+            fclose(fp);
+            return false;
+        }
+        fclose(fp);
+        size_t n = strlen(buf);
+        while (n > 0 && (buf[n - 1] == '\n' || buf[n - 1] == '\r'))
+            buf[--n] = 0;
+        return true;
+    }
+
+    static double bqmon_current_ma(long current_now)
+    {
+        /*
+         * Linux power_supply normally exports current_now in microamps.
+         * Some vendor bq27220 trees/devices expose an already scaled value one
+         * step larger; avoid showing impossible tens-of-amps readings on the UI.
+         */
+        // long abs_v = current_now < 0 ? -current_now : current_now;
+        // return -current_now / (abs_v >= 10000000 ? 1000000.0 : 1000.0);
+        return -(current_now / 1000.0);
+    }
+
+    static double bqmon_temp_c(long temp)
+    {
+        /* power_supply temp is usually 0.1 C.  If it is outside a plausible
+         * battery range, fall back to 0.01 C used by some vendor exports. */
+        double c = temp / 10.0;
+        if (c > 100.0 || c < -40.0)
+            c = temp / 100.0;
+        return c;
+    }
+
+    static bool bqmon_has_file(const std::string &dir, const char *name)
+    {
+        std::string path = dir + "/" + name;
+        return access(path.c_str(), R_OK) == 0;
+    }
+
+    static std::string bqmon_find_power_supply()
+    {
+        const char *base = "/sys/class/power_supply";
+        DIR *dp = opendir(base);
+        if (!dp) return "";
+
+        std::string fallback;
+        struct dirent *ent = nullptr;
+        while ((ent = readdir(dp)) != nullptr) {
+            if (ent->d_name[0] == '.') continue;
+            std::string dir = std::string(base) + "/" + ent->d_name;
+            if (!bqmon_has_file(dir, "capacity") ||
+                !bqmon_has_file(dir, "voltage_now") ||
+                !bqmon_has_file(dir, "current_now") ||
+                !bqmon_has_file(dir, "temp") ||
+                !bqmon_has_file(dir, "status"))
+                continue;
+
+            if (strstr(ent->d_name, "bq27220") || strstr(ent->d_name, "bq27")) {
+                closedir(dp);
+                return dir;
+            }
+            if (fallback.empty()) fallback = dir;
+        }
+        closedir(dp);
+        return fallback;
+    }
+
+    // ==================== BQ27220 calibration sub-page ====================
+    enum {
+        BQCAL_ACT_REFRESH = 0,
+        BQCAL_ACT_ENTER_CAL,
+        BQCAL_ACT_CC_OFFSET,
+        BQCAL_ACT_BOARD_OFFSET,
+        BQCAL_ACT_EXIT_CAL,
+        BQCAL_ACT_COUNT
+    };
+
+    static constexpr const char *BQ27220_I2C_DEV = "/dev/i2c-1";
+    static constexpr int BQ27220_I2C_ADDR        = 0x55;
+    static constexpr int BQ27220_REG_CONTROL     = 0x00;
+    static constexpr int BQ27220_REG_FLAGS       = 0x0E;
+    static constexpr int BQ27220_CMD_CC_OFFSET   = 0x000A;
+    static constexpr int BQ27220_CMD_BOARD_OFFSET= 0x0009;
+    static constexpr int BQ27220_CMD_ENTER_CAL   = 0x0081;
+    static constexpr int BQ27220_CMD_EXIT_CAL    = 0x0080;
+
+    void build_bqcal_page(lv_obj_t *c)
+    {
+        bqcal_sel_ = 0;
+        bqcal_info_lbl_ = make_label(c, "", 0, 0, 0x58A6FF, &lv_font_montserrat_12);
+        bqcal_status_lbl_ = make_label(c, "ENTER: run  UP/DN: select  ESC: back", 0, 106, 0x555555, &lv_font_montserrat_10);
+
+        const char *actions[BQCAL_ACT_COUNT] = {
+            "Refresh battery data",
+            "1. Enter CAL mode",
+            "2. CC offset calibration",
+            "3. Board offset calibration",
+            "4. Exit CAL mode / save",
+        };
+        for (int i = 0; i < BQCAL_ACT_COUNT; ++i) {
+            bqcal_rows_[i] = lv_obj_create(c);
+            lv_obj_set_size(bqcal_rows_[i], 294, 17);
+            lv_obj_set_pos(bqcal_rows_[i], 0, 24 + i * 16);
+            lv_obj_set_style_radius(bqcal_rows_[i], 3, LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_obj_set_style_border_width(bqcal_rows_[i], 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_obj_set_style_pad_all(bqcal_rows_[i], 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_obj_clear_flag(bqcal_rows_[i], LV_OBJ_FLAG_SCROLLABLE);
+            make_label(bqcal_rows_[i], actions[i], 5, 1, 0xCCCCCC, &lv_font_montserrat_10);
+        }
+        bqcal_update_rows();
+        bqcal_refresh_info("Ready. Keep battery idle before offset calibration.");
+    }
+
+    void handle_bqcal_key(uint32_t key)
+    {
+        switch (key) {
+        case KEY_UP:
+            if (bqcal_sel_ > 0) { --bqcal_sel_; bqcal_update_rows(); }
+            break;
+        case KEY_DOWN:
+            if (bqcal_sel_ < BQCAL_ACT_COUNT - 1) { ++bqcal_sel_; bqcal_update_rows(); }
+            break;
+        case KEY_ENTER:
+            bqcal_run_selected();
+            break;
+        case KEY_ESC:
+            close_sub_page();
+            break;
+        default:
+            break;
+        }
+    }
+
+    void bqcal_update_rows()
+    {
+        for (int i = 0; i < BQCAL_ACT_COUNT; ++i) {
+            if (!bqcal_rows_[i]) continue;
+            bool sel = (i == bqcal_sel_);
+            lv_obj_set_style_bg_color(bqcal_rows_[i], lv_color_hex(sel ? 0x1F3A5F : 0x161B22),
+                                      LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_obj_set_style_bg_opa(bqcal_rows_[i], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+            uint32_t tc = sel ? 0xFFFFFF : 0xCCCCCC;
+            uint32_t cnt = lv_obj_get_child_count(bqcal_rows_[i]);
+            for (uint32_t n = 0; n < cnt; ++n) {
+                lv_obj_t *child = lv_obj_get_child(bqcal_rows_[i], n);
+                lv_obj_set_style_text_color(child, lv_color_hex(tc), LV_PART_MAIN | LV_STATE_DEFAULT);
+            }
+        }
+    }
+
+    void bqcal_refresh_info(const char *status)
+    {
+        hal_battery_info_t bat = hal_battery_read();
+        char buf[160];
+        snprintf(buf, sizeof(buf), "BQ27220 %s  %d%% %dmV %dmA F:%04X",
+                 bat.valid ? "OK" : "N/A", bat.soc, bat.voltage_mv,
+                 bat.avg_current_ma ? bat.avg_current_ma : bat.current_ma, bat.flags);
+        if (bqcal_info_lbl_) lv_label_set_text(bqcal_info_lbl_, buf);
+        if (bqcal_status_lbl_ && status) lv_label_set_text(bqcal_status_lbl_, status);
+    }
+
+    void bqcal_run_selected()
+    {
+        int ret = 0;
+        const char *ok = "Done.";
+        switch (bqcal_sel_) {
+        case BQCAL_ACT_REFRESH:
+            bqcal_refresh_info("Refreshed.");
+            return;
+        case BQCAL_ACT_ENTER_CAL:
+            ret = bq27220_control_cmd(BQ27220_CMD_ENTER_CAL);
+            ok = "CAL mode command sent.";
+            break;
+        case BQCAL_ACT_CC_OFFSET:
+            ret = bq27220_control_cmd(BQ27220_CMD_CC_OFFSET);
+            ok = "CC offset calibration command sent.";
+            break;
+        case BQCAL_ACT_BOARD_OFFSET:
+            ret = bq27220_control_cmd(BQ27220_CMD_BOARD_OFFSET);
+            ok = "Board offset calibration command sent.";
+            break;
+        case BQCAL_ACT_EXIT_CAL:
+            ret = bq27220_control_cmd(BQ27220_CMD_EXIT_CAL);
+            ok = "Exit CAL command sent.";
+            break;
+        default:
+            return;
+        }
+        bqcal_refresh_info(ret == 0 ? ok : "I2C write failed: check /dev/i2c-1 permissions.");
+    }
+
+    static int bq27220_control_cmd(int cmd)
+    {
+        int fd = open(BQ27220_I2C_DEV, O_RDWR);
+        if (fd < 0) return -1;
+
+        unsigned char buf[3];
+        struct i2c_msg msg;
+        struct i2c_rdwr_ioctl_data data;
+        buf[0] = BQ27220_REG_CONTROL;
+        buf[1] = cmd & 0xFF;
+        buf[2] = (cmd >> 8) & 0xFF;
+        msg.addr  = BQ27220_I2C_ADDR;
+        msg.flags = 0;
+        msg.len   = sizeof(buf);
+        msg.buf   = buf;
+        data.msgs  = &msg;
+        data.nmsgs = 1;
+
+        int ret = ioctl(fd, I2C_RDWR, &data);
+        close(fd);
+        return ret < 0 ? -1 : 0;
     }
 
     // ==================== UI 构建（主菜单） ====================
@@ -860,6 +1267,16 @@ private:
         pwr_curr_lbl_ = nullptr;
         pwr_temp_lbl_ = nullptr;
         pwr_cap_lbl_  = nullptr;
+        pwr_hint_lbl_ = nullptr;
+        pwr_calib_row_ = nullptr;
+        stop_power_timer();
+        power_in_calib_ = false;
+        bqmon_line_lbl_   = nullptr;
+        bqmon_path_lbl_   = nullptr;
+        bqmon_status_lbl_ = nullptr;
+        bqcal_info_lbl_   = nullptr;
+        bqcal_status_lbl_ = nullptr;
+        for (int i = 0; i < BQCAL_ACT_COUNT; ++i) bqcal_rows_[i] = nullptr;
         pw_input_lbl_ = nullptr;
         pw_hint_lbl_  = nullptr;
 
