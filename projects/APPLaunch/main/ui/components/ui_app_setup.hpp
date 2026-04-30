@@ -8,11 +8,15 @@
 #include <cstring>
 #include <cstdlib>
 #include <fcntl.h>
+#ifndef _WIN32
 #include <unistd.h>
+#endif
 #include <dirent.h>
+#ifdef __linux__
 #include <sys/ioctl.h>
 #include <linux/i2c.h>
 #include <linux/i2c-dev.h>
+#endif
 #include "hal/hal_settings.h"
 
 // ============================================================
@@ -1029,6 +1033,7 @@ private:
 
     static int bq27220_control_cmd(int cmd)
     {
+#ifdef __linux__
         int fd = open(BQ27220_I2C_DEV, O_RDWR);
         if (fd < 0) return -1;
 
@@ -1048,6 +1053,10 @@ private:
         int ret = ioctl(fd, I2C_RDWR, &data);
         close(fd);
         return ret < 0 ? -1 : 0;
+#else
+        (void)cmd;
+        return -1;
+#endif
     }
 
     // ==================== UI 构建（主菜单） ====================
