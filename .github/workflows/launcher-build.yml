@@ -24,10 +24,27 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu dpkg-dev \
-          libfreetype-dev libpng-dev
+          libfreetype-dev libpng-dev libasound2-dev
 
     - name: Install Python build dependencies
       run: pip install scons parse requests tqdm
+
+    - name: Prefetch sysroot (static_lib) so we can inject ALSA headers
+      run: |
+        cd projects/APPLaunch
+        if [ ! -d static_lib ]; then
+          wget -q -O /tmp/sdk_bsp.tar.gz \
+            "https://github.com/dianjixz/M5CardputerZero-UserDemo/releases/download/v0.0.3/sdk_bsp.tar.gz"
+          mkdir -p static_lib
+          tar -xzf /tmp/sdk_bsp.tar.gz -C static_lib
+        fi
+
+    - name: Stage ALSA headers into sysroot
+      run: |
+        SYSROOT=projects/APPLaunch/static_lib
+        mkdir -p "$SYSROOT/usr/include"
+        cp -r /usr/include/alsa "$SYSROOT/usr/include/"
+        ls "$SYSROOT/usr/include/alsa/asoundlib.h"
 
     - name: Build APPLauncher (cross-compile aarch64)
       run: |

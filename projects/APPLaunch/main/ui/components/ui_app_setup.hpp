@@ -18,7 +18,9 @@
 #include <linux/i2c-dev.h>
 #endif
 #include "hal/hal_settings.h"
+#include "hal/hal_audio.h"
 #include "hal/hal_process.h"
+#include "hal/hal_paths.h"
 
 // ============================================================
 //  系统设置界面  UISetupPage
@@ -751,10 +753,18 @@ private:
     void handle_poweraction_key(uint32_t key, bool is_reboot)
     {
         switch (key) {
-        case KEY_ENTER:
+        case KEY_ENTER: {
+            /* Play shutdown chime (sync) then invoke system call.
+             * Use absolute path; audio HAL forks mpg123, not LVGL FS.
+             * Volume 0..100 — tune SHUTDOWN_VOL if too loud/quiet. */
+            constexpr int SHUTDOWN_VOL = 30;
+            printf("[SETUP] poweraction ENTER is_reboot=%d\n", (int)is_reboot);
+            hal_audio_play_sync_vol("/usr/share/APPLaunch/share/images/shutdown.mp3",
+                                    SHUTDOWN_VOL);
             if (is_reboot) hal_system_reboot();
             else           hal_system_shutdown();
             break;
+        }
         case KEY_ESC:
             close_sub_page();
             break;

@@ -106,14 +106,15 @@ def create_applaunch_deb(version='0.1', src_folder='../dist', revision='m5stack1
     else:
         print(f'  [warn] no *.py found under {src_folder}')
 
-    # ------------------------------------------------------- share/images/  (recursive *.png under src_folder)
-    png_files = glob.glob(os.path.join(src_folder, '**', '*.png'), recursive=True)
-    png_files += glob.glob(os.path.join(src_folder, '**', '*.gif'), recursive=True)
-    if png_files:
-        for f in png_files:
+    # ------------------------------------------------------- share/images/  (recursive *.png / *.gif / *.mp3 / *.wav)
+    image_files = []
+    for ext in ('*.png', '*.gif', '*.mp3', '*.wav'):
+        image_files += glob.glob(os.path.join(src_folder, '**', ext), recursive=True)
+    if image_files:
+        for f in image_files:
             shutil.copy2(f, os.path.join(deb_folder, SHARE_PATH, 'images'))
     else:
-        print(f'  [warn] no *.png found under {src_folder}')
+        print(f'  [warn] no image/audio assets found under {src_folder}')
 
     # ------------------------------------------------------- applications/  (generated template)
     with open(os.path.join(deb_folder, APP_PATH, 'vim.desktop.temple'), 'w') as f:

@@ -163,9 +163,26 @@ void home_screen_load()
     lv_disp_load_scr(ui_Screen1);
     lv_indev_set_group(lv_indev_get_next(NULL), Screen1group);
 
-    static char _startup_snd[256];
-    snprintf(_startup_snd, sizeof(_startup_snd), "%s/startup.mp3", hal_path_images_dir());
-    hal_audio_play(_startup_snd);
+    /* Play the startup chime only on the very first entry to home,
+     * i.e. right after boot / after the GIF finishes. Do not replay
+     * when returning from an app. */
+    /* NOTE: hal_path_images_dir() returns the LVGL-FS relative path
+     * ("share/images") that gets prefixed with "A:" by the LVGL POSIX FS
+     * driver. Audio playback does NOT go through LVGL FS, it uses raw
+     * fopen() inside libraries like miniaudio, so we need the absolute
+     * filesystem path here. */
+    #define AUDIO_PREFIX "/usr/share/APPLaunch/share/images/"
+    /* Per-sound volume (0..100). Tune here. */
+    #define STARTUP_VOL 5
+    static int startup_sound_played = 0;
+    if (!startup_sound_played) {
+        startup_sound_played = 1;
+        printf("[HOME] first-time startup: play chime + init click sound\n");
+        hal_audio_play_vol(AUDIO_PREFIX "startup.mp3", STARTUP_VOL);
+        hal_audio_click_init(AUDIO_PREFIX "keyclick.wav");
+    }
+    #undef AUDIO_PREFIX
+    #undef STARTUP_VOL
 }
 
 void ui_event_logo_over(lv_event_t * e) {

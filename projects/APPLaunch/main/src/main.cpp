@@ -14,6 +14,7 @@
 #include "compat/input_keys.h"
 #include "hal/hal_process.h"
 #include "hal/hal_settings.h"
+#include "hal/hal_audio.h"
 // #include "ui/inter_process_comms.h"
 
 // #define BACKWARD_HAS_DW 1
@@ -155,6 +156,26 @@ static void keypad_read_cb(lv_indev_t *indev, lv_indev_data_t *data)
              * Called after the page has had a chance to react, and only
              * READS elm — never frees it. */
             ui_global_hint_on_key(elm);
+
+            /* Key click sound on real key-down (not repeat, not release).
+             * Skip ESC/modifier keys to avoid noise on long-press flows. */
+            if (elm->key_state == 1) {
+                switch (elm->key_code) {
+                case KEY_ESC:
+                case KEY_LEFTSHIFT:
+                case KEY_RIGHTSHIFT:
+                case KEY_LEFTCTRL:
+                case KEY_RIGHTCTRL:
+                case KEY_LEFTALT:
+                case KEY_RIGHTALT:
+                case KEY_CAPSLOCK:
+                case KEY_FN:
+                    break;
+                default:
+                    hal_audio_click_play();
+                    break;
+                }
+            }
 
             data->key = _evdev_process_key(elm->key_code);
             if(data->key)

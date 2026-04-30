@@ -25,7 +25,7 @@ if is_desktop_sdl and platform.system() == 'Darwin':
 if is_desktop_sdl:
     REQUIREMENTS = ['lvgl_component', 'pthread']
 else:
-    REQUIREMENTS = ['lvgl_component', 'pthread', 'input', 'xkbcommon', 'udev']
+    REQUIREMENTS = ['lvgl_component', 'pthread', 'input', 'xkbcommon', 'udev', 'm', 'dl']
 
 STATIC_LIB = []
 DYNAMIC_LIB = []
