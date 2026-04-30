@@ -5,12 +5,12 @@
  *
  * Behavior:
  *   (a) ESC held continuously for >= 1.5s -> show
- *       "长按 ESC 5秒可返回首页" for ~1.5s. Short taps (released
+ *       "Hold ESC 5s to return home" for ~1.5s. Short taps (released
  *       before 1.5s) show nothing, so a quick "back" press inside
  *       an app no longer flashes the return-home toast.
  *   (b) Single press of SHIFT (Aa / KEY_LEFTSHIFT) or SYM (physical
  *       "SYM" key on the M5 CardputerZero; currently best-effort mapped)
- *       -> show "快速双击可锁定" for ~1.5s.
+ *       -> show "Double-tap to lock" for ~1.5s.
  *
  *   Fn key is intentionally NOT hinted (no lock feature yet).
  *
@@ -109,7 +109,7 @@ static void esc_poll_timer_cb(lv_timer_t *t)
 
     uint32_t elapsed = lv_tick_elaps(s_esc_down_tick);
     if (elapsed >= HINT_ESC_HOLD_MS) {
-        show_hint("长按 ESC 5秒可返回首页");
+        show_hint("Hold ESC 5s to return home");
         s_esc_hint_shown = true;
         /* One-shot per hold: don't keep re-triggering show_hint every
          * 100ms while the user continues to hold ESC past 1.5s. The
@@ -239,7 +239,7 @@ extern "C" void ui_global_hint_on_key(const struct key_item *elm)
         case KEY_LEFTSHIFT:
         case KEY_RIGHTSHIFT:
         case KEY_COMPOSE:
-            show_hint("快速双击可锁定");
+            show_hint("Double-tap to lock");
             return;
 
         default:
@@ -254,7 +254,7 @@ extern "C" void ui_global_hint_on_key(const struct key_item *elm)
             strcmp(elm->sym_name, "Menu")      == 0 ||
             strcmp(elm->sym_name, "Sym")       == 0 ||
             strcmp(elm->sym_name, "SYM")       == 0) {
-            show_hint("快速双击可锁定");
+            show_hint("Double-tap to lock");
         }
     }
 }
