@@ -7,12 +7,11 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#else
 #include <unistd.h>
-#include "hal/hal_settings.h"
-#include "hal/hal_network.h"
-#include "compat/input_keys.h"
-
-#ifndef _WIN32
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -20,6 +19,9 @@
 #include <errno.h>
 #include <sys/select.h>
 #endif
+#include "hal/hal_settings.h"
+#include "hal/hal_network.h"
+#include "compat/input_keys.h"
 
 // ============================================================
 //  HACK Tools  UIHackPage

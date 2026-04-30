@@ -14,6 +14,10 @@
 
 extern "C" { void ui_init(void); }
 
+// APPLaunch's main.cpp defines LV_EVENT_BATTERY, but the web target
+// uses this main_web.cpp instead, so the symbol would be undefined.
+volatile uint32_t LV_EVENT_BATTERY;
+
 // ── Layout (same as native) ─────────────────────────────────────
 static constexpr int SKIN_W = 1280;
 static constexpr int SKIN_H = 840;
