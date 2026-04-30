@@ -57,9 +57,17 @@ int hal_process_exec_blocking(const char *exec_path, volatile int *home_key_flag
     }
     if (pid == 0) {
         close(evfd);
+        /* Put the child (and everything it fork/execs) in its own
+         * process group, so the launcher can kill the whole tree via
+         * killpg() on long-press ESC. Otherwise sh often fork+waits an
+         * inner sh that exec's the real binary, leaving the real
+         * process as a grandchild that SIGTERM to `pid` never reaches. */
+        setpgid(0, 0);
         execlp("/bin/sh", "sh", "-c", exec_path, (char *)NULL);
         _exit(127);
     }
+    /* Also set it in the parent in case setpgid races the child. */
+    setpgid(pid, pid);
 
     auto esc_down_since = std::chrono::steady_clock::time_point{};
     bool esc_down = false;
@@ -98,16 +106,21 @@ int hal_process_exec_blocking(const char *exec_path, volatile int *home_key_flag
             auto held_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::steady_clock::now() - esc_down_since).count();
             if (held_ms >= ESC_HOLD_SEC * 1000) {
-                printf("[hal] ESC held %ldms, SIGTERM %d\n", (long)held_ms, pid);
+                printf("[hal] ESC held %ldms, SIGTERM pgid %d\n",
+                       (long)held_ms, pid);
                 fflush(stdout);
-                kill(pid, SIGTERM);
+                /* Kill the whole process group, not just pid, because
+                 * sh -c may have fork'd an inner shell that exec'd the
+                 * real binary as a grandchild. killpg reaches them all
+                 * via the pgid we set with setpgid() above. */
+                killpg(pid, SIGTERM);
                 auto t0 = std::chrono::steady_clock::now();
                 while (waitpid(pid, &status, WNOHANG) == 0) {
                     if (std::chrono::duration_cast<std::chrono::seconds>(
                             std::chrono::steady_clock::now() - t0).count() >= 3) {
-                        printf("[hal] SIGKILL %d\n", pid);
+                        printf("[hal] SIGKILL pgid %d\n", pid);
                         fflush(stdout);
-                        kill(pid, SIGKILL);
+                        killpg(pid, SIGKILL);
                         waitpid(pid, &status, 0);
                         break;
                     }
@@ -151,14 +164,17 @@ int hal_process_check_lock(const char *lock_path, int *holder_pid)
 void hal_process_kill(int pid, int grace_ms)
 {
     if (pid <= 0) return;
-    kill(pid, SIGINT);
+    /* killpg: hal_process_spawn puts the child in its own pgid, so
+     * SIGINT/SIGKILL here reaches grandchildren too (sh + exec'd
+     * binary are typically both inside). */
+    killpg(pid, SIGINT);
     auto start = std::chrono::steady_clock::now();
     while (true) {
         int status;
         if (waitpid(pid, &status, WNOHANG) != 0) return;
         auto now = std::chrono::steady_clock::now();
         if (std::chrono::duration_cast<std::chrono::milliseconds>(now - start).count() >= grace_ms) {
-            kill(pid, SIGKILL);
+            killpg(pid, SIGKILL);
             waitpid(pid, &status, 0);
             return;
         }
@@ -171,16 +187,18 @@ hal_pid_t hal_process_spawn(const char *exec_path)
     pid_t pid = fork();
     if (pid < 0) return -1;
     if (pid == 0) {
+        setpgid(0, 0);
         execlp("/bin/sh", "sh", "-c", exec_path, (char *)NULL);
         _exit(127);
     }
+    setpgid(pid, pid);
     return (hal_pid_t)pid;
 }
 
 void hal_process_stop(hal_pid_t pid)
 {
     if (pid <= 0) return;
-    kill((pid_t)pid, SIGTERM);
+    killpg((pid_t)pid, SIGTERM);
     int status;
     waitpid((pid_t)pid, &status, WNOHANG);
 }
