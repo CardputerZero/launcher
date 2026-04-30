@@ -17,8 +17,69 @@
 #include "hal/hal_settings.h"
 #define APP_CONSOLE_EXIT_EVENT (lv_event_code_t)(LV_EVENT_LAST + 1)
 
+static inline std::string img_path(const char *name)
+{
+    return std::string(hal_path_images_dir()) + "/" + name;
+}
 
-class home_base
+class app_
+{
+
+public:
+    lv_group_t *key_group;
+    lv_obj_t *ui_root;
+    lv_obj_t *get_ui() { return ui_root; }
+    lv_group_t *get_key_group() { return key_group; }
+    std::function<void(void)> go_back_home;
+
+public:
+    app_()
+    {
+        creat_base_UI();
+        creat_input_group();
+    }
+    ~app_()
+    {
+        lv_obj_del(ui_root);
+    }
+
+
+private:
+    /* ================================================================== */
+    /*  UI 构建                                                             */
+    /* ================================================================== */
+    void creat_base_UI()
+    {
+        ui_root = lv_obj_create(NULL);
+        lv_obj_clear_flag(ui_root, LV_OBJ_FLAG_SCROLLABLE);      /// Flags
+        lv_obj_set_style_bg_color(ui_root, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_opa(ui_root, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+    }
+
+    void creat_input_group()
+    {
+        key_group = lv_group_create();
+        lv_group_add_obj(key_group, ui_root);
+    }
+
+    // static void static_event_handler(lv_event_t * e)
+    // {
+    //     app_base *instance = static_cast<app_base *>(lv_event_get_user_data(e));
+    //     if (instance)
+    //     {
+    //         instance->event_handler(e);
+    //     }
+    // }
+
+    // virtual void event_handler(lv_event_t * e)
+    // {
+
+    // }
+
+};
+
+
+class home_base : public app_
 {
 private:
     lv_obj_t *ui_TOP_logo;
@@ -29,19 +90,13 @@ private:
     lv_timer_t *status_timer_ = nullptr;
 
 public:
-    lv_group_t *key_group;
     lv_obj_t *ui_APP_Container;
-    lv_obj_t *ui_root;
-    std::function<void(void)> go_back_home;
-    lv_obj_t *get_ui() { return ui_root; }
-    lv_group_t *get_key_group() { return key_group; }
 
 
 public:
-    home_base()
+    home_base(): app_()
     {
-        creat_base_UI();
-        creat_input_group();
+        creat_Top_UI();
         UI_bind_event();
         update_status_bar();
         status_timer_ = lv_timer_create(home_status_timer_cb, 5000, this);
@@ -49,7 +104,6 @@ public:
     ~home_base()
     {
         if (status_timer_) lv_timer_delete(status_timer_);
-        lv_obj_del(ui_root);
     }
 
     static void home_battery_event_cb(lv_event_t *e)
@@ -97,13 +151,8 @@ private:
     /* ================================================================== */
     /*  UI 构建                                                             */
     /* ================================================================== */
-    void creat_base_UI()
+    void creat_Top_UI()
     {
-        ui_root = lv_obj_create(NULL);
-        lv_obj_clear_flag(ui_root, LV_OBJ_FLAG_SCROLLABLE);      /// Flags
-        lv_obj_set_style_bg_color(ui_root, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_opa(ui_root, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-
         ui_TOP_logo = lv_img_create(ui_root);
         lv_img_set_src(ui_TOP_logo, ui_img_zero_png);
         lv_obj_set_width(ui_TOP_logo, LV_SIZE_CONTENT);   /// 49
@@ -166,11 +215,6 @@ private:
         lv_obj_clear_flag(ui_APP_Container, (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));      /// Flags
     }
 
-    void creat_input_group()
-    {
-        key_group = lv_group_create();
-    }
-
     void UI_bind_event()
     {
         lv_obj_add_event_cb(ui_root, home_battery_event_cb, (lv_event_code_t)LV_EVENT_BATTERY, this);
@@ -178,7 +222,8 @@ private:
 };
 
 
-class app_base
+
+class app_base : public app_
 {
 private:
     lv_obj_t *ui_TOP_logo;
@@ -194,18 +239,13 @@ private:
     lv_timer_t *status_timer_ = nullptr;
 
 public:
-    lv_group_t *key_group;
     lv_obj_t *ui_APP_Container;
-    lv_obj_t *ui_root;
-    lv_obj_t *get_ui() { return ui_root; }
-    lv_group_t *get_key_group() { return key_group; }
-    std::function<void(void)> go_back_home;
+
 
 public:
-    app_base()
+    app_base(): app_()
     {
-        creat_base_UI();
-        creat_input_group();
+        creat_Top_UI();
         UI_bind_event();
         update_status_bar();
         status_timer_ = lv_timer_create(app_status_timer_cb, 5000, this);
@@ -213,7 +253,6 @@ public:
     ~app_base()
     {
         if (status_timer_) lv_timer_delete(status_timer_);
-        lv_obj_del(ui_root);
     }
 
     static void app_battery_event_cb(lv_event_t *e)
@@ -266,13 +305,8 @@ private:
     /* ================================================================== */
     /*  UI 构建                                                             */
     /* ================================================================== */
-    void creat_base_UI()
+    void creat_Top_UI()
     {
-        ui_root = lv_obj_create(NULL);
-        lv_obj_clear_flag(ui_root, LV_OBJ_FLAG_SCROLLABLE);      /// Flags
-        lv_obj_set_style_bg_color(ui_root, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_opa(ui_root, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-
         ui_TOP_logo = lv_img_create(ui_root);
         lv_img_set_src(ui_TOP_logo, ui_img_zero_logo_w_png);
         lv_obj_set_width(ui_TOP_logo, LV_SIZE_CONTENT);   /// 58
@@ -390,26 +424,6 @@ private:
         lv_obj_set_align(ui_APP_Container, LV_ALIGN_CENTER);
         lv_obj_clear_flag(ui_APP_Container, (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));      /// Flags
     }
-
-    void creat_input_group()
-    {
-        key_group = lv_group_create();
-        lv_group_add_obj(key_group, ui_root);
-    }
-
-    // static void static_event_handler(lv_event_t * e)
-    // {
-    //     app_base *instance = static_cast<app_base *>(lv_event_get_user_data(e));
-    //     if (instance)
-    //     {
-    //         instance->event_handler(e);
-    //     }
-    // }
-
-    // virtual void event_handler(lv_event_t * e)
-    // {
-
-    // }
 
     void UI_bind_event()
     {

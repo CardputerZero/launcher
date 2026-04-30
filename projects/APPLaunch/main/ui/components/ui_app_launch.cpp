@@ -33,12 +33,11 @@
 #include "ui_app_rec.hpp"
 #include "ui_app_camera.hpp"
 #include "ui_app_game.hpp"
+#include "ui_app_UnitEnv.hpp"
+#include "ui_app_midi.hpp"
+#include "ui_app_gpio.hpp"
 #include "../ui_loading.h"
-
-static inline std::string img_path(const char *name)
-{
-    return std::string(hal_path_images_dir()) + "/" + name;
-}
+/* img_path() now defined in ui_app_page.hpp */
 
 // ============================================================
 // 启动快捷方式示例
@@ -109,6 +108,7 @@ private:
     hal_watcher_t dir_watcher = NULL;
     lv_timer_t *watch_timer = nullptr; // LVGL 3s 定时器
     lv_timer_t *status_timer = nullptr; // 状态栏刷新定时器
+    int fixed_count;
 
 public:
     std::list<app> app_list;
@@ -197,7 +197,17 @@ public:
                               img_path("camera.png"), page_v<UICameraPage>);
         app_list.emplace_back("GAME",
                               img_path("gmae.png"), page_v<UIGamePage>);
+        app_list.emplace_back("UnitEnv",
+                              img_path("hack.png"), page_v<UIUnitEnvPage>);
+        app_list.emplace_back("Midi",
+                              img_path("hack.png"), page_v<UIMidiPage>);
 
+        app_list.emplace_back("Gpio",
+                              img_path("hack.png"), page_v<UIGpioPage>);
+
+
+
+        fixed_count = app_list.size();
         applications_load();
 
         // 初始化 inotify，监听 applications 目录
@@ -493,9 +503,6 @@ public:
     // ============================================================
     void applications_reload()
     {
-        // 固定条目数量（Python/STORE/CLI/CLAW/SETTING/MUSIC/AUDIO_PLAYER/IP_PANEL/MATH/STOCKS
-        // + CHAT/e-Mail/FILE/SSH/HACK/MESH/REC/CAMERA/GAME）
-        const int fixed_count = 19;
         int sz = (int)app_list.size();
         if (sz > fixed_count)
         {
