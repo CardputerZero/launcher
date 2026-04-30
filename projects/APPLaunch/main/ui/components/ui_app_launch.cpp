@@ -33,6 +33,7 @@
 #include "ui_app_rec.hpp"
 #include "ui_app_camera.hpp"
 #include "ui_app_game.hpp"
+#include "../ui_loading.h"
 
 static inline std::string img_path(const char *name)
 {
@@ -260,18 +261,31 @@ public:
     void launch_Exec_in_terminal(const std::string &exec, bool sysplause = true)
     {
         printf("Launching terminal app: %s\n", exec.c_str());
+        /* Instant visual feedback; paint before the (potentially slow)
+         * Console page construction so the user sees it right away. */
+        ui_loading_show("Loading...");
+        lv_refr_now(NULL);
         auto p = std::make_shared<UIConsolePage>();
         app_Page = p;
         lv_disp_load_scr(p->get_ui());
         lv_indev_set_group(lv_indev_get_next(NULL), p->get_key_group());
         p->go_back_home = std::bind(&app_launch_S::go_back_home, this);
         p->terminal_sysplause = sysplause;
+        /* Console page fully covers APP_Container; safe to hide now.
+         * The heavy exec() call below will still run while the terminal
+         * page is on-screen — no overlay needed at that point. */
+        ui_loading_hide();
         p->exec(exec);
     }
 
     void launch_Exec(const std::string &exec)
     {
         printf("Launching external app: %s\n", exec.c_str());
+        /* Show overlay BEFORE we tear down LVGL input/timers so the user
+         * gets immediate feedback when ENTER was pressed. The overlay
+         * stays drawn on the framebuffer right up until the child takes
+         * it over via hal_process_exec_blocking(). */
+        ui_loading_show("Loading...");
         lv_disp_t *disp = lv_disp_get_default();
         lv_indev_t *indev = lv_indev_get_next(NULL);
         LVGL_RUN_FLAGE = 0;
@@ -286,6 +300,9 @@ public:
         if (indev)
             lv_indev_set_group(indev, Screen1group);
         lv_disp_load_scr(ui_Screen1);
+        /* Child process has returned; we are back on the launcher home.
+         * Hide the overlay so it doesn't linger. */
+        ui_loading_hide();
         lv_obj_invalidate(lv_screen_active());
         lv_refr_now(disp);
         LVGL_RUN_FLAGE = 1;
@@ -605,6 +622,13 @@ app::app(std::string name,
 {
     launch = [](app_launch_S *self)
     {
+        /* Instant feedback: show the overlay, then force an immediate
+         * redraw so it actually paints BEFORE the (sometimes slow) page
+         * construction starts. Without lv_refr_now() the overlay would
+         * only hit the framebuffer after the constructor returns, which
+         * defeats the whole point. */
+        ui_loading_show("Loading...");
+        lv_refr_now(NULL);
         auto p = std::make_shared<PageT>();
         self->app_Page = p;
         lv_disp_load_scr(p->get_ui());
@@ -612,6 +636,9 @@ app::app(std::string name,
                            p->get_key_group());
         p->go_back_home =
             std::bind(&app_launch_S::go_back_home, self);
+        /* Page is now attached and drawable; hide the overlay. The
+         * next LVGL frame will paint the new page without it. */
+        ui_loading_hide();
     };
 }
 
