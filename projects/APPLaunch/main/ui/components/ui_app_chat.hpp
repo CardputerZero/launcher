@@ -107,7 +107,7 @@ private:
 
         // message area (scrollable)
         lv_obj_t *msg_area = lv_obj_create(bg);
-        lv_obj_set_size(msg_area, 320, 96);
+        lv_obj_set_size(msg_area, 320, 80);
         lv_obj_set_pos(msg_area, 0, 22);
         lv_obj_set_style_radius(msg_area, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_color(msg_area, lv_color_hex(0x0D1117), LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -126,7 +126,7 @@ private:
         // separator line above input
         lv_obj_t *sep = lv_obj_create(bg);
         lv_obj_set_size(sep, 320, 1);
-        lv_obj_set_pos(sep, 0, 118);
+        lv_obj_set_pos(sep, 0, 102);
         lv_obj_set_style_radius(sep, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_color(sep, lv_color_hex(0x21262D), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_opa(sep, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -135,8 +135,8 @@ private:
 
         // input area
         lv_obj_t *input_area = lv_obj_create(bg);
-        lv_obj_set_size(input_area, 320, 23);
-        lv_obj_set_pos(input_area, 0, 119);
+        lv_obj_set_size(input_area, 320, 20);
+        lv_obj_set_pos(input_area, 0, 103);
         lv_obj_set_style_radius(input_area, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_color(input_area, lv_color_hex(0x161B22), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_opa(input_area, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
