@@ -169,8 +169,12 @@ void home_screen_load()
 }
 
 void ui_event_logo_over(lv_event_t * e) {
+    static int done = 0;
     lv_event_code_t event_code = lv_event_get_code(e);
-    if(event_code == LV_EVENT_READY) {
+    if(event_code == LV_EVENT_READY && !done) {
+        done = 1;
+        printf("[GIF] first LV_EVENT_READY -> pause + home_screen_load()\n");
+        if (startup_gif) lv_gif_pause(startup_gif);
         home_screen_load();
     }
 }
