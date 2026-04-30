@@ -305,8 +305,6 @@ int main(void)
 
     LV_EVENT_KEYBOARD = lv_event_register_id();
 
-    kbd_dump_keymap_table();
-
     ui_init();
     // lv_demo_widgets(); // 用LVGL自带demo测试
     /*Handle LVGL tasks*/
