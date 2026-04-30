@@ -18,6 +18,7 @@
 #include <linux/i2c-dev.h>
 #endif
 #include "hal/hal_settings.h"
+#include "hal/hal_process.h"
 
 // ============================================================
 //  系统设置界面  UISetupPage
@@ -232,6 +233,24 @@ private:
             "Battery Info",
             [this](lv_obj_t *c) { build_power_page(c); },
             [this](uint32_t key) { handle_power_key(key); }
+        });
+
+        // ---- Shutdown (confirm sub-page) ----
+        menu_items_.push_back({
+            LV_SYMBOL_POWER,
+            "Shutdown",
+            "Shutdown Device",
+            [this](lv_obj_t *c) { build_poweraction_page(c, /*is_reboot=*/false); },
+            [this](uint32_t key) { handle_poweraction_key(key, /*is_reboot=*/false); }
+        });
+
+        // ---- Reboot (confirm sub-page) ----
+        menu_items_.push_back({
+            LV_SYMBOL_REFRESH,
+            "Reboot",
+            "Reboot Device",
+            [this](lv_obj_t *c) { build_poweraction_page(c, /*is_reboot=*/true); },
+            [this](uint32_t key) { handle_poweraction_key(key, /*is_reboot=*/true); }
         });
 
         // ---- About ----
@@ -700,6 +719,41 @@ private:
         switch (key) {
         case KEY_ENTER:
             open_power_calib_page();
+            break;
+        case KEY_ESC:
+            close_sub_page();
+            break;
+        default:
+            break;
+        }
+    }
+
+    // ==================== Shutdown / Reboot confirm sub-pages ====================
+    void build_poweraction_page(lv_obj_t *c, bool is_reboot)
+    {
+        const char *verb = is_reboot ? "Reboot" : "Shutdown";
+        uint32_t accent  = is_reboot ? 0xD29922 : 0xF85149;
+
+        lv_obj_t *icon = make_label(c, is_reboot ? LV_SYMBOL_REFRESH : LV_SYMBOL_POWER,
+                                    136, 10, accent, &lv_font_montserrat_14);
+        (void)icon;
+
+        char line[64];
+        snprintf(line, sizeof(line), "%s this device?", verb);
+        lv_obj_t *prompt = make_label(c, line, 0, 40, 0xE6EDF3, &lv_font_montserrat_14);
+        lv_obj_set_width(prompt, 296);
+        lv_obj_set_style_text_align(prompt, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+        make_label(c, "ENTER: confirm    ESC: cancel",
+                   0, 96, 0x6E7681, &lv_font_montserrat_10);
+    }
+
+    void handle_poweraction_key(uint32_t key, bool is_reboot)
+    {
+        switch (key) {
+        case KEY_ENTER:
+            if (is_reboot) hal_system_reboot();
+            else           hal_system_shutdown();
             break;
         case KEY_ESC:
             close_sub_page();
