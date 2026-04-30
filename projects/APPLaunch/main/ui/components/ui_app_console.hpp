@@ -377,7 +377,10 @@ private:
                 {
                     end_status = 0;
                     self->stop_pty();
-                    // self->terminal_active = false;
+                    self->terminal_active = false;
+                    /* 直接触发返回主页，不依赖 poll_cb 的检测链 */
+                    if (self->go_back_home)
+                        self->go_back_home();
                 }
             }
             else

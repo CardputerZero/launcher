@@ -8,7 +8,7 @@
 
 // ============================================================
 //  聊天界面  UIchatPage
-//  屏幕分辨率: 320 x 170  (顶栏20px, ui_APP_Container 320x150)
+//  屏幕分辨率: 320 x 170 
 //
 //  功能:
 //    - 本地聊天 demo UI
@@ -19,7 +19,7 @@
 //    - DIRECTION_KEY_MODE = 0 启用原始按键输入
 // ============================================================
 
-class UIchatPage : public app_base
+class UIchatPage : public app_
 {
     struct ChatMsg
     {
@@ -28,7 +28,7 @@ class UIchatPage : public app_base
     };
 
 public:
-    UIchatPage() : app_base()
+    UIchatPage() : app_()
     {
         DIRECTION_KEY_MODE = 0;
         creat_UI();
@@ -101,8 +101,8 @@ private:
     void creat_UI()
     {
         // background
-        lv_obj_t *bg = lv_obj_create(ui_APP_Container);
-        lv_obj_set_size(bg, 320, 150);
+        lv_obj_t *bg = lv_obj_create(ui_root);
+        lv_obj_set_size(bg, 320, 170);
         lv_obj_set_pos(bg, 0, 0);
         lv_obj_set_style_radius(bg, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_color(bg, lv_color_hex(0x0D1117), LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -138,7 +138,7 @@ private:
 
         // message area (scrollable)
         lv_obj_t *msg_area = lv_obj_create(bg);
-        lv_obj_set_size(msg_area, 320, 104);
+        lv_obj_set_size(msg_area, 320, 124);
         lv_obj_set_pos(msg_area, 0, 22);
         lv_obj_set_style_radius(msg_area, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_color(msg_area, lv_color_hex(0x0D1117), LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -157,7 +157,7 @@ private:
         // separator line above input
         lv_obj_t *sep = lv_obj_create(bg);
         lv_obj_set_size(sep, 320, 1);
-        lv_obj_set_pos(sep, 0, 126);
+        lv_obj_set_pos(sep, 0, 146);
         lv_obj_set_style_radius(sep, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_color(sep, lv_color_hex(0x21262D), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_opa(sep, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -167,7 +167,7 @@ private:
         // input area
         lv_obj_t *input_area = lv_obj_create(bg);
         lv_obj_set_size(input_area, 320, 23);
-        lv_obj_set_pos(input_area, 0, 127);
+        lv_obj_set_pos(input_area, 0, 147);
         lv_obj_set_style_radius(input_area, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_color(input_area, lv_color_hex(0x161B22), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_opa(input_area, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
