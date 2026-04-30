@@ -9,7 +9,6 @@
 #include <chrono>
 #include <thread>
 #include <linux/input.h>
-#include <linux/uinput.h>
 
 extern "C" {
     extern void keyboard_pause(void);
@@ -22,96 +21,45 @@ static const char *get_kbd_device()
     return env ? env : "/dev/input/by-path/platform-3f804000.i2c-event";
 }
 
-static int create_uinput_kbd()
-{
-    int fd = open("/dev/uinput", O_WRONLY | O_NONBLOCK);
-    if (fd < 0) {
-        perror("[hal] open /dev/uinput");
-        return -1;
-    }
-
-    ioctl(fd, UI_SET_EVBIT, EV_KEY);
-    ioctl(fd, UI_SET_EVBIT, EV_SYN);
-    ioctl(fd, UI_SET_EVBIT, EV_REP);
-    for (int i = 0; i < KEY_MAX; i++)
-        ioctl(fd, UI_SET_KEYBIT, i);
-
-    struct uinput_setup setup = {};
-    snprintf(setup.name, UINPUT_MAX_NAME_SIZE, "APPLaunch-vkbd");
-    setup.id.bustype = BUS_VIRTUAL;
-    setup.id.vendor = 0x1234;
-    setup.id.product = 0x5678;
-    setup.id.version = 1;
-
-    if (ioctl(fd, UI_DEV_SETUP, &setup) < 0) {
-        perror("[hal] UI_DEV_SETUP");
-        close(fd);
-        return -1;
-    }
-    if (ioctl(fd, UI_DEV_CREATE) < 0) {
-        perror("[hal] UI_DEV_CREATE");
-        close(fd);
-        return -1;
-    }
-
-    usleep(200000);
-    return fd;
-}
-
-static void forward_event(int uinput_fd, const struct input_event *ev)
-{
-    write(uinput_fd, ev, sizeof(*ev));
-}
-
 static const int ESC_HOLD_SEC = 3;
 
+/* ------------------------------------------------------------------
+ * Experiment:
+ *  - Do NOT EVIOCGRAB the tca8418 evdev while the child is running.
+ *  - Do NOT create a uinput mirror.
+ *  - Child reads /dev/input/event* directly (same physical device);
+ *    multiple readers each receive every input_event on an ungrabbed
+ *    evdev, so both this loop (for ESC-hold detection) and the child
+ *    can see the keys.
+ *  - keyboard_pause() still suspends libinput so APPLauncher's LVGL
+ *    keyboard thread doesn't react while the app is in the foreground.
+ * ------------------------------------------------------------------ */
 int hal_process_exec_blocking(const char *exec_path, volatile int *home_key_flag)
 {
     (void)home_key_flag;
 
     keyboard_pause();
 
-    int evfd = open(get_kbd_device(), O_RDONLY);
+    int evfd = open(get_kbd_device(), O_RDONLY | O_NONBLOCK);
     if (evfd < 0) {
         perror("[hal] open evdev");
         keyboard_resume();
         return -1;
     }
-
-    if (ioctl(evfd, EVIOCGRAB, 1) < 0) {
-        perror("[hal] EVIOCGRAB");
-        close(evfd);
-        keyboard_resume();
-        return -1;
-    }
-    printf("[hal] Grabbed evdev exclusively\n");
-
-    int uifd = create_uinput_kbd();
-    if (uifd < 0) {
-        ioctl(evfd, EVIOCGRAB, 0);
-        close(evfd);
-        keyboard_resume();
-        return -1;
-    }
-    printf("[hal] Created uinput virtual keyboard\n");
+    printf("[hal] Opened evdev %s (no EVIOCGRAB; shared with child)\n", get_kbd_device());
+    fflush(stdout);
 
     pid_t pid = fork();
     if (pid < 0) {
-        ioctl(uifd, UI_DEV_DESTROY);
-        close(uifd);
-        ioctl(evfd, EVIOCGRAB, 0);
         close(evfd);
         keyboard_resume();
         return -1;
     }
     if (pid == 0) {
         close(evfd);
-        close(uifd);
         execlp("/bin/sh", "sh", "-c", exec_path, (char *)NULL);
         _exit(127);
     }
-
-    fcntl(evfd, F_SETFL, O_RDONLY | O_NONBLOCK);
 
     auto esc_down_since = std::chrono::steady_clock::time_point{};
     bool esc_down = false;
@@ -128,20 +76,21 @@ int hal_process_exec_blocking(const char *exec_path, volatile int *home_key_flag
                 const char *st = (ev.value == 1) ? "DOWN" :
                                  (ev.value == 0) ? "UP"   :
                                  (ev.value == 2) ? "REPEAT" : "???";
-                printf("[HAL-EXT] evdev code=%u value=%d(%s) (to child via uinput)\n",
+                printf("[HAL-EXT] evdev code=%u value=%d(%s) (shared, child reads too)\n",
                        ev.code, ev.value, st);
+                fflush(stdout);
             }
             if (ev.type == EV_KEY && ev.code == KEY_ESC) {
                 if (ev.value == 1) {
                     esc_down = true;
                     esc_down_since = std::chrono::steady_clock::now();
                     printf("[HAL-EXT] ESC DOWN\n");
+                    fflush(stdout);
                 } else if (ev.value == 0) {
                     esc_down = false;
                     printf("[HAL-EXT] ESC UP\n");
+                    fflush(stdout);
                 }
-            } else {
-                forward_event(uifd, &ev);
             }
         }
 
@@ -150,12 +99,14 @@ int hal_process_exec_blocking(const char *exec_path, volatile int *home_key_flag
                 std::chrono::steady_clock::now() - esc_down_since).count();
             if (held_ms >= ESC_HOLD_SEC * 1000) {
                 printf("[hal] ESC held %ldms, SIGTERM %d\n", (long)held_ms, pid);
+                fflush(stdout);
                 kill(pid, SIGTERM);
                 auto t0 = std::chrono::steady_clock::now();
                 while (waitpid(pid, &status, WNOHANG) == 0) {
                     if (std::chrono::duration_cast<std::chrono::seconds>(
                             std::chrono::steady_clock::now() - t0).count() >= 3) {
                         printf("[hal] SIGKILL %d\n", pid);
+                        fflush(stdout);
                         kill(pid, SIGKILL);
                         waitpid(pid, &status, 0);
                         break;
@@ -169,14 +120,12 @@ int hal_process_exec_blocking(const char *exec_path, volatile int *home_key_flag
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 
-    ioctl(uifd, UI_DEV_DESTROY);
-    close(uifd);
-    ioctl(evfd, EVIOCGRAB, 0);
     close(evfd);
 
     keyboard_resume();
 
     printf("[hal] Returned to launcher\n");
+    fflush(stdout);
     if (WIFEXITED(status)) return WEXITSTATUS(status);
     return -1;
 }
