@@ -255,6 +255,13 @@ extern "C" {
     void ui_init(void);
     void lv_sdl_keyboard_handler(SDL_Event *event);
 }
+// APPLaunch's src/main.cpp defines LV_EVENT_BATTERY, but the Windows
+// static build doesn't compile that file — provide a stub here so the
+// UI code that references it links. (Never fired on emulator.)
+#if defined(_WIN32) && defined(EMU_STATIC_APP)
+#include <cstdint>
+extern "C" volatile uint32_t LV_EVENT_BATTERY = 0;
+#endif
 #endif
 
 // Set working directory to the exe's directory so relative paths work

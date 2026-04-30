@@ -295,6 +295,9 @@ if(NOT WIN32)
     target_link_libraries(cardputer-zero-emu PRIVATE ${CMAKE_DL_LIBS})
     find_package(Threads REQUIRED)
     target_link_libraries(cardputer-zero-emu PRIVATE Threads::Threads)
+else()
+    # ui_app_hack.hpp calls gethostname() on Windows via <winsock2.h>.
+    target_link_libraries(cardputer-zero-emu PRIVATE ws2_32)
 endif()
 
 # ---------------------------------------------------------------------------
