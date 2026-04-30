@@ -4,8 +4,10 @@
  * Transient on-screen hint/toast overlay.
  *
  * Behavior:
- *   (a) Single press of ESC (key-down, state==1) -> show
- *       "长按 ESC 5秒可返回首页" for ~1.5s.
+ *   (a) ESC held continuously for >= 1.5s -> show
+ *       "长按 ESC 5秒可返回首页" for ~1.5s. Short taps (released
+ *       before 1.5s) show nothing, so a quick "back" press inside
+ *       an app no longer flashes the return-home toast.
  *   (b) Single press of SHIFT (Aa / KEY_LEFTSHIFT) or SYM (physical
  *       "SYM" key on the M5 CardputerZero; currently best-effort mapped)
  *       -> show "快速双击可锁定" for ~1.5s.
@@ -50,6 +52,11 @@
 #endif
 
 #define HINT_SHOW_MS        1500
+#define HINT_ESC_HOLD_MS    1500  /* how long ESC must be held before the
+                                   * "long-press 5s to return home" toast
+                                   * appears. Short taps stay silent. */
+#define HINT_ESC_POLL_MS    100   /* how often we re-check "is ESC still
+                                   * held and past the threshold?". */
 #define HINT_BG_COLOR       0x1F3A5F
 #define HINT_BG_OPA         LV_OPA_80
 #define HINT_TEXT_COLOR     0xFFFFFF
@@ -61,6 +68,16 @@ static lv_obj_t  *s_hint_obj   = NULL;
 static lv_obj_t  *s_hint_label = NULL;
 static lv_timer_t *s_hint_timer = NULL;
 
+/* ESC-hold tracking. We do NOT fire the ESC hint on key-down anymore;
+ * instead we record the down-tick and let a poll timer decide. */
+static lv_timer_t *s_esc_poll_timer = NULL;
+static uint32_t    s_esc_down_tick  = 0;   /* lv_tick_get() snapshot at
+                                            * key-down; 0 == not held */
+static bool        s_esc_hint_shown = false; /* true iff the currently
+                                              * visible toast is the ESC
+                                              * one (so release can hide
+                                              * only its own hint). */
+
 static void hint_timer_cb(lv_timer_t *t)
 {
     /* One-shot: hide the toast and pause the timer. We keep the timer
@@ -70,7 +87,35 @@ static void hint_timer_cb(lv_timer_t *t)
     if (s_hint_obj) {
         lv_obj_add_flag(s_hint_obj, LV_OBJ_FLAG_HIDDEN);
     }
+    s_esc_hint_shown = false;
     if (t) lv_timer_pause(t);
+}
+
+/* Forward decl: the poll timer shows the hint, which is defined below. */
+static void show_hint(const char *text);
+
+/* Poll while ESC is held. Fires every HINT_ESC_POLL_MS. If ESC is
+ * released (LVGL_HOME_KEY_FLAGE == 0) we just pause ourselves — the
+ * release path also explicitly pauses, this is belt-and-suspenders.
+ * If ESC is still down and has been held >= HINT_ESC_HOLD_MS, show
+ * the toast once and pause until the next fresh ESC press. */
+static void esc_poll_timer_cb(lv_timer_t *t)
+{
+    /* ESC no longer held — nothing to do until a new key-down. */
+    if (LVGL_HOME_KEY_FLAGE == 0 || s_esc_down_tick == 0) {
+        if (t) lv_timer_pause(t);
+        return;
+    }
+
+    uint32_t elapsed = lv_tick_elaps(s_esc_down_tick);
+    if (elapsed >= HINT_ESC_HOLD_MS) {
+        show_hint("长按 ESC 5秒可返回首页");
+        s_esc_hint_shown = true;
+        /* One-shot per hold: don't keep re-triggering show_hint every
+         * 100ms while the user continues to hold ESC past 1.5s. The
+         * auto-hide timer (HINT_SHOW_MS) will take the toast down. */
+        if (t) lv_timer_pause(t);
+    }
 }
 
 static void ensure_hint_created(void)
@@ -115,6 +160,13 @@ static void show_hint(const char *text)
     ensure_hint_created();
     if (s_hint_obj == NULL || s_hint_label == NULL) return;
 
+    /* Any call to show_hint replaces whatever toast was up. Clear the
+     * "visible toast is the ESC one" flag; the ESC path re-sets it right
+     * after calling us, so this only affects SHIFT/SYM callers — which
+     * means releasing ESC after a SHIFT toast took over won't mistakenly
+     * hide the SHIFT toast. */
+    s_esc_hint_shown = false;
+
     lv_label_set_text(s_hint_label, text);
     lv_obj_align(s_hint_obj, LV_ALIGN_TOP_MID, 0, HINT_Y_OFFSET);
     lv_obj_clear_flag(s_hint_obj, LV_OBJ_FLAG_HIDDEN);
@@ -136,19 +188,54 @@ extern "C" void ui_global_hint_on_key(const struct key_item *elm)
 {
     if (elm == NULL) return;
 
-    /* Only fire on the initial key-down edge — not repeats, not releases. */
-    if (elm->key_state != KBD_KEY_PRESSED) return;
-
     const uint32_t code = elm->key_code;
+
+    /* ESC has its own gated behavior: arm/disarm on every press/release
+     * edge; do not bail on non-PRESSED states like the other keys. */
+    if (code == KEY_ESC) {
+        if (elm->key_state == KBD_KEY_PRESSED) {
+            /* Arm the hold timer. Don't show anything yet — a quick tap
+             * (common "go back" gesture) should stay silent. */
+            s_esc_down_tick  = lv_tick_get();
+            if (s_esc_down_tick == 0) s_esc_down_tick = 1; /* sentinel */
+            s_esc_hint_shown = false;
+
+            if (s_esc_poll_timer == NULL) {
+                s_esc_poll_timer = lv_timer_create(esc_poll_timer_cb,
+                                                   HINT_ESC_POLL_MS,
+                                                   NULL);
+            }
+            if (s_esc_poll_timer) {
+                lv_timer_set_period(s_esc_poll_timer, HINT_ESC_POLL_MS);
+                lv_timer_reset(s_esc_poll_timer);
+                lv_timer_resume(s_esc_poll_timer);
+            }
+        } else if (elm->key_state == KBD_KEY_RELEASED) {
+            /* Released before the threshold -> hint never armed; pause
+             * the poll timer. If the hint is currently visible because
+             * the user did hold past 1.5s, hide it immediately on release
+             * rather than waiting for the auto-hide 1.5s. */
+            s_esc_down_tick = 0;
+            if (s_esc_poll_timer) lv_timer_pause(s_esc_poll_timer);
+            if (s_esc_hint_shown) {
+                /* Reuse hint_timer_cb to do the hide + pause bookkeeping
+                 * in one place. Passing s_hint_timer keeps the pause-in-
+                 * callback behavior consistent. */
+                hint_timer_cb(s_hint_timer);
+            }
+        }
+        /* state == KBD_KEY_REPEATED: ignore — the poll timer handles
+         * the hold detection regardless of repeat delivery. */
+        return;
+    }
+
+    /* All other keys: only fire on the initial key-down edge. */
+    if (elm->key_state != KBD_KEY_PRESSED) return;
 
     /* Explicitly skip Fn — no lock feature attached to it. */
     if (code == KEY_FN) return;
 
     switch (code) {
-        case KEY_ESC:
-            show_hint("长按 ESC 5秒可返回首页");
-            return;
-
         case KEY_LEFTSHIFT:
         case KEY_RIGHTSHIFT:
         case KEY_COMPOSE:
