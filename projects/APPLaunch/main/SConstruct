@@ -5,11 +5,16 @@ Import('env')
 with open(env['PROJECT_TOOL_S']) as f:
     exec(f.read())
 
+if 'CONFIG_TOOLCHAIN_PREFIX' in os.environ:
+    env['RANLIB'] = '${_concat(GCCPREFIX, "ranlib", GCCSUFFIX, __env__)}'
+    env['RANLIBCOM'] = '$RANLIB $TARGET'
+    env['ARFLAGS'] = ['rcs']
+
 SRCS = Glob('src/*.c*')
 INCLUDE = [ADir('.'), ADir('include')]
 PRIVATE_INCLUDE = []
 
-is_desktop_sdl = (platform.system() == 'Darwin') or ('CONFIG_V9_5_LV_USE_SDL' in os.environ)
+is_desktop_sdl = 'CONFIG_V9_5_LV_USE_SDL' in os.environ
 
 if is_desktop_sdl and platform.system() == 'Darwin':
     import subprocess
@@ -33,6 +38,13 @@ DEFINITIONS = []
 DEFINITIONS_PRIVATE = []
 LDFLAGS = []
 LINK_SEARCH_PATH = []
+if not is_desktop_sdl and 'CONFIG_TOOLCHAIN_SYSROOT' in os.environ:
+    multiarch_lib = os.path.join(os.environ['CONFIG_TOOLCHAIN_SYSROOT'], 'usr', 'lib', 'aarch64-linux-gnu')
+    LDFLAGS += [
+        f'-B{multiarch_lib}',
+        f'-L{multiarch_lib}',
+        f'-Wl,-rpath-link,{multiarch_lib}',
+    ]
 if is_desktop_sdl and platform.system() == 'Darwin':
     import subprocess
     try:
@@ -83,7 +95,14 @@ if is_desktop_sdl and platform.system() == 'Darwin':
         lvgl_component['INCLUDE'] += ['/opt/homebrew/include/freetype2']
 else:
     lvgl_component['REQUIREMENTS'] += ['freetype']
-    lvgl_component['INCLUDE'] += ['/usr/include/freetype2', '/usr/include/libpng16']
+    if 'CONFIG_TOOLCHAIN_SYSROOT' in os.environ:
+        sysroot_include = os.path.join(os.environ['CONFIG_TOOLCHAIN_SYSROOT'], 'usr', 'include')
+        lvgl_component['INCLUDE'] += [
+            os.path.join(sysroot_include, 'freetype2'),
+            os.path.join(sysroot_include, 'libpng16'),
+        ]
+    else:
+        lvgl_component['INCLUDE'] += ['/usr/include/freetype2', '/usr/include/libpng16']
 
 for src in lvgl_component['SRCS']:
     if 'lv_sdl_keyboard.c' in str(src):
