@@ -4,11 +4,30 @@ import shutil
 import socket
 import platform
 arch = platform.machine()
+homebrew_toolchain = "/opt/homebrew/bin"
+has_homebrew_aarch64 = os.path.exists(os.path.join(homebrew_toolchain, "aarch64-linux-gnu-gcc"))
 
 
 version = "v0.0.3"
 static_lib = "static_lib"
 update = False
+sysroot_dir = Path.cwd() / static_lib
+multiarch_include = sysroot_dir / "usr" / "include" / "aarch64-linux-gnu"
+multiarch_lib = sysroot_dir / "usr" / "lib" / "aarch64-linux-gnu"
+toolchain_flags = [
+    f"-B{multiarch_lib}",
+    f"-isystem{multiarch_include}",
+    f"-L{multiarch_lib}",
+    f"-Wl,-rpath-link,{multiarch_lib}",
+]
+
+
+def allow_trusted_sdk_tar_links():
+    try:
+        import tarfile
+        tarfile.TarFile.extraction_filter = staticmethod(tarfile.fully_trusted_filter)
+    except AttributeError:
+        pass
 
 
 # export CardputerZero=y 交叉编译到 CardputerZero
@@ -21,9 +40,11 @@ if 'CardputerZero' in os.environ:
             f.write("CONFIG_V9_5_LV_USE_DRAW_SW_ASM=1\n")
             f.write("CONFIG_V9_5_LV_USE_EVDEV=y\n")
 
-            # f.write('CONFIG_TOOLCHAIN_PATH="/opt/gcc-linaro-7.5.0-2019.12-x86_64_aarch64-linux-gnu/bin"\n')
+            if has_homebrew_aarch64:
+                f.write(f'CONFIG_TOOLCHAIN_PATH="{homebrew_toolchain}"\n')
             f.write('CONFIG_TOOLCHAIN_PREFIX="aarch64-linux-gnu-"\n')
             f.write(f'''CONFIG_TOOLCHAIN_SYSROOT="{os.path.join(sys.path[0], "static_lib")}"\n''')
+            f.write('CONFIG_TOOLCHAIN_FLAGS="{}"\n'.format(" ".join(toolchain_flags)))
 # x86_64/arm64 本地模拟器 (macOS/Linux desktop)
 elif arch != "aarch64" or platform.system() == "Darwin":
     if not os.path.exists("build/config/config_tmp.mk"):
@@ -79,6 +100,7 @@ if 'CardputerZero' in os.environ or arch == "aarch64":
     if update:
         with open(env["PROJECT_TOOL_S"]) as f:
             exec(f.read())
+        allow_trusted_sdk_tar_links()
         down_url = "https://github.com/dianjixz/M5CardputerZero-UserDemo/releases/download/{}/sdk_bsp.tar.gz".format(
             version
         )
