@@ -3,6 +3,10 @@
 #include "lvgl/src/draw/lv_image_decoder.h"
 #include <dirent.h>
 #include <sys/stat.h>
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/ioctl.h>
+#include <linux/fb.h>
 #include <algorithm>
 #include <cctype>
 #include <cstring>
@@ -44,6 +48,11 @@ public:
         scan_images();
         create_UI();
         event_handler_init();
+        init_hdmi_framebuffer();
+        if (hdmi_available_) {
+            extern bool g_hdmi_mirror_paused;
+            g_hdmi_mirror_paused = true;
+        }
         if (!images_.empty()) {
             slideshow_timer_ = lv_timer_create(slideshow_timer_cb, SLIDE_MS, this);
         }
@@ -51,6 +60,11 @@ public:
 
     ~UIGalleryPage()
     {
+        if (hdmi_available_) {
+            extern bool g_hdmi_mirror_paused;
+            g_hdmi_mirror_paused = false;
+        }
+        close_hdmi_framebuffer();
         if (slideshow_timer_) lv_timer_del(slideshow_timer_);
         for (auto &kv : jpg_cache_) {
             unlink(kv.second.c_str());
@@ -68,9 +82,126 @@ private:
     lv_obj_t *pause_icon_ = nullptr;
 
     std::string pending_path_;
+    std::string current_display_path_;
     uint32_t pending_zoom_ = 256;
     std::unordered_map<std::string, std::string> jpg_cache_;
     int tmp_counter_ = 0;
+
+    /* ========== HDMI 高清输出相关 ========== */
+    int hdmi_fbfd_ = -1;
+    unsigned char *hdmi_fbp_ = nullptr;
+    int hdmi_w_ = 0;
+    int hdmi_h_ = 0;
+    int hdmi_stride_ = 0;
+    int hdmi_bpp_ = 16;
+    bool hdmi_available_ = false;
+
+    void init_hdmi_framebuffer()
+    {
+        FILE *fp = fopen("/proc/fb", "r");
+        if (!fp) return;
+
+        char line[256];
+        char hdmi_dev[32] = {0};
+        while (fgets(line, sizeof(line), fp) != NULL) {
+            if (strstr(line, "fb_st7789v") != NULL) continue;
+            int fb_num = -1;
+            if (sscanf(line, "%d", &fb_num) == 1) {
+                snprintf(hdmi_dev, sizeof(hdmi_dev), "/dev/fb%d", fb_num);
+                break;
+            }
+        }
+        fclose(fp);
+
+        if (hdmi_dev[0] == '\0') return;
+
+        hdmi_fbfd_ = open(hdmi_dev, O_RDWR);
+        if (hdmi_fbfd_ < 0) return;
+
+        struct fb_var_screeninfo vinfo;
+        struct fb_fix_screeninfo finfo;
+        if (ioctl(hdmi_fbfd_, FBIOGET_FSCREENINFO, &finfo) == -1 ||
+            ioctl(hdmi_fbfd_, FBIOGET_VSCREENINFO, &vinfo) == -1) {
+            close(hdmi_fbfd_);
+            hdmi_fbfd_ = -1;
+            return;
+        }
+
+        hdmi_w_ = vinfo.xres;
+        hdmi_h_ = vinfo.yres;
+        hdmi_bpp_ = vinfo.bits_per_pixel;
+        hdmi_stride_ = finfo.line_length;
+
+        if (hdmi_bpp_ != 16) {
+            printf("HDMI is %dbpp, gallery HDMI output needs 16bpp RGB565\n", hdmi_bpp_);
+            close(hdmi_fbfd_);
+            hdmi_fbfd_ = -1;
+            return;
+        }
+
+        hdmi_fbp_ = (unsigned char *)mmap(0, finfo.smem_len,
+                                          PROT_READ | PROT_WRITE, MAP_SHARED,
+                                          hdmi_fbfd_, 0);
+        if (hdmi_fbp_ == MAP_FAILED) {
+            close(hdmi_fbfd_);
+            hdmi_fbfd_ = -1;
+            return;
+        }
+
+        hdmi_available_ = true;
+        printf("Gallery HDMI output ready: %dx%d RGB565\n", hdmi_w_, hdmi_h_);
+    }
+
+    void close_hdmi_framebuffer()
+    {
+        if (hdmi_fbp_ && hdmi_fbp_ != MAP_FAILED) {
+            munmap(hdmi_fbp_, hdmi_h_ * hdmi_stride_);
+            hdmi_fbp_ = nullptr;
+        }
+        if (hdmi_fbfd_ >= 0) {
+            close(hdmi_fbfd_);
+            hdmi_fbfd_ = -1;
+        }
+        hdmi_available_ = false;
+    }
+
+    void update_hdmi_display()
+    {
+        if (!hdmi_available_ || current_display_path_.empty()) return;
+
+        std::string sys_path = current_display_path_;
+        if (sys_path.size() > 2 && sys_path.substr(0, 2) == "A:") {
+            sys_path = "." + sys_path.substr(2);
+        }
+
+        char cmd[1024];
+        snprintf(cmd, sizeof(cmd),
+            "ffmpeg -y -loglevel error -i \"%s\" "
+            "-vf \"scale=%d:%d:force_original_aspect_ratio=decrease,"
+            "pad=%d:%d:(ow-iw)/2:(oh-ih)/2:black\" "
+            "-f rawvideo -pix_fmt rgb565le -",
+            sys_path.c_str(),
+            hdmi_w_, hdmi_h_,
+            hdmi_w_, hdmi_h_);
+
+        FILE *pipe = popen(cmd, "r");
+        if (!pipe) {
+            printf("Failed to run ffmpeg for HDMI\n");
+            return;
+        }
+
+        std::vector<uint8_t> row_buf(hdmi_w_ * 2);
+        for (int y = 0; y < hdmi_h_; y++) {
+            size_t read_len = fread(row_buf.data(), 1, hdmi_w_ * 2, pipe);
+            if (read_len < (size_t)(hdmi_w_ * 2)) break;
+            memcpy(hdmi_fbp_ + y * hdmi_stride_, row_buf.data(), hdmi_w_ * 2);
+        }
+
+        int ret = pclose(pipe);
+        if (ret != 0) {
+            printf("ffmpeg HDMI pipe exited with code %d\n", ret);
+        }
+    }
 
     // 扫描目录下的 PNG 图片
     void scan_images()
@@ -189,6 +320,7 @@ private:
         current_idx_ = idx;
 
         std::string display_path = prepare_image(images_[idx]);
+        current_display_path_ = display_path;
         if (display_path.empty()) {
             if (info_label_) lv_label_set_text(info_label_, "Image decode failed");
             return;
@@ -232,6 +364,7 @@ private:
             lv_img_set_zoom(img_obj_, zoom);
             lv_obj_set_style_opa(img_obj_, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
             update_info();
+            update_hdmi_display();
         }
     }
 
@@ -260,6 +393,7 @@ private:
             lv_anim_start(&a);
         }
         update_info();
+        update_hdmi_display();
     }
 
     void update_info()

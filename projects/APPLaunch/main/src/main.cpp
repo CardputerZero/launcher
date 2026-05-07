@@ -9,6 +9,11 @@
 #include "keyboard_input.h"
 #include <linux/input.h>
 #include <cstring>
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/ioctl.h>
+#include <linux/fb.h>
+#include <algorithm>
 // #include "ui/inter_process_comms.h"
 #include "ui/components/ui_app_lora.hpp"
 
@@ -163,28 +168,177 @@ static void lv_linux_indev_init(void)
 
 
 #if LV_USE_LINUX_FBDEV
+
+/* ========== HDMI framebuffer 镜像相关 ========== */
+typedef struct {
+    int fbfd;
+    unsigned char *fbp;
+    struct fb_var_screeninfo vinfo;
+    struct fb_fix_screeninfo finfo;
+    bool valid;
+} mirror_fb_t;
+
+static mirror_fb_t g_lcd_mirror = {0};
+static mirror_fb_t g_hdmi_mirror = {0};
+
+/* 相册APP运行时暂停LCD镜像，改用高清原图输出 */
+bool g_hdmi_mirror_paused = false;
+
+static bool open_mirror_fb(mirror_fb_t *fb, const char *device, bool read_only)
+{
+    int flag = read_only ? O_RDONLY : O_RDWR;
+    fb->fbfd = open(device, flag);
+    if (fb->fbfd < 0) return false;
+
+    if (ioctl(fb->fbfd, FBIOGET_FSCREENINFO, &fb->finfo) == -1 ||
+        ioctl(fb->fbfd, FBIOGET_VSCREENINFO, &fb->vinfo) == -1) {
+        close(fb->fbfd);
+        fb->fbfd = -1;
+        return false;
+    }
+
+    int prot = read_only ? PROT_READ : (PROT_READ | PROT_WRITE);
+    fb->fbp = (unsigned char *)mmap(0, fb->finfo.smem_len, prot, MAP_SHARED, fb->fbfd, 0);
+    if (fb->fbp == MAP_FAILED) {
+        close(fb->fbfd);
+        fb->fbfd = -1;
+        return false;
+    }
+
+    fb->valid = true;
+    return true;
+}
+
+static void close_mirror_fb(mirror_fb_t *fb)
+{
+    if (!fb->valid) return;
+    if (fb->fbp && fb->fbp != MAP_FAILED) munmap(fb->fbp, fb->finfo.smem_len);
+    if (fb->fbfd >= 0) close(fb->fbfd);
+    memset(fb, 0, sizeof(mirror_fb_t));
+}
+
+/* 从 /proc/fb 查找非 ST7789V 的 framebuffer（通常是 HDMI） */
+static int find_hdmi_fbdev(char *out_path, size_t buf_size)
+{
+    FILE *fp = fopen("/proc/fb", "r");
+    if (!fp) return -1;
+
+    char line[256];
+    while (fgets(line, sizeof(line), fp) != NULL) {
+        if (strstr(line, "fb_st7789v") != NULL) continue;
+
+        int fb_num = -1;
+        if (sscanf(line, "%d", &fb_num) == 1) {
+            snprintf(out_path, buf_size, "/dev/fb%d", fb_num);
+            fclose(fp);
+            return 0;
+        }
+    }
+
+    fclose(fp);
+    return -1;
+}
+
+/* 将 LCD framebuffer 内容缩放到 HDMI */
+static void mirror_lcd_to_hdmi(void)
+{
+    if (g_hdmi_mirror_paused) return;
+    if (!g_hdmi_mirror.valid || !g_lcd_mirror.valid) return;
+
+    int lcd_w = g_lcd_mirror.vinfo.xres;
+    int lcd_h = g_lcd_mirror.vinfo.yres;
+    int hdmi_w = g_hdmi_mirror.vinfo.xres;
+    int hdmi_h = g_hdmi_mirror.vinfo.yres;
+    int lcd_bpp = g_lcd_mirror.vinfo.bits_per_pixel;
+    int hdmi_bpp = g_hdmi_mirror.vinfo.bits_per_pixel;
+
+    /* 相同分辨率且色深一致，直接 memcpy（零开销） */
+    if (lcd_w == hdmi_w && lcd_h == hdmi_h && lcd_bpp == hdmi_bpp) {
+        memcpy(g_hdmi_mirror.fbp, g_lcd_mirror.fbp, g_lcd_mirror.finfo.smem_len);
+        return;
+    }
+
+    /* 仅处理 RGB565 -> RGB565 的情况 */
+    if (lcd_bpp != 16 || hdmi_bpp != 16) return;
+
+    /* 居中保持比例缩放 */
+    float scale_x = (float)hdmi_w / lcd_w;
+    float scale_y = (float)hdmi_h / lcd_h;
+    float scale = scale_x < scale_y ? scale_x : scale_y;
+
+    int out_w = (int)(lcd_w * scale);
+    int out_h = (int)(lcd_h * scale);
+    int offset_x = (hdmi_w - out_w) / 2;
+    int offset_y = (hdmi_h - out_h) / 2;
+
+    uint16_t *src = (uint16_t *)g_lcd_mirror.fbp;
+    uint16_t *dst = (uint16_t *)g_hdmi_mirror.fbp;
+    int src_stride = g_lcd_mirror.finfo.line_length / 2;
+    int dst_stride = g_hdmi_mirror.finfo.line_length / 2;
+
+    /* 清屏为黑色 */
+    for (int y = 0; y < hdmi_h; y++) {
+        memset(&dst[y * dst_stride], 0, hdmi_w * sizeof(uint16_t));
+    }
+
+    /* 最近邻缩放 */
+    for (int y = 0; y < out_h; y++) {
+        int src_y = (int)(y / scale);
+        uint16_t *dst_row = &dst[(offset_y + y) * dst_stride + offset_x];
+        const uint16_t *src_row = &src[src_y * src_stride];
+        for (int x = 0; x < out_w; x++) {
+            int src_x = (int)(x / scale);
+            dst_row[x] = src_row[src_x];
+        }
+    }
+}
+/* ================================================ */
+
 static void lv_linux_disp_init(void)
 {
-    // export LV_LINUX_FBDEV_DEVICE="/dev/fb$(grep 'fb_st7789v' /proc/fb | awk '{print $1}')"
+    /* 1. LCD 显示器（原有逻辑） */
     const char *device = NULL;
     char fbdev[64] = {0};
     device = getenv_default("LV_LINUX_FBDEV_DEVICE", NULL);
     if ((device == NULL) && (get_st7789v_fbdev(fbdev, sizeof(fbdev)) == 0)) {
         device = fbdev;
     }
-    printf("Using framebuffer device: %s\n", device);
+    printf("Using LCD framebuffer device: %s\n", device);
+
     lv_display_t * disp = lv_linux_fbdev_create();
     if(disp == NULL) {
         printf("Failed to create fbdev display!\n");
         return;
     }
-
     lv_linux_fbdev_set_file(disp, device);
 
-    // 打印获取到的分辨率
+    /* 2. 同时以只读方式打开 LCD framebuffer，供镜像读取 */
+    if (device && open_mirror_fb(&g_lcd_mirror, device, true)) {
+        printf("LCD mirror buffer: %dx%d, %dbpp\n",
+               g_lcd_mirror.vinfo.xres,
+               g_lcd_mirror.vinfo.yres,
+               g_lcd_mirror.vinfo.bits_per_pixel);
+    }
+
+    /* 3. 查找并打开 HDMI framebuffer */
+    char hdmi_dev[64] = {0};
+    if (find_hdmi_fbdev(hdmi_dev, sizeof(hdmi_dev)) == 0) {
+        printf("HDMI framebuffer found: %s\n", hdmi_dev);
+        if (open_mirror_fb(&g_hdmi_mirror, hdmi_dev, false)) {
+            printf("HDMI mirror buffer: %dx%d, %dbpp\n",
+                   g_hdmi_mirror.vinfo.xres,
+                   g_hdmi_mirror.vinfo.yres,
+                   g_hdmi_mirror.vinfo.bits_per_pixel);
+        } else {
+            printf("Warning: Failed to open HDMI framebuffer\n");
+        }
+    } else {
+        printf("No HDMI framebuffer detected, running in single display mode\n");
+    }
+
     lv_coord_t w = lv_display_get_horizontal_resolution(disp);
     lv_coord_t h = lv_display_get_vertical_resolution(disp);
-    printf("Framebuffer resolution: %dx%d\n", w, h);
+    printf("LCD resolution: %dx%d\n", w, h);
 }
 #if ! LV_USE_EVDEV && ! LV_USE_LIBINPUT
 static void lv_linux_indev_init(void)
@@ -240,7 +394,11 @@ int main(void)
     printf("Entering main loop...\n");
     while(1) {
         lv_timer_handler();
-        usleep(1000);
+
+        /* 同步 LCD 内容到 HDMI */
+        mirror_lcd_to_hdmi();
+
+        usleep(5000);
     }
 
     return 0;
