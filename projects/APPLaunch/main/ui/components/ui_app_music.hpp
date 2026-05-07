@@ -41,6 +41,7 @@ class UIMusicPage : public app_base
 public:
     UIMusicPage() : app_base()
     {
+        set_page_title("MUSIC");
         creat_UI();
         event_handler_init();
     }

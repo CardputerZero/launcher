@@ -44,6 +44,7 @@ class UIMeshPage : public app_base
 public:
     UIMeshPage() : app_base()
     {
+        set_page_title("MESH");
         srand((unsigned)time(nullptr));
         generate_node_id();
         creat_UI();

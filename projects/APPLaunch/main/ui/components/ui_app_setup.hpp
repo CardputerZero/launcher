@@ -46,6 +46,7 @@ class UISetupPage : public app_base
 public:
     UISetupPage() : app_base()
     {
+        set_page_title("SETUP");
         menu_init();
         creat_UI();
         event_handler_init();

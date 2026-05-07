@@ -49,6 +49,7 @@ class UIHackPage : public app_base
 public:
     UIHackPage() : app_base()
     {
+        set_page_title("HACK");
         menu_init();
         creat_UI();
         event_handler_init();

@@ -1,17 +1,20 @@
 from pathlib import Path
 import os, sys
-import shutil
-import socket
 import platform
+
 arch = platform.machine()
 homebrew_toolchain = "/opt/homebrew/bin"
 has_homebrew_aarch64 = os.path.exists(os.path.join(homebrew_toolchain, "aarch64-linux-gnu-gcc"))
 
+local_path = Path(os.getcwd())
+sdk_path = local_path.parent.parent / "SDK"
+os.environ["SDK_PATH"] = str(sdk_path)
+os.environ["EXT_COMPONENTS_PATH"] = str(sdk_path.parent / "ext_components")
 
 version = "v0.0.3"
-static_lib = "static_lib"
+static_lib = os.path.join(sdk_path, "github_source", f"static_lib_{version}")
 update = False
-sysroot_dir = Path.cwd() / static_lib
+sysroot_dir = Path(static_lib)
 multiarch_include = sysroot_dir / "usr" / "include" / "aarch64-linux-gnu"
 multiarch_lib = sysroot_dir / "usr" / "lib" / "aarch64-linux-gnu"
 toolchain_flags = [
@@ -30,8 +33,8 @@ def allow_trusted_sdk_tar_links():
         pass
 
 
-# export CardputerZero=y 交叉编译到 CardputerZero
-if 'CardputerZero' in os.environ:
+# Cross-compile to Cardputer Zero when CardputerZero=y is exported.
+if "CardputerZero" in os.environ:
     if not os.path.exists("build/config/config_tmp.mk"):
         os.makedirs("build/config", exist_ok=True)
         with open("build/config/config_tmp.mk", "w") as f:
@@ -39,13 +42,13 @@ if 'CardputerZero' in os.environ:
             f.write("CONFIG_V9_5_LV_DRAW_SW_ASM_NEON=y\n")
             f.write("CONFIG_V9_5_LV_USE_DRAW_SW_ASM=1\n")
             f.write("CONFIG_V9_5_LV_USE_EVDEV=y\n")
-
             if has_homebrew_aarch64:
                 f.write(f'CONFIG_TOOLCHAIN_PATH="{homebrew_toolchain}"\n')
             f.write('CONFIG_TOOLCHAIN_PREFIX="aarch64-linux-gnu-"\n')
-            f.write(f'''CONFIG_TOOLCHAIN_SYSROOT="{os.path.join(sys.path[0], "static_lib")}"\n''')
+            f.write(f'CONFIG_TOOLCHAIN_SYSROOT="{static_lib}"\n')
             f.write('CONFIG_TOOLCHAIN_FLAGS="{}"\n'.format(" ".join(toolchain_flags)))
-# x86_64/arm64 本地模拟器 (macOS/Linux desktop)
+
+# Local SDL simulator on macOS/Linux desktop.
 elif arch != "aarch64" or platform.system() == "Darwin":
     if not os.path.exists("build/config/config_tmp.mk"):
         os.makedirs("build/config", exist_ok=True)
@@ -62,7 +65,7 @@ elif arch != "aarch64" or platform.system() == "Darwin":
                 except Exception:
                     pass
 
-# CardputerZero 本机编译
+# Native Cardputer Zero build.
 else:
     if not os.path.exists("build/config/config_tmp.mk"):
         os.makedirs("build/config", exist_ok=True)
@@ -73,20 +76,14 @@ else:
             f.write("CONFIG_V9_5_LV_USE_EVDEV=y\n")
 
 
-local_path = Path(os.getcwd())
-sdk_path = local_path.parent.parent / "SDK"
-os.environ["SDK_PATH"] = str(sdk_path)
-os.environ["EXT_COMPONENTS_PATH"] = str(sdk_path.parent / "ext_components")
-
-
 env = SConscript(
     str(sdk_path / "tools" / "scons" / "project.py"),
     variant_dir=os.getcwd(),
     duplicate=0,
 )
 
-# static_lib is only needed for cross-compilation, skip in SDL mode
-if 'CardputerZero' in os.environ or arch == "aarch64":
+# static_lib is only needed for cross-compilation, skip in SDL mode.
+if "CardputerZero" in os.environ or arch == "aarch64":
     if not os.path.exists(static_lib):
         update = True
     else:
@@ -94,7 +91,7 @@ if 'CardputerZero' in os.environ or arch == "aarch64":
             with open(str(Path(static_lib) / "version"), "r") as f:
                 if version != f.read().strip():
                     update = True
-        except:
+        except Exception:
             update = True
 
     if update:
@@ -104,7 +101,4 @@ if 'CardputerZero' in os.environ or arch == "aarch64":
         down_url = "https://github.com/dianjixz/M5CardputerZero-UserDemo/releases/download/{}/sdk_bsp.tar.gz".format(
             version
         )
-        down_path = check_wget_down(down_url, "static_lib_{}.tar.gz".format(version))
-        if os.path.exists(static_lib):
-            shutil.rmtree(static_lib)
-        shutil.move(down_path, static_lib)
+        check_wget_down(down_url, "static_lib_{}.tar.gz".format(version))

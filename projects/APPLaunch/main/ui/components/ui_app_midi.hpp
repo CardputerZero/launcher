@@ -36,13 +36,18 @@ class UIMidiPage : public app_
 public:
     UIMidiPage() : app_()
     {
+        system("gpioset -c gpiochip0 4=1 &");
+        system("gpioset -c gpiochip0 17=1 &");
+        system("sh -c 'sleep 4 ; /home/pi/roller485 -b 1 mode 1 ; /home/pi/roller485 -b 1 enable ; /home/pi/roller485 -b 1 speed 100 ' &");
         creat_UI();
         event_handler_init();
     }
 
     ~UIMidiPage()
     {
-
+        system("pkill gpioset");
+        system("gpioset -c gpiochip0 17=0 &");
+        system("sleep 0.1 && pkill gpioset");
     }
 private:
     lv_obj_t *play_gif;
