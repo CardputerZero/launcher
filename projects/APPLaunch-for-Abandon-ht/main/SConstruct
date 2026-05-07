@@ -1,0 +1,149 @@
+import os
+import platform
+
+Import('env')
+with open(env['PROJECT_TOOL_S']) as f:
+    exec(f.read())
+
+if 'CONFIG_TOOLCHAIN_PREFIX' in os.environ:
+    env['RANLIB'] = '${_concat(GCCPREFIX, "ranlib", GCCSUFFIX, __env__)}'
+    env['RANLIBCOM'] = '$RANLIB $TARGET'
+    env['ARFLAGS'] = ['rcs']
+
+SRCS = Glob('src/*.c*')
+SRCS += [
+    AFile('../third_party/RadioLib/src/Hal.cpp'),
+    AFile('../third_party/RadioLib/src/Module.cpp'),
+    AFile('../third_party/RadioLib/src/utils/CRC.cpp'),
+    AFile('../third_party/RadioLib/src/utils/FEC.cpp'),
+    AFile('../third_party/RadioLib/src/utils/Utils.cpp'),
+    AFile('../third_party/RadioLib/src/protocols/PhysicalLayer/PhysicalLayer.cpp'),
+    AFile('../third_party/RadioLib/src/modules/SX126x/SX126x.cpp'),
+    AFile('../third_party/RadioLib/src/modules/SX126x/SX126x_commands.cpp'),
+    AFile('../third_party/RadioLib/src/modules/SX126x/SX126x_config.cpp'),
+    AFile('../third_party/RadioLib/src/modules/SX126x/SX126x_LR_FHSS.cpp'),
+    AFile('../third_party/RadioLib/src/modules/SX126x/SX1262.cpp'),
+]
+INCLUDE = [ADir('.'), ADir('include'), ADir('../third_party/RadioLib/src')]
+PRIVATE_INCLUDE = []
+
+is_desktop_sdl = 'CONFIG_V9_5_LV_USE_SDL' in os.environ
+
+if is_desktop_sdl and platform.system() == 'Darwin':
+    import subprocess
+    try:
+        nlj_inc = subprocess.check_output(
+            ['pkg-config', '--cflags', 'nlohmann_json'], text=True
+        ).strip()
+        nlj_dirs = [f.replace('-I', '') for f in nlj_inc.split() if f.startswith('-I')]
+        INCLUDE += nlj_dirs
+    except Exception:
+        INCLUDE += ['/opt/homebrew/include']
+
+if is_desktop_sdl:
+    REQUIREMENTS = ['lvgl_component', 'pthread']
+else:
+    REQUIREMENTS = ['lvgl_component', 'pthread', 'input', 'xkbcommon', 'udev']
+
+STATIC_LIB = []
+DYNAMIC_LIB = []
+DEFINITIONS = []
+DEFINITIONS_PRIVATE = []
+LDFLAGS = []
+LINK_SEARCH_PATH = []
+if not is_desktop_sdl and 'CONFIG_TOOLCHAIN_SYSROOT' in os.environ:
+    multiarch_lib = os.path.join(os.environ['CONFIG_TOOLCHAIN_SYSROOT'], 'usr', 'lib', 'aarch64-linux-gnu')
+    LDFLAGS += [
+        f'-B{multiarch_lib}',
+        f'-L{multiarch_lib}',
+        f'-Wl,-rpath-link,{multiarch_lib}',
+    ]
+if is_desktop_sdl and platform.system() == 'Darwin':
+    import subprocess
+    try:
+        ft_ldflags = subprocess.check_output(
+            ['pkg-config', '--libs', 'freetype2'], text=True
+        ).strip()
+        LDFLAGS += ft_ldflags.split()
+    except Exception:
+        LDFLAGS += ['-L/opt/homebrew/lib', '-lfreetype']
+STATIC_FILES = []
+
+
+SRCS += append_srcs_dir(ADir('ui'))
+
+if is_desktop_sdl:
+    SRCS += Glob('hal/sdl/*.c*')
+else:
+    SRCS += Glob('hal/linux/*.c*')
+
+
+lvgl_component = list(filter(lambda x: x['target'] == 'lvgl_component', env['COMPONENTS']))[0]
+
+if is_desktop_sdl:
+    lvgl_component['REQUIREMENTS'] += ['SDL2']
+    if platform.system() == 'Darwin':
+        import subprocess
+        try:
+            sdl2_cflags = subprocess.check_output(
+                ['pkg-config', '--cflags', 'sdl2'], text=True
+            ).strip()
+            sdl2_inc_dirs = [f.replace('-I', '') for f in sdl2_cflags.split() if f.startswith('-I')]
+            lvgl_component['INCLUDE'] += sdl2_inc_dirs
+        except Exception:
+            lvgl_component['INCLUDE'] += ['/opt/homebrew/include/SDL2']
+    else:
+        lvgl_component['INCLUDE'] += ['/usr/include/SDL2']
+    lvgl_component['DEFINITIONS'] += ['-D_REENTRANT']
+
+if is_desktop_sdl and platform.system() == 'Darwin':
+    import subprocess
+    try:
+        ft_cflags = subprocess.check_output(
+            ['pkg-config', '--cflags', 'freetype2'], text=True
+        ).strip()
+        ft_inc_dirs = [f.replace('-I', '') for f in ft_cflags.split() if f.startswith('-I')]
+        lvgl_component['INCLUDE'] += ft_inc_dirs
+    except Exception:
+        lvgl_component['INCLUDE'] += ['/opt/homebrew/include/freetype2']
+else:
+    lvgl_component['REQUIREMENTS'] += ['freetype']
+    if 'CONFIG_TOOLCHAIN_SYSROOT' in os.environ:
+        sysroot_include = os.path.join(os.environ['CONFIG_TOOLCHAIN_SYSROOT'], 'usr', 'include')
+        lvgl_component['INCLUDE'] += [
+            os.path.join(sysroot_include, 'freetype2'),
+            os.path.join(sysroot_include, 'libpng16'),
+        ]
+    else:
+        lvgl_component['INCLUDE'] += ['/usr/include/freetype2', '/usr/include/libpng16']
+
+for src in lvgl_component['SRCS']:
+    if 'lv_sdl_keyboard.c' in str(src):
+        lvgl_component['SRCS'].remove(src)
+
+
+# screen_srcs = append_srcs_dir(ADir('ui/screens'))
+# for src in screen_srcs:
+#     os.system(f"sed -i 's/&ui_img_/ui_img_/g' {src}")
+#     os.system(f"sed -i 's/= lv_tabview_create(/= lv_tabview_create_compat(/g' {src}")
+
+
+STATIC_FILES += [ADir('ui/images')]
+STATIC_FILES += [os.path.join(env['component_dir'], '..', '..', '..', 'doc', 'store_cache_sync.py')]
+# REQUIREMENTS += ['Backward_cpp']
+
+
+env['COMPONENTS'].append({'target':'M5CardputerZero-APPLaunch',
+                          'SRCS':SRCS,
+                          'INCLUDE':INCLUDE,
+                          'PRIVATE_INCLUDE':PRIVATE_INCLUDE,
+                          'REQUIREMENTS':REQUIREMENTS,
+                          'STATIC_LIB':STATIC_LIB,
+                          'DYNAMIC_LIB':DYNAMIC_LIB,
+                          'DEFINITIONS':DEFINITIONS,
+                          'DEFINITIONS_PRIVATE':DEFINITIONS_PRIVATE,
+                          'LDFLAGS':LDFLAGS,
+                          'LINK_SEARCH_PATH':LINK_SEARCH_PATH,
+                          'STATIC_FILES':STATIC_FILES,
+                          'REGISTER':'project'
+                          })

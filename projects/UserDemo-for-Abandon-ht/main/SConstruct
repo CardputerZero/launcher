@@ -1,0 +1,66 @@
+import os
+
+Import("env")
+with open(env["PROJECT_TOOL_S"]) as f:
+    exec(f.read())
+
+RadioLib = wget_github('https://github.com/jgromes/RadioLib.git')
+
+SRCS = Glob('src/*.c*')
+SRCS += [
+    os.path.join(RadioLib, 'src', 'Hal.cpp'),
+    os.path.join(RadioLib, 'src', 'Module.cpp'),
+    os.path.join(RadioLib, 'src', 'utils', 'CRC.cpp'),
+    os.path.join(RadioLib, 'src', 'utils', 'FEC.cpp'),
+    os.path.join(RadioLib, 'src', 'utils', 'Utils.cpp'),
+    os.path.join(RadioLib, 'src', 'protocols', 'PhysicalLayer', 'PhysicalLayer.cpp'),
+    os.path.join(RadioLib, 'src', 'modules', 'SX126x', 'SX126x.cpp'),
+    os.path.join(RadioLib, 'src', 'modules', 'SX126x', 'SX126x_commands.cpp'),
+    os.path.join(RadioLib, 'src', 'modules', 'SX126x', 'SX126x_config.cpp'),
+    os.path.join(RadioLib, 'src', 'modules', 'SX126x', 'SX126x_LR_FHSS.cpp'),
+    os.path.join(RadioLib, 'src', 'modules', 'SX126x', 'SX1262.cpp'),
+]
+
+INCLUDE = [ADir('.'), ADir('include'), os.path.join(RadioLib, 'src')]
+PRIVATE_INCLUDE = []
+REQUIREMENTS = ["lvgl_component", "pthread"]
+STATIC_LIB = []
+DYNAMIC_LIB = []
+DEFINITIONS = []
+DEFINITIONS_PRIVATE = []
+LDFLAGS = []
+LINK_SEARCH_PATH = []
+STATIC_FILES = []
+
+# 添加ui目录
+SRCS += append_srcs_dir(ADir("ui"))
+INCLUDE += ["ui"]
+
+
+# 为 lvgl_component 添加 SDL2 依赖
+lvgl_component = list(
+    filter(lambda x: x["target"] == "lvgl_component", env["COMPONENTS"])
+)[0]
+if "CONFIG_V9_5_LV_USE_SDL" in os.environ:
+    lvgl_component["REQUIREMENTS"] += ["SDL2"]
+    lvgl_component["INCLUDE"] += ["/usr/include/SDL2"]
+    lvgl_component["DEFINITIONS"] += ["-D_REENTRANT"]
+
+
+env["COMPONENTS"].append(
+    {
+        "target": "M5CardputerZero-UserDemo",
+        "SRCS": SRCS,
+        "INCLUDE": INCLUDE,
+        "PRIVATE_INCLUDE": PRIVATE_INCLUDE,
+        "REQUIREMENTS": REQUIREMENTS,
+        "STATIC_LIB": STATIC_LIB,
+        "DYNAMIC_LIB": DYNAMIC_LIB,
+        "DEFINITIONS": DEFINITIONS,
+        "DEFINITIONS_PRIVATE": DEFINITIONS_PRIVATE,
+        "LDFLAGS": LDFLAGS,
+        "LINK_SEARCH_PATH": LINK_SEARCH_PATH,
+        "STATIC_FILES": STATIC_FILES,
+        "REGISTER": "project",
+    }
+)
