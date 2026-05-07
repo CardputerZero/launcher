@@ -32,6 +32,7 @@ class UIFilePage : public app_base
 public:
     UIFilePage() : app_base()
     {
+        set_page_title("FILES");
         current_path_ = "/";
         creat_UI();
         event_handler_init();

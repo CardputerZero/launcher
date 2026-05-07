@@ -61,6 +61,10 @@ private:
 public:
     UIGpioPage() : app_base()
     {
+        set_page_title("GPIO");
+        system("pigs prs 22 1000");
+        system("pigs pfs 22 1000");
+        system("pigs p 22 500");
         gpio_init();
         creat_UI();
         event_handler_init();
@@ -72,6 +76,7 @@ public:
 
     ~UIGpioPage()
     {
+        system("pigs p 22 0");
         if (blink_timer_) {
             lv_timer_del(blink_timer_);
             blink_timer_ = nullptr;
@@ -88,7 +93,7 @@ private:
     int selected_func_  = 3;   // 默认 PWM
     int selected_value_ = 0;   // 0: FREQ, 1: DUTY
 
-    int pwm_freq_ = 10000;
+    int pwm_freq_ = 1000;
     int pwm_duty_ = 50;
 
     // G26 / G23 / G22 闪烁相关

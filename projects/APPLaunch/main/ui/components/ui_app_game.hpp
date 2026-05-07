@@ -8,11 +8,11 @@
 
 // ============================================================
 //  Snake Game  UIGamePage
-//  Screen: 320 x 170  (top bar 20px, ui_APP_Container 320x150)
+//  Screen: 320 x 170  (ui_root 320x170)
 //
 //  Layout:
 //    Title bar: 22px with "GAME - Snake" and score
-//    Game area: 320 x 128 pixels (40 cols x 16 rows, 8x8 cells)
+//    Game area: 320 x 148 pixels (40 cols x 18 rows, 8x8 cells)
 //
 //  Game states:
 //    READY     - press ENTER to start
@@ -24,14 +24,18 @@
 //    ENTER              - start / restart
 //    ESC                - quit to home
 // ============================================================
-class UIGamePage : public app_base
+class UIGamePage : public app_
 {
+    // ---- Screen constants ----
+    static constexpr int SCREEN_W    = 320;  // Overall screen width
+    static constexpr int SCREEN_H    = 170;  // Overall screen height
+
     // ---- Grid constants ----
     static constexpr int CELL_SIZE   = 8;
     static constexpr int GRID_COLS   = 40;   // 320 / 8
-    static constexpr int GRID_ROWS   = 16;   // 128 / 8
+    static constexpr int GRID_ROWS   = 18;   // 144 / 8
     static constexpr int GAME_AREA_W = 320;
-    static constexpr int GAME_AREA_H = 128;
+    static constexpr int GAME_AREA_H = 148;  // 170 - 22
     static constexpr int TITLE_BAR_H = 22;
 
     // ---- Colors ----
@@ -75,8 +79,9 @@ class UIGamePage : public app_base
     int               score_        = 0;
 
 public:
-    UIGamePage() : app_base()
+    UIGamePage() : app_()
     {
+
         creat_UI();
         event_handler_init();
     }
@@ -94,8 +99,8 @@ private:
     void creat_UI()
     {
         // -- Background panel --
-        bg_ = lv_obj_create(ui_APP_Container);
-        lv_obj_set_size(bg_, 320, 150);
+        bg_ = lv_obj_create(ui_root);
+        lv_obj_set_size(bg_, SCREEN_W, SCREEN_H);
         lv_obj_set_pos(bg_, 0, 0);
         lv_obj_set_style_radius(bg_, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_color(bg_, lv_color_hex(COLOR_BG), LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -106,7 +111,7 @@ private:
 
         // -- Title bar --
         title_bar_ = lv_obj_create(bg_);
-        lv_obj_set_size(title_bar_, 320, TITLE_BAR_H);
+        lv_obj_set_size(title_bar_, SCREEN_W, TITLE_BAR_H);
         lv_obj_set_pos(title_bar_, 0, 0);
         lv_obj_set_style_radius(title_bar_, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_color(title_bar_, lv_color_hex(COLOR_TITLE_BAR), LV_PART_MAIN | LV_STATE_DEFAULT);

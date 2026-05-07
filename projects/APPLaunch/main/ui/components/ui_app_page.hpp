@@ -26,6 +26,7 @@ class app_
 {
 
 public:
+    std::string app_name = "APP";
     lv_group_t *key_group;
     lv_obj_t *ui_root;
     lv_obj_t *get_ui() { return ui_root; }
@@ -301,20 +302,29 @@ public:
         }
     }
 
+    void set_page_title(const std::string &title)
+    {
+        lv_label_set_text(ui_TOP_logo, title.c_str());
+    }
+
 private:
     /* ================================================================== */
     /*  UI 构建                                                             */
     /* ================================================================== */
     void creat_Top_UI()
     {
-        ui_TOP_logo = lv_img_create(ui_root);
-        lv_img_set_src(ui_TOP_logo, ui_img_zero_logo_w_png);
-        lv_obj_set_width(ui_TOP_logo, LV_SIZE_CONTENT);   /// 58
-        lv_obj_set_height(ui_TOP_logo, LV_SIZE_CONTENT);    /// 12
-        lv_obj_set_x(ui_TOP_logo, 5);
-        lv_obj_set_y(ui_TOP_logo, 5);
-        lv_obj_add_flag(ui_TOP_logo, LV_OBJ_FLAG_ADV_HITTEST);     /// Flags
-        lv_obj_clear_flag(ui_TOP_logo, LV_OBJ_FLAG_SCROLLABLE);      /// Flags
+        ui_TOP_logo = lv_label_create(ui_root);
+        lv_obj_set_width(ui_TOP_logo, LV_SIZE_CONTENT);   /// 1
+        lv_obj_set_height(ui_TOP_logo, LV_SIZE_CONTENT);    /// 1
+        lv_obj_set_x(ui_TOP_logo, 4);
+        lv_obj_set_y(ui_TOP_logo, 0);
+        lv_obj_set_align(ui_TOP_logo, LV_ALIGN_TOP_LEFT);
+        lv_label_set_text(ui_TOP_logo, app_name.c_str());
+        lv_obj_set_style_text_color(ui_TOP_logo, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_text_opa(ui_TOP_logo, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_text_align(ui_TOP_logo, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_text_font(ui_TOP_logo, &lv_font_montserrat_16, LV_PART_MAIN | LV_STATE_DEFAULT);
+
 
         ui_TOP_time = lv_obj_create(ui_root);
         lv_obj_set_width(ui_TOP_time, 40);

@@ -30,6 +30,7 @@ class UISSHPage : public app_base
 public:
     UISSHPage() : app_base()
     {
+        set_page_title("SSH");
         fields_.resize(3);
         fields_[0] = {"Host", "192.168.1.1"};
         fields_[1] = {"Port", "22"};

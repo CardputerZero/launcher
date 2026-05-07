@@ -30,6 +30,7 @@ class UIEmailPage : public app_base
 public:
     UIEmailPage() : app_base()
     {
+        set_page_title("Email");
         email_init();
         creat_UI();
         event_handler_init();

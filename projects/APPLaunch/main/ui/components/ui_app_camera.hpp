@@ -26,6 +26,7 @@ class UICameraPage : public app_base
 public:
     UICameraPage() : app_base()
     {
+        set_page_title("CAMERA");
         detect_camera();
         creat_UI();
         event_handler_init();

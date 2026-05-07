@@ -160,6 +160,7 @@ public:
             poll_timer = lv_timer_create(UIConsolePage::s_poll_cb, 30, this);
         if (!cursor_timer)
             cursor_timer = lv_timer_create(UIConsolePage::s_cursor_blink_cb, 500, this);
+        set_page_title(executable);
     }
 
 private:

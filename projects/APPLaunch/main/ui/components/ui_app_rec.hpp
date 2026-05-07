@@ -31,6 +31,7 @@ class UIRecPage : public app_base
 public:
     UIRecPage() : app_base()
     {
+        set_page_title("REC");
         creat_UI();
         event_handler_init();
     }
