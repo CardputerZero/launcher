@@ -5,37 +5,12 @@
 #include <time.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <cstring>
-#include <chrono>
 #include "ui/ui.h"
-#include "ui/ui_global_hint.h"
 #include "keyboard_input.h"
-#include "compat/input_keys.h"
-#include "hal/hal_process.h"
-#include "hal/hal_settings.h"
+#include <linux/input.h>
+#include <cstring>
 // #include "ui/inter_process_comms.h"
-
-// #define BACKWARD_HAS_DW 1
-// #include "backward.hpp"
-// #include "backward.h"
-
-#include "hal/hal_paths.h"
-static const char* lock_file = NULL;
-volatile uint32_t LV_EVENT_BATTERY;
-
-static void battery_timer_cb(lv_timer_t *timer)
-{
-    (void)timer;
-    lv_obj_t *root = lv_screen_active();
-    if (!root) return;
-
-    lv_battery_event_data_t data;
-    memset(&data, 0, sizeof(data));
-    data.info = hal_battery_read();
-    lv_obj_send_event(root, (lv_event_code_t)LV_EVENT_BATTERY, &data);
-}
-
+#include "ui/components/ui_app_lora.hpp"
 
 static const char *getenv_default(const char *name, const char *dflt)
 {
@@ -131,30 +106,12 @@ static void keypad_read_cb(lv_indev_t *indev, lv_indev_data_t *data)
             elm = STAILQ_FIRST(&keyboard_queue);
             STAILQ_REMOVE_HEAD(&keyboard_queue, entries);
 
-            {
-                char utf8_dbg[64] = "";
-                int di = 0;
-                for (int i = 0; i < (int)sizeof(elm->utf8) && elm->utf8[i] && di < 60; i++) {
-                    unsigned char c = (unsigned char)elm->utf8[i];
-                    if (c >= 0x20 && c < 0x7f) utf8_dbg[di++] = (char)c;
-                    else di += snprintf(utf8_dbg+di, 64-di, "\\x%02x", c);
-                }
-                utf8_dbg[di] = '\0';
-                printf("[INDEV] dequeue code=%u state=%s sym=%s utf8='%s' cp=0x%x active_screen=%p\n",
-                       elm->key_code, kbd_state_name(elm->key_state),
-                       elm->sym_name, utf8_dbg, elm->codepoint,
-                       (void*)lv_screen_active());
-            }
+            printf("Read key event from queue: code=%u state=%u\n", elm->key_code, elm->key_state);
             lv_obj_t *root = lv_screen_active();
             if (root) {
                 lv_obj_send_event(root, (lv_event_code_t)LV_EVENT_KEYBOARD, elm);
             }
             // printf("lv_obj_send_event event to root object over\n");
-
-            /* Global on-screen hint overlay (ESC / Shift / SYM).
-             * Called after the page has had a chance to react, and only
-             * READS elm — never frees it. */
-            ui_global_hint_on_key(elm);
 
             data->key = _evdev_process_key(elm->key_code);
             if(data->key)
@@ -173,11 +130,10 @@ static void keypad_read_cb(lv_indev_t *indev, lv_indev_data_t *data)
 static void lv_linux_indev_init(void)
 {
     const char *mouse_device = getenv_default("LV_LINUX_MOUSE_DEVICE", NULL);
-    const char *keyboard_device = getenv_default("LV_LINUX_KEYBOARD_DEVICE", hal_path_keyboard_device());
-    const char *keyboard_map = getenv_default("LV_LINUX_KEYBOARD_MAP", hal_path_keyboard_map());
+    const char *keyboard_device = getenv_default("LV_LINUX_KEYBOARD_DEVICE", "/dev/input/by-path/platform-3f804000.i2c-event");
+    const char *keyboard_map = getenv_default("LV_LINUX_KEYBOARD_MAP", "/usr/share/keymaps/tca8418_keypad_m5stack_keymap.map");
     // /home/nihao/w2T/github/m5stack-linux-dtoverlays/modules/tca8418-1.0/tca8418_keypad_m5stack_keymap.map
-    setenv("APPLAUNCH_LINUX_KEYBOARD_DEVICE", keyboard_device, 1);
-    setenv("APPLAUNCH_LINUX_KEYBOARD_MAP", keyboard_map, 1);
+ 
  
     {
         pthread_t keyboard_read_thread_id;
@@ -216,7 +172,6 @@ static void lv_linux_disp_init(void)
     if ((device == NULL) && (get_st7789v_fbdev(fbdev, sizeof(fbdev)) == 0)) {
         device = fbdev;
     }
-    setenv("APPLAUNCH_LINUX_FBDEV_DEVICE", device, 1);
     printf("Using framebuffer device: %s\n", device);
     lv_display_t * disp = lv_linux_fbdev_create();
     if(disp == NULL) {
@@ -263,52 +218,10 @@ static void lv_linux_indev_init(void)
 #else
 #error Unsupported configuration
 #endif
-#include <fcntl.h>
-#include <unistd.h>
-#include <cstdio>
-#include <cstring>
-#include <cerrno>
-
-void APPLaunch_lock()
-{
-    static int home_back_status = 0;
-    static std::chrono::time_point<std::chrono::steady_clock> start_time;
-
-    int holder_pid = 0;
-    hal_process_check_lock(lock_file, &holder_pid);
-
-    static int lvgl_lock = 0;
-    if (holder_pid == 0) {
-        if (lvgl_lock == 1) {
-            LVGL_RUN_FLAGE = 1;
-            lvgl_lock = 0;
-            lv_obj_invalidate(lv_scr_act());
-        }
-    } else {
-        if (LVGL_HOME_KEY_FLAGE) {
-            if (home_back_status == 0) {
-                home_back_status = 1;
-                start_time = std::chrono::steady_clock::now();
-            }
-            auto elapsed = std::chrono::steady_clock::now() - start_time;
-            auto secs = std::chrono::duration_cast<std::chrono::seconds>(elapsed).count();
-            if (secs >= 5) {
-                hal_process_kill(holder_pid, 3000);
-                home_back_status = 0;
-            }
-        } else {
-            home_back_status = 0;
-        }
-        lvgl_lock = 1;
-        LVGL_RUN_FLAGE = 0;
-    }
-}
 
 
 int main(void)
 {
-
-    lock_file = hal_path_lock_file();
 
     lv_init();
 
@@ -316,17 +229,16 @@ int main(void)
     lv_linux_disp_init();
 
     lv_linux_indev_init();
-
-    LV_EVENT_KEYBOARD = lv_event_register_id();
-    LV_EVENT_BATTERY = lv_event_register_id();
-    lv_timer_create(battery_timer_cb, 3000, NULL);
+    /*Create a Demo*/
+    // lv_demo_widgets();
+    // lv_demo_widgets_start_slideshow();
+    // lv_demo_music();
 
     ui_init();
     // lv_demo_widgets(); // 用LVGL自带demo测试
     /*Handle LVGL tasks*/
     printf("Entering main loop...\n");
     while(1) {
-        APPLaunch_lock();
         lv_timer_handler();
         usleep(1000);
     }

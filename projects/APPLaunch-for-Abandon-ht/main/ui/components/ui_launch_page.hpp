@@ -4,7 +4,6 @@
 #include <unordered_map>
 #include <list>
 #include <string>
-#include "hal/hal_process.h"
 
 // ==================== 5个槽位的标准坐标 ====================
 static const lv_coord_t LP_SLOT_X[] = {-177, -99,   0,  99, 177,  -177,  -99,  0,   99,  177  };
@@ -594,11 +593,23 @@ private:
         lv_timer_enable(false);
         lv_refr_now(disp);
 
-        int ret = hal_process_exec_blocking(it->Exec.c_str(), &LVGL_HOME_KEY_FLAGE);
-        printf("App %s exited with code %d\n", it->Exec.c_str(), ret);
-        lv_timer_enable(true);
-        if (indev) lv_indev_set_group(lv_indev_get_next(NULL), Screen1group);
-        lv_disp_load_scr(ui_Screen1);
-        lv_refr_now(disp);
+        pid_t pid = fork();
+        if (pid == 0) {
+            execlp(it->Exec.c_str(), it->Exec.c_str(), NULL);
+            perror("execlp failed");
+            _exit(EXIT_FAILURE);
+        } else if (pid > 0) {
+            int status;
+            waitpid(pid, &status, 0);
+            printf("App %s exited with status %d\n", it->Exec.c_str(), WEXITSTATUS(status));
+            lv_timer_enable(true);
+            if (indev) lv_indev_set_group(lv_indev_get_next(NULL), Screen1group);
+            lv_disp_load_scr(ui_Screen1);
+            lv_refr_now(disp);
+        } else {
+            perror("fork failed");
+            lv_timer_enable(true);
+            if (indev) lv_indev_set_group(indev, lv_group_get_default());
+        }
     }
 };

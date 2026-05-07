@@ -3,18 +3,23 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/wait.h>
 #include <fcntl.h>
+#include <linux/fb.h>
+#include <sys/ioctl.h>
 #include <unordered_map>
 #include <list>
 #include <memory>
 #include <string>
 #include <stdint.h>
 #include <stdlib.h>
+#include <signal.h>
+#include <pty.h>
+#include <termios.h>
 #include <errno.h>
 #include <vector>
 #include <sstream>
 #include <keyboard_input.h>
-#include "hal/hal_pty.h"
 
 // ============================================================
 //  终端控制台  UIConsolePage
@@ -99,7 +104,7 @@ public:
      */
     void exec(std::string cmd)
     {
-        if (pty_handle != NULL)
+        if (child_pid > 0)
             stop_pty();
 
         terminal_active = true;
@@ -160,7 +165,6 @@ public:
             poll_timer = lv_timer_create(UIConsolePage::s_poll_cb, 30, this);
         if (!cursor_timer)
             cursor_timer = lv_timer_create(UIConsolePage::s_cursor_blink_cb, 500, this);
-        set_page_title(executable);
     }
 
 private:
@@ -215,7 +219,8 @@ private:
     bool vt100_skip_until_st = false;
 
     /* ── PTY ──────────────────────────────────────────────── */
-    hal_pty_t pty_handle = NULL;
+    int pty_master = -1;
+    pid_t child_pid = -1;
 
     lv_timer_t *poll_timer = nullptr;
     lv_timer_t *cursor_timer = nullptr;
@@ -314,9 +319,6 @@ private:
         if (lv_event_get_code(e) == LV_EVENT_KEYBOARD)
         {
             struct key_item *elm = (struct key_item *)lv_event_get_param(e);
-            printf("[CONSOLE] code=%u state=%s sym=%s utf8_len=%zu pty_active=%d waiting_exit=%d\n",
-                   elm->key_code, kbd_state_name(elm->key_state), elm->sym_name,
-                   strlen(elm->utf8), (int)terminal_active, (int)waiting_key_to_exit);
             if (waiting_key_to_exit && (elm->key_state == 0))
             {
                 if (terminal_sysplause)
@@ -332,14 +334,13 @@ private:
             }
             else
             {
-                if (pty_handle != NULL && terminal_active)
+                if (pty_master >= 0 && terminal_active)
                 {
-                    if (elm->key_state) {
-                        printf("[CONSOLE] -> PTY write (state=%s)\n", kbd_state_name(elm->key_state));
+                    if (elm->key_state)
                         write_key_to_pty(elm->key_code, elm->utf8);
-                    }
                 }
             }
+            printf("Received LV_EVENT_KEYBOARD event: elm=%s\n", elm->sym_name);
         }
     }
 
@@ -379,11 +380,9 @@ private:
                 if (std::chrono::duration_cast<std::chrono::seconds>(end_time - start_time).count() >= 5)
                 {
                     end_status = 0;
-                    printf("[CONSOLE] ESC held 5s -> kill PTY and go back home\n");
-                    self->stop_pty();
-                    self->terminal_active = false;
-                    if (self->go_back_home)
-                        self->go_back_home();
+                    kill(self->child_pid, SIGKILL);
+                    // self->stop_pty();
+                    // self->terminal_active = false;
                 }
             }
             else
@@ -679,8 +678,8 @@ private:
             case 'c': /* Secondary Device Attributes */
                 /* Reply: VT100 (type 0), firmware v10, no options */
                 fprintf(stderr, "[VT100-DBG] SDA reply: \\033[>0;10;0c\n");
-                if (pty_handle != NULL)
-                    hal_pty_write(pty_handle, "\033[>0;10;0c", 10);
+                if (pty_master >= 0)
+                    write(pty_master, "\033[>0;10;0c", 10);
                 break;
             case 'm': /* xterm set-modifyOtherKeys — ignore */
                 fprintf(stderr, "[VT100-DBG] SDA: set-modifyOtherKeys ignored\n");
@@ -809,16 +808,16 @@ private:
 
         /* ── 设备控制 ────────────────────── */
         case 'c': /* DA — Device Attributes: 回复 \033[?1;0c (VT100) */
-            if (pty_handle != NULL) {
+            if (pty_master >= 0) {
                 const char *reply = "\033[?1;0c";
-                hal_pty_write(pty_handle, reply, strlen(reply));
+                write(pty_master, reply, strlen(reply));
             }
             break;
         case 'n': /* DSR — Device Status Report */
             fprintf(stderr, "[VT100-DBG] DSR query param[0]=%d\n", vt100_params[0]);
             if (vt100_params[0] == 5) {
                 fprintf(stderr, "[VT100-DBG] DSR 5: reply \\033[0n (OK)\n");
-                if (pty_handle != NULL) hal_pty_write(pty_handle, "\033[0n", 4);
+                if (pty_master >= 0) write(pty_master, "\033[0n", 4);
             } else if (vt100_params[0] == 6) {
                 /* Cursor Position Report */
                 char buf[32];
@@ -826,7 +825,7 @@ private:
                                    vt100_cur_row + 1, vt100_cur_col + 1);
                 fprintf(stderr, "[VT100-DBG] DSR 6: cursor=(%d,%d) reply=%s\n",
                         vt100_cur_row + 1, vt100_cur_col + 1, buf);
-                if (pty_handle != NULL) hal_pty_write(pty_handle, buf, len);
+                if (pty_master >= 0) write(pty_master, buf, len);
             }
             break;
 
@@ -1054,20 +1053,65 @@ private:
     /* ================================================================== */
     bool start_pty(const std::string &cmd, const std::vector<std::string> &args = {})
     {
-        std::vector<const char *> argv;
-        argv.push_back(cmd.c_str());
-        for (const auto &a : args)
-            argv.push_back(a.c_str());
-        argv.push_back(nullptr);
-        pty_handle = hal_pty_open(cmd.c_str(), argv.data(), COLS, ROWS);
-        return pty_handle != NULL;
+        int master, slave;
+        struct winsize ws;
+        ws.ws_col = COLS;
+        ws.ws_row = ROWS;
+        ws.ws_xpixel = TERM_W;
+        ws.ws_ypixel = TERM_H;
+        if (openpty(&master, &slave, NULL, NULL, &ws) < 0)
+            return false;
+
+        pid_t pid = fork();
+        if (pid < 0)
+        {
+            close(master);
+            close(slave);
+            return false;
+        }
+
+        if (pid == 0)
+        {
+            setsid();
+            dup2(slave, STDIN_FILENO);
+            dup2(slave, STDOUT_FILENO);
+            dup2(slave, STDERR_FILENO);
+            ioctl(slave, TIOCSCTTY, 0);
+            close(master);
+            close(slave);
+            setenv("TERM", "vt100", 1);
+            setenv("PYTHONUNBUFFERED", "1", 1);
+            setenv("NO_COLOR", "1", 1);
+
+            std::vector<char *> argv;
+            argv.push_back(const_cast<char *>(cmd.c_str()));
+            for (const auto &a : args)
+                argv.push_back(const_cast<char *>(a.c_str()));
+            argv.push_back(nullptr);
+            execvp(cmd.c_str(), argv.data());
+            _exit(127);
+        }
+
+        close(slave);
+        pty_master = master;
+        child_pid = pid;
+        int flags = fcntl(pty_master, F_GETFL, 0);
+        fcntl(pty_master, F_SETFL, flags | O_NONBLOCK);
+        return true;
     }
 
     void stop_pty()
     {
-        if (pty_handle) {
-            hal_pty_close(pty_handle);
-            pty_handle = NULL;
+        if (pty_master >= 0)
+        {
+            close(pty_master);
+            pty_master = -1;
+        }
+        if (child_pid > 0)
+        {
+            kill(child_pid, SIGTERM);
+            waitpid(child_pid, NULL, 0);
+            child_pid = -1;
         }
     }
 
@@ -1077,32 +1121,41 @@ private:
     void vt100_poll_cb(lv_timer_t *t)
     {
         (void)t;
-        if (pty_handle == NULL || !terminal_active)
+        if (pty_master < 0 || !terminal_active)
             return;
 
         char buf[1024];
-        int n;
+        ssize_t n;
         bool changed = false;
+        int read_errno = 0;
 
-        while ((n = hal_pty_read(pty_handle, buf, sizeof(buf))) > 0)
+        while ((n = read(pty_master, buf, sizeof(buf))) > 0)
         {
-            vt100_process_bytes(buf, n);
+            fprintf(stderr, "[VT100-DBG] poll_cb read %zd bytes from pty_master\n", n);
+            vt100_process_bytes(buf, (int)n);
             changed = true;
         }
+        read_errno = errno;
+
+        if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK)
+            fprintf(stderr, "[VT100-DBG] poll_cb read error errno=%d\n", errno);
 
         if (changed)
             vt100_render_all();
 
         bool child_exited = false;
-        if (n < 0)
+        if (n < 0 && read_errno == EIO)
         {
             child_exited = true;
         }
-        else if (pty_handle != NULL)
+        else if (child_pid > 0)
         {
             int status = 0;
-            if (hal_pty_check_child(pty_handle, &status) == 1)
+            if (waitpid(child_pid, &status, WNOHANG) == child_pid)
+            {
+                child_pid = -1;
                 child_exited = true;
+            }
         }
 
         if (child_exited)
@@ -1112,8 +1165,11 @@ private:
             vt100_process_bytes(hint, (int)strlen(hint));
             vt100_render_all();
             waiting_key_to_exit = true;
-            hal_pty_close(pty_handle);
-            pty_handle = NULL;
+            if (pty_master >= 0)
+            {
+                close(pty_master);
+                pty_master = -1;
+            }
         }
     }
 
@@ -1153,7 +1209,7 @@ private:
      */
     void write_key_to_pty(uint32_t evdev_key, const char *utf8_str)
     {
-        if (!terminal_active || pty_handle == NULL)
+        if (!terminal_active || pty_master < 0)
             return;
         char buf[8];
         int len = 0;
@@ -1210,7 +1266,7 @@ private:
             for (int ki = 0; ki < len; ki++)
                 fprintf(stderr, "%02X ", (unsigned char)buf[ki]);
             fprintf(stderr, "\n");
-            hal_pty_write(pty_handle, buf, (size_t)len);
+            write(pty_master, buf, (size_t)len);
         }
     }
 

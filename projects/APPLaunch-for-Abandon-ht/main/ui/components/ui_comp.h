@@ -41,6 +41,7 @@ void del_component_child_event_cb(lv_event_t * e);
 
 lv_obj_t * ui_comp_get_child(lv_obj_t * comp, uint32_t child_idx);
 extern uint32_t LV_EVENT_GET_COMP_CHILD;
+extern uint32_t LV_EVENT_KEYBOARD;
 #include "ui_comp_button1.h"
 
 

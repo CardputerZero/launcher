@@ -1,14 +1,14 @@
 #pragma once
 #include "ui_app_page.hpp"
-#include "compat/input_keys.h"
 #include <unordered_map>
 #include <string>
 #include <vector>
 #include <iostream>
 #include <dirent.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
+#include <signal.h>
 #include <unistd.h>
-#include "hal/hal_process.h"
 #include <libgen.h>
 #include <algorithm>
 #include <cctype>
@@ -41,7 +41,6 @@ class UIMusicPage : public app_base
 public:
     UIMusicPage() : app_base()
     {
-        set_page_title("MUSIC");
         creat_UI();
         event_handler_init();
     }
@@ -93,7 +92,7 @@ private:
     int                      current_track_ = 0;
     PlayState play_state_ = PlayState::STOPPED;
     ViewState view_state_ = ViewState::MAIN;
-    hal_pid_t player_pid_ = -1;
+    pid_t player_pid_ = -1;
 
     // ==================== POSIX 路径工具 ====================
     // 父目录（基于 POSIX dirname(3)）
@@ -238,30 +237,11 @@ private:
         UIMusicPage *self = static_cast<UIMusicPage *>(lv_event_get_user_data(e));
         if (self) self->event_handler(e);
     }
-    static uint32_t fzxc_to_lv_arrow(uint32_t key)
-    {
-        switch (key) {
-        case KEY_F: return LV_KEY_UP;
-        case KEY_X: return LV_KEY_DOWN;
-        case KEY_Z: return LV_KEY_LEFT;
-        case KEY_C: return LV_KEY_RIGHT;
-        default:    return key;
-        }
-    }
-
     void event_handler(lv_event_t *e)
     {
-        lv_event_code_t ec = lv_event_get_code(e);
-        if (ec == (lv_event_code_t)LV_EVENT_KEYBOARD) {
-            struct key_item *elm = (struct key_item *)lv_event_get_param(e);
-            printf("[MUSIC][KEYBOARD] code=%u state=%s sym=%s view=%d\n",
-                   elm->key_code, kbd_state_name(elm->key_state), elm->sym_name, (int)view_state_);
-            return;
-        }
-        if (ec != LV_EVENT_KEY) return;
-        uint32_t raw = lv_event_get_key(e);
-        uint32_t key = fzxc_to_lv_arrow(raw);
-        printf("[MUSIC][LV_KEY] raw=%u mapped=%u view=%d\n", raw, key, (int)view_state_);
+        if (lv_event_get_code(e) != LV_EVENT_KEY) return;
+        uint32_t key = lv_event_get_key(e);
+        printf("[Music] key:%u  view:%d\n", key, (int)view_state_);
         switch (view_state_)
         {
         case ViewState::MAIN:       handle_main_key(key);     break;
@@ -283,7 +263,7 @@ private:
         case LV_KEY_RIGHT: next_track();          break;
         case 15:           open_folder_browser(); break; // (Tab)
         case 'p':          open_playlist();       break;
-        case LV_KEY_ESC:   printf("[MUSIC] ESC -> go_back_home()\n"); go_back_home();        break;
+        case LV_KEY_ESC:   go_back_home();        break;
         default: break;
         }
     }
@@ -695,15 +675,29 @@ private:
         const std::string &file = playlist_[current_track_];
         printf("[Music] Playing: %s\n", file.c_str());
 
-        std::string cmd = std::string("mpg123 -q '") + file + "' 2>/dev/null || ffplay -nodisp -autoexit -loglevel quiet '" + file + "'";
-        player_pid_ = hal_process_spawn(cmd.c_str());
+        pid_t pid = fork();
+        if (pid == 0)
+        {
+            execlp("mpg123", "mpg123", "-q", file.c_str(), (char *)nullptr);
+            execlp("ffplay", "ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", file.c_str(), (char *)nullptr);
+            _exit(EXIT_FAILURE);
+        }
+        else if (pid > 0)
+        {
+            player_pid_ = pid;
+        }
+        else
+        {
+            perror("[Music] fork failed");
+        }
     }
 
     void stop_playback()
     {
         if (player_pid_ > 0)
         {
-            hal_process_stop(player_pid_);
+            kill(player_pid_, SIGTERM);
+            waitpid(player_pid_, nullptr, WNOHANG);
             player_pid_ = -1;
         }
     }

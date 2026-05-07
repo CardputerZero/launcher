@@ -1,12 +1,13 @@
 #pragma once
 #include "ui_app_page.hpp"
-#include "compat/input_keys.h"
 #include <unordered_map>
 #include <string>
 #include <vector>
 #include <functional>
 #include <algorithm>
-#include "hal/hal_network.h"
+#include <ifaddrs.h>
+#include <arpa/inet.h>
+#include <net/if.h>
 
 // ============================================================
 //  IP面板界面  UIIpPanelPage
@@ -30,7 +31,6 @@ class UIIpPanelPage : public app_base
 public:
     UIIpPanelPage() : app_base()
     {
-        set_page_title("IP PANEL");
         creat_UI();
         event_handler_init();
     }
@@ -56,20 +56,51 @@ private:
     {
         iface_list_.clear();
 
-        hal_netif_info_t entries[16];
-        int count = 0;
-        if (hal_network_list(entries, 16, &count) != 0)
+        struct ifaddrs *ifas = nullptr;
+        if (getifaddrs(&ifas) != 0)
             return;
 
-        for (int i = 0; i < count; i++)
+        // 先收集所有有 IPv4 地址的接口
+        std::unordered_map<std::string, NetIfInfo> map;
+        for (struct ifaddrs *ifa = ifas; ifa; ifa = ifa->ifa_next)
         {
-            NetIfInfo info;
-            info.iface = entries[i].iface;
-            info.ip    = entries[i].ipv4;
-            info.mask  = entries[i].netmask;
-            info.up    = entries[i].is_up != 0;
-            iface_list_.push_back(info);
+            if (!ifa->ifa_name) continue;
+            std::string name(ifa->ifa_name);
+
+            // 跳过 loopback
+            if (name == "lo") continue;
+
+            if (map.find(name) == map.end())
+            {
+                NetIfInfo info;
+                info.iface = name;
+                info.ip    = "N/A";
+                info.mask  = "N/A";
+                info.up    = (ifa->ifa_flags & IFF_UP) != 0;
+                map[name]  = info;
+            }
+
+            // 仅处理 IPv4
+            if (ifa->ifa_addr && ifa->ifa_addr->sa_family == AF_INET)
+            {
+                char buf[INET_ADDRSTRLEN];
+                struct sockaddr_in *sa = (struct sockaddr_in *)ifa->ifa_addr;
+                inet_ntop(AF_INET, &sa->sin_addr, buf, sizeof(buf));
+                map[name].ip = buf;
+
+                if (ifa->ifa_netmask)
+                {
+                    struct sockaddr_in *sm = (struct sockaddr_in *)ifa->ifa_netmask;
+                    inet_ntop(AF_INET, &sm->sin_addr, buf, sizeof(buf));
+                    map[name].mask = buf;
+                }
+                map[name].up = (ifa->ifa_flags & IFF_UP) != 0;
+            }
         }
+        freeifaddrs(ifas);
+
+        for (auto &kv : map)
+            iface_list_.push_back(kv.second);
 
         // 按接口名排序，保证顺序稳定
         std::sort(iface_list_.begin(), iface_list_.end(),
@@ -300,21 +331,10 @@ private:
         UIIpPanelPage *self = static_cast<UIIpPanelPage *>(lv_event_get_user_data(e));
         if (self) self->event_handler(e);
     }
-    static uint32_t fzxc_to_lv_arrow(uint32_t key)
-    {
-        switch (key) {
-        case KEY_F: return LV_KEY_UP;
-        case KEY_X: return LV_KEY_DOWN;
-        case KEY_Z: return LV_KEY_LEFT;
-        case KEY_C: return LV_KEY_RIGHT;
-        default:    return key;
-        }
-    }
-
     void event_handler(lv_event_t *e)
     {
         if (lv_event_get_code(e) != LV_EVENT_KEY) return;
-        uint32_t key = fzxc_to_lv_arrow(lv_event_get_key(e));
+        uint32_t key = lv_event_get_key(e);
 
         int count = (int)iface_list_.size();
         switch (key)

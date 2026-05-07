@@ -37,11 +37,7 @@ extern struct keyboard_queue_t keyboard_queue;
 extern pthread_mutex_t keyboard_mutex;
 extern volatile int LVGL_HOME_KEY_FLAGE;
 extern volatile int LVGL_RUN_FLAGE;
-extern volatile uint32_t LV_EVENT_KEYBOARD;
-
 void *keyboard_read_thread(void *argv);
-const char *kbd_state_name(int state);
-void kbd_dump_keymap_table(void);
 #ifdef __cplusplus
 }
 #endif
