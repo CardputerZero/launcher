@@ -1,5 +1,5 @@
 #pragma once
-#include "ui_app_page.hpp"
+#include "../ui_app_page.hpp"
 #include "ui_app_console.hpp"
 #include <unordered_map>
 #include <string>

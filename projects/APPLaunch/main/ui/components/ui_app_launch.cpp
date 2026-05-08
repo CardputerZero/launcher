@@ -18,25 +18,9 @@
 #include <fstream>
 #include <sstream>
 #include "ui_launch_page.hpp"
-#include "ui_app_store.hpp"
-#include "ui_app_music.hpp"
-#include "ui_app_setup.hpp"
-#include "ui_app_console.hpp"
-#include "ui_app_IpPanel.hpp"
-#include "ui_app_stock.hpp"
-#include "ui_app_chat.hpp"
-#include "ui_app_email.hpp"
-#include "ui_app_file.hpp"
-#include "ui_app_ssh.hpp"
-#include "ui_app_hack.hpp"
-#include "ui_app_mesh.hpp"
-#include "ui_app_rec.hpp"
-#include "ui_app_camera.hpp"
-#include "ui_app_game.hpp"
-#include "ui_app_UnitEnv.hpp"
-#include "ui_app_midi.hpp"
-#include "ui_app_gpio.hpp"
 #include "../ui_loading.h"
+#include "page_app.h"
+
 /* img_path() now defined in ui_app_page.hpp */
 
 // ============================================================
@@ -51,9 +35,6 @@ Exec=vim
 Terminal=true
 Icon=share/images/email.png
 */
-
-
-
 
 // 前向声明
 class app_launch_S;
@@ -106,7 +87,7 @@ class app_launch_S
 private:
     int current_app = 2;
     hal_watcher_t dir_watcher = NULL;
-    lv_timer_t *watch_timer = nullptr; // LVGL 3s 定时器
+    lv_timer_t *watch_timer = nullptr;  // LVGL 3s 定时器
     lv_timer_t *status_timer = nullptr; // 状态栏刷新定时器
     int fixed_count;
 
@@ -160,7 +141,6 @@ public:
                                         LV_PART_MAIN | LV_STATE_DEFAULT);
         }
 
-
         // 动态图标，允许用户自定义
         app_list.emplace_back("MUSIC",
                               img_path("MUSIC_logo.png"), page_v<UIMusicPage>);
@@ -172,9 +152,8 @@ public:
                               img_path("ssh.png"), page_v<UIIpPanelPage>);
 
         app_list.emplace_back("MATH",
-                              img_path("math.png"), 
+                              img_path("math.png"),
                               "/home/pi/M5CardputerZero-Calculator-linux-aarch64", false);
-
 
         app_list.emplace_back("STOCKS",
                               img_path("stocks_macos_bigsur_icon_189691.png"), page_v<UIStockPage>);
@@ -204,8 +183,19 @@ public:
 
         app_list.emplace_back("Gpio",
                               img_path("hack.png"), page_v<UIGpioPage>);
+        
+        app_list.emplace_back("LORA", img_path("mesh.png"), page_v<UILoraPage>);
 
+        app_list.emplace_back("GALLERY", img_path("camera.png"), page_v<UIGalleryPage>);
 
+        app_list.emplace_back("HIKEPOD", img_path("hack.png"), page_v<UIHikePodPage>);
+
+        app_list.emplace_back("AICli", img_path("hack.png"), page_v<UIAICliPage>);
+
+        app_list.emplace_back("TANK", img_path("CLAW_logo.png"), page_v<UITankBattlePage>);
+
+        app_list.emplace_back("Love",
+                                    img_path("gmae.png"), page_v<UILovyanPage>);
 
         fixed_count = app_list.size();
         applications_load();
@@ -297,7 +287,6 @@ public:
         LVGL_RUN_FLAGE = 1;
     }
 
-
     void zuo(lv_obj_t *panel, lv_obj_t *label)
     {
         current_app = current_app == (int)app_list.size() - 1 ? 0 : current_app + 1;
@@ -381,21 +370,26 @@ public:
                 if (eq == std::string::npos)
                     continue;
 
-                std::string key   = line.substr(0, eq);
+                std::string key = line.substr(0, eq);
                 std::string value = line.substr(eq + 1);
 
                 // 去除 key 首尾空格
-                auto ltrim = [](std::string &s) {
+                auto ltrim = [](std::string &s)
+                {
                     size_t i = 0;
-                    while (i < s.size() && (s[i] == ' ' || s[i] == '\t')) ++i;
+                    while (i < s.size() && (s[i] == ' ' || s[i] == '\t'))
+                        ++i;
                     s = s.substr(i);
                 };
-                auto rtrim = [](std::string &s) {
+                auto rtrim = [](std::string &s)
+                {
                     while (!s.empty() && (s.back() == ' ' || s.back() == '\t'))
                         s.pop_back();
                 };
-                ltrim(key); rtrim(key);
-                ltrim(value); rtrim(value);
+                ltrim(key);
+                rtrim(key);
+                ltrim(value);
+                rtrim(value);
 
                 if (key == "Name")
                     app_name = value;
@@ -416,20 +410,20 @@ public:
                 continue;
             }
             bool in_list = false;
-            for(auto it: app_list)
+            for (auto it : app_list)
             {
-                if(it.Exec == app_exec)
+                if (it.Exec == app_exec)
                 {
                     in_list = true;
                     break;
                 }
             }
-            if(in_list)
+            if (in_list)
             {
                 fprintf(stderr, "applications_load: skip %s (duplicate Exec)\n", filepath.c_str());
                 continue;
             }
-                
+
             app_list.emplace_back(app_name, app_icon, app_exec, app_terminal, app_sysplause);
         }
 
@@ -450,13 +444,15 @@ public:
     void refresh_ui_panels()
     {
         int sz = (int)app_list.size();
-        if (sz == 0) return;
+        if (sz == 0)
+            return;
 
         // 确保 current_app 在合法范围内
         if (current_app >= sz)
             current_app = sz - 1;
 
-        auto app_at = [&](int idx) -> app & {
+        auto app_at = [&](int idx) -> app &
+        {
             idx = ((idx % sz) + sz) % sz;
             return *std::next(app_list.begin(), idx);
         };
@@ -519,7 +515,8 @@ public:
     static void home_status_timer_cb(lv_timer_t *timer)
     {
         auto *self = static_cast<app_launch_S *>(lv_timer_get_user_data(timer));
-        if (self) self->update_home_status_bar();
+        if (self)
+            self->update_home_status_bar();
     }
 
     void update_home_status_bar()
@@ -529,10 +526,13 @@ public:
         lv_label_set_text(ui_timeLabel, time_buf);
 
         hal_battery_info_t bat = hal_battery_read();
-        if (bat.valid) {
+        if (bat.valid)
+        {
             int soc = bat.soc;
-            if (soc > 100) soc = 100;
-            if (soc < 0) soc = 0;
+            if (soc > 100)
+                soc = 100;
+            if (soc < 0)
+                soc = 0;
             lv_bar_set_value(ui_Bar1, soc, LV_ANIM_ON);
 
             char pwr_buf[16];
@@ -540,8 +540,10 @@ public:
             lv_label_set_text(ui_powerLabel, pwr_buf);
 
             uint32_t color = 0x66CC33;
-            if (soc <= 20) color = 0xE74C3C;
-            else if (soc <= 50) color = 0xF39C12;
+            if (soc <= 20)
+                color = 0xE74C3C;
+            else if (soc <= 50)
+                color = 0xF39C12;
             lv_obj_set_style_bg_color(ui_Bar1, lv_color_hex(color),
                                       LV_PART_INDICATOR | LV_STATE_DEFAULT);
         }
@@ -655,10 +657,10 @@ std::unique_ptr<app_launch_S> app_launch_Ser;
 
 extern "C"
 {
-    
+
     void ui_info_bind()
     {
-        app_launch_Ser = std::make_unique<app_launch_S>();        
+        app_launch_Ser = std::make_unique<app_launch_S>();
     }
     void cpp_app_zuo(lv_obj_t *panel, lv_obj_t *label)
     {

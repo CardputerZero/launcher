@@ -1,5 +1,5 @@
 #pragma once
-#include "ui_app_page.hpp"
+#include "../ui_app_page.hpp"
 #include "ui_app_console.hpp"
 #include "compat/input_keys.h"
 #include <unordered_map>

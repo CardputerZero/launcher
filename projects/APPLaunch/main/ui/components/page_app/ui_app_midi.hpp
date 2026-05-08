@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../ui.h"
-#include "ui_app_page.hpp"
+#include "ui/ui.h"
+#include "../ui_app_page.hpp"
 #include <functional>
 #include <unordered_map>
 #include <string>

@@ -1,9 +1,22 @@
 import os
+import sys
 import platform
+import subprocess
 
 Import('env')
 with open(env['PROJECT_TOOL_S']) as f:
     exec(f.read())
+
+script_path = os.path.abspath(str(AFile('ui/components/generate_page_app_includes.py')))
+script_dir = os.path.dirname(script_path)
+subprocess.run(
+    [sys.executable, script_path],
+    cwd=script_dir,
+    capture_output=True,   # 捕获标准输出和错误输出（可选）
+    text=True              # 以文本形式返回输出（Python 3.7+）
+)
+
+
 
 if 'CONFIG_TOOLCHAIN_PREFIX' in os.environ:
     env['RANLIB'] = '${_concat(GCCPREFIX, "ranlib", GCCSUFFIX, __env__)}'
@@ -113,6 +126,30 @@ for src in lvgl_component['SRCS']:
 # for src in screen_srcs:
 #     os.system(f"sed -i 's/&ui_img_/ui_img_/g' {src}")
 #     os.system(f"sed -i 's/= lv_tabview_create(/= lv_tabview_create_compat(/g' {src}")
+
+
+
+
+
+RadioLib = wget_github('https://github.com/jgromes/RadioLib.git')
+SRCS += [
+    os.path.join(RadioLib, 'src', 'Hal.cpp'),
+    os.path.join(RadioLib, 'src', 'Module.cpp'),
+    os.path.join(RadioLib, 'src', 'utils', 'CRC.cpp'),
+    os.path.join(RadioLib, 'src', 'utils', 'FEC.cpp'),
+    os.path.join(RadioLib, 'src', 'utils', 'Utils.cpp'),
+    os.path.join(RadioLib, 'src', 'protocols', 'PhysicalLayer', 'PhysicalLayer.cpp'),
+    os.path.join(RadioLib, 'src', 'modules', 'SX126x', 'SX126x.cpp'),
+    os.path.join(RadioLib, 'src', 'modules', 'SX126x', 'SX126x_commands.cpp'),
+    os.path.join(RadioLib, 'src', 'modules', 'SX126x', 'SX126x_config.cpp'),
+    os.path.join(RadioLib, 'src', 'modules', 'SX126x', 'SX126x_LR_FHSS.cpp'),
+    os.path.join(RadioLib, 'src', 'modules', 'SX126x', 'SX1262.cpp'),
+]
+INCLUDE += [os.path.join(RadioLib, 'src')]
+
+
+
+
 
 
 STATIC_FILES += [ADir('ui/images')]
