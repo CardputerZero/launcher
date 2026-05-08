@@ -1,80 +1,40 @@
 from pathlib import Path
 import os, sys
 import platform
+import subprocess
+"""
+  The default cross-compilation toolchain can be specified in a 
+  custom `config_defaults.mk` file and passed via the `CONFIG_DEFAULT_FILE` 
+  environment variable.
 
-arch = platform.machine()
-homebrew_toolchain = "/opt/homebrew/bin"
-has_homebrew_aarch64 = os.path.exists(os.path.join(homebrew_toolchain, "aarch64-linux-gnu-gcc"))
+export CONFIG_DEFAULT_FILE=custom_config_defaults.mk
+scons -j8
+"""
 
+
+cross_package_enabled = False
+version = "v0.0.3"
 local_path = Path(os.getcwd())
 sdk_path = local_path.parent.parent / "SDK"
+static_lib_path = os.path.join(sdk_path, "github_source", f"static_lib_{version}")
+
+
+if os.environ.get("CardputerZero", '') == 'y':
+    os.environ["CONFIG_DEFAULT_FILE"] = "linux_x86_cross_cp0_config_defaults.mk"
+
+if os.environ.get("CONFIG_DEFAULT_FILE") == None:
+    if platform.machine() == 'x86_64':
+        os.environ["CONFIG_DEFAULT_FILE"] = "linux_x86_sdl2_config_defaults.mk"
+
+if "cross" in os.environ.get("CONFIG_DEFAULT_FILE", ''):
+    cross_package_enabled = True
+    if not os.path.exists("build/config"):
+        os.makedirs("build/config")
+        with open("build/config/config_tmp.mk", "w") as f:
+            f.write(f'CONFIG_TOOLCHAIN_SYSROOT="{static_lib_path}"\n')
+
 os.environ["SDK_PATH"] = str(sdk_path)
 os.environ["EXT_COMPONENTS_PATH"] = str(sdk_path.parent / "ext_components")
-
-version = "v0.0.3"
-static_lib = os.path.join(sdk_path, "github_source", f"static_lib_{version}")
-update = False
-sysroot_dir = Path(static_lib)
-multiarch_include = sysroot_dir / "usr" / "include" / "aarch64-linux-gnu"
-multiarch_lib = sysroot_dir / "usr" / "lib" / "aarch64-linux-gnu"
-toolchain_flags = [
-    f"-B{multiarch_lib}",
-    f"-isystem{multiarch_include}",
-    f"-L{multiarch_lib}",
-    f"-Wl,-rpath-link,{multiarch_lib}",
-]
-
-
-def allow_trusted_sdk_tar_links():
-    try:
-        import tarfile
-        tarfile.TarFile.extraction_filter = staticmethod(tarfile.fully_trusted_filter)
-    except AttributeError:
-        pass
-
-
-# Cross-compile to Cardputer Zero when CardputerZero=y is exported.
-if "CardputerZero" in os.environ:
-    if not os.path.exists("build/config/config_tmp.mk"):
-        os.makedirs("build/config", exist_ok=True)
-        with open("build/config/config_tmp.mk", "w") as f:
-            f.write("CONFIG_V9_5_LV_USE_LINUX_FBDEV=y\n")
-            f.write("CONFIG_V9_5_LV_DRAW_SW_ASM_NEON=y\n")
-            f.write("CONFIG_V9_5_LV_USE_DRAW_SW_ASM=1\n")
-            f.write("CONFIG_V9_5_LV_USE_EVDEV=y\n")
-            if has_homebrew_aarch64:
-                f.write(f'CONFIG_TOOLCHAIN_PATH="{homebrew_toolchain}"\n')
-            f.write('CONFIG_TOOLCHAIN_PREFIX="aarch64-linux-gnu-"\n')
-            f.write(f'CONFIG_TOOLCHAIN_SYSROOT="{static_lib}"\n')
-            f.write('CONFIG_TOOLCHAIN_FLAGS="{}"\n'.format(" ".join(toolchain_flags)))
-
-# Local SDL simulator on macOS/Linux desktop.
-elif arch != "aarch64" or platform.system() == "Darwin":
-    if not os.path.exists("build/config/config_tmp.mk"):
-        os.makedirs("build/config", exist_ok=True)
-        with open("build/config/config_tmp.mk", "w") as f:
-            f.write("CONFIG_V9_5_LV_USE_SDL=y\n")
-            f.write('CONFIG_V9_5_LV_FS_POSIX_PATH="./"\n')
-            if platform.system() == "Darwin":
-                import subprocess
-                try:
-                    sdl2_flags = subprocess.check_output(
-                        ["pkg-config", "--cflags", "--libs", "sdl2"], text=True
-                    ).strip()
-                    f.write('CONFIG_TOOLCHAIN_FLAGS="{}"\n'.format(sdl2_flags))
-                except Exception:
-                    pass
-
-# Native Cardputer Zero build.
-else:
-    if not os.path.exists("build/config/config_tmp.mk"):
-        os.makedirs("build/config", exist_ok=True)
-        with open("build/config/config_tmp.mk", "w") as f:
-            f.write("CONFIG_V9_5_LV_USE_LINUX_FBDEV=y\n")
-            f.write("CONFIG_V9_5_LV_DRAW_SW_ASM_NEON=y\n")
-            f.write("CONFIG_V9_5_LV_USE_DRAW_SW_ASM=1\n")
-            f.write("CONFIG_V9_5_LV_USE_EVDEV=y\n")
-
 
 env = SConscript(
     str(sdk_path / "tools" / "scons" / "project.py"),
@@ -83,12 +43,13 @@ env = SConscript(
 )
 
 # static_lib is only needed for cross-compilation, skip in SDL mode.
-if "CardputerZero" in os.environ or arch == "aarch64":
-    if not os.path.exists(static_lib):
+if cross_package_enabled:
+    update = False
+    if not os.path.exists(static_lib_path):
         update = True
     else:
         try:
-            with open(str(Path(static_lib) / "version"), "r") as f:
+            with open(str(Path(static_lib_path) / "version"), "r") as f:
                 if version != f.read().strip():
                     update = True
         except Exception:
@@ -97,8 +58,16 @@ if "CardputerZero" in os.environ or arch == "aarch64":
     if update:
         with open(env["PROJECT_TOOL_S"]) as f:
             exec(f.read())
-        allow_trusted_sdk_tar_links()
-        down_url = "https://github.com/dianjixz/M5CardputerZero-UserDemo/releases/download/{}/sdk_bsp.tar.gz".format(
-            version
-        )
+        try:
+            import tarfile
+
+            tarfile.TarFile.extraction_filter = staticmethod(
+                tarfile.fully_trusted_filter
+            )
+        except AttributeError:
+            pass
+        down_url = (
+            "https://github.com/dianjixz/M5CardputerZero-UserDemo/"
+            "releases/download/{}/sdk_bsp.tar.gz"
+        ).format(version)
         check_wget_down(down_url, "static_lib_{}.tar.gz".format(version))

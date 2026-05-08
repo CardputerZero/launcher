@@ -2,396 +2,128 @@ import os
 import sys
 import platform
 import subprocess
-
-
-# =============================================================================
-# SCons Environment
-# =============================================================================
-
+# iomport env and tools from the SDK's scons project.py
 Import('env')
-
-with open(env['PROJECT_TOOL_S'], encoding='utf-8') as f:
+with open(env['PROJECT_TOOL_S']) as f:
     exec(f.read())
 
-
-# =============================================================================
-# Constants
-# =============================================================================
-
-SYSTEM = platform.system()
-IS_DARWIN = SYSTEM == 'Darwin'
-IS_DESKTOP_SDL = 'CONFIG_V9_5_LV_USE_SDL' in os.environ
-
-CONFIG_TOOLCHAIN_SYSROOT = os.environ.get('CONFIG_TOOLCHAIN_SYSROOT')
-CONFIG_TOOLCHAIN_PREFIX = os.environ.get('CONFIG_TOOLCHAIN_PREFIX')
-
-
-# =============================================================================
-# Helper Functions
-# =============================================================================
-
-def run_script(script):
-    """
-    Run a Python script with its directory as cwd.
-    """
-    script_path = os.path.abspath(str(AFile(script)))
-    script_dir = os.path.dirname(script_path)
-
-    result = subprocess.run(
-        [sys.executable, script_path],
-        cwd=script_dir,
-        capture_output=True,
-        text=True,
-    )
-
-    if result.returncode != 0:
-        if result.stdout:
-            print(result.stdout)
-        if result.stderr:
-            print(result.stderr)
-        raise RuntimeError(f'Failed to run script: {script_path}')
-
-
-def pkg_config_flags(package, option):
-    """
-    Get flags from pkg-config.
-
-    Example:
-        pkg_config_flags('sdl2', '--cflags')
-        pkg_config_flags('freetype2', '--libs')
-    """
-    return subprocess.check_output(
-        ['pkg-config', option, package],
-        text=True,
-    ).strip()
-
-
-def pkg_config_include_dirs(package, fallback=None):
-    """
-    Get include directories from pkg-config cflags.
-    """
-    fallback = fallback or []
-
-    try:
-        cflags = pkg_config_flags(package, '--cflags')
-        return [
-            item.replace('-I', '')
-            for item in cflags.split()
-            if item.startswith('-I')
-        ]
-    except Exception:
-        return fallback
-
-
-def pkg_config_libs(package, fallback=None):
-    """
-    Get linker flags from pkg-config libs.
-    """
-    fallback = fallback or []
-
-    try:
-        libs = pkg_config_flags(package, '--libs')
-        return libs.split()
-    except Exception:
-        return fallback
-
-
-def get_lvgl_component():
-    """
-    Find lvgl_component from env['COMPONENTS'].
-    """
-    for component in env['COMPONENTS']:
-        if component['target'] == 'lvgl_component':
-            return component
-
-    raise RuntimeError('lvgl_component not found in env["COMPONENTS"]')
-
-
-def get_sysroot_include_dir():
-    if not CONFIG_TOOLCHAIN_SYSROOT:
-        return None
-
-    return os.path.join(CONFIG_TOOLCHAIN_SYSROOT, 'usr', 'include')
-
-
-def get_multiarch_lib_dir():
-    if not CONFIG_TOOLCHAIN_SYSROOT:
-        return None
-
-    return os.path.join(
-        CONFIG_TOOLCHAIN_SYSROOT,
-        'usr',
-        'lib',
-        'aarch64-linux-gnu',
-    )
-
-
-# =============================================================================
-# Pre-build Scripts
-# =============================================================================
-
-run_script('ui/components/generate_page_app_includes.py')
-
-
-# =============================================================================
-# Toolchain Config
-# =============================================================================
-
-if CONFIG_TOOLCHAIN_PREFIX:
-    env['RANLIB'] = '${_concat(GCCPREFIX, "ranlib", GCCSUFFIX, __env__)}'
-    env['RANLIBCOM'] = '$RANLIB $TARGET'
-    env['ARFLAGS'] = ['rcs']
-
-
-# =============================================================================
-# Component Basic Config
-# =============================================================================
-
-SRCS = Glob('src/*.c*')
-
-INCLUDE = [
-    ADir('.'),
-    ADir('include'),
-]
-
+# define the project's environment
+SRCS = []
+INCLUDE = []
 PRIVATE_INCLUDE = []
-
+REQUIREMENTS = []
 STATIC_LIB = []
 DYNAMIC_LIB = []
-
 DEFINITIONS = []
 DEFINITIONS_PRIVATE = []
-
 LDFLAGS = []
 LINK_SEARCH_PATH = []
-
 STATIC_FILES = []
 
-
-# =============================================================================
-# Platform Requirements
-# =============================================================================
-
-if IS_DESKTOP_SDL:
-    REQUIREMENTS = [
-        'lvgl_component',
-        'pthread',
-    ]
-else:
-    REQUIREMENTS = [
-        'lvgl_component',
-        'pthread',
-        'input',
-        'xkbcommon',
-        'udev',
-    ]
+# run generate_page_app_includes.py to generate the header file for including app pages in the UI.
+script_path = os.path.abspath(str(AFile('ui/components/generate_page_app_includes.py')))
+script_dir = os.path.dirname(script_path)
+subprocess.run(
+    [sys.executable, script_path],
+    cwd=script_dir,
+    capture_output=True,   
+    text=True              
+)
 
 
-# =============================================================================
-# macOS SDL Desktop Include / Link Flags
-# =============================================================================
-
-if IS_DESKTOP_SDL and IS_DARWIN:
-    INCLUDE += pkg_config_include_dirs(
-        'nlohmann_json',
-        fallback=['/opt/homebrew/include'],
-    )
-
-    LDFLAGS += pkg_config_libs(
-        'freetype2',
-        fallback=[
-            '-L/opt/homebrew/lib',
-            '-lfreetype',
-        ],
-    )
-
-
-# =============================================================================
-# Linux Cross Compile Link Flags
-# =============================================================================
-
-if not IS_DESKTOP_SDL and CONFIG_TOOLCHAIN_SYSROOT:
-    multiarch_lib = get_multiarch_lib_dir()
-
-    LDFLAGS += [
-        f'-B{multiarch_lib}',
-        f'-L{multiarch_lib}',
-        f'-Wl,-rpath-link,{multiarch_lib}',
-    ]
-
-
-# =============================================================================
-# Source Files
-# =============================================================================
-
+# add srcs
+SRCS += Glob('src/*.c*')
 SRCS += append_srcs_dir(ADir('ui'))
+# add includes
+INCLUDE += [ADir('.'), ADir('include')]
 
-if IS_DESKTOP_SDL:
+# add requirements
+REQUIREMENTS += ['lvgl_component', 'pthread']
+
+# custom lvgl component
+lvgl_component = list(filter(lambda x: x['target'] == 'lvgl_component', env['COMPONENTS']))[0]
+lvgl_component['SRCS'] = list(filter(
+    lambda src: 'lv_sdl_keyboard.c' not in str(src),
+    lvgl_component['SRCS']
+))
+
+
+# x86
+if os.environ.get("CONFIG_DEFAULT_FILE", '') == 'linux_x86_sdl2_config_defaults.mk':
+    lvgl_component['DEFINITIONS'] += pkg_config_cflags("freetype2")
+    lvgl_component['REQUIREMENTS'] += pkg_config_ldflags("freetype2")
+
     SRCS += Glob('hal/sdl/*.c*')
-else:
+    DEFINITIONS += pkg_config_cflags("sdl2")
+    REQUIREMENTS += pkg_config_ldflags("sdl2")
+    REQUIREMENTS += ['input', 'xkbcommon', 'udev']
+
+# x86 cross
+if os.environ.get("CONFIG_DEFAULT_FILE", '') == 'linux_x86_cross_cp0_config_defaults.mk':
+    lvgl_component['DEFINITIONS'] += ['-D_REENTRANT']
+    lvgl_component['INCLUDE'] += ['/usr/include/freetype2', '/usr/include/libpng16']
+
     SRCS += Glob('hal/linux/*.c*')
+    REQUIREMENTS += ['input', 'xkbcommon', 'udev', 'freetype']    
 
 
-# =============================================================================
-# LVGL Component Config
-# =============================================================================
+# macOS
+if os.environ.get("CONFIG_DEFAULT_FILE", '') == 'darwin_config_defaults.mk':
+    # macOS 使用 SDL 后端
+    SRCS += Glob('hal/sdl/*.c*')
 
-lvgl_component = get_lvgl_component()
+    # nlohmann_json
+    DEFINITIONS += pkg_config_cflags("nlohmann_json")
 
-if IS_DESKTOP_SDL:
-    lvgl_component['REQUIREMENTS'] += [
-        'SDL2',
-    ]
+    # SDL2
+    DEFINITIONS += pkg_config_cflags("sdl2")
+    REQUIREMENTS += pkg_config_ldflags("sdl2")
 
-    if IS_DARWIN:
-        lvgl_component['INCLUDE'] += pkg_config_include_dirs(
-            'sdl2',
-            fallback=['/opt/homebrew/include/SDL2'],
-        )
-    else:
-        lvgl_component['INCLUDE'] += [
-            '/usr/include/SDL2',
-        ]
+    # LVGL SDL driver 也需要 SDL2 头文件/定义
+    lvgl_component['DEFINITIONS'] += pkg_config_cflags("sdl2")
+    lvgl_component['DEFINITIONS'] += ['-D_REENTRANT']
 
-    lvgl_component['DEFINITIONS'] += [
-        '-D_REENTRANT',
-    ]
+    # FreeType
+    lvgl_component['DEFINITIONS'] += pkg_config_cflags("freetype2")
+    REQUIREMENTS += pkg_config_ldflags("freetype2")
 
 
-# =============================================================================
-# LVGL FreeType Config
-# =============================================================================
-
-if IS_DESKTOP_SDL and IS_DARWIN:
-    lvgl_component['INCLUDE'] += pkg_config_include_dirs(
-        'freetype2',
-        fallback=['/opt/homebrew/include/freetype2'],
-    )
-else:
-    lvgl_component['REQUIREMENTS'] += [
-        'freetype',
-    ]
-
-    if CONFIG_TOOLCHAIN_SYSROOT:
-        sysroot_include = get_sysroot_include_dir()
-
-        lvgl_component['INCLUDE'] += [
-            os.path.join(sysroot_include, 'freetype2'),
-            os.path.join(sysroot_include, 'libpng16'),
-        ]
-    else:
-        lvgl_component['INCLUDE'] += [
-            '/usr/include/freetype2',
-            '/usr/include/libpng16',
-        ]
-
-
-# =============================================================================
-# Remove Unused LVGL SDL Keyboard Source
-# =============================================================================
-
-lvgl_component['SRCS'] = [
-    src
-    for src in lvgl_component['SRCS']
-    if 'lv_sdl_keyboard.c' not in str(src)
-]
-
-
-# =============================================================================
-# UI Source Patch Example
-# =============================================================================
-
-# screen_srcs = append_srcs_dir(ADir('ui/screens'))
-#
-# for src in screen_srcs:
-#     os.system(f"sed -i 's/&ui_img_/ui_img_/g' {src}")
-#     os.system(f"sed -i 's/= lv_tabview_create(/= lv_tabview_create_compat(/g' {src}")
-
-
-# =============================================================================
-# RadioLib
-# =============================================================================
-
+# add RadioLib
 RadioLib = wget_github('https://github.com/jgromes/RadioLib.git')
-src_path = os.path.join(RadioLib, 'src')
-utils_path = os.path.join(src_path, 'utils')
-modules_sx126x_path = os.path.join(src_path, 'modules', 'SX126x')
 SRCS += [
-    os.path.join(src_path, 'Hal.cpp'),
-    os.path.join(src_path, 'Module.cpp'),
-
-    os.path.join(utils_path, 'CRC.cpp'),
-    os.path.join(utils_path, 'FEC.cpp'),
-    os.path.join(utils_path, 'Utils.cpp'),
-
-    os.path.join(
-        src_path,
-        'protocols',
-        'PhysicalLayer',
-        'PhysicalLayer.cpp',
-    ),
-
-    os.path.join(modules_sx126x_path, 'SX126x.cpp'),
-    os.path.join(modules_sx126x_path, 'SX126x_commands.cpp'),
-    os.path.join(modules_sx126x_path, 'SX126x_config.cpp'),
-    os.path.join(modules_sx126x_path, 'SX126x_LR_FHSS.cpp'),
-    os.path.join(modules_sx126x_path, 'SX1262.cpp'),
+    os.path.join(RadioLib, 'src', 'Hal.cpp'),
+    os.path.join(RadioLib, 'src', 'Module.cpp'),
+    os.path.join(RadioLib, 'src', 'utils', 'CRC.cpp'),
+    os.path.join(RadioLib, 'src', 'utils', 'FEC.cpp'),
+    os.path.join(RadioLib, 'src', 'utils', 'Utils.cpp'),
+    os.path.join(RadioLib, 'src', 'protocols', 'PhysicalLayer', 'PhysicalLayer.cpp'),
+    os.path.join(RadioLib, 'src', 'modules', 'SX126x', 'SX126x.cpp'),
+    os.path.join(RadioLib, 'src', 'modules', 'SX126x', 'SX126x_commands.cpp'),
+    os.path.join(RadioLib, 'src', 'modules', 'SX126x', 'SX126x_config.cpp'),
+    os.path.join(RadioLib, 'src', 'modules', 'SX126x', 'SX126x_LR_FHSS.cpp'),
+    os.path.join(RadioLib, 'src', 'modules', 'SX126x', 'SX1262.cpp'),
 ]
-
-INCLUDE += [
-    src_path,
-]
+INCLUDE += [os.path.join(RadioLib, 'src')]
 
 
-# =============================================================================
-# Static Files
-# =============================================================================
-script_path = os.path.join(
-        env['component_dir'],
-        '..',
-        '..',
-        '..',
-        'doc',
-        'store_cache_sync.py',
-    )
-STATIC_FILES += [
-    ADir('ui/images'),
-    script_path,
-]
 
 
-# =============================================================================
-# Optional Requirements
-# =============================================================================
 
-# REQUIREMENTS += [
-#     'Backward_cpp',
-# ]
-
-
-# =============================================================================
-# Register Component
-# =============================================================================
-
-env['COMPONENTS'].append({
-    'target': 'M5CardputerZero-APPLaunch',
-
-    'SRCS': SRCS,
-    'INCLUDE': INCLUDE,
-    'PRIVATE_INCLUDE': PRIVATE_INCLUDE,
-
-    'REQUIREMENTS': REQUIREMENTS,
-
-    'STATIC_LIB': STATIC_LIB,
-    'DYNAMIC_LIB': DYNAMIC_LIB,
-
-    'DEFINITIONS': DEFINITIONS,
-    'DEFINITIONS_PRIVATE': DEFINITIONS_PRIVATE,
-
-    'LDFLAGS': LDFLAGS,
-    'LINK_SEARCH_PATH': LINK_SEARCH_PATH,
-
-    'STATIC_FILES': STATIC_FILES,
-
-    'REGISTER': 'project',
-})
+# add static files
+STATIC_FILES += [ADir('ui/images')]
+STATIC_FILES += [os.path.join(env['component_dir'], '..', '..', '..', 'doc', 'store_cache_sync.py')]
+# register the component to the build system
+env['COMPONENTS'].append({'target':'M5CardputerZero-APPLaunch',
+                          'SRCS':SRCS,
+                          'INCLUDE':INCLUDE,
+                          'PRIVATE_INCLUDE':PRIVATE_INCLUDE,
+                          'REQUIREMENTS':REQUIREMENTS,
+                          'STATIC_LIB':STATIC_LIB,
+                          'DYNAMIC_LIB':DYNAMIC_LIB,
+                          'DEFINITIONS':DEFINITIONS,
+                          'DEFINITIONS_PRIVATE':DEFINITIONS_PRIVATE,
+                          'LDFLAGS':LDFLAGS,
+                          'LINK_SEARCH_PATH':LINK_SEARCH_PATH,
+                          'STATIC_FILES':STATIC_FILES,
+                          'REGISTER':'project'
+                          })
