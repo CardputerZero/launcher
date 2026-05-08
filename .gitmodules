@@ -17,3 +17,7 @@
 [submodule "projects/AudioSpectrum"]
 	path = projects/AudioSpectrum
 	url = https://github.com/CardputerZero/AudioSpectrum.git
+[submodule "projects/AppStore"]
+	path = projects/AppStore
+	url = git@github.com:CardputerZero/AppStore.git
+	branch = main
