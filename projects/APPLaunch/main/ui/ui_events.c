@@ -1,7 +1,18 @@
 #include "ui.h"
 #include <stdio.h>
 #include <string.h>
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <signal.h>
+
 #include "compat/input_keys.h"
+
+#define MINIAUDIO_IMPLEMENTATION
+#include "miniaudio.h"
+#include "thpool.h"
+
+extern threadpool g_launch_thread_pool;
 
 typedef void (*switch_cb_t)(lv_event_t *);
 struct lv_timer_data_t
@@ -41,6 +52,151 @@ static bool is_animating = false;
 static int Panel_current_pos = 2; // 当前位置
 
 static int switch_current_pos = 11; // 当前位置
+
+// ==================== audio ====================
+static volatile int keep_running = 0;
+void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount) {
+    ma_decoder* pDecoder = (ma_decoder*)pDevice->pUserData;
+    if (pDecoder == NULL) return;
+
+    ma_uint64 frames_read;
+    ma_result result = ma_decoder_read_pcm_frames(pDecoder, pOutput, frameCount, &frames_read);
+
+    if (frames_read < frameCount) {
+        /* Fill remaining with silence */
+        ma_uint32 bytes_per_frame = ma_get_bytes_per_frame(pDevice->playback.format, pDevice->playback.channels);
+        ma_uint8* pOutBytes = (ma_uint8*)pOutput;
+        for (ma_uint32 i = frames_read * bytes_per_frame; i < frameCount * bytes_per_frame; i++) {
+            pOutBytes[i] = 0;
+        }
+        /* Done playing — signal main loop */
+        keep_running = 0;
+    }
+
+    (void)pInput;
+    (void)result;
+}
+
+void play_audio(char* argv) {
+    if (keep_running)
+        return;
+
+    keep_running = 1;
+
+    ma_decoder decoder;
+    ma_result result = ma_decoder_init_file(argv, NULL, &decoder);
+    if (result != MA_SUCCESS) {
+        fprintf(stderr, "Failed to open %s, error %d\n", argv, result);
+        keep_running = 0;
+        return;
+    }
+
+    ma_format format = decoder.outputFormat;
+    ma_uint32 channels = decoder.outputChannels;
+    ma_uint32 sampleRate = decoder.outputSampleRate;
+
+    ma_backend backends[] = {
+        ma_backend_alsa
+    };
+
+    ma_context context;
+    result = ma_context_init(backends, 1, NULL, &context);
+    if (result != MA_SUCCESS) {
+        fprintf(stderr, "Failed to init ALSA context, error %d\n", result);
+        ma_decoder_uninit(&decoder);
+        keep_running = 0;
+        return;
+    }
+
+    ma_device_info* pPlaybackInfos;
+    ma_uint32 playbackCount;
+    ma_device_info* pCaptureInfos;
+    ma_uint32 captureCount;
+
+    result = ma_context_get_devices(
+        &context,
+        &pPlaybackInfos,
+        &playbackCount,
+        &pCaptureInfos,
+        &captureCount
+    );
+
+    if (result != MA_SUCCESS) {
+        fprintf(stderr, "Failed to get ALSA devices, error %d\n", result);
+        ma_context_uninit(&context);
+        ma_decoder_uninit(&decoder);
+        keep_running = 0;
+        return;
+    }
+
+    ma_device_id selectedDeviceID;
+    ma_bool32 found = MA_FALSE;
+
+    printf("Playback devices:\n");
+    for (ma_uint32 i = 0; i < playbackCount; i++) {
+        // printf("[%u] %s%s\n",
+        //        i,
+        //        pPlaybackInfos[i].name,
+        //        pPlaybackInfos[i].isDefault ? " [default]" : "");
+
+        if (strstr(pPlaybackInfos[i].name, "ES8388") != NULL ||
+            strstr(pPlaybackInfos[i].name, "ES8389") != NULL) {
+            selectedDeviceID = pPlaybackInfos[i].id;
+            found = MA_TRUE;
+        }
+    }
+
+    if (!found) {
+        fprintf(stderr, "ES8388Audio device not found\n");
+        ma_context_uninit(&context);
+        ma_decoder_uninit(&decoder);
+        keep_running = 0;
+        return;
+    }
+
+    ma_device_config config = ma_device_config_init(ma_device_type_playback);
+    config.playback.pDeviceID = &selectedDeviceID;
+    config.playback.format    = format;
+    config.playback.channels  = channels;
+    config.sampleRate         = sampleRate;
+    config.dataCallback       = data_callback;
+    config.pUserData          = &decoder;
+
+    ma_device device;
+    result = ma_device_init(&context, &config, &device);
+    if (result != MA_SUCCESS) {
+        fprintf(stderr, "Failed to init ALSA device, error %d\n", result);
+        ma_context_uninit(&context);
+        ma_decoder_uninit(&decoder);
+        keep_running = 0;
+        return;
+    }
+
+    printf("Backend: %s\n", ma_get_backend_name(device.pContext->backend));
+    printf("Device:  %s\n", device.playback.name);
+
+    result = ma_device_start(&device);
+    if (result != MA_SUCCESS) {
+        fprintf(stderr, "Failed to start device, error %d\n", result);
+        ma_device_uninit(&device);
+        ma_context_uninit(&context);
+        ma_decoder_uninit(&decoder);
+        keep_running = 0;
+        return;
+    }
+
+    while (keep_running) {
+        ma_sleep(10);
+    }
+
+    ma_device_stop(&device);
+    ma_device_uninit(&device);
+    ma_context_uninit(&context);
+    ma_decoder_uninit(&decoder);
+
+    keep_running = 0;
+}
+
 
 // ==================== 初始化 ====================
 void launch_circle_init()
@@ -329,10 +485,16 @@ void main_key_switch(lv_event_t *e)
         case KEY_DOWN:
             break;
         case KEY_LEFT:
+        {
+            thpool_add_work(g_launch_thread_pool, play_audio, caudio_path("switch.wav"));
             switchyou(NULL);
+        }
             break;
         case KEY_RIGHT:
+        {
+            thpool_add_work(g_launch_thread_pool, play_audio, caudio_path("switch.wav"));
             switchzuo(NULL);
+        }
             break;
         default:
             break;
@@ -340,6 +502,7 @@ void main_key_switch(lv_event_t *e)
     }
     else if (code == KEY_ENTER)
     {
+        thpool_add_work(g_launch_thread_pool, play_audio, caudio_path("enter.wav"));
         app_launch(NULL);
     }
 }

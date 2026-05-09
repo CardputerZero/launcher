@@ -126,6 +126,14 @@ extern lv_font_t *g_font_mono_12;   /* 终端专用等宽字体 */
 // EVENTS
 extern lv_obj_t * ui____initial_actions0;
 
+#ifdef _WIN32
+    #define PATH_SEP "\\"
+#else
+    #define PATH_SEP "/"
+#endif
+char* cimg_path(const char *name);
+char* caudio_path(const char *name);
+char* cfont_path(const char *name);
 
 
 // UI INIT

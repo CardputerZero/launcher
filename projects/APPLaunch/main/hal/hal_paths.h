@@ -16,7 +16,7 @@ const char *hal_path_keyboard_device(void);
 const char *hal_path_keyboard_map(void);
 const char *hal_path_store_sync_cmd(void);
 const char *hal_path_images_dir(void);
-
+const char *hal_path_audio_dir(void);
 #ifdef __cplusplus
 }
 #endif

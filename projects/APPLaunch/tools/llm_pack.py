@@ -38,7 +38,8 @@ debian-APPLaunch directory structure:
 PACKAGE_NAME   = 'applaunch'
 APP_NAME       = 'APPLaunch'
 BIN_NAME       = 'M5CardputerZero-APPLaunch'
-INSTALL_PREFIX = 'usr/share/APPLaunch'
+INSTALL_PPREFIX = 'usr/share'
+INSTALL_PREFIX = f'{INSTALL_PPREFIX}/APPLaunch'
 BIN_PATH       = f'{INSTALL_PREFIX}/bin'
 LIB_PATH       = f'{INSTALL_PREFIX}/lib'
 SHARE_PATH     = f'{INSTALL_PREFIX}/share'
@@ -88,42 +89,10 @@ def create_applaunch_deb(version='0.1', src_folder='../dist', revision='m5stack1
         raise FileNotFoundError(f'Binary {BIN_NAME} not found in {src_folder}')
     shutil.copy2(bin_src, os.path.join(deb_folder, BIN_PATH, BIN_NAME))
 
-    # ------------------------------------------------------- lib/lvgl.so  (placeholder)
-    open(os.path.join(deb_folder, LIB_PATH, 'lvgl.so'), 'w').close()
+    # ------------------------------------------------------- APPLaunch/
+    print(os.path.join(src_folder, "APPLaunch"), os.path.join(deb_folder, INSTALL_PREFIX))
+    shutil.copytree(os.path.join(src_folder, "APPLaunch"), os.path.join(deb_folder, INSTALL_PREFIX), dirs_exist_ok=True)
 
-    # ------------------------------------------------------- share/font/  (recursive *.ttf under src_folder)
-    ttf_files = glob.glob(os.path.join(src_folder, '**', '*.ttf'), recursive=True)
-    if ttf_files:
-        for f in ttf_files:
-            shutil.copy2(f, os.path.join(deb_folder, SHARE_PATH, 'font'))
-    else:
-        print(f'  [warn] no *.ttf found under {src_folder}')
-
-    py_files = glob.glob(os.path.join(src_folder, '**', '*.py'), recursive=True)
-    if py_files:
-        for f in py_files:
-            shutil.copy2(f, os.path.join(deb_folder, BIN_PATH))
-    else:
-        print(f'  [warn] no *.py found under {src_folder}')
-
-    # ------------------------------------------------------- share/images/  (recursive *.png under src_folder)
-    png_files = glob.glob(os.path.join(src_folder, '**', '*.png'), recursive=True)
-    png_files += glob.glob(os.path.join(src_folder, '**', '*.gif'), recursive=True)
-    if png_files:
-        for f in png_files:
-            shutil.copy2(f, os.path.join(deb_folder, SHARE_PATH, 'images'))
-    else:
-        print(f'  [warn] no *.png found under {src_folder}')
-
-    # ------------------------------------------------------- applications/  (generated template)
-    with open(os.path.join(deb_folder, APP_PATH, 'vim.desktop.temple'), 'w') as f:
-        f.write('[Desktop Entry]\n')
-        f.write('Name=Vim\n')
-        f.write('TryExec=vim\n')
-        f.write('Exec=vim\n')
-        f.write('Terminal=true\n')
-        f.write('Icon=share/images/email.png\n')
-        f.write('Type=Application\n')
 
     # ------------------------------------------------------- DEBIAN/control
     with open(os.path.join(deb_folder, 'DEBIAN', 'control'), 'w') as f:
@@ -181,7 +150,7 @@ def create_applaunch_deb(version='0.1', src_folder='../dist', revision='m5stack1
     subprocess.run(['dpkg-deb', '-b', deb_folder, deb_file], check=True)
     print(f'Debian package created: {deb_file}')
 
-    shutil.rmtree(deb_folder)
+    # shutil.rmtree(deb_folder)
     return f'{PACKAGE_NAME} create success!'
 
 
@@ -196,7 +165,7 @@ if __name__ == '__main__':
         os.system('rm -rf ./*.deb m5stack_*')
         sys.exit(0)
 
-    version    = '0.1'
+    version    = '0.2'
     src_folder = '../dist'
     revision   = 'm5stack1'
 

@@ -17,9 +17,14 @@
 #include "hal/hal_settings.h"
 #define APP_CONSOLE_EXIT_EVENT (lv_event_code_t)(LV_EVENT_LAST + 1)
 
+
 static inline std::string img_path(const char *name)
 {
-    return std::string(hal_path_images_dir()) + "/" + name;
+    return std::string(hal_path_images_dir()) + PATH_SEP + name;
+}
+static inline std::string audio_path(const char *name)
+{
+    return std::string(hal_path_audio_dir()) + PATH_SEP + name;
 }
 
 class app_

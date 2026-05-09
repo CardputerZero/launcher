@@ -40,6 +40,13 @@ INCLUDE += [ADir('.'), ADir('include')]
 # add requirements
 REQUIREMENTS += ['lvgl_component', 'pthread']
 
+# add miniaudio
+REQUIREMENTS += ['Miniaudio']
+
+# add 
+if 'CONFIG_BACKWARD_CPP_ENABLED' in os.environ:
+    REQUIREMENTS += ['Backward_cpp']
+
 # custom lvgl component
 lvgl_component = list(filter(lambda x: x['target'] == 'lvgl_component', env['COMPONENTS']))[0]
 lvgl_component['SRCS'] = list(filter(
@@ -116,7 +123,7 @@ INCLUDE += [CThreadPool]
 
 
 # add static files
-STATIC_FILES += [ADir('ui/images')]
+STATIC_FILES += [ADir('../APPLaunch')]
 STATIC_FILES += [os.path.join(env['component_dir'], '..', '..', '..', 'doc', 'store_cache_sync.py')]
 # register the component to the build system
 env['COMPONENTS'].append({'target':'M5CardputerZero-APPLaunch',

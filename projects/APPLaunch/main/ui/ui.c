@@ -228,3 +228,26 @@ void ui_init(void)
     }
 #endif
 }
+
+
+
+char* cimg_path(const char *name)
+{
+    static char path_buf[512];
+    snprintf(path_buf, sizeof(path_buf), "%s%s%s", hal_path_images_dir(), PATH_SEP, name);
+    return path_buf;
+}
+
+char* caudio_path(const char *name)
+{
+    static char path_buf[512];
+    snprintf(path_buf, sizeof(path_buf), "%s%s%s", hal_path_audio_dir(), PATH_SEP, name);
+    return path_buf;
+}
+
+char* cfont_path(const char *name)
+{
+    static char path_buf[512];
+    snprintf(path_buf, sizeof(path_buf), "%s%s%s", hal_path_font_dir(), PATH_SEP, name);
+    return path_buf;
+}

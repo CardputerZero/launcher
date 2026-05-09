@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=Vim
+TryExec=vim
+Exec=vim
+Terminal=true
+Icon=share/images/email.png
+Type=Application
