@@ -1,0 +1,6 @@
+
+menuconfig MINIAUDIO_COMPONENT_ENABLED
+    bool "Enable Miniaudio"
+    default n
+
+
