@@ -47,7 +47,7 @@ lvgl_component['SRCS'] = list(filter(
     lvgl_component['SRCS']
 ))
 
-
+SRCS += Glob('hal/*.c*')
 # x86
 if 'linux_x86_sdl2_config_defaults.mk' in os.environ.get("CONFIG_DEFAULT_FILE", ''):
     lvgl_component['DEFINITIONS'] += pkg_config_cflags("freetype2")
@@ -107,8 +107,12 @@ SRCS += [
 ]
 INCLUDE += [os.path.join(RadioLib, 'src')]
 
-
-
+# add https://github.com/Pithikos/C-Thread-Pool.git
+CThreadPool = wget_github('https://github.com/Pithikos/C-Thread-Pool.git')
+SRCS += [
+    os.path.join(CThreadPool, 'thpool.c')
+]
+INCLUDE += [CThreadPool]
 
 
 # add static files
