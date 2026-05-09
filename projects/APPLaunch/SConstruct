@@ -13,7 +13,7 @@ scons -j8
 
 
 cross_package_enabled = False
-version = "v0.0.3"
+version = "v0.0.4"
 local_path = Path(os.getcwd())
 sdk_path = local_path.parent.parent / "SDK"
 static_lib_path = os.path.join(sdk_path, "github_source", f"static_lib_{version}")

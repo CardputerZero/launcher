@@ -177,12 +177,12 @@ public:
         app_list.emplace_back("GAME",
                               img_path("gmae.png"), page_v<UIGamePage>);
         app_list.emplace_back("UnitEnv",
-                              img_path("hack.png"), page_v<UIUnitEnvPage>);
+                              img_path("unitENV.png"), page_v<UIUnitEnvPage>);
         app_list.emplace_back("Midi",
-                              img_path("hack.png"), page_v<UIMidiPage>);
+                              img_path("Midi.png"), page_v<UIMidiPage>);
 
         app_list.emplace_back("Gpio",
-                              img_path("hack.png"), page_v<UIGpioPage>);
+                              img_path("Gpio.png"), page_v<UIGpioPage>);
         
         app_list.emplace_back("LORA", img_path("mesh.png"), page_v<UILoraPage>);
 
@@ -192,7 +192,7 @@ public:
 
         app_list.emplace_back("AICli", img_path("hack.png"), page_v<UIAICliPage>);
 
-        app_list.emplace_back("TANK", img_path("CLAW_logo.png"), page_v<UITankBattlePage>);
+        app_list.emplace_back("TANK", img_path("tank.png"), page_v<UITankBattlePage>);
 
         app_list.emplace_back("Love",
                                     img_path("gmae.png"), page_v<UILovyanPage>);

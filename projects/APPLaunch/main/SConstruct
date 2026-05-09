@@ -49,7 +49,7 @@ lvgl_component['SRCS'] = list(filter(
 
 
 # x86
-if os.environ.get("CONFIG_DEFAULT_FILE", '') == 'linux_x86_sdl2_config_defaults.mk':
+if 'linux_x86_sdl2_config_defaults.mk' in os.environ.get("CONFIG_DEFAULT_FILE", ''):
     lvgl_component['DEFINITIONS'] += pkg_config_cflags("freetype2")
     lvgl_component['REQUIREMENTS'] += pkg_config_ldflags("freetype2")
 
@@ -59,16 +59,18 @@ if os.environ.get("CONFIG_DEFAULT_FILE", '') == 'linux_x86_sdl2_config_defaults.
     REQUIREMENTS += ['input', 'xkbcommon', 'udev']
 
 # x86 cross
-if os.environ.get("CONFIG_DEFAULT_FILE", '') == 'linux_x86_cross_cp0_config_defaults.mk':
+if 'linux_x86_cross_cp0_config_defaults.mk' in os.environ.get("CONFIG_DEFAULT_FILE", ''):
     lvgl_component['DEFINITIONS'] += ['-D_REENTRANT']
     lvgl_component['INCLUDE'] += ['/usr/include/freetype2', '/usr/include/libpng16']
 
     SRCS += Glob('hal/linux/*.c*')
     REQUIREMENTS += ['input', 'xkbcommon', 'udev', 'freetype']    
-
+    # add libcamera
+    REQUIREMENTS += ['camera', 'camera-base', 'jpeg']
+    LDFLAGS += [f'{os.environ.get("CONFIG_TOOLCHAIN_SYSROOT", "")}/usr/lib/aarch64-linux-gnu/libstdc++.so.6']
 
 # macOS
-if os.environ.get("CONFIG_DEFAULT_FILE", '') == 'darwin_config_defaults.mk':
+if 'darwin_config_defaults.mk' in os.environ.get("CONFIG_DEFAULT_FILE", ''):
     # macOS 使用 SDL 后端
     SRCS += Glob('hal/sdl/*.c*')
 

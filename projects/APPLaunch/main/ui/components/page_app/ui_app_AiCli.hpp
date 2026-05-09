@@ -79,7 +79,7 @@ private:
         70, 42, 30, 56, 35, 62, 26, 44
     };
 
-    const char *voice_cmd_ = "can you help me";
+    const char *voice_cmd_ = "please printf hello world";
 
 private:
     /*
@@ -403,7 +403,7 @@ private:
         lv_obj_t *hello = lv_label_create(screen);
         lv_label_set_text(hello, "hello world");
         lv_obj_center(hello);
-        lv_obj_set_style_text_font(hello, &lv_font_montserrat_18, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_text_font(hello, &lv_font_montserrat_48, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_text_color(hello, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
 
         ui_obj_["fullscreen_hello"] = hello;
@@ -865,7 +865,7 @@ private:
             }
             break;
 
-        case KEY_ENTER:
+        case KEY_TAB:
         case KEY_SPACE:
             start_voice_flow();
             break;

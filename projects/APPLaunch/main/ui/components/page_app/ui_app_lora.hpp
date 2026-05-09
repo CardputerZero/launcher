@@ -1907,11 +1907,15 @@ class UILoraPage : public app_base
 public:
     UILoraPage() : app_base()
     {
+        Lora_APP::ui_app_lora_set_go_back([this]() {
+            if (go_back_home) go_back_home();
+        });
         Lora_APP::ui_app_lora_create(ui_APP_Container, ui_root);
     }
 
     ~UILoraPage()
     {
+        Lora_APP::ui_app_lora_set_go_back(nullptr);
         Lora_APP::ui_app_lora_destroy();
     }
 
