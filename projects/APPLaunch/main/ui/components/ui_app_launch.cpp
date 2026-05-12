@@ -25,12 +25,6 @@
 
 static void panel_set_icon(lv_obj_t *panel, const char *src)
 {
-    // DEBUG: red background + border to visualize panel bounds
-    lv_obj_set_style_bg_color(panel, lv_color_hex(0xFF0000), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_opa(panel, 128, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_border_color(panel, lv_color_hex(0xFF0000), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_border_opa(panel, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_border_width(panel, 1, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_pad_all(panel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
 
     lv_obj_t *img = lv_obj_get_child(panel, 0);
