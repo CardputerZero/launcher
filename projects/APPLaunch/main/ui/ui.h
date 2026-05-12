@@ -123,7 +123,8 @@ extern const char *ui_img_camera_png ;
 extern lv_font_t *g_font_cn_20;
 extern lv_font_t *g_font_cn_14;
 extern lv_font_t *g_font_cn_12;
-extern lv_font_t *g_font_mono_12;   /* 终端专用等宽字体 */
+extern lv_font_t *g_font_mono_12;
+extern lv_font_t *g_font_bold_14;   /* 终端专用等宽字体 */
 // EVENTS
 extern lv_obj_t * ui____initial_actions0;
 
