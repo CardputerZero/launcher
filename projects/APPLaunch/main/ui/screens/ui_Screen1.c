@@ -21,33 +21,21 @@ void ui_Screen1_screen_init(void)
     lv_obj_add_flag(ui_Image1, LV_OBJ_FLAG_ADV_HITTEST);     /// Flags
     lv_obj_clear_flag(ui_Image1, LV_OBJ_FLAG_SCROLLABLE);      /// Flags
 
-    // --- WiFi status icon ---
-    ui_wifiPanel = lv_obj_create(ui_Screen1);
-    lv_obj_set_width(ui_wifiPanel, 20);
-    lv_obj_set_height(ui_wifiPanel, 16);
-    lv_obj_set_x(ui_wifiPanel, 212);
-    lv_obj_set_y(ui_wifiPanel, 5);
-    lv_obj_clear_flag(ui_wifiPanel, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_radius(ui_wifiPanel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(ui_wifiPanel, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_opa(ui_wifiPanel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_img_src(ui_wifiPanel, ui_img_wifi_bg_png, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_border_width(ui_wifiPanel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_pad_all(ui_wifiPanel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-
-    ui_wifiLabel = lv_label_create(ui_wifiPanel);
+    // --- WiFi status icon (no background, just white icon, hidden by default) ---
+    ui_wifiLabel = lv_label_create(ui_Screen1);
     lv_obj_set_width(ui_wifiLabel, LV_SIZE_CONTENT);
     lv_obj_set_height(ui_wifiLabel, LV_SIZE_CONTENT);
-    lv_obj_set_align(ui_wifiLabel, LV_ALIGN_CENTER);
+    lv_obj_set_x(ui_wifiLabel, 220);
+    lv_obj_set_y(ui_wifiLabel, 5);
     lv_label_set_text(ui_wifiLabel, LV_SYMBOL_WIFI);
     lv_obj_set_style_text_color(ui_wifiLabel, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_opa(ui_wifiLabel, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_flag(ui_wifiLabel, LV_OBJ_FLAG_HIDDEN);
 
     // --- Time status icon ---
     ui_Panel1 = lv_obj_create(ui_Screen1);
     lv_obj_set_width(ui_Panel1, 45);
     lv_obj_set_height(ui_Panel1, 16);
-    lv_obj_set_x(ui_Panel1, 235);
+    lv_obj_set_x(ui_Panel1, 238);
     lv_obj_set_y(ui_Panel1, 5);
     lv_obj_clear_flag(ui_Panel1, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_style_radius(ui_Panel1, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -66,9 +54,9 @@ void ui_Screen1_screen_init(void)
 
     // --- Battery status icon ---
     ui_batteryPanel = lv_obj_create(ui_Screen1);
-    lv_obj_set_width(ui_batteryPanel, 35);
+    lv_obj_set_width(ui_batteryPanel, 32);
     lv_obj_set_height(ui_batteryPanel, 16);
-    lv_obj_set_x(ui_batteryPanel, 283);
+    lv_obj_set_x(ui_batteryPanel, 286);
     lv_obj_set_y(ui_batteryPanel, 5);
     lv_obj_clear_flag(ui_batteryPanel, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_style_radius(ui_batteryPanel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
