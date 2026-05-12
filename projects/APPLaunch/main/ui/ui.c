@@ -31,9 +31,6 @@ lv_obj_t * startup_gif;
 // CUSTOM VARIABLES
 int Animation_time = 200;
 const char *ui_img_zero_png;
-const char *ui_img_time_png;
-const char *ui_img_wifi_bg_png;
-const char *ui_img_battery_bg_png;
 const char *ui_img_zuo_png;
 const char *ui_img_you_png;
 
@@ -57,9 +54,6 @@ static void ui_images_init(void)
     const char *d = hal_path_images_dir();
     struct { const char **ptr; const char *name; } tbl[] = {
         { &ui_img_zero_png,       "zero.png" },
-        { &ui_img_time_png,       "time.png" },
-        { &ui_img_wifi_bg_png,    "wifi_bg.png" },
-        { &ui_img_battery_bg_png, "battery_bg.png" },
         { &ui_img_zuo_png,        "zuo.png" },
         { &ui_img_you_png,        "you.png" },
         { &ui_img_zero_logo_w_png,"zero_logo_w.png" },
@@ -219,10 +213,13 @@ void ui_init(void)
     // 初始化输入组
     input_group_init();
 
-    // 显示开机动画（需要 share/images/logo_output.gif，SDL 模式下可能缺失）
-#ifdef HAL_PLATFORM_SDL
+    // 显示开机动画（需要 share/images/logo_output.gif）
+#ifndef APPLAUNCH_STARTUP_ANIMATION
     home_screen_load();
 #else
+    #ifdef HAL_PLATFORM_SDL
+    home_screen_load();
+    #else
     {
         char gif_check[256];
         snprintf(gif_check, sizeof(gif_check), "%s/logo_output.gif", hal_path_images_dir());
@@ -230,6 +227,7 @@ void ui_init(void)
         if (_gif_f) { fclose(_gif_f); start_startup_gif(); }
         else { home_screen_load(); }
     }
+    #endif
 #endif
 }
 

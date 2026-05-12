@@ -40,6 +40,10 @@ INCLUDE += [ADir('.'), ADir('include')]
 # add requirements
 REQUIREMENTS += ['lvgl_component', 'pthread']
 
+# Startup animation (GIF splash): opt-in via environment variable
+if os.environ.get('APPLAUNCH_STARTUP_ANIMATION', '0') == '1':
+    DEFINITIONS += ['-DAPPLAUNCH_STARTUP_ANIMATION']
+
 # add miniaudio
 REQUIREMENTS += ['Miniaudio']
 
