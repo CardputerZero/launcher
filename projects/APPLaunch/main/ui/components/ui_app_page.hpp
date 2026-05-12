@@ -173,13 +173,12 @@ private:
         lv_obj_set_height(ui_TOP_time, 16);
         lv_obj_set_x(ui_TOP_time, 237);
         lv_obj_set_y(ui_TOP_time, 5);
-        lv_obj_clear_flag(ui_TOP_time, LV_OBJ_FLAG_SCROLLABLE);      /// Flags
+        lv_obj_clear_flag(ui_TOP_time, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_set_style_radius(ui_TOP_time, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_color(ui_TOP_time, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_opa(ui_TOP_time, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_img_src(ui_TOP_time, ui_img_time_png, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_border_width(ui_TOP_time, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-
         ui_TOP_time_Label = lv_label_create(ui_TOP_time);
         lv_obj_set_width(ui_TOP_time_Label, LV_SIZE_CONTENT);   /// 1
         lv_obj_set_height(ui_TOP_time_Label, LV_SIZE_CONTENT);    /// 1

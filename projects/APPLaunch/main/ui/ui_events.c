@@ -47,23 +47,10 @@ lv_obj_t *launch_circle[100];
 
 // ==================== 5个槽位的标准坐标 ====================
 
-static const lv_coord_t SLOT_X[] = {
-    -177, -99, 0, 99, 177,
-    -177, -99, 0, 99, 177
-};
-
-static const lv_coord_t SLOT_Y[] = {
-    4, -6, -16, -6, 4,
-    57, 57, 50, 57, 57
-};
-
-static const lv_coord_t SLOT_W[] = {
-    61, 81, 101, 81, 61
-};
-
-static const lv_coord_t SLOT_H[] = {
-    61, 81, 101, 81, 61
-};
+static const lv_coord_t SLOT_X[] = {-177, -99, 0, 99, 177, -177, -99, 0, 99, 177};
+static const lv_coord_t SLOT_Y[] = {4, -6, -16, -6, 4, LABEL_Y_SIDE, LABEL_Y_SIDE, LABEL_Y_CENTER, LABEL_Y_SIDE, LABEL_Y_SIDE};
+static const lv_coord_t SLOT_W[] = {61, 80, 100, 80, 61};
+static const lv_coord_t SLOT_H[] = {61, 80, 100, 80, 61};
 
 static bool is_animating = false;
 
@@ -597,6 +584,18 @@ static void snap_all_panels(lv_anim_t *a)
     }
 
     is_animating = false;
+
+    // Reset border colors: center=bright, sides=dark
+    for (int i = 0; i < 5; i++) {
+        uint32_t color = (i == 2) ? BORDER_COLOR_CENTER : BORDER_COLOR_SIDE;
+        lv_obj_set_style_border_color(launch_circle[i], lv_color_hex(color), LV_PART_MAIN | LV_STATE_DEFAULT);
+    }
+
+    // Reset all label fonts to bold
+    for (int i = 5; i < 10; i++) {
+        lv_obj_set_style_text_font(launch_circle[i], g_font_bold_14, LV_PART_MAIN | LV_STATE_DEFAULT);
+    }
+
 }
 
 

@@ -98,6 +98,7 @@ void ui_console_key(lv_event_t * e);
 // CUSTOM VARIABLES
 extern const char *ui_img_zero_png;
 extern const char *ui_img_time_png;
+extern const char *ui_img_battery_bg_png;
 extern const char *ui_img_zuo_png;
 extern const char *ui_img_you_png;
 extern const char *ui_img_store_logo_png ;
@@ -122,7 +123,15 @@ extern const char *ui_img_camera_png ;
 extern lv_font_t *g_font_cn_20;
 extern lv_font_t *g_font_cn_14;
 extern lv_font_t *g_font_cn_12;
-extern lv_font_t *g_font_mono_12;   /* 终端专用等宽字体 */
+extern lv_font_t *g_font_mono_12;
+extern lv_font_t *g_font_bold_14;
+extern lv_font_t *g_font_bold_12;
+// Launcher layout constants
+#define BORDER_COLOR_CENTER  0x444444
+#define BORDER_COLOR_SIDE    0x222222
+#define LABEL_Y_CENTER       50
+#define LABEL_Y_SIDE         50
+
 // EVENTS
 extern lv_obj_t * ui____initial_actions0;
 
