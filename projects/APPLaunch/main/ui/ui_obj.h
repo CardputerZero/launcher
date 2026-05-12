@@ -1,6 +1,5 @@
 UI_DEFINE_OBJECT(ui_Screen1)
 UI_DEFINE_OBJECT(ui_Image1)
-UI_DEFINE_OBJECT(ui_wifiPanel)
 UI_DEFINE_OBJECT(ui_wifiLabel)
 UI_DEFINE_OBJECT(ui_Panel1)
 UI_DEFINE_OBJECT(ui_timeLabel)

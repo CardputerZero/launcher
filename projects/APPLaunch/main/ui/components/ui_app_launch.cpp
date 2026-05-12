@@ -518,20 +518,12 @@ public:
 
     void update_home_status_bar()
     {
-        // WiFi
+        // WiFi: show when connected, hide when not
         hal_wifi_status_t wifi = hal_wifi_get_status();
-        if (wifi.connected) {
-            if (wifi.signal >= 70)
-                lv_label_set_text(ui_wifiLabel, LV_SYMBOL_WIFI);
-            else if (wifi.signal >= 40)
-                lv_label_set_text(ui_wifiLabel, LV_SYMBOL_WIFI);
-            else
-                lv_label_set_text(ui_wifiLabel, LV_SYMBOL_WIFI);
-            lv_obj_set_style_text_opa(ui_wifiLabel, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-        } else {
-            lv_label_set_text(ui_wifiLabel, LV_SYMBOL_WIFI);
-            lv_obj_set_style_text_opa(ui_wifiLabel, 90, LV_PART_MAIN | LV_STATE_DEFAULT);
-        }
+        if (wifi.connected)
+            lv_obj_clear_flag(ui_wifiLabel, LV_OBJ_FLAG_HIDDEN);
+        else
+            lv_obj_add_flag(ui_wifiLabel, LV_OBJ_FLAG_HIDDEN);
 
         // Time
         char time_buf[16];
@@ -552,6 +544,10 @@ public:
             char pwr_buf[16];
             snprintf(pwr_buf, sizeof(pwr_buf), "%d%%", soc);
             lv_label_set_text(ui_powerLabel, pwr_buf);
+            if (soc == 100)
+                lv_obj_set_style_text_font(ui_powerLabel, &lv_font_montserrat_10, LV_PART_MAIN | LV_STATE_DEFAULT);
+            else
+                lv_obj_set_style_text_font(ui_powerLabel, LV_FONT_DEFAULT, LV_PART_MAIN | LV_STATE_DEFAULT);
 
             uint32_t color = 0x66CC33;
             if (soc <= 20)
