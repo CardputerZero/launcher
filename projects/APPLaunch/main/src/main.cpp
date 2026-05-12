@@ -305,7 +305,10 @@ void APPLaunch_lock()
 
 int main(void)
 {
-
+    setenv("XDG_RUNTIME_DIR", "/run/user/1000", 1);
+    setenv("PIPEWIRE_RUNTIME_DIR", "/run/user/1000", 1);
+    setenv("PULSE_SERVER", "unix:/run/user/1000/pulse/native", 1);
+    
     lock_file = hal_path_lock_file();
     g_launch_thread_pool = thpool_init(3);
     lv_init();

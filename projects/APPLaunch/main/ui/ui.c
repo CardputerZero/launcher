@@ -168,6 +168,9 @@ void home_screen_load()
     hal_audio_play(_startup_snd);
 }
 
+void audio_system_init();
+void audio_load_sounds();
+
 void ui_event_logo_over(lv_event_t * e) {
     static int done = 0;
     lv_event_code_t event_code = lv_event_get_code(e);
@@ -175,6 +178,21 @@ void ui_event_logo_over(lv_event_t * e) {
         done = 1;
         printf("[GIF] first LV_EVENT_READY -> pause + home_screen_load()\n");
         if (startup_gif) lv_gif_pause(startup_gif);
+
+
+        /*
+        * 这里会在程序运行时执行一次。
+        * 所以在这里初始化音频最合适。
+        *
+        * audio_system_init():
+        *   打开 ALSA 设备，并保持打开。
+        *
+        * audio_load_sounds():
+        *   预加载 switch.wav / enter.wav。
+        */
+        audio_system_init();
+        audio_load_sounds();
+
         home_screen_load();
     }
 }

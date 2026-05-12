@@ -38,7 +38,7 @@ public:
     {
         system("gpioset -c gpiochip0 4=1 &");
         system("gpioset -c gpiochip0 17=1 &");
-        system("sh -c 'sleep 4 ; /home/pi/roller485 -b 1 mode 1 ; /home/pi/roller485 -b 1 enable ; /home/pi/roller485 -b 1 speed 100 ' &");
+        system("sh -c 'sleep 4 ; /home/pi/roller485 -b 1 mode 1 ; /home/pi/roller485 -b 1 enable ; /home/pi/roller485 -b 1 speed 30 ' &");
         creat_UI();
         event_handler_init();
     }

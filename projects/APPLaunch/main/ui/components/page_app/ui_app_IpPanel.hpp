@@ -30,7 +30,7 @@ class UIIpPanelPage : public app_base
 public:
     UIIpPanelPage() : app_base()
     {
-        set_page_title("IP PANEL");
+        set_page_title("IP INFO");
         creat_UI();
         event_handler_init();
     }
