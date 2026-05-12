@@ -79,7 +79,7 @@ private:
         70, 42, 30, 56, 35, 62, 26, 44
     };
 
-    const char *voice_cmd_ = "please printf hello world";
+    const char *voice_cmd_ = "print hello world";
 
 private:
     /*
@@ -247,17 +247,17 @@ private:
                      &lv_font_montserrat_10, 0x74819B);
 
         lv_obj_t *prompt = create_label(card, "$", 10, 25,
-                                        &lv_font_montserrat_12, 0x37D6FF);
+                                        &lv_font_montserrat_16, 0x37D6FF);
         ui_obj_["lbl_prompt"] = prompt;
 
-        lv_obj_t *voice = create_label(card, "press TALK and say a command", 58, 26,
-                                       &lv_font_montserrat_10, 0xDDE7FF);
+        lv_obj_t *voice = create_label(card, "press TALK and say a command", 65, 26,
+                                       &lv_font_montserrat_16, 0xDDE7FF);
         lv_obj_set_width(voice, 236);
         lv_label_set_long_mode(voice, LV_LABEL_LONG_SCROLL_CIRCULAR);
         ui_obj_["lbl_voice"] = voice;
 
         lv_obj_t *processing = create_label(card, "ready", 10, 45,
-                                            &lv_font_montserrat_12, 0x8E9AB3);
+                                            &lv_font_montserrat_16, 0x8E9AB3);
         ui_obj_["lbl_processing"] = processing;
 
         /*
@@ -437,7 +437,7 @@ private:
         lv_label_set_text(ui_obj_["lbl_processing"], "ready");
 
         lv_obj_set_style_text_font(ui_obj_["lbl_voice"],
-                                   &lv_font_montserrat_10,
+                                   &lv_font_montserrat_16,
                                    LV_PART_MAIN | LV_STATE_DEFAULT);
 
         lv_obj_set_style_text_color(ui_obj_["lbl_voice"],
@@ -487,7 +487,7 @@ private:
         lv_label_set_text(ui_obj_["lbl_processing"], "audio wave input...");
 
         lv_obj_set_style_text_font(ui_obj_["lbl_voice"],
-                                   &lv_font_montserrat_10,
+                                   &lv_font_montserrat_16,
                                    LV_PART_MAIN | LV_STATE_DEFAULT);
 
         lv_obj_set_style_text_color(ui_obj_["lbl_voice"],
@@ -531,10 +531,15 @@ private:
         lv_label_set_text(ui_obj_["lbl_voice"], voice_cmd_);
         lv_label_set_text(ui_obj_["lbl_processing"], "...processing");
 
-        lv_obj_set_style_text_font(ui_obj_["lbl_voice"],
-                                   &lv_font_montserrat_12,
+        lv_obj_set_style_text_font(ui_obj_["lbl_prompt"],
+                                   &lv_font_montserrat_16,
                                    LV_PART_MAIN | LV_STATE_DEFAULT);
-
+        lv_obj_set_style_text_font(ui_obj_["lbl_voice"],
+                                   &lv_font_montserrat_16,
+                                   LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_text_font(ui_obj_["lbl_processing"],
+                                   &lv_font_montserrat_16,
+                                   LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_text_color(ui_obj_["lbl_voice"],
                                     lv_color_hex(0xFFBD2E),
                                     LV_PART_MAIN | LV_STATE_DEFAULT);
