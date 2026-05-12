@@ -1,4 +1,5 @@
 #pragma once
+#if !defined(HAL_PLATFORM_SDL)
 #include "../ui_app_page.hpp"
 #include <unordered_map>
 #include <string>
@@ -1447,3 +1448,5 @@ private:
         }
     }
 };
+
+#endif // !HAL_PLATFORM_SDL
