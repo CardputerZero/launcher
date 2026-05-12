@@ -97,10 +97,11 @@ if 'linux_x86_cross_cp0_config_defaults.mk' in os.environ.get("CONFIG_DEFAULT_FI
     lvgl_component['INCLUDE'] += ['/usr/include/freetype2', '/usr/include/libpng16']
 
     SRCS += Glob('hal/linux/*.c*')
-    REQUIREMENTS += ['input', 'xkbcommon', 'udev', 'freetype']    
+    REQUIREMENTS += ['input', 'xkbcommon', 'udev', 'freetype']
     # add libcamera
     REQUIREMENTS += ['camera', 'camera-base', 'jpeg']
     LDFLAGS += [f'{os.environ.get("CONFIG_TOOLCHAIN_SYSROOT", "")}/usr/lib/aarch64-linux-gnu/libstdc++.so.6']
+    DEFINITIONS += ['-Wno-format-truncation']
 
 # macOS
 if 'darwin_config_defaults.mk' in os.environ.get("CONFIG_DEFAULT_FILE", ''):
