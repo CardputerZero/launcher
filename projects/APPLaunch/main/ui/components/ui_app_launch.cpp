@@ -526,12 +526,20 @@ public:
 
     void update_home_status_bar()
     {
-        // WiFi: show when connected, hide when not
+        // WiFi signal bars: show/hide + color by strength
         hal_wifi_status_t wifi = hal_wifi_get_status();
-        if (wifi.connected)
-            lv_obj_clear_flag(ui_wifiLabel, LV_OBJ_FLAG_HIDDEN);
-        else
-            lv_obj_add_flag(ui_wifiLabel, LV_OBJ_FLAG_HIDDEN);
+        if (wifi.connected) {
+            lv_obj_clear_flag(ui_wifiPanel, LV_OBJ_FLAG_HIDDEN);
+            int sig = wifi.signal;
+            uint32_t on_color  = 0x33CC33;
+            uint32_t off_color = 0x4D4D4D;
+            lv_obj_set_style_bg_color(ui_wifiBar1, lv_color_hex(sig > 0 ? on_color : off_color), LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_obj_set_style_bg_color(ui_wifiBar2, lv_color_hex(sig >= 30 ? on_color : off_color), LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_obj_set_style_bg_color(ui_wifiBar3, lv_color_hex(sig >= 60 ? on_color : off_color), LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_obj_set_style_bg_color(ui_wifiBar4, lv_color_hex(sig >= 80 ? on_color : off_color), LV_PART_MAIN | LV_STATE_DEFAULT);
+        } else {
+            lv_obj_add_flag(ui_wifiPanel, LV_OBJ_FLAG_HIDDEN);
+        }
 
         // Time
         char time_buf[16];
