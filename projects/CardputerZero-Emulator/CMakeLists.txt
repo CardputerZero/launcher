@@ -114,7 +114,7 @@ option(EMU_SKIP_APPLAUNCH "Skip APPLaunch (Unix-only deps)" OFF)
 
 file(GLOB_RECURSE APPLAUNCH_UI_C   ${APPLAUNCH}/ui/*.c)
 file(GLOB_RECURSE APPLAUNCH_UI_CPP ${APPLAUNCH}/ui/*.cpp)
-file(GLOB         APPLAUNCH_KBD    ${APPLAUNCH}/src/keyboard_input.c)
+file(GLOB         APPLAUNCH_KBD    ${APPLAUNCH}/hal/keyboard_input.c)
 file(GLOB APPLAUNCH_HAL_SDL_C   ${APPLAUNCH}/hal/sdl/*.c)
 file(GLOB APPLAUNCH_HAL_SDL_CPP ${APPLAUNCH}/hal/sdl/*.cpp)
 
@@ -336,7 +336,7 @@ endif() # NOT EMSCRIPTEN
 if(EMSCRIPTEN)
     file(GLOB_RECURSE APPLAUNCH_UI_C_WEB   ${APPLAUNCH}/ui/*.c)
     file(GLOB_RECURSE APPLAUNCH_UI_CPP_WEB ${APPLAUNCH}/ui/*.cpp)
-    file(GLOB         APPLAUNCH_KBD_WEB    ${APPLAUNCH}/src/keyboard_input.c)
+    file(GLOB         APPLAUNCH_KBD_WEB    ${APPLAUNCH}/hal/keyboard_input.c)
     file(GLOB         APPLAUNCH_HAL_SDL_C_WEB   ${APPLAUNCH}/hal/sdl/*.c)
     file(GLOB         APPLAUNCH_HAL_SDL_CPP_WEB ${APPLAUNCH}/hal/sdl/*.cpp)
 
