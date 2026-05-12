@@ -98,6 +98,8 @@ void ui_console_key(lv_event_t * e);
 // CUSTOM VARIABLES
 extern const char *ui_img_zero_png;
 extern const char *ui_img_time_png;
+extern const char *ui_img_wifi_bg_png;
+extern const char *ui_img_battery_bg_png;
 extern const char *ui_img_zuo_png;
 extern const char *ui_img_you_png;
 extern const char *ui_img_store_logo_png ;
