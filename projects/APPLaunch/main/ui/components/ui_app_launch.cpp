@@ -28,16 +28,6 @@
 #define PANEL_PAD_CENTER     0
 #define PANEL_PAD_SIDE       0
 
-static void label_set_auto_font(lv_obj_t *label, const char *text)
-{
-    int len = strlen(text);
-    if (len <= 4)
-        lv_obj_set_style_text_font(label, g_font_bold_14, LV_PART_MAIN | LV_STATE_DEFAULT);
-    else if (len <= 6)
-        lv_obj_set_style_text_font(label, g_font_cn_12, LV_PART_MAIN | LV_STATE_DEFAULT);
-    else
-        lv_obj_set_style_text_font(label, &lv_font_montserrat_10, LV_PART_MAIN | LV_STATE_DEFAULT);
-}
 
 static void panel_set_icon(lv_obj_t *panel, const char *src)
 {
@@ -487,49 +477,33 @@ public:
         {
             auto &a = app_at(current_app - 2);
             lv_label_set_text(ui_zuoLabelout, a.Name.c_str());
-            label_set_auto_font(ui_zuoLabelout, a.Name.c_str());
             panel_set_icon(ui_outPanelzuo, a.Icon.c_str());
         }
         // 左
         {
             auto &a = app_at(current_app - 1);
             lv_label_set_text(ui_zuoLabel, a.Name.c_str());
-            label_set_auto_font(ui_zuoLabel, a.Name.c_str());
             panel_set_icon(ui_zuoPanel, a.Icon.c_str());
         }
         // 中心
         {
             auto &a = app_at(current_app);
             lv_label_set_text(ui_switchLabel, a.Name.c_str());
-            label_set_auto_font(ui_switchLabel, a.Name.c_str());
             panel_set_icon(ui_switchPanel, a.Icon.c_str());
         }
         // 右
         {
             auto &a = app_at(current_app + 1);
             lv_label_set_text(ui_youLabel, a.Name.c_str());
-            label_set_auto_font(ui_youLabel, a.Name.c_str());
             panel_set_icon(ui_youPanel, a.Icon.c_str());
         }
         // 最右外（隐藏）
         {
             auto &a = app_at(current_app + 2);
             lv_label_set_text(ui_youLabelout, a.Name.c_str());
-            label_set_auto_font(ui_youLabelout, a.Name.c_str());
             panel_set_icon(ui_outPanelyou, a.Icon.c_str());
         }
 
-        // Update border colors: center=bright, sides=dark
-        lv_obj_set_style_border_color(ui_switchPanel, lv_color_hex(PANEL_BORDER_CENTER), LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_border_color(ui_zuoPanel, lv_color_hex(PANEL_BORDER_SIDE), LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_border_color(ui_youPanel, lv_color_hex(PANEL_BORDER_SIDE), LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_border_color(ui_outPanelzuo, lv_color_hex(PANEL_BORDER_SIDE), LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_border_color(ui_outPanelyou, lv_color_hex(PANEL_BORDER_SIDE), LV_PART_MAIN | LV_STATE_DEFAULT);
-
-        // Update padding
-        lv_obj_set_style_pad_all(ui_switchPanel, PANEL_PAD_CENTER, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_pad_all(ui_zuoPanel, PANEL_PAD_SIDE, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_pad_all(ui_youPanel, PANEL_PAD_SIDE, LV_PART_MAIN | LV_STATE_DEFAULT);
     }
 
     // ============================================================
