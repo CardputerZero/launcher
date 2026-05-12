@@ -111,7 +111,6 @@ void ui_Screen1_screen_init(void)
         lv_obj_set_style_border_width(top, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_pad_all(top, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
     }
-    lv_obj_set_style_pad_all(battery_top_cover, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
 
     ui_Bar1 = lv_bar_create(ui_batteryPanel);
     lv_bar_set_value(ui_Bar1, 96, LV_ANIM_OFF);

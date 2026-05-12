@@ -54,19 +54,10 @@ inline constexpr page_t<PageT> page_v{};
 // ============================================================
 // app:统一的应用描述 + 发射器
 // ============================================================
-static std::string icon_80_from_100(const std::string &icon100)
-{
-    auto pos = icon100.rfind("_100.png");
-    if (pos != std::string::npos)
-        return icon100.substr(0, pos) + "_80.png";
-    return icon100;
-}
-
 struct app
 {
     std::string Name;
     std::string Icon;
-    std::string Icon80;
     std::string Exec;
 
     std::function<void(app_launch_S *)> launch;
@@ -125,14 +116,14 @@ public:
         {
             auto it = std::next(app_list.begin(), 0);
             lv_label_set_text(ui_zuoLabelout, it->Name.c_str());
-            lv_obj_set_style_bg_img_src(ui_outPanelzuo, it->Icon80.c_str(),
+            lv_obj_set_style_bg_img_src(ui_outPanelzuo, it->Icon.c_str(),
                                         LV_PART_MAIN | LV_STATE_DEFAULT);
         }
 
         {
             auto it = std::next(app_list.begin(), 1);
             lv_label_set_text(ui_zuoLabel, it->Name.c_str());
-            lv_obj_set_style_bg_img_src(ui_zuoPanel, it->Icon80.c_str(),
+            lv_obj_set_style_bg_img_src(ui_zuoPanel, it->Icon.c_str(),
                                         LV_PART_MAIN | LV_STATE_DEFAULT);
         }
 
@@ -146,14 +137,14 @@ public:
         {
             auto it = std::next(app_list.begin(), 3);
             lv_label_set_text(ui_youLabel, it->Name.c_str());
-            lv_obj_set_style_bg_img_src(ui_youPanel, it->Icon80.c_str(),
+            lv_obj_set_style_bg_img_src(ui_youPanel, it->Icon.c_str(),
                                         LV_PART_MAIN | LV_STATE_DEFAULT);
         }
 
         {
             auto it = std::next(app_list.begin(), 4);
             lv_label_set_text(ui_youLabelout, it->Name.c_str());
-            lv_obj_set_style_bg_img_src(ui_outPanelyou, it->Icon80.c_str(),
+            lv_obj_set_style_bg_img_src(ui_outPanelyou, it->Icon.c_str(),
                                         LV_PART_MAIN | LV_STATE_DEFAULT);
         }
 
@@ -307,7 +298,7 @@ public:
         next_app = next_app == (int)app_list.size() - 1 ? 0 : next_app + 1;
         auto it = std::next(app_list.begin(), next_app);
         lv_label_set_text(label, it->Name.c_str());
-        lv_obj_set_style_bg_img_src(panel, it->Icon80.c_str(),
+        lv_obj_set_style_bg_img_src(panel, it->Icon.c_str(),
                                     LV_PART_MAIN | LV_STATE_DEFAULT);
     }
 
@@ -319,7 +310,7 @@ public:
         next_app = next_app == 0 ? (int)app_list.size() - 1 : next_app - 1;
         auto it = std::next(app_list.begin(), next_app);
         lv_label_set_text(label, it->Name.c_str());
-        lv_obj_set_style_bg_img_src(panel, it->Icon80.c_str(),
+        lv_obj_set_style_bg_img_src(panel, it->Icon.c_str(),
                                     LV_PART_MAIN | LV_STATE_DEFAULT);
     }
 
@@ -473,14 +464,14 @@ public:
         {
             auto &a = app_at(current_app - 2);
             lv_label_set_text(ui_zuoLabelout, a.Name.c_str());
-            lv_obj_set_style_bg_img_src(ui_outPanelzuo, a.Icon80.c_str(),
+            lv_obj_set_style_bg_img_src(ui_outPanelzuo, a.Icon.c_str(),
                                         LV_PART_MAIN | LV_STATE_DEFAULT);
         }
         // 左
         {
             auto &a = app_at(current_app - 1);
             lv_label_set_text(ui_zuoLabel, a.Name.c_str());
-            lv_obj_set_style_bg_img_src(ui_zuoPanel, a.Icon80.c_str(),
+            lv_obj_set_style_bg_img_src(ui_zuoPanel, a.Icon.c_str(),
                                         LV_PART_MAIN | LV_STATE_DEFAULT);
         }
         // 中心
@@ -494,14 +485,14 @@ public:
         {
             auto &a = app_at(current_app + 1);
             lv_label_set_text(ui_youLabel, a.Name.c_str());
-            lv_obj_set_style_bg_img_src(ui_youPanel, a.Icon80.c_str(),
+            lv_obj_set_style_bg_img_src(ui_youPanel, a.Icon.c_str(),
                                         LV_PART_MAIN | LV_STATE_DEFAULT);
         }
         // 最右外（隐藏）
         {
             auto &a = app_at(current_app + 2);
             lv_label_set_text(ui_youLabelout, a.Name.c_str());
-            lv_obj_set_style_bg_img_src(ui_outPanelyou, a.Icon80.c_str(),
+            lv_obj_set_style_bg_img_src(ui_outPanelyou, a.Icon.c_str(),
                                         LV_PART_MAIN | LV_STATE_DEFAULT);
         }
     }
@@ -604,8 +595,7 @@ inline app::app(std::string name,
                 std::string icon,
                 std::string exec,
                 bool terminal)
-    : Name(std::move(name)), Icon(std::move(icon)), Icon80(icon_80_from_100(Icon))
-{
+    : Name(std::move(name)), Icon(std::move(icon)){
     launch = [exec = std::move(exec), terminal](app_launch_S *ctx)
     {
         if (terminal)
@@ -620,8 +610,7 @@ inline app::app(std::string name,
                 std::string exec,
                 bool terminal,
                 bool sysplause)
-    : Name(std::move(name)), Icon(std::move(icon)), Icon80(icon_80_from_100(Icon))
-{
+    : Name(std::move(name)), Icon(std::move(icon)){
     launch = [exec = std::move(exec), terminal, sysplause](app_launch_S *ctx)
     {
         if (terminal)
@@ -635,8 +624,7 @@ template <class PageT>
 app::app(std::string name,
          std::string icon,
          page_t<PageT> /*tag*/)
-    : Name(std::move(name)), Icon(std::move(icon)), Icon80(icon_80_from_100(Icon))
-{
+    : Name(std::move(name)), Icon(std::move(icon)){
     launch = [](app_launch_S *self)
     {
         /* Instant feedback: show the overlay, then force an immediate
