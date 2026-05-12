@@ -129,7 +129,7 @@ SRCS += [
     os.path.join(RadioLib, 'src', 'Hal.cpp'),
     os.path.join(RadioLib, 'src', 'Module.cpp'),
     os.path.join(RadioLib, 'src', 'utils', 'CRC.cpp'),
-    os.path.join(RadioLib, 'src', 'utils', 'FEC.cpp'),
+    os.path.join(RadioLib, 'src', 'utils', 'ConvCode.cpp'),
     os.path.join(RadioLib, 'src', 'utils', 'Utils.cpp'),
     os.path.join(RadioLib, 'src', 'protocols', 'PhysicalLayer', 'PhysicalLayer.cpp'),
     os.path.join(RadioLib, 'src', 'modules', 'SX126x', 'SX126x.cpp'),
