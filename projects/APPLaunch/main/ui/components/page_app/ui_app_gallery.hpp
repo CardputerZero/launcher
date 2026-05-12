@@ -40,7 +40,11 @@ class UIGalleryPage : public app_base
 public:
     UIGalleryPage() : app_base()
     {
+#ifdef _WIN32
+        mkdir(TMP_DIR);
+#else
         mkdir(TMP_DIR, 0755);
+#endif
         scan_images();
         create_UI();
         event_handler_init();
