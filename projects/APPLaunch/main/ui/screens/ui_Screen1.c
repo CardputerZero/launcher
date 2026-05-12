@@ -21,19 +21,30 @@ void ui_Screen1_screen_init(void)
     lv_obj_add_flag(ui_Image1, LV_OBJ_FLAG_ADV_HITTEST);     /// Flags
     lv_obj_clear_flag(ui_Image1, LV_OBJ_FLAG_SCROLLABLE);      /// Flags
 
-    // --- WiFi status icon ---
+    // --- WiFi status icon (LVGL drawn: sharp top, rounded bottom) ---
     ui_wifiPanel = lv_obj_create(ui_Screen1);
     lv_obj_set_width(ui_wifiPanel, 20);
     lv_obj_set_height(ui_wifiPanel, 16);
     lv_obj_set_x(ui_wifiPanel, 212);
     lv_obj_set_y(ui_wifiPanel, 5);
     lv_obj_clear_flag(ui_wifiPanel, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_radius(ui_wifiPanel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(ui_wifiPanel, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_opa(ui_wifiPanel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_img_src(ui_wifiPanel, ui_img_wifi_bg_png, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_radius(ui_wifiPanel, 4, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(ui_wifiPanel, lv_color_hex(0x996633), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(ui_wifiPanel, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_border_width(ui_wifiPanel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_pad_all(ui_wifiPanel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_clip_corner(ui_wifiPanel, true, LV_PART_MAIN | LV_STATE_DEFAULT);
+    {
+        lv_obj_t *top = lv_obj_create(ui_wifiPanel);
+        lv_obj_set_size(top, 20, 5);
+        lv_obj_set_pos(top, 0, 0);
+        lv_obj_clear_flag(top, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_style_radius(top, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_color(top, lv_color_hex(0x996633), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_opa(top, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_border_width(top, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_pad_all(top, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+    }
 
     ui_wifiLabel = lv_label_create(ui_wifiPanel);
     lv_obj_set_width(ui_wifiLabel, LV_SIZE_CONTENT);
@@ -43,18 +54,30 @@ void ui_Screen1_screen_init(void)
     lv_obj_set_style_text_color(ui_wifiLabel, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(ui_wifiLabel, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    // --- Time status icon ---
+    // --- Time status icon (LVGL drawn: sharp top, rounded bottom) ---
     ui_Panel1 = lv_obj_create(ui_Screen1);
     lv_obj_set_width(ui_Panel1, 45);
     lv_obj_set_height(ui_Panel1, 16);
     lv_obj_set_x(ui_Panel1, 235);
     lv_obj_set_y(ui_Panel1, 5);
     lv_obj_clear_flag(ui_Panel1, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_radius(ui_Panel1, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(ui_Panel1, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_opa(ui_Panel1, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_img_src(ui_Panel1, ui_img_time_png, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_radius(ui_Panel1, 4, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(ui_Panel1, lv_color_hex(0x996633), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(ui_Panel1, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_border_width(ui_Panel1, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_all(ui_Panel1, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_clip_corner(ui_Panel1, true, LV_PART_MAIN | LV_STATE_DEFAULT);
+    {
+        lv_obj_t *top = lv_obj_create(ui_Panel1);
+        lv_obj_set_size(top, 45, 5);
+        lv_obj_set_pos(top, 0, 0);
+        lv_obj_clear_flag(top, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_style_radius(top, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_color(top, lv_color_hex(0x996633), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_opa(top, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_border_width(top, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_pad_all(top, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+    }
 
     ui_timeLabel = lv_label_create(ui_Panel1);
     lv_obj_set_width(ui_timeLabel, LV_SIZE_CONTENT);
@@ -64,19 +87,31 @@ void ui_Screen1_screen_init(void)
     lv_obj_set_style_text_color(ui_timeLabel, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(ui_timeLabel, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    // --- Battery status icon ---
+    // --- Battery status icon (LVGL drawn: sharp top, rounded bottom) ---
     ui_batteryPanel = lv_obj_create(ui_Screen1);
     lv_obj_set_width(ui_batteryPanel, 35);
     lv_obj_set_height(ui_batteryPanel, 16);
     lv_obj_set_x(ui_batteryPanel, 283);
     lv_obj_set_y(ui_batteryPanel, 5);
     lv_obj_clear_flag(ui_batteryPanel, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_radius(ui_batteryPanel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(ui_batteryPanel, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_opa(ui_batteryPanel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_img_src(ui_batteryPanel, ui_img_battery_bg_png, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_radius(ui_batteryPanel, 4, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(ui_batteryPanel, lv_color_hex(0x996633), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(ui_batteryPanel, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_border_width(ui_batteryPanel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_pad_all(ui_batteryPanel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_clip_corner(ui_batteryPanel, true, LV_PART_MAIN | LV_STATE_DEFAULT);
+    {
+        lv_obj_t *top = lv_obj_create(ui_batteryPanel);
+        lv_obj_set_size(top, 35, 5);
+        lv_obj_set_pos(top, 0, 0);
+        lv_obj_clear_flag(top, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_style_radius(top, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_color(top, lv_color_hex(0x996633), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_opa(top, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_border_width(top, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_pad_all(top, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+    }
+    lv_obj_set_style_pad_all(battery_top_cover, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
 
     ui_Bar1 = lv_bar_create(ui_batteryPanel);
     lv_bar_set_value(ui_Bar1, 96, LV_ANIM_OFF);
