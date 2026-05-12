@@ -1,4 +1,5 @@
 #pragma once
+#if !defined(HAL_PLATFORM_SDL)
 
 #include "../ui_app_page.hpp"
 
@@ -980,3 +981,5 @@ private:
         }
     }
 };
+
+#endif // !HAL_PLATFORM_SDL

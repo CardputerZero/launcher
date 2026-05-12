@@ -1,4 +1,5 @@
 #pragma once
+#if !defined(HAL_PLATFORM_SDL)
 #include "ui_app_lora.hpp"
 #include "lvgl/lvgl.h"
 #include <unistd.h>
@@ -1920,3 +1921,5 @@ public:
     }
 
 };
+
+#endif // !HAL_PLATFORM_SDL
