@@ -54,10 +54,19 @@ inline constexpr page_t<PageT> page_v{};
 // ============================================================
 // app:统一的应用描述 + 发射器
 // ============================================================
+static std::string icon_80_from_100(const std::string &icon100)
+{
+    auto pos = icon100.rfind("_100.png");
+    if (pos != std::string::npos)
+        return icon100.substr(0, pos) + "_80.png";
+    return icon100;
+}
+
 struct app
 {
     std::string Name;
     std::string Icon;
+    std::string Icon80;
     std::string Exec;
 
     std::function<void(app_launch_S *)> launch;
@@ -103,45 +112,27 @@ public:
     {
         // 固定图标，不允许用户修改
         app_list.emplace_back("Python",
-                              img_path("PYTHON_80.png"),
-                              "python3",
-                              true,
-                              false);
-
-#if !defined(HAL_PLATFORM_SDL)
-        app_list.emplace_back("SETTING",
-                              img_path("SETTING_80.png"),
-                              page_v<UISetupPage>);
-#endif
-
+                              img_path("python_100.png"), "python3", true, false);
         app_list.emplace_back("STORE",
-                              img_path("STORE_80.png"),
-                              page_v<UIStorePage>);    
-
+                              img_path("store_100.png"), page_v<UIStorePage>);
         app_list.emplace_back("CLI",
-                              img_path("CLI_80.png"),
-                              "bash",
-                              true,
-                              false);
-
-        app_list.emplace_back("MUSIC",
-                              img_path("MUSIC_80.png"),
-                              page_v<UIMusicPage>);
-
-
-
+                              img_path("cli_100.png"), "bash", true, false);
+        app_list.emplace_back("CLAW",
+                              img_path("claw_100.png"), "/home/pi/zeroclaw agent", true);
+        app_list.emplace_back("SETTING",
+                              img_path("setting_100.png"), page_v<UISetupPage>);
 
         {
             auto it = std::next(app_list.begin(), 0);
             lv_label_set_text(ui_zuoLabelout, it->Name.c_str());
-            lv_obj_set_style_bg_img_src(ui_outPanelzuo, it->Icon.c_str(),
+            lv_obj_set_style_bg_img_src(ui_outPanelzuo, it->Icon80.c_str(),
                                         LV_PART_MAIN | LV_STATE_DEFAULT);
         }
 
         {
             auto it = std::next(app_list.begin(), 1);
             lv_label_set_text(ui_zuoLabel, it->Name.c_str());
-            lv_obj_set_style_bg_img_src(ui_zuoPanel, it->Icon.c_str(),
+            lv_obj_set_style_bg_img_src(ui_zuoPanel, it->Icon80.c_str(),
                                         LV_PART_MAIN | LV_STATE_DEFAULT);
         }
 
@@ -155,120 +146,67 @@ public:
         {
             auto it = std::next(app_list.begin(), 3);
             lv_label_set_text(ui_youLabel, it->Name.c_str());
-            lv_obj_set_style_bg_img_src(ui_youPanel, it->Icon.c_str(),
+            lv_obj_set_style_bg_img_src(ui_youPanel, it->Icon80.c_str(),
                                         LV_PART_MAIN | LV_STATE_DEFAULT);
         }
 
         {
             auto it = std::next(app_list.begin(), 4);
             lv_label_set_text(ui_youLabelout, it->Name.c_str());
-            lv_obj_set_style_bg_img_src(ui_outPanelyou, it->Icon.c_str(),
+            lv_obj_set_style_bg_img_src(ui_outPanelyou, it->Icon80.c_str(),
                                         LV_PART_MAIN | LV_STATE_DEFAULT);
         }
 
         // 动态图标，允许用户自定义
+        app_list.emplace_back("MUSIC",
+                              img_path("music_100.png"), page_v<UIMusicPage>);
+        app_list.emplace_back("AUDIO_PLAYER",
+                              img_path("audio_player_100.png"),
+                              "tinyplay -D1 -d0 /home/pi/zhou.wav",
+                              true);
+        app_list.emplace_back("IP_PANEL",
+                              img_path("ip_panel_100.png"), page_v<UIIpPanelPage>);
 
         app_list.emplace_back("MATH",
-                              img_path("MATH_80.png"),
-                              "/usr/share/APPLaunch/bin/M5CardputerZero-Calculator",
-                              false);
-
-        app_list.emplace_back("CLAW",
-                              img_path("CLAW_80.png"),
-                              page_v<UIAICliPage>);
-
-        // app_list.emplace_back("AUDIO_PLAYER",
-        //                       img_path("AUDIO_PLAYER_80.png"),
-        //                       "tinyplay -D1 -d0 /home/pi/zhou.wav",
-        //                       true);
-
-        app_list.emplace_back("IP_INFO",
-                              img_path("IP_PANEL_80.png"),
-                              page_v<UIIpPanelPage>);
-
-
+                              img_path("math_100.png"),
+                              "/home/pi/M5CardputerZero-Calculator-linux-aarch64", false);
 
         app_list.emplace_back("STOCKS",
-                              img_path("STOCKS_80.png"),
-                              page_v<UIStockPage>);
+                              img_path("stocks_100.png"), page_v<UIStockPage>);
 
         app_list.emplace_back("CHAT",
-                              img_path("CHAT_80.png"),
-                              page_v<UIchatPage>);
-
+                              img_path("chat_100.png"), page_v<UIchatPage>);
         app_list.emplace_back("e-Mail",
-                              img_path("e-Mail_80.png"),
-                              page_v<UIEmailPage>);
-
+                              img_path("e_mail_100.png"), page_v<UIEmailPage>);
         app_list.emplace_back("FILE",
-                              img_path("FILE_80.png"),
-                              page_v<UIFilePage>);
-
-        app_list.emplace_back("SSH",
-                              img_path("SSH_80.png"),
-                              page_v<UISSHPage>);
-
+                              img_path("file_100.png"), page_v<UIFilePage>);
         app_list.emplace_back("HACK",
-                              img_path("HACK_80.png"),
-                              page_v<UIHackPage>);
-
-        app_list.emplace_back("MESH",
-                              img_path("MESH_80.png"),
-                              page_v<UIMeshPage>);
-
-        app_list.emplace_back("REC",
-                              img_path("REC_80.png"),
-                              page_v<UIRecPage>);
-
-#if !defined(HAL_PLATFORM_SDL)
-        app_list.emplace_back("CAMERA",
-                              img_path("CAMERA_80.png"),
-                              page_v<UICameraPage>);
-#endif
-
+                              img_path("hack_100.png"), page_v<UIHackPage>);
         app_list.emplace_back("GAME",
-                              img_path("GAME_80.png"),
-                              page_v<UIGamePage>);
-
+                              img_path("game_100.png"), page_v<UIGamePage>);
+        app_list.emplace_back("AICli", img_path("aicli_100.png"), page_v<UIAICliPage>);
+#ifdef __linux__
+        app_list.emplace_back("SSH",
+                              img_path("ssh_100.png"), page_v<UISSHPage>);
+        app_list.emplace_back("MESH",
+                              img_path("mesh_100.png"), page_v<UIMeshPage>);
+        app_list.emplace_back("REC",
+                              img_path("rec_100.png"), page_v<UIRecPage>);
+        app_list.emplace_back("CAMERA",
+                              img_path("camera_100.png"), page_v<UICameraPage>);
         app_list.emplace_back("UnitEnv",
-                              img_path("UnitENV_80.png"),
-                              page_v<UIUnitEnvPage>);
-
-        app_list.emplace_back("MIDI",
-                              img_path("Midi_80.png"),
-                              page_v<UIMidiPage>);
-
+                              img_path("unitenv_100.png"), page_v<UIUnitEnvPage>);
+        app_list.emplace_back("Midi",
+                              img_path("midi_100.png"), page_v<UIMidiPage>);
         app_list.emplace_back("Gpio",
-                              img_path("Gpio_80.png"),
-                              page_v<UIGpioPage>);
-
-#if !defined(HAL_PLATFORM_SDL)
-        app_list.emplace_back("LoRa",
-                              img_path("LoRa_80.png"),
-                              page_v<UILoraPage>);
+                              img_path("gpio_100.png"), page_v<UIGpioPage>);
+        app_list.emplace_back("LORA", img_path("lora_100.png"), page_v<UILoraPage>);
+        app_list.emplace_back("GALLERY", img_path("gallery_100.png"), page_v<UIGalleryPage>);
+        app_list.emplace_back("HIKEPOD", img_path("hikepod_100.png"), page_v<UIHikePodPage>);
+        app_list.emplace_back("TANK", img_path("tank_100.png"), page_v<UITankBattlePage>);
+        app_list.emplace_back("Love",
+                                    img_path("game_100.png"), page_v<UILovyanPage>);
 #endif
-
-        app_list.emplace_back("GALLERY",
-                              img_path("GALLERY_80.png"),
-                              page_v<UIGalleryPage>);
-
-#if !defined(HAL_PLATFORM_SDL)
-        app_list.emplace_back("NAVI",
-                              img_path("HIKEPOD_80.png"),
-                              page_v<UIHikePodPage>);
-#endif
-
-        // app_list.emplace_back("AICli",
-        //                       img_path("AICli_80.png"),
-        //                       page_v<UIAICliPage>);
-
-        app_list.emplace_back("TANK",
-                              img_path("TANK_80.png"),
-                              page_v<UITankBattlePage>);
-
-        app_list.emplace_back("RACER",
-                              img_path("RACER_80.png"),
-                              page_v<UILovyanPage>);
 
         fixed_count = app_list.size();
 
@@ -369,7 +307,7 @@ public:
         next_app = next_app == (int)app_list.size() - 1 ? 0 : next_app + 1;
         auto it = std::next(app_list.begin(), next_app);
         lv_label_set_text(label, it->Name.c_str());
-        lv_obj_set_style_bg_img_src(panel, it->Icon.c_str(),
+        lv_obj_set_style_bg_img_src(panel, it->Icon80.c_str(),
                                     LV_PART_MAIN | LV_STATE_DEFAULT);
     }
 
@@ -381,7 +319,7 @@ public:
         next_app = next_app == 0 ? (int)app_list.size() - 1 : next_app - 1;
         auto it = std::next(app_list.begin(), next_app);
         lv_label_set_text(label, it->Name.c_str());
-        lv_obj_set_style_bg_img_src(panel, it->Icon.c_str(),
+        lv_obj_set_style_bg_img_src(panel, it->Icon80.c_str(),
                                     LV_PART_MAIN | LV_STATE_DEFAULT);
     }
 
@@ -535,14 +473,14 @@ public:
         {
             auto &a = app_at(current_app - 2);
             lv_label_set_text(ui_zuoLabelout, a.Name.c_str());
-            lv_obj_set_style_bg_img_src(ui_outPanelzuo, a.Icon.c_str(),
+            lv_obj_set_style_bg_img_src(ui_outPanelzuo, a.Icon80.c_str(),
                                         LV_PART_MAIN | LV_STATE_DEFAULT);
         }
         // 左
         {
             auto &a = app_at(current_app - 1);
             lv_label_set_text(ui_zuoLabel, a.Name.c_str());
-            lv_obj_set_style_bg_img_src(ui_zuoPanel, a.Icon.c_str(),
+            lv_obj_set_style_bg_img_src(ui_zuoPanel, a.Icon80.c_str(),
                                         LV_PART_MAIN | LV_STATE_DEFAULT);
         }
         // 中心
@@ -556,14 +494,14 @@ public:
         {
             auto &a = app_at(current_app + 1);
             lv_label_set_text(ui_youLabel, a.Name.c_str());
-            lv_obj_set_style_bg_img_src(ui_youPanel, a.Icon.c_str(),
+            lv_obj_set_style_bg_img_src(ui_youPanel, a.Icon80.c_str(),
                                         LV_PART_MAIN | LV_STATE_DEFAULT);
         }
         // 最右外（隐藏）
         {
             auto &a = app_at(current_app + 2);
             lv_label_set_text(ui_youLabelout, a.Name.c_str());
-            lv_obj_set_style_bg_img_src(ui_outPanelyou, a.Icon.c_str(),
+            lv_obj_set_style_bg_img_src(ui_outPanelyou, a.Icon80.c_str(),
                                         LV_PART_MAIN | LV_STATE_DEFAULT);
         }
     }
@@ -595,19 +533,36 @@ public:
 
     void update_home_status_bar()
     {
-        // char time_buf[16];
-        // hal_time_str(time_buf, sizeof(time_buf));
-        // lv_label_set_text(ui_timeLabel, time_buf);
+        // WiFi
+        hal_wifi_status_t wifi = hal_wifi_get_status();
+        if (wifi.connected) {
+            if (wifi.signal >= 70)
+                lv_label_set_text(ui_wifiLabel, LV_SYMBOL_WIFI);
+            else if (wifi.signal >= 40)
+                lv_label_set_text(ui_wifiLabel, LV_SYMBOL_WIFI);
+            else
+                lv_label_set_text(ui_wifiLabel, LV_SYMBOL_WIFI);
+            lv_obj_set_style_text_opa(ui_wifiLabel, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+        } else {
+            lv_label_set_text(ui_wifiLabel, LV_SYMBOL_WIFI);
+            lv_obj_set_style_text_opa(ui_wifiLabel, 90, LV_PART_MAIN | LV_STATE_DEFAULT);
+        }
 
-        // hal_battery_info_t bat = hal_battery_read();
-        // if (bat.valid)
-        // {
-        //     int soc = bat.soc;
-        //     if (soc > 100)
-        //         soc = 100;
-        //     if (soc < 0)
-        //         soc = 0;
-        //     lv_bar_set_value(ui_Bar1, soc, LV_ANIM_ON);
+        // Time
+        char time_buf[16];
+        hal_time_str(time_buf, sizeof(time_buf));
+        lv_label_set_text(ui_timeLabel, time_buf);
+
+        // Battery
+        hal_battery_info_t bat = hal_battery_read();
+        if (bat.valid)
+        {
+            int soc = bat.soc;
+            if (soc > 100)
+                soc = 100;
+            if (soc < 0)
+                soc = 0;
+            lv_bar_set_value(ui_Bar1, soc, LV_ANIM_ON);
 
         //     char pwr_buf[16];
         //     snprintf(pwr_buf, sizeof(pwr_buf), "%d%%", soc);
@@ -649,7 +604,7 @@ inline app::app(std::string name,
                 std::string icon,
                 std::string exec,
                 bool terminal)
-    : Name(std::move(name)), Icon(std::move(icon))
+    : Name(std::move(name)), Icon(std::move(icon)), Icon80(icon_80_from_100(Icon))
 {
     launch = [exec = std::move(exec), terminal](app_launch_S *ctx)
     {
@@ -665,7 +620,7 @@ inline app::app(std::string name,
                 std::string exec,
                 bool terminal,
                 bool sysplause)
-    : Name(std::move(name)), Icon(std::move(icon))
+    : Name(std::move(name)), Icon(std::move(icon)), Icon80(icon_80_from_100(Icon))
 {
     launch = [exec = std::move(exec), terminal, sysplause](app_launch_S *ctx)
     {
@@ -680,7 +635,7 @@ template <class PageT>
 app::app(std::string name,
          std::string icon,
          page_t<PageT> /*tag*/)
-    : Name(std::move(name)), Icon(std::move(icon))
+    : Name(std::move(name)), Icon(std::move(icon)), Icon80(icon_80_from_100(Icon))
 {
     launch = [](app_launch_S *self)
     {
