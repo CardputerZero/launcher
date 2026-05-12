@@ -73,7 +73,7 @@ void zuolabel2you_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb
     lv_anim_set_time(&PropertyAnimation_1, Animation_time);
     lv_anim_set_user_data(&PropertyAnimation_1, PropertyAnimation_1_user_data);
     lv_anim_set_custom_exec_cb(&PropertyAnimation_1, _ui_anim_callback_set_y);
-    lv_anim_set_values(&PropertyAnimation_1, 0, -7);
+    lv_anim_set_values(&PropertyAnimation_1, 0, 0);
     lv_anim_set_path_cb(&PropertyAnimation_1, lv_anim_path_overshoot);
     lv_anim_set_delay(&PropertyAnimation_1, delay + 0);
     lv_anim_set_deleted_cb(&PropertyAnimation_1, _ui_anim_callback_free_user_data_and_ready_cb);
@@ -117,7 +117,7 @@ void switchlabel2you_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready
     lv_anim_set_time(&PropertyAnimation_1, Animation_time);
     lv_anim_set_user_data(&PropertyAnimation_1, PropertyAnimation_1_user_data);
     lv_anim_set_custom_exec_cb(&PropertyAnimation_1, _ui_anim_callback_set_y);
-    lv_anim_set_values(&PropertyAnimation_1, 0, 7);
+    lv_anim_set_values(&PropertyAnimation_1, 0, 0);
     lv_anim_set_path_cb(&PropertyAnimation_1, lv_anim_path_overshoot);
     lv_anim_set_delay(&PropertyAnimation_1, delay + 0);
     lv_anim_set_deleted_cb(&PropertyAnimation_1, _ui_anim_callback_free_user_data_and_ready_cb);
@@ -251,7 +251,7 @@ void youlabel2zuo_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb
     lv_anim_set_time(&PropertyAnimation_1, Animation_time);
     lv_anim_set_user_data(&PropertyAnimation_1, PropertyAnimation_1_user_data);
     lv_anim_set_custom_exec_cb(&PropertyAnimation_1, _ui_anim_callback_set_y);
-    lv_anim_set_values(&PropertyAnimation_1, 0, -7);
+    lv_anim_set_values(&PropertyAnimation_1, 0, 0);
     lv_anim_set_path_cb(&PropertyAnimation_1, lv_anim_path_overshoot);
     lv_anim_set_delay(&PropertyAnimation_1, delay + 0);
     lv_anim_set_deleted_cb(&PropertyAnimation_1, _ui_anim_callback_free_user_data_and_ready_cb);
@@ -295,7 +295,7 @@ void switchlabel2zuo_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready
     lv_anim_set_time(&PropertyAnimation_1, Animation_time);
     lv_anim_set_user_data(&PropertyAnimation_1, PropertyAnimation_1_user_data);
     lv_anim_set_custom_exec_cb(&PropertyAnimation_1, _ui_anim_callback_set_y);
-    lv_anim_set_values(&PropertyAnimation_1, 0, 7);
+    lv_anim_set_values(&PropertyAnimation_1, 0, 0);
     lv_anim_set_path_cb(&PropertyAnimation_1, lv_anim_path_overshoot);
     lv_anim_set_delay(&PropertyAnimation_1, delay + 0);
     lv_anim_set_deleted_cb(&PropertyAnimation_1, _ui_anim_callback_free_user_data_and_ready_cb);
