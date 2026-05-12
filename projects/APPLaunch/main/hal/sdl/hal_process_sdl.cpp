@@ -2,12 +2,15 @@
 #include <cstdlib>
 #include <cstdio>
 
+#if defined(_WIN32) || defined(__EMSCRIPTEN__)
 #ifdef _WIN32
 #include <windows.h>
+#endif
 
 int hal_process_exec_blocking(const char *exec_path, volatile int *home_key_flag)
 {
     (void)home_key_flag;
+#ifdef _WIN32
     STARTUPINFOA si = {}; si.cb = sizeof(si);
     PROCESS_INFORMATION pi = {};
     char cmd[1024];
@@ -20,6 +23,10 @@ int hal_process_exec_blocking(const char *exec_path, volatile int *home_key_flag
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
     return (int)exit_code;
+#else
+    (void)exec_path;
+    return -1;
+#endif
 }
 
 int hal_process_check_lock(const char *lock_path, int *holder_pid)

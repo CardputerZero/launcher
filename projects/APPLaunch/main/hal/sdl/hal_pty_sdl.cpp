@@ -1,6 +1,6 @@
 #include "../hal_pty.h"
 
-#ifdef _WIN32
+#if defined(_WIN32) || defined(__EMSCRIPTEN__)
 hal_pty_t hal_pty_open(const char *cmd, const char *const *args, int cols, int rows)
 { (void)cmd; (void)args; (void)cols; (void)rows; return NULL; }
 int  hal_pty_read(hal_pty_t p, char *b, size_t s) { (void)p; (void)b; (void)s; return -1; }
