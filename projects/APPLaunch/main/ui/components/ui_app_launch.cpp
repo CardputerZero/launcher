@@ -108,9 +108,11 @@ public:
                               true,
                               false);
 
+#if !defined(HAL_PLATFORM_SDL)
         app_list.emplace_back("SETTING",
                               img_path("SETTING_80.png"),
                               page_v<UISetupPage>);
+#endif
 
         app_list.emplace_back("STORE",
                               img_path("STORE_80.png"),
@@ -218,9 +220,11 @@ public:
                               img_path("REC_80.png"),
                               page_v<UIRecPage>);
 
+#if !defined(HAL_PLATFORM_SDL)
         app_list.emplace_back("CAMERA",
                               img_path("CAMERA_80.png"),
                               page_v<UICameraPage>);
+#endif
 
         app_list.emplace_back("GAME",
                               img_path("GAME_80.png"),
@@ -238,17 +242,21 @@ public:
                               img_path("Gpio_80.png"),
                               page_v<UIGpioPage>);
 
+#if !defined(HAL_PLATFORM_SDL)
         app_list.emplace_back("LoRa",
                               img_path("LoRa_80.png"),
                               page_v<UILoraPage>);
+#endif
 
         app_list.emplace_back("GALLERY",
                               img_path("GALLERY_80.png"),
                               page_v<UIGalleryPage>);
 
+#if !defined(HAL_PLATFORM_SDL)
         app_list.emplace_back("NAVI",
                               img_path("HIKEPOD_80.png"),
                               page_v<UIHikePodPage>);
+#endif
 
         // app_list.emplace_back("AICli",
         //                       img_path("AICli_80.png"),
