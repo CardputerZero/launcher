@@ -23,6 +23,26 @@
 
 /* img_path() now defined in ui_app_page.hpp */
 
+static void panel_set_icon(lv_obj_t *panel, const char *src)
+{
+    // DEBUG: red background + border to visualize panel bounds
+    lv_obj_set_style_bg_color(panel, lv_color_hex(0xFF0000), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(panel, 128, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_color(panel, lv_color_hex(0xFF0000), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_opa(panel, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_width(panel, 1, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_all(panel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+    lv_obj_t *img = lv_obj_get_child(panel, 0);
+    if (!img || !lv_obj_check_type(img, &lv_image_class)) {
+        img = lv_image_create(panel);
+        lv_obj_set_size(img, LV_PCT(100), LV_PCT(100));
+        lv_obj_set_align(img, LV_ALIGN_CENTER);
+        lv_image_set_inner_align(img, LV_IMAGE_ALIGN_STRETCH);
+    }
+    lv_image_set_src(img, src);
+}
+
 // ============================================================
 // 启动快捷方式示例
 // ============================================================
@@ -113,32 +133,27 @@ public:
         {
             auto it = std::next(app_list.begin(), 0);
             lv_label_set_text(ui_zuoLabelout, it->Name.c_str());
-            lv_obj_set_style_bg_img_src(ui_outPanelzuo, it->Icon.c_str(),
-                                        LV_PART_MAIN | LV_STATE_DEFAULT);
+            panel_set_icon(ui_outPanelzuo, it->Icon.c_str());
         }
         {
             auto it = std::next(app_list.begin(), 1);
             lv_label_set_text(ui_zuoLabel, it->Name.c_str());
-            lv_obj_set_style_bg_img_src(ui_zuoPanel, it->Icon.c_str(),
-                                        LV_PART_MAIN | LV_STATE_DEFAULT);
+            panel_set_icon(ui_zuoPanel, it->Icon.c_str());
         }
         {
             auto it = std::next(app_list.begin(), 2);
             lv_label_set_text(ui_switchLabel, it->Name.c_str());
-            lv_obj_set_style_bg_img_src(ui_switchPanel, it->Icon.c_str(),
-                                        LV_PART_MAIN | LV_STATE_DEFAULT);
+            panel_set_icon(ui_switchPanel, it->Icon.c_str());
         }
         {
             auto it = std::next(app_list.begin(), 3);
             lv_label_set_text(ui_youLabel, it->Name.c_str());
-            lv_obj_set_style_bg_img_src(ui_youPanel, it->Icon.c_str(),
-                                        LV_PART_MAIN | LV_STATE_DEFAULT);
+            panel_set_icon(ui_youPanel, it->Icon.c_str());
         }
         {
             auto it = std::next(app_list.begin(), 4);
             lv_label_set_text(ui_youLabelout, it->Name.c_str());
-            lv_obj_set_style_bg_img_src(ui_outPanelyou, it->Icon.c_str(),
-                                        LV_PART_MAIN | LV_STATE_DEFAULT);
+            panel_set_icon(ui_outPanelyou, it->Icon.c_str());
         }
 
         // 动态图标，允许用户自定义
@@ -290,8 +305,7 @@ public:
         next_app = next_app == (int)app_list.size() - 1 ? 0 : next_app + 1;
         auto it = std::next(app_list.begin(), next_app);
         lv_label_set_text(label, it->Name.c_str());
-        lv_obj_set_style_bg_img_src(panel, it->Icon.c_str(),
-                                    LV_PART_MAIN | LV_STATE_DEFAULT);
+        panel_set_icon(panel, it->Icon.c_str());
     }
 
     void you(lv_obj_t *panel, lv_obj_t *label)
@@ -302,8 +316,7 @@ public:
         next_app = next_app == 0 ? (int)app_list.size() - 1 : next_app - 1;
         auto it = std::next(app_list.begin(), next_app);
         lv_label_set_text(label, it->Name.c_str());
-        lv_obj_set_style_bg_img_src(panel, it->Icon.c_str(),
-                                    LV_PART_MAIN | LV_STATE_DEFAULT);
+        panel_set_icon(panel, it->Icon.c_str());
     }
 
     void applications_load()
@@ -456,36 +469,31 @@ public:
         {
             auto &a = app_at(current_app - 2);
             lv_label_set_text(ui_zuoLabelout, a.Name.c_str());
-            lv_obj_set_style_bg_img_src(ui_outPanelzuo, a.Icon.c_str(),
-                                        LV_PART_MAIN | LV_STATE_DEFAULT);
+            panel_set_icon(ui_outPanelzuo, a.Icon.c_str());
         }
         // 左
         {
             auto &a = app_at(current_app - 1);
             lv_label_set_text(ui_zuoLabel, a.Name.c_str());
-            lv_obj_set_style_bg_img_src(ui_zuoPanel, a.Icon.c_str(),
-                                        LV_PART_MAIN | LV_STATE_DEFAULT);
+            panel_set_icon(ui_zuoPanel, a.Icon.c_str());
         }
         // 中心
         {
             auto &a = app_at(current_app);
             lv_label_set_text(ui_switchLabel, a.Name.c_str());
-            lv_obj_set_style_bg_img_src(ui_switchPanel, a.Icon.c_str(),
-                                        LV_PART_MAIN | LV_STATE_DEFAULT);
+            panel_set_icon(ui_switchPanel, a.Icon.c_str());
         }
         // 右
         {
             auto &a = app_at(current_app + 1);
             lv_label_set_text(ui_youLabel, a.Name.c_str());
-            lv_obj_set_style_bg_img_src(ui_youPanel, a.Icon.c_str(),
-                                        LV_PART_MAIN | LV_STATE_DEFAULT);
+            panel_set_icon(ui_youPanel, a.Icon.c_str());
         }
         // 最右外（隐藏）
         {
             auto &a = app_at(current_app + 2);
             lv_label_set_text(ui_youLabelout, a.Name.c_str());
-            lv_obj_set_style_bg_img_src(ui_outPanelyou, a.Icon.c_str(),
-                                        LV_PART_MAIN | LV_STATE_DEFAULT);
+            panel_set_icon(ui_outPanelyou, a.Icon.c_str());
         }
     }
 

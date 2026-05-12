@@ -29,7 +29,7 @@ void ui_Screen1_screen_init(void)
     lv_obj_set_y(ui_wifiPanel, 5);
     lv_obj_clear_flag(ui_wifiPanel, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_style_radius(ui_wifiPanel, 4, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(ui_wifiPanel, lv_color_hex(0x996633), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(ui_wifiPanel, lv_color_hex(0x33CC33), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_opa(ui_wifiPanel, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_border_width(ui_wifiPanel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_pad_all(ui_wifiPanel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -40,7 +40,7 @@ void ui_Screen1_screen_init(void)
         lv_obj_set_pos(top, 0, 0);
         lv_obj_clear_flag(top, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_set_style_radius(top, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_color(top, lv_color_hex(0x996633), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_color(top, lv_color_hex(0x33CC33), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_opa(top, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_border_width(top, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_pad_all(top, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -278,13 +278,12 @@ void ui_Screen1_screen_init(void)
     lv_obj_set_style_radius(ui_zuoPanel, 17, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_color(ui_zuoPanel, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_opa(ui_zuoPanel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_img_src(ui_zuoPanel, ui_img_store_logo_png, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_border_color(ui_zuoPanel, lv_color_hex(0x333333), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_border_opa(ui_zuoPanel, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
     ui_switchPanel = lv_obj_create(ui_Screen1);
-    lv_obj_set_width(ui_switchPanel, 101);
-    lv_obj_set_height(ui_switchPanel, 101);
+    lv_obj_set_width(ui_switchPanel, 100);
+    lv_obj_set_height(ui_switchPanel, 100);
     lv_obj_set_x(ui_switchPanel, 0);
     lv_obj_set_y(ui_switchPanel, -16);
     lv_obj_set_align(ui_switchPanel, LV_ALIGN_CENTER);
@@ -292,7 +291,6 @@ void ui_Screen1_screen_init(void)
     lv_obj_set_style_radius(ui_switchPanel, 22, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_color(ui_switchPanel, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_opa(ui_switchPanel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_img_src(ui_switchPanel, ui_img_cli_logo_png, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_border_color(ui_switchPanel, lv_color_hex(0x333333), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_border_opa(ui_switchPanel, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
@@ -306,7 +304,6 @@ void ui_Screen1_screen_init(void)
     lv_obj_set_style_radius(ui_youPanel, 17, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_color(ui_youPanel, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_opa(ui_youPanel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_img_src(ui_youPanel, ui_img_claw_logo_png, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_border_color(ui_youPanel, lv_color_hex(0x333333), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_border_opa(ui_youPanel, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
@@ -321,7 +318,6 @@ void ui_Screen1_screen_init(void)
     lv_obj_set_style_radius(ui_outPanelyou, 17, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_color(ui_outPanelyou, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_opa(ui_outPanelyou, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_img_src(ui_outPanelyou, ui_img_setting_logo_png, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_border_color(ui_outPanelyou, lv_color_hex(0x333333), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_border_opa(ui_outPanelyou, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
@@ -366,7 +362,6 @@ void ui_Screen1_screen_init(void)
     lv_obj_set_style_radius(ui_outPanelzuo, 17, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_color(ui_outPanelzuo, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_opa(ui_outPanelzuo, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_img_src(ui_outPanelzuo, ui_img_python_logo_png, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_border_color(ui_outPanelzuo, lv_color_hex(0x333333), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_border_opa(ui_outPanelzuo, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
