@@ -133,7 +133,6 @@ add_library(APPLaunch SHARED
 target_include_directories(APPLaunch PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/vendor
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/compat
     ${CMAKE_CURRENT_SOURCE_DIR}/lib
     ${REPO_ROOT}/ext_components/Miniaudio/include
     ${APPLAUNCH}/ui
@@ -141,6 +140,11 @@ target_include_directories(APPLaunch PRIVATE
     ${APPLAUNCH}
     ${APPLAUNCH}/hal
 )
+if(NOT WIN32)
+    target_include_directories(APPLaunch PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/compat_stubs)
+else()
+    target_include_directories(APPLaunch PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/compat)
+endif()
 target_compile_definitions(APPLaunch PRIVATE HAL_PLATFORM_SDL=1)
 if(SDL2_MIXER_FOUND)
     target_compile_definitions(APPLaunch PRIVATE EMU_HAS_AUDIO=1)
@@ -351,7 +355,7 @@ if(EMSCRIPTEN)
         ${CMAKE_CURRENT_SOURCE_DIR}/src/compat_queue
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/src
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/compat
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/compat_stubs
         ${CMAKE_CURRENT_SOURCE_DIR}/vendor
         ${CMAKE_CURRENT_SOURCE_DIR}/lib
         ${REPO_ROOT}/ext_components/Miniaudio/include
