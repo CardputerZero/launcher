@@ -133,7 +133,9 @@ add_library(APPLaunch SHARED
 target_include_directories(APPLaunch PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/vendor
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/compat
     ${CMAKE_CURRENT_SOURCE_DIR}/lib
+    ${REPO_ROOT}/ext_components/Miniaudio/include
     ${APPLAUNCH}/ui
     ${APPLAUNCH}/include
     ${APPLAUNCH}
@@ -195,6 +197,7 @@ if(WIN32 AND NOT EMU_SKIP_APPLAUNCH)
     target_include_directories(cardputer-zero-emu PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src/compat
         ${CMAKE_CURRENT_SOURCE_DIR}/vendor
+        ${REPO_ROOT}/ext_components/Miniaudio/include
         ${APPLAUNCH}/ui ${APPLAUNCH}/include ${APPLAUNCH} ${APPLAUNCH}/hal)
     target_compile_options(cardputer-zero-emu PRIVATE
         "SHELL:-include ${CMAKE_CURRENT_SOURCE_DIR}/src/emu_compat_win.h"
@@ -348,8 +351,10 @@ if(EMSCRIPTEN)
         ${CMAKE_CURRENT_SOURCE_DIR}/src/compat_queue
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/compat
         ${CMAKE_CURRENT_SOURCE_DIR}/vendor
         ${CMAKE_CURRENT_SOURCE_DIR}/lib
+        ${REPO_ROOT}/ext_components/Miniaudio/include
         ${APPLAUNCH}/ui
         ${APPLAUNCH}/include
         ${APPLAUNCH}
