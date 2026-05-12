@@ -96,6 +96,8 @@ void _ui_anim_callback_set_height(lv_anim_t * a, int32_t v);
 
 void _ui_anim_callback_set_opacity(lv_anim_t * a, int32_t v);
 
+void _ui_anim_callback_set_transform_scale(lv_anim_t * a, int32_t v);
+
 void _ui_anim_callback_set_image_zoom(lv_anim_t * a, int32_t v);
 
 void _ui_anim_callback_set_image_angle(lv_anim_t * a, int32_t v);
@@ -111,6 +113,8 @@ int32_t _ui_anim_callback_get_width(lv_anim_t * a);
 int32_t _ui_anim_callback_get_height(lv_anim_t * a);
 
 int32_t _ui_anim_callback_get_opacity(lv_anim_t * a);
+
+int32_t _ui_anim_callback_get_transform_scale(lv_anim_t * a);
 
 int32_t _ui_anim_callback_get_image_zoom(lv_anim_t * a);
 
