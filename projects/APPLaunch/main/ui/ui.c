@@ -155,7 +155,7 @@ void font_manager_init(void)
         static char bold_path[512];
         snprintf(bold_path, sizeof(bold_path), "%s/Montserrat-Bold.ttf", hal_path_font_dir());
         g_font_bold_14 = lv_freetype_font_create(
-            bold_path, LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 14,
+            bold_path, LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 16,
             LV_FREETYPE_FONT_STYLE_BOLD);
         g_font_bold_12 = lv_freetype_font_create(
             bold_path, LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 12,

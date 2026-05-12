@@ -249,7 +249,7 @@ void ui_Screen1_screen_init(void)
     lv_obj_set_style_border_opa(ui_Panel10, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
     ui_switchLabel = lv_label_create(ui_Screen1);
-    lv_obj_set_width(ui_switchLabel, LV_SIZE_CONTENT);   /// 1
+    lv_obj_set_width(ui_switchLabel, LV_SIZE_CONTENT);
     lv_obj_set_height(ui_switchLabel, LV_SIZE_CONTENT);    /// 1
     lv_obj_set_x(ui_switchLabel, 0);
     lv_obj_set_y(ui_switchLabel, LABEL_Y_CENTER);
@@ -260,18 +260,18 @@ void ui_Screen1_screen_init(void)
     lv_obj_set_style_text_opa(ui_switchLabel, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
     ui_youLabel = lv_label_create(ui_Screen1);
-    lv_obj_set_width(ui_youLabel, LV_SIZE_CONTENT);   /// 1
+    lv_obj_set_width(ui_youLabel, LV_SIZE_CONTENT);
     lv_obj_set_height(ui_youLabel, LV_SIZE_CONTENT);    /// 1
     lv_obj_set_x(ui_youLabel, 99);
     lv_obj_set_y(ui_youLabel, LABEL_Y_SIDE);
     lv_obj_set_align(ui_youLabel, LV_ALIGN_CENTER);
     lv_label_set_text(ui_youLabel, "CLAW");
     lv_obj_set_style_text_color(ui_youLabel, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_font(ui_youLabel, g_font_bold_12, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_font(ui_youLabel, g_font_bold_14, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(ui_youLabel, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
     ui_zuoLabel = lv_label_create(ui_Screen1);
-    lv_obj_set_width(ui_zuoLabel, LV_SIZE_CONTENT);   /// 1
+    lv_obj_set_width(ui_zuoLabel, LV_SIZE_CONTENT);
     lv_obj_set_height(ui_zuoLabel, LV_SIZE_CONTENT);    /// 1
     lv_obj_set_x(ui_zuoLabel, -99);
     lv_obj_set_y(ui_zuoLabel, LABEL_Y_SIDE);
@@ -279,7 +279,7 @@ void ui_Screen1_screen_init(void)
     lv_label_set_text(ui_zuoLabel, "STORE");
     lv_obj_set_style_text_color(ui_zuoLabel, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(ui_zuoLabel, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_font(ui_zuoLabel, g_font_bold_12, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_font(ui_zuoLabel, g_font_bold_14, LV_PART_MAIN | LV_STATE_DEFAULT);
 
     ui_zuoPanel = lv_obj_create(ui_Screen1);
     lv_obj_set_width(ui_zuoPanel, 80);
@@ -380,26 +380,26 @@ void ui_Screen1_screen_init(void)
     lv_obj_set_style_border_opa(ui_outPanelzuo, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
     ui_zuoLabelout = lv_label_create(ui_Screen1);
-    lv_obj_set_width(ui_zuoLabelout, LV_SIZE_CONTENT);   /// 1
+    lv_obj_set_width(ui_zuoLabelout, LV_SIZE_CONTENT);
     lv_obj_set_height(ui_zuoLabelout, LV_SIZE_CONTENT);    /// 1
     lv_obj_set_x(ui_zuoLabelout, -177);
     lv_obj_set_y(ui_zuoLabelout, LABEL_Y_SIDE);
     lv_obj_set_align(ui_zuoLabelout, LV_ALIGN_CENTER);
     lv_label_set_text(ui_zuoLabelout, "one");
     lv_obj_add_flag(ui_zuoLabelout, LV_OBJ_FLAG_HIDDEN);     /// Flags
-    lv_obj_set_style_text_font(ui_zuoLabelout, g_font_bold_12, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_font(ui_zuoLabelout, g_font_bold_14, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_color(ui_zuoLabelout, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(ui_zuoLabelout, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
     ui_youLabelout = lv_label_create(ui_Screen1);
-    lv_obj_set_width(ui_youLabelout, LV_SIZE_CONTENT);   /// 1
+    lv_obj_set_width(ui_youLabelout, LV_SIZE_CONTENT);
     lv_obj_set_height(ui_youLabelout, LV_SIZE_CONTENT);    /// 1
     lv_obj_set_x(ui_youLabelout, 177);
     lv_obj_set_y(ui_youLabelout, LABEL_Y_SIDE);
     lv_obj_set_align(ui_youLabelout, LV_ALIGN_CENTER);
     lv_label_set_text(ui_youLabelout, "three");
     lv_obj_add_flag(ui_youLabelout, LV_OBJ_FLAG_HIDDEN);     /// Flags
-    lv_obj_set_style_text_font(ui_youLabelout, g_font_bold_12, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_font(ui_youLabelout, g_font_bold_14, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_color(ui_youLabelout, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(ui_youLabelout, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
