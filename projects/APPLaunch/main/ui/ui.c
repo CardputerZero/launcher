@@ -93,7 +93,8 @@ lv_font_t *g_font_cn_20 = NULL;
 lv_font_t *g_font_cn_14 = NULL;
 lv_font_t *g_font_cn_12 = NULL;
 lv_font_t *g_font_mono_12 = NULL;   /* 终端专用等宽字体 */
-lv_font_t *g_font_bold_14 = NULL;   /* App名称加粗字体 */
+lv_font_t *g_font_bold_14 = NULL;   /* App名称加粗字体 - 中间 */
+lv_font_t *g_font_bold_12 = NULL;   /* App名称加粗字体 - 侧面 */
 
 // // EVENTS
 
@@ -156,6 +157,9 @@ void font_manager_init(void)
         g_font_bold_14 = lv_freetype_font_create(
             bold_path, LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 14,
             LV_FREETYPE_FONT_STYLE_BOLD);
+        g_font_bold_12 = lv_freetype_font_create(
+            bold_path, LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 12,
+            LV_FREETYPE_FONT_STYLE_BOLD);
     }
 
     // Fallback to built-in fonts if freetype loading failed (e.g. on macOS emulator)
@@ -164,6 +168,7 @@ void font_manager_init(void)
     if (!g_font_cn_12)  g_font_cn_12  = (lv_font_t *)&lv_font_montserrat_12;
     if (!g_font_mono_12) g_font_mono_12 = (lv_font_t *)&lv_font_montserrat_12;
     if (!g_font_bold_14) g_font_bold_14 = (lv_font_t *)&lv_font_montserrat_14;
+    if (!g_font_bold_12) g_font_bold_12 = (lv_font_t *)&lv_font_montserrat_12;
 }
 
 ///////////////////// SCREENS ////////////////////
