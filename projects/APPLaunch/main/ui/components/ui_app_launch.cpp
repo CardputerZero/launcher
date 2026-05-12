@@ -159,7 +159,7 @@ public:
         // 动态图标，允许用户自定义
         app_list.emplace_back("MUSIC",
                               img_path("music_100.png"), page_v<UIMusicPage>);
-        app_list.emplace_back("AUDIO_PLAYER",
+        app_list.emplace_back("AUDIO",
                               img_path("audio_player_100.png"),
                               "tinyplay -D1 -d0 /home/pi/zhou.wav",
                               true);

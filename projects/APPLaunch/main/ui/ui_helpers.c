@@ -170,6 +170,8 @@ void _ui_anim_callback_set_opacity(lv_anim_t * a, int32_t v)
     lv_obj_set_style_opa(usr->target, v, 0);
 }
 
+
+
 void _ui_anim_callback_set_image_zoom(lv_anim_t * a, int32_t v)
 {
     ui_anim_user_data_t * usr = (ui_anim_user_data_t *)a->user_data;

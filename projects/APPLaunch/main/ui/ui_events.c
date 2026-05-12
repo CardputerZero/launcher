@@ -320,11 +320,11 @@ static void snap_all_panels(lv_anim_t *a)
         lv_obj_set_style_border_color(launch_circle[i], lv_color_hex(color), LV_PART_MAIN | LV_STATE_DEFAULT);
     }
 
-    // Reset label fonts: center=bold_14, sides=bold_12
+    // Reset all label fonts to bold
     for (int i = 5; i < 10; i++) {
-        lv_font_t *font = (i == 7) ? g_font_bold_14 : g_font_bold_12;
-        lv_obj_set_style_text_font(launch_circle[i], font, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_text_font(launch_circle[i], g_font_bold_14, LV_PART_MAIN | LV_STATE_DEFAULT);
     }
+
 }
 
 static void snap_timer_cb(lv_timer_t *timer)
