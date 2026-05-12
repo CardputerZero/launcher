@@ -269,8 +269,8 @@ void ui_Screen1_screen_init(void)
     lv_obj_set_style_text_opa(ui_zuoLabel, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
     ui_zuoPanel = lv_obj_create(ui_Screen1);
-    lv_obj_set_width(ui_zuoPanel, 81);
-    lv_obj_set_height(ui_zuoPanel, 81);
+    lv_obj_set_width(ui_zuoPanel, 80);
+    lv_obj_set_height(ui_zuoPanel, 80);
     lv_obj_set_x(ui_zuoPanel, -99);
     lv_obj_set_y(ui_zuoPanel, -6);
     lv_obj_set_align(ui_zuoPanel, LV_ALIGN_CENTER);
@@ -297,8 +297,8 @@ void ui_Screen1_screen_init(void)
     lv_obj_set_style_border_opa(ui_switchPanel, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
     ui_youPanel = lv_obj_create(ui_Screen1);
-    lv_obj_set_width(ui_youPanel, 81);
-    lv_obj_set_height(ui_youPanel, 81);
+    lv_obj_set_width(ui_youPanel, 80);
+    lv_obj_set_height(ui_youPanel, 80);
     lv_obj_set_x(ui_youPanel, 99);
     lv_obj_set_y(ui_youPanel, -6);
     lv_obj_set_align(ui_youPanel, LV_ALIGN_CENTER);
