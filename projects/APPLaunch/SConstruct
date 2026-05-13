@@ -67,7 +67,7 @@ if cross_package_enabled:
         except AttributeError:
             pass
         down_url = (
-            "https://github.com/dianjixz/M5CardputerZero-UserDemo/"
+            "https://github.com/CardputerZero/M5CardputerZero-UserDemo/"
             "releases/download/{}/sdk_bsp.tar.gz"
         ).format(version)
         check_wget_down(down_url, "static_lib_{}.tar.gz".format(version))
