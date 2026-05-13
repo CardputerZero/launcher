@@ -124,8 +124,8 @@ public:
         // 固定图标，不允许用户修改
         app_list.emplace_back("Python",
                               img_path("python_100.png"), "python3", true, false);
-        app_list.emplace_back("STORE",
-                              img_path("store_100.png"), page_v<UIStorePage>);
+        // app_list.emplace_back("STORE",
+        //                       img_path("store_100.png"), page_v<UIStorePage>);
         app_list.emplace_back("CLI",
                               img_path("cli_100.png"), "bash", true, false);
         app_list.emplace_back("CLAW",
@@ -170,28 +170,27 @@ public:
                               img_path("audio_player_100.png"),
                               "tinyplay -D1 -d0 /home/pi/zhou.wav",
                               true);
-        app_list.emplace_back("IP_PANEL",
-                              img_path("ip_panel_100.png"), page_v<UIIpPanelPage>);
+        app_list.emplace_back("HACK",
+                              img_path("hack_100.png"), page_v<UIHackPage>);
+        app_list.emplace_back("GAME",
+                              img_path("game_100.png"), page_v<UIGamePage>);
 
         app_list.emplace_back("MATH",
                               img_path("math_100.png"),
                               "/home/pi/M5CardputerZero-Calculator-linux-aarch64", false);
 
+#ifdef __linux__
+        app_list.emplace_back("IP_PANEL",
+                              img_path("ip_panel_100.png"), page_v<UIIpPanelPage>);
         app_list.emplace_back("STOCKS",
                               img_path("stocks_100.png"), page_v<UIStockPage>);
-
         app_list.emplace_back("CHAT",
                               img_path("chat_100.png"), page_v<UIchatPage>);
         app_list.emplace_back("e-Mail",
                               img_path("e_mail_100.png"), page_v<UIEmailPage>);
         app_list.emplace_back("FILE",
                               img_path("file_100.png"), page_v<UIFilePage>);
-        app_list.emplace_back("HACK",
-                              img_path("hack_100.png"), page_v<UIHackPage>);
-        app_list.emplace_back("GAME",
-                              img_path("game_100.png"), page_v<UIGamePage>);
         app_list.emplace_back("AICli", img_path("aicli_100.png"), page_v<UIAICliPage>);
-#ifdef __linux__
         app_list.emplace_back("SSH",
                               img_path("ssh_100.png"), page_v<UISSHPage>);
         app_list.emplace_back("MESH",
@@ -580,6 +579,7 @@ public:
         //     lv_obj_set_style_bg_color(ui_Bar1, lv_color_hex(color),
         //                               LV_PART_INDICATOR | LV_STATE_DEFAULT);
         // }
+        }
     }
 
     // ============================================================
