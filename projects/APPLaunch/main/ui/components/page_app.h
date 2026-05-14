@@ -13,7 +13,6 @@
 #include "page_app/ui_app_email.hpp"
 #include "page_app/ui_app_file.hpp"
 #include "page_app/ui_app_stock.hpp"
-#include "page_app/ui_app_store.hpp"
 #include "page_app/ui_app_UnitEnv.hpp"
 #include "page_app/ui_app_camera.hpp"
 #include "page_app/ui_app_gallery.hpp"

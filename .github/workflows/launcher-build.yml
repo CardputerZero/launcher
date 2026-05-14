@@ -5,6 +5,7 @@ on:
     branches: [master, ci/**]
     paths:
       - 'projects/APPLaunch/**'
+      - 'projects/AppStore'
       - 'SDK/**'
       - '.github/workflows/launcher-build.yml'
   pull_request:
@@ -17,8 +18,10 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Initialize SDK submodule
-      run: git submodule update --init --depth=1 SDK
+    - name: Initialize submodules (SDK + AppStore)
+      run: |
+        git submodule update --init --depth=1 SDK
+        git submodule update --init --depth=1 projects/AppStore
 
     - name: Install cross-compilation toolchain
       run: |
@@ -36,6 +39,23 @@ jobs:
         export CardputerZero=y
         export CONFIG_REPO_AUTOMATION=y
         scons -j$(nproc)
+
+    - name: Build AppStore (cross-compile aarch64)
+      run: |
+        cd projects/AppStore
+        rm -rf build dist
+        export CardputerZero=y
+        export CONFIG_REPO_AUTOMATION=y
+        scons -j$(nproc)
+
+    - name: Copy AppStore into APPLaunch dist
+      run: |
+        mkdir -p projects/APPLaunch/dist/bin
+        cp projects/AppStore/dist/M5CardputerZero-AppStore projects/APPLaunch/dist/bin/
+        cp projects/AppStore/appstore.py projects/APPLaunch/dist/bin/
+        mkdir -p projects/APPLaunch/dist/APPLaunch/share/images
+        cp projects/AppStore/share/images/store_wordmark.png projects/APPLaunch/dist/APPLaunch/share/images/ 2>/dev/null || true
+        cp projects/AppStore/share/images/store_arrow_*.png projects/APPLaunch/dist/APPLaunch/share/images/ 2>/dev/null || true
 
     - name: Build .deb package
       run: |

@@ -124,8 +124,9 @@ public:
         // 固定图标，不允许用户修改
         app_list.emplace_back("Python",
                               img_path("python_100.png"), "python3", true, false);
-        // app_list.emplace_back("STORE",
-        //                       img_path("store_100.png"), page_v<UIStorePage>);
+        app_list.emplace_back("STORE",
+                              img_path("store_100.png"),
+                              "/usr/share/APPLaunch/bin/M5CardputerZero-AppStore", false);
         app_list.emplace_back("CLI",
                               img_path("cli_100.png"), "bash", true, false);
         app_list.emplace_back("CLAW",
