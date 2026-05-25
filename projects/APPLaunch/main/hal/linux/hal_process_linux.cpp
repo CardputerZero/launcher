@@ -25,6 +25,13 @@ static const char *get_kbd_device()
 
 static const int ESC_HOLD_SEC = 3;
 
+static bool is_nologin_shell(const char *shell)
+{
+    if (!shell || !shell[0]) return true;
+    return strstr(shell, "nologin") != NULL ||
+           strstr(shell, "/bin/false") != NULL;
+}
+
 static const char *get_run_user()
 {
     const char *cfg = hal_config_get_str("run_as_user", NULL);
@@ -33,7 +40,8 @@ static const char *get_run_user()
     struct passwd *pwd;
     setpwent();
     while ((pwd = getpwent()) != NULL) {
-        if (pwd->pw_uid >= 1000) {
+        if (pwd->pw_uid >= 1000 && pwd->pw_uid < 65534 &&
+            !is_nologin_shell(pwd->pw_shell)) {
             endpwent();
             return pwd->pw_name;
         }

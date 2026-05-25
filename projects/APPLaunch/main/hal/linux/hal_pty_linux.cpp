@@ -43,7 +43,13 @@ hal_pty_t hal_pty_open(const char *cmd, const char *const *args,
                 struct passwd *p;
                 setpwent();
                 while ((p = getpwent()) != NULL) {
-                    if (p->pw_uid >= 1000) { username = p->pw_name; break; }
+                    if (p->pw_uid >= 1000 && p->pw_uid < 65534 &&
+                        p->pw_shell && p->pw_shell[0] &&
+                        !strstr(p->pw_shell, "nologin") &&
+                        !strstr(p->pw_shell, "/bin/false")) {
+                        username = p->pw_name;
+                        break;
+                    }
                 }
                 endpwent();
             }
