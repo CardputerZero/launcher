@@ -37,3 +37,9 @@ void hal_audio_play_sync(const char *path)
 
 void hal_audio_stop(void) {}
 void hal_audio_deinit(void) {}
+
+void audio_system_init(void) {
+    hal_audio_init();
+}
+
+void audio_load_sounds(void) {}
