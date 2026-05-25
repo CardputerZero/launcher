@@ -63,6 +63,7 @@ hal_bt_status_t hal_bt_get_status(void)
 }
 
 int hal_bt_set_power(int on) { (void)on; return 0; }
+int hal_bt_scan(hal_bt_device_t *out, int max_devices) { (void)out; (void)max_devices; return 0; }
 
 void hal_time_str(char *buf, int buf_size)
 {
