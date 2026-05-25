@@ -1,6 +1,8 @@
 #include "../hal_pty.h"
+#include "../hal_config.h"
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
@@ -8,6 +10,8 @@
 #include <sys/wait.h>
 #include <sys/ioctl.h>
 #include <pty.h>
+#include <pwd.h>
+#include <grp.h>
 
 struct hal_pty {
     int   master_fd;
@@ -28,6 +32,36 @@ hal_pty_t hal_pty_open(const char *cmd, const char *const *args,
 
     if (pid == 0) {
         setenv("TERM", "vt100", 1);
+
+        // Drop to regular user if running as root
+        if (getuid() == 0) {
+            const char *cfg_user = hal_config_get_str("run_as_user", NULL);
+            const char *username = NULL;
+            if (cfg_user && cfg_user[0]) {
+                username = cfg_user;
+            } else {
+                struct passwd *p;
+                setpwent();
+                while ((p = getpwent()) != NULL) {
+                    if (p->pw_uid >= 1000) { username = p->pw_name; break; }
+                }
+                endpwent();
+            }
+            if (!username) username = "pi";
+
+            struct passwd *pw = getpwnam(username);
+            if (pw && strcmp(username, "root") != 0) {
+                initgroups(pw->pw_name, pw->pw_gid);
+                setgid(pw->pw_gid);
+                setuid(pw->pw_uid);
+                setenv("HOME", pw->pw_dir, 1);
+                setenv("USER", pw->pw_name, 1);
+                setenv("LOGNAME", pw->pw_name, 1);
+                setenv("SHELL", pw->pw_shell[0] ? pw->pw_shell : "/bin/bash", 1);
+                chdir(pw->pw_dir);
+            }
+        }
+
         if (args)
             execvp(cmd, (char *const *)args);
         else
