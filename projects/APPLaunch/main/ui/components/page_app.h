@@ -6,7 +6,7 @@
 #include "page_app/ui_app_music.hpp"
 #include "page_app/ui_app_setup.hpp"
 
-#ifdef __linux__
+#if defined(__linux__) && !defined(HAL_PLATFORM_SDL)
 #include "page_app/ui_app_AiCli.hpp"
 #include "page_app/ui_app_IpPanel.hpp"
 #include "page_app/ui_app_chat.hpp"
