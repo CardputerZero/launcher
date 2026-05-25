@@ -58,13 +58,18 @@ subprocess.run(
 
 # Get git commit short hash for version display
 try:
+    _repo_root = subprocess.check_output(
+        ['git', 'rev-parse', '--show-toplevel'],
+        stderr=subprocess.DEVNULL
+    ).decode().strip()
     _git_commit = subprocess.check_output(
         ['git', 'rev-parse', '--short', 'HEAD'],
-        cwd=os.path.dirname(os.path.abspath(str(AFile('.')))),
+        cwd=_repo_root,
         stderr=subprocess.DEVNULL
     ).decode().strip()
 except Exception:
     _git_commit = 'unknown'
+print('-- Launcher git commit: %s' % _git_commit)
 
 
 # add srcs
