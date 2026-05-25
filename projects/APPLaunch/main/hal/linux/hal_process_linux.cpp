@@ -1,4 +1,5 @@
 #include "../hal_process.h"
+#include "../hal_config.h"
 #include <unistd.h>
 #include <sys/wait.h>
 #include <signal.h>
@@ -9,6 +10,7 @@
 #include <chrono>
 #include <thread>
 #include <linux/input.h>
+#include <pwd.h>
 
 extern "C" {
     extern void keyboard_pause(void);
@@ -22,6 +24,35 @@ static const char *get_kbd_device()
 }
 
 static const int ESC_HOLD_SEC = 3;
+
+static const char *get_run_user()
+{
+    const char *cfg = hal_config_get_str("run_as_user", NULL);
+    if (cfg && cfg[0]) return cfg;
+
+    struct passwd *pwd;
+    setpwent();
+    while ((pwd = getpwent()) != NULL) {
+        if (pwd->pw_uid >= 1000) {
+            endpwent();
+            return pwd->pw_name;
+        }
+    }
+    endpwent();
+    return "pi";
+}
+
+static void exec_as_user(const char *exec_path)
+{
+    const char *user = get_run_user();
+    if (getuid() == 0 && strcmp(user, "root") != 0) {
+        char cmd[2048];
+        snprintf(cmd, sizeof(cmd), "runuser -l %s -c '%s'", user, exec_path);
+        execlp("/bin/sh", "sh", "-c", cmd, (char *)NULL);
+    } else {
+        execlp("/bin/sh", "sh", "-c", exec_path, (char *)NULL);
+    }
+}
 
 /* ------------------------------------------------------------------
  * Experiment:
@@ -57,13 +88,8 @@ int hal_process_exec_blocking(const char *exec_path, volatile int *home_key_flag
     }
     if (pid == 0) {
         close(evfd);
-        /* Put the child (and everything it fork/execs) in its own
-         * process group, so the launcher can kill the whole tree via
-         * killpg() on long-press ESC. Otherwise sh often fork+waits an
-         * inner sh that exec's the real binary, leaving the real
-         * process as a grandchild that SIGTERM to `pid` never reaches. */
         setpgid(0, 0);
-        execlp("/bin/sh", "sh", "-c", exec_path, (char *)NULL);
+        exec_as_user(exec_path);
         _exit(127);
     }
     /* Also set it in the parent in case setpgid races the child. */
@@ -188,7 +214,7 @@ hal_pid_t hal_process_spawn(const char *exec_path)
     if (pid < 0) return -1;
     if (pid == 0) {
         setpgid(0, 0);
-        execlp("/bin/sh", "sh", "-c", exec_path, (char *)NULL);
+        exec_as_user(exec_path);
         _exit(127);
     }
     setpgid(pid, pid);

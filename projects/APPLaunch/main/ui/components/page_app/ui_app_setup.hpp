@@ -26,6 +26,7 @@
 #endif
 #include "hal/hal_settings.h"
 #include "hal/hal_process.h"
+#include "hal/hal_config.h"
 
 // ============================================================
 //  系统设置界面  UISetupPage
@@ -561,12 +562,16 @@ private:
             bright_val_ -= step;
             if (bright_val_ < 1) bright_val_ = 1;
             hal_backlight_write(bright_val_);
+            hal_config_set_int("brightness", bright_val_);
+            hal_config_save();
             update_bright_ui();
             break;
         case KEY_RIGHT:
             bright_val_ += step;
             if (bright_val_ > mx) bright_val_ = mx;
             hal_backlight_write(bright_val_);
+            hal_config_set_int("brightness", bright_val_);
+            hal_config_save();
             update_bright_ui();
             break;
         case KEY_ESC:

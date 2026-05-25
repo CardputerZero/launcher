@@ -15,6 +15,7 @@
 #include "compat/input_keys.h"
 #include "hal/hal_process.h"
 #include "hal/hal_settings.h"
+#include "hal/hal_config.h"
 // #include "ui/inter_process_comms.h"
 #include "global_config.h"
 #if CONFIG_BACKWARD_CPP_ENABLED
@@ -321,6 +322,13 @@ int main(void)
     LV_EVENT_KEYBOARD = lv_event_register_id();
     LV_EVENT_BATTERY = lv_event_register_id();
     lv_timer_create(battery_timer_cb, 3000, NULL);
+
+    // Restore saved brightness
+    {
+        int saved_bright = hal_config_get_int("brightness", -1);
+        if (saved_bright > 0)
+            hal_backlight_write(saved_bright);
+    }
 
     ui_init();
     // lv_demo_widgets(); // 用LVGL自带demo测试
