@@ -19,11 +19,6 @@ extern threadpool g_launch_thread_pool;
 
 typedef void (*switch_cb_t)(lv_event_t *);
 
-struct lv_timer_data_t
-{
-    switch_cb_t cb_fun;
-    lv_timer_t **snap_timer;
-};
 
 #define ROTATE_LEFT(arr, start, end)                   \
     do                                                 \
@@ -53,6 +48,7 @@ static const lv_coord_t SLOT_W[] = {61, 80, 100, 80, 61};
 static const lv_coord_t SLOT_H[] = {61, 80, 100, 80, 61};
 
 static bool is_animating = false;
+static switch_cb_t pending_switch = NULL;
 
 static int Panel_current_pos = 2;
 static int switch_current_pos = 11;
@@ -571,8 +567,6 @@ static void snap_label_to_slot(lv_obj_t *label, int slot)
 
 static void snap_all_panels(lv_anim_t *a)
 {
-    printf("snap_all_panels\r\n");
-
     for (int i = 0; i < 5; i++)
     {
         snap_panel_to_slot(launch_circle[i], i);
@@ -596,40 +590,11 @@ static void snap_all_panels(lv_anim_t *a)
         lv_obj_set_style_text_font(launch_circle[i], g_font_bold_14, LV_PART_MAIN | LV_STATE_DEFAULT);
     }
 
-}
-
-
-static void snap_timer_cb(lv_timer_t *timer)
-{
-    struct lv_timer_data_t *data =
-        (struct lv_timer_data_t *)lv_timer_get_user_data(timer);
-
-    switch_cb_t cb_fun = data->cb_fun;
-    lv_timer_t **snap_timer = data->snap_timer;
-
-    lv_mem_free(data);
-
-    *snap_timer = NULL;
-
-    cb_fun(NULL);
-}
-
-
-static void delay_cb_fun(lv_timer_t **snap_timer, switch_cb_t cb)
-{
-    if (*snap_timer)
-    {
-        return;
+    if (pending_switch) {
+        switch_cb_t cb = pending_switch;
+        pending_switch = NULL;
+        cb(NULL);
     }
-
-    struct lv_timer_data_t *data =
-        lv_mem_alloc(sizeof(struct lv_timer_data_t));
-
-    data->cb_fun = cb;
-    data->snap_timer = snap_timer;
-
-    *snap_timer = lv_timer_create(snap_timer_cb, 50, data);
-    lv_timer_set_repeat_count(*snap_timer, 1);
 }
 
 
@@ -639,11 +604,9 @@ static void delay_cb_fun(lv_timer_t **snap_timer, switch_cb_t cb)
 
 void switchyou(lv_event_t *e)
 {
-    static lv_timer_t *snap_timer = NULL;
-
     if (is_animating)
     {
-        delay_cb_fun(&snap_timer, &switchyou);
+        pending_switch = &switchyou;
         return;
     }
 
@@ -689,15 +652,11 @@ void switchyou(lv_event_t *e)
 
 void switchzuo(lv_event_t *e)
 {
-    static lv_timer_t *snap_timer = NULL;
-
     if (is_animating)
     {
-        delay_cb_fun(&snap_timer, &switchzuo);
+        pending_switch = &switchzuo;
         return;
     }
-
-    printf("switchzuo\r\n");
 
     is_animating = true;
 
