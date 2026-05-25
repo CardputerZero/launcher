@@ -1,8 +1,11 @@
 #pragma once
 #if !defined(HAL_PLATFORM_SDL)
-#ifndef LAUNCHER_GIT_COMMIT
-#define LAUNCHER_GIT_COMMIT "unknown"
+#define _STRINGIFY(x) #x
+#define STRINGIFY(x) _STRINGIFY(x)
+#ifndef LAUNCHER_GIT_COMMIT_RAW
+#define LAUNCHER_GIT_COMMIT_RAW unknown
 #endif
+#define LAUNCHER_GIT_COMMIT STRINGIFY(LAUNCHER_GIT_COMMIT_RAW)
 #include "../ui_app_page.hpp"
 #include <unordered_map>
 #include <string>
