@@ -1,5 +1,8 @@
 #pragma once
 #if !defined(HAL_PLATFORM_SDL)
+#ifndef LAUNCHER_GIT_COMMIT
+#define LAUNCHER_GIT_COMMIT "unknown"
+#endif
 #include "../ui_app_page.hpp"
 #include <unordered_map>
 #include <string>
@@ -261,16 +264,20 @@ private:
             "About",
             "About Device",
             [](lv_obj_t *c) {
+                char launcher_build[128];
+                snprintf(launcher_build, sizeof(launcher_build),
+                         "Launcher: %s %s", __DATE__, LAUNCHER_GIT_COMMIT);
                 const char *lines[] = {
                     "Device  : M5Cardputer Zero",
-                    "FW Ver  : v1.0.0",
                     "LVGL    : 9.x",
-                    "Build   : " __DATE__,
+                    "OS Build: " __DATE__,
+                    launcher_build,
+                    "Shortcut: Ctrl+S screenshot",
                 };
-                for (int i = 0; i < 4; ++i) {
+                for (int i = 0; i < 5; ++i) {
                     lv_obj_t *lbl = lv_label_create(c);
                     lv_label_set_text(lbl, lines[i]);
-                    lv_obj_set_pos(lbl, 0, 4 + i * 26);
+                    lv_obj_set_pos(lbl, 0, 4 + i * 22);
                     lv_obj_set_style_text_color(lbl, lv_color_hex(i == 0 ? 0x58A6FF : 0xE6EDF3),
                                                 LV_PART_MAIN | LV_STATE_DEFAULT);
                     lv_obj_set_style_text_font(lbl, &lv_font_montserrat_12, LV_PART_MAIN | LV_STATE_DEFAULT);
