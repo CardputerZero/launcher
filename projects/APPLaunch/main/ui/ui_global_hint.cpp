@@ -25,6 +25,7 @@
 #include "ui.h"
 #include "keyboard_input.h"
 #include "lvgl/lvgl.h"
+#include "hal/hal_screenshot.h"
 
 #include "compat/input_keys.h"
 
@@ -231,6 +232,13 @@ extern "C" void ui_global_hint_on_key(const struct key_item *elm)
 
     /* All other keys: only fire on the initial key-down edge. */
     if (elm->key_state != KBD_KEY_PRESSED) return;
+
+    /* Ctrl+S: global screenshot */
+    if (code == KEY_S && (elm->mods & KBD_MOD_CTRL)) {
+        int ret = hal_screenshot_save("/home/pi/screenshots");
+        show_hint(ret == 0 ? "Screenshot saved" : "Screenshot failed");
+        return;
+    }
 
     /* Explicitly skip Fn — no lock feature attached to it. */
     if (code == KEY_FN) return;
