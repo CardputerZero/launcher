@@ -330,6 +330,13 @@ int main(void)
             hal_backlight_write(saved_bright);
     }
 
+    // Restore saved volume
+    {
+        int saved_vol = hal_config_get_int("volume", -1);
+        if (saved_vol >= 0)
+            hal_volume_write(saved_vol);
+    }
+
     ui_init();
     // lv_demo_widgets(); // 用LVGL自带demo测试
     /*Handle LVGL tasks*/

@@ -103,6 +103,17 @@ private:
         return lbl;
     }
 
+    static uint32_t fzxc_to_arrow(uint32_t key)
+    {
+        switch (key) {
+        case KEY_F: return KEY_UP;
+        case KEY_X: return KEY_DOWN;
+        case KEY_Z: return KEY_LEFT;
+        case KEY_C: return KEY_RIGHT;
+        default:    return key;
+        }
+    }
+
     // ==================== keycode to char ====================
     static char keycode_to_char(uint32_t key)
     {
@@ -900,8 +911,8 @@ private:
             uint32_t key = LV_EVENT_KEYBOARD_GET_KEY(e);
             switch (view_state_)
             {
-            case ViewState::MAIN:  handle_main_key(key); break;
-            case ViewState::SUB:   handle_sub_key(key);  break;
+            case ViewState::MAIN:  handle_main_key(fzxc_to_arrow(key)); break;
+            case ViewState::SUB:   handle_sub_key(fzxc_to_arrow(key));  break;
             case ViewState::INPUT: handle_sub_key(key);  break;
             }
         }

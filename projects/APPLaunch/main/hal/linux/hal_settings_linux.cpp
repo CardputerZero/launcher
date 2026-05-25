@@ -299,24 +299,39 @@ int hal_wifi_scan(hal_wifi_ap_t *out, int max_aps)
     while (fgets(line, sizeof(line), p) && count < max_aps) {
         line[strcspn(line, "\n")] = 0;
         if (line[0] == 0) continue;
-        hal_wifi_ap_t *ap = &out[count];
-        memset(ap, 0, sizeof(*ap));
+        hal_wifi_ap_t tmp;
+        memset(&tmp, 0, sizeof(tmp));
         char *ptr = line;
         char *last_colon = strrchr(ptr, ':');
         if (!last_colon) continue;
-        ap->in_use = (*(last_colon + 1) == '*') ? 1 : 0;
+        tmp.in_use = (*(last_colon + 1) == '*') ? 1 : 0;
         *last_colon = 0;
         char *sec_colon = strrchr(ptr, ':');
         if (!sec_colon) continue;
-        strncpy(ap->security, sec_colon + 1, sizeof(ap->security) - 1);
+        strncpy(tmp.security, sec_colon + 1, sizeof(tmp.security) - 1);
         *sec_colon = 0;
         char *sig_colon = strrchr(ptr, ':');
         if (!sig_colon) continue;
-        ap->signal = atoi(sig_colon + 1);
+        tmp.signal = atoi(sig_colon + 1);
         *sig_colon = 0;
         if (ptr[0] == 0) continue;
-        strncpy(ap->ssid, ptr, WIFI_SSID_MAX - 1);
-        count++;
+        strncpy(tmp.ssid, ptr, WIFI_SSID_MAX - 1);
+
+        /* Dedup: if same SSID already exists, keep the stronger signal */
+        int dup_idx = -1;
+        for (int i = 0; i < count; i++) {
+            if (strcmp(out[i].ssid, tmp.ssid) == 0) {
+                dup_idx = i;
+                break;
+            }
+        }
+        if (dup_idx >= 0) {
+            if (tmp.signal > out[dup_idx].signal)
+                out[dup_idx] = tmp;
+        } else {
+            out[count] = tmp;
+            count++;
+        }
     }
     pclose(p);
     return count;

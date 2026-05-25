@@ -178,7 +178,7 @@ public:
 
         app_list.emplace_back("MATH",
                               img_path("math_100.png"),
-                              "/home/pi/M5CardputerZero-Calculator-linux-aarch64", false);
+                              "/usr/share/APPLaunch/bin/M5CardputerZero-Calculator", false);
 
 #if defined(__linux__) && !defined(HAL_PLATFORM_SDL)
         app_list.emplace_back("IP_PANEL",
