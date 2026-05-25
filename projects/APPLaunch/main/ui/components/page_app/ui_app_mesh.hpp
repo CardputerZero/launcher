@@ -354,7 +354,7 @@ private:
         lv_obj_set_width(msg_input_lbl_, 260);
         lv_label_set_long_mode(msg_input_lbl_, LV_LABEL_LONG_CLIP);
 
-        make_label(input_overlay_, "ENTER:send  ESC:cancel", 0, 30, 0x888888, &lv_font_montserrat_10);
+        make_label(input_overlay_, "OK:send  ESC:cancel", 0, 30, 0x888888, &lv_font_montserrat_10);
     }
 
     // ==================== close input overlay ====================

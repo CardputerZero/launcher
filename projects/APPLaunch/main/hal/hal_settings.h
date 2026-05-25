@@ -53,8 +53,19 @@ hal_wifi_status_t hal_wifi_get_status(void);
 int  hal_wifi_scan(hal_wifi_ap_t *out, int max_aps);
 int  hal_wifi_connect(const char *ssid, const char *password);
 
+#define BT_DEVICE_MAX  16
+#define BT_NAME_MAX    64
+
+typedef struct {
+    char name[BT_NAME_MAX];
+    char address[24];
+    int  rssi;
+    int  connected;
+} hal_bt_device_t;
+
 hal_bt_status_t hal_bt_get_status(void);
 int  hal_bt_set_power(int on);
+int  hal_bt_scan(hal_bt_device_t *out, int max_devices);
 
 void hal_time_str(char *buf, int buf_size);
 

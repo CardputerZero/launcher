@@ -236,34 +236,50 @@ hal_wifi_status_t hal_wifi_get_status(void)
 {
     hal_wifi_status_t st;
     memset(&st, 0, sizeof(st));
-    FILE *p = popen("nmcli -t -f active,ssid,signal dev wifi list 2>/dev/null", "r");
-    if (!p) return st;
     char line[256];
+
+    // Use nmcli to check active wifi connection
+    FILE *p = popen("nmcli -t -f TYPE,NAME dev status 2>/dev/null", "r");
+    if (!p) return st;
     while (fgets(line, sizeof(line), p)) {
         line[strcspn(line, "\n")] = 0;
-        if (strncmp(line, "yes:", 4) == 0) {
-            st.connected = 1;
-            char *s = line + 4;
-            char *colon = strrchr(s, ':');
-            if (colon) {
-                *colon = 0;
-                strncpy(st.ssid, s, WIFI_SSID_MAX - 1);
-                st.signal = atoi(colon + 1);
+        if (strncmp(line, "wifi:", 5) == 0) {
+            char *name = line + 5;
+            if (name[0] && strcmp(name, "--") != 0) {
+                st.connected = 1;
+                strncpy(st.ssid, name, WIFI_SSID_MAX - 1);
             }
             break;
         }
     }
     pclose(p);
+
     if (st.connected) {
-        p = popen("nmcli -t -f IP4.ADDRESS con show --active 2>/dev/null", "r");
+        // Get signal strength
+        p = popen("nmcli -t -f IN-USE,SIGNAL dev wifi list 2>/dev/null", "r");
         if (p) {
             while (fgets(line, sizeof(line), p)) {
                 line[strcspn(line, "\n")] = 0;
-                char *v = strstr(line, "IP4.ADDRESS");
-                if (v) {
-                    v = strchr(v, ':');
-                    if (v) { v++; char *sl = strchr(v, '/'); if (sl) *sl = 0; strncpy(st.ip, v, sizeof(st.ip) - 1); }
+                if (line[0] == '*' && line[1] == ':') {
+                    st.signal = atoi(line + 2);
                     break;
+                }
+            }
+            pclose(p);
+        }
+
+        // Get IP from ip addr (most reliable)
+        p = popen("ip -4 -o addr show wlan0 2>/dev/null", "r");
+        if (p) {
+            if (fgets(line, sizeof(line), p)) {
+                char *inet = strstr(line, "inet ");
+                if (inet) {
+                    inet += 5;
+                    char *sl = strchr(inet, '/');
+                    if (sl) *sl = 0;
+                    char *sp = strchr(inet, ' ');
+                    if (sp) *sp = 0;
+                    strncpy(st.ip, inet, sizeof(st.ip) - 1);
                 }
             }
             pclose(p);
@@ -345,6 +361,39 @@ int hal_bt_set_power(int on)
     while (fgets(buf, sizeof(buf), p)) { if (strstr(buf, "succeeded") || strstr(buf, "Changing")) ok = 1; }
     pclose(p);
     return ok ? 0 : -1;
+}
+
+int hal_bt_scan(hal_bt_device_t *out, int max_devices)
+{
+    system("bluetoothctl scan on 2>/dev/null &");
+    usleep(4000000);
+    system("bluetoothctl scan off 2>/dev/null");
+
+    FILE *p = popen("bluetoothctl devices 2>/dev/null", "r");
+    if (!p) return 0;
+
+    char line[256];
+    int count = 0;
+    while (fgets(line, sizeof(line), p) && count < max_devices) {
+        line[strcspn(line, "\n")] = 0;
+        // Format: "Device XX:XX:XX:XX:XX:XX Name"
+        if (strncmp(line, "Device ", 7) != 0) continue;
+        char *addr = line + 7;
+        char *sp = strchr(addr, ' ');
+        if (!sp) continue;
+        *sp = 0;
+        char *name = sp + 1;
+
+        hal_bt_device_t *dev = &out[count];
+        memset(dev, 0, sizeof(*dev));
+        strncpy(dev->address, addr, sizeof(dev->address) - 1);
+        strncpy(dev->name, name[0] ? name : addr, BT_NAME_MAX - 1);
+        dev->rssi = 0;
+        dev->connected = 0;
+        count++;
+    }
+    pclose(p);
+    return count;
 }
 
 void hal_time_str(char *buf, int buf_size)

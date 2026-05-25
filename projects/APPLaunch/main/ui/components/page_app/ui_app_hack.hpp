@@ -272,9 +272,9 @@ private:
         lv_obj_set_style_bg_color(port_result_cont_, lv_color_hex(0x1F6FEB), LV_PART_SCROLLBAR | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_opa(port_result_cont_, 200, LV_PART_SCROLLBAR | LV_STATE_DEFAULT);
 
-        make_label(port_result_cont_, "Press ENTER to scan", 4, 4, 0x555555);
+        make_label(port_result_cont_, "Press OK to scan", 4, 4, 0x555555);
 
-        port_hint_lbl_ = make_label(c, "Type IP, ENTER:scan  ESC:back", 0, 98, 0x555555, &lv_font_montserrat_10);
+        port_hint_lbl_ = make_label(c, "Type IP, OK:scan  ESC:back", 0, 98, 0x555555, &lv_font_montserrat_10);
 
         // Enable text input mode
         view_state_ = ViewState::INPUT;
@@ -540,9 +540,9 @@ private:
         lv_obj_set_style_bg_color(ping_result_cont_, lv_color_hex(0x1F6FEB), LV_PART_SCROLLBAR | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_opa(ping_result_cont_, 200, LV_PART_SCROLLBAR | LV_STATE_DEFAULT);
 
-        make_label(ping_result_cont_, "Press ENTER to ping", 4, 4, 0x555555);
+        make_label(ping_result_cont_, "Press OK to ping", 4, 4, 0x555555);
 
-        ping_hint_lbl_ = make_label(c, "Type host, ENTER:ping  ESC:back", 0, 98, 0x555555, &lv_font_montserrat_10);
+        ping_hint_lbl_ = make_label(c, "Type host, OK:ping  ESC:back", 0, 98, 0x555555, &lv_font_montserrat_10);
 
         view_state_ = ViewState::INPUT;
     }
@@ -693,7 +693,7 @@ private:
         lv_obj_set_style_text_font(lbl_title, &lv_font_montserrat_14, LV_PART_MAIN | LV_STATE_DEFAULT);
 
         lv_obj_t *lbl_hint = lv_label_create(title_bar);
-        lv_label_set_text(lbl_hint, "UP/DN:select  ENTER:open  ESC:back");
+        lv_label_set_text(lbl_hint, "UP/DN:select  OK:open  ESC:back");
         lv_obj_set_align(lbl_hint, LV_ALIGN_RIGHT_MID);
         lv_obj_set_x(lbl_hint, -4);
         lv_obj_set_style_text_color(lbl_hint, lv_color_hex(0x7EA8D8), LV_PART_MAIN | LV_STATE_DEFAULT);

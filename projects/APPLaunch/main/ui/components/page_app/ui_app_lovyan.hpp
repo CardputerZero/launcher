@@ -139,7 +139,7 @@ private:
         lv_obj_set_style_border_width(footer, 1, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_border_color(footer, lv_color_hex(0x1E293B), LV_PART_MAIN | LV_STATE_DEFAULT);
 
-        hint_label_ = make_label(footer, 9, 2, "ENTER: launch package   ESC: home", COLOR_MUTED, &lv_font_montserrat_10);
+        hint_label_ = make_label(footer, 9, 2, "OK: launch package   ESC: home", COLOR_MUTED, &lv_font_montserrat_10);
         lv_obj_set_width(hint_label_, 286);
         lv_obj_set_style_text_align(hint_label_, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN | LV_STATE_DEFAULT);
     }
