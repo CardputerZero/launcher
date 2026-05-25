@@ -281,7 +281,7 @@ private:
                     "LVGL    : 9.x",
                     "OS Build: " __DATE__,
                     launcher_build,
-                    "Shortcut: Ctrl+S screenshot",
+                    "Shortcut: Ctrl+Alt+S screenshot",
                 };
                 for (int i = 0; i < 5; ++i) {
                     lv_obj_t *lbl = lv_label_create(c);
@@ -462,6 +462,7 @@ private:
         if (key == KEY_ENTER) {
             if (pw_hint_lbl_)
                 lv_label_set_text(pw_hint_lbl_, "Connecting...");
+            lv_refr_now(NULL);
             int ret = hal_wifi_connect(wifi_pw_ssid_.c_str(), wifi_pw_buf_.c_str());
             view_state_ = ViewState::SUB;
             lv_obj_t *content = ui_obj_.count("sub_content") ? ui_obj_["sub_content"] : nullptr;
@@ -469,8 +470,15 @@ private:
                 lv_obj_clean(content);
                 build_wifi_page(content);
             }
-            if (ret == 0)
+            if (ret == 0) {
                 wifi_refresh_status();
+            } else {
+                if (wifi_status_lbl_) {
+                    lv_label_set_text(wifi_status_lbl_, "Connection failed");
+                    lv_obj_set_style_text_color(wifi_status_lbl_,
+                        lv_color_hex(0xE74C3C), LV_PART_MAIN | LV_STATE_DEFAULT);
+                }
+            }
             return;
         }
         if (key == KEY_BACKSPACE) {
@@ -683,7 +691,7 @@ private:
     // ==================== Sound sub-page ====================
     void build_sound_page(lv_obj_t *c)
     {
-        vol_val_ = hal_volume_read();
+        vol_val_ = hal_config_get_int("volume", hal_volume_read());
         if (vol_val_ < 0) vol_val_ = 39;
         vol_muted_ = (vol_val_ == 0) ? 1 : 0;
 
@@ -691,7 +699,7 @@ private:
         vol_bar_ = make_bar(c, 0, 24, 220, 12, vol_val_, 63, 0x2ECC71);
 
         char buf[32];
-        snprintf(buf, sizeof(buf), "%d/%d", vol_val_, 63);
+        snprintf(buf, sizeof(buf), "%d%%", vol_val_ * 100 / 63);
         vol_lbl_ = make_label(c, buf, 230, 21, 0xFFFFFF);
 
         char mute_buf[32];
@@ -708,6 +716,8 @@ private:
             vol_val_ -= 3;
             if (vol_val_ < 0) vol_val_ = 0;
             hal_volume_write(vol_val_);
+            hal_config_set_int("volume", vol_val_);
+            hal_config_save();
             vol_muted_ = (vol_val_ == 0) ? 1 : 0;
             update_vol_ui();
             break;
@@ -715,6 +725,8 @@ private:
             vol_val_ += 3;
             if (vol_val_ > 63) vol_val_ = 63;
             hal_volume_write(vol_val_);
+            hal_config_set_int("volume", vol_val_);
+            hal_config_save();
             vol_muted_ = 0;
             update_vol_ui();
             break;
@@ -728,6 +740,8 @@ private:
                 vol_muted_ = 1;
             }
             hal_volume_write(vol_val_);
+            hal_config_set_int("volume", vol_val_);
+            hal_config_save();
             update_vol_ui();
             break;
         case KEY_ESC:
@@ -744,7 +758,7 @@ private:
             lv_bar_set_value(vol_bar_, vol_val_, LV_ANIM_ON);
         if (vol_lbl_) {
             char buf[32];
-            snprintf(buf, sizeof(buf), "%d/%d", vol_val_, 63);
+            snprintf(buf, sizeof(buf), "%d%%", vol_val_ * 100 / 63);
             lv_label_set_text(vol_lbl_, buf);
         }
         if (mute_lbl_) {
