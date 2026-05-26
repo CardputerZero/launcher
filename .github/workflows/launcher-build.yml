@@ -6,7 +6,11 @@ on:
     paths:
       - 'projects/APPLaunch/**'
       - 'projects/AppStore'
+      - 'projects/AppStore/**'
+      - 'projects/Calculator'
+      - 'projects/Calculator/**'
       - 'SDK/**'
+      - '.gitmodules'
       - '.github/workflows/launcher-build.yml'
   pull_request:
     branches: [master]
@@ -18,10 +22,11 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Initialize submodules (SDK + AppStore)
+    - name: Initialize submodules (SDK + AppStore + Calculator)
       run: |
         git submodule update --init --depth=1 SDK
         git submodule update --init --depth=1 projects/AppStore
+        git submodule update --init --depth=1 projects/Calculator
 
     - name: Install cross-compilation toolchain
       run: |
@@ -48,11 +53,20 @@ jobs:
         export CONFIG_REPO_AUTOMATION=y
         scons -j$(nproc)
 
-    - name: Copy AppStore into APPLaunch dist
+    - name: Build Calculator (cross-compile aarch64)
+      run: |
+        cd projects/Calculator
+        rm -rf build dist
+        export CardputerZero=y
+        export CONFIG_REPO_AUTOMATION=y
+        scons -j$(nproc)
+
+    - name: Copy bundled apps into APPLaunch dist
       run: |
         mkdir -p projects/APPLaunch/dist/bin
         cp projects/AppStore/dist/M5CardputerZero-AppStore projects/APPLaunch/dist/bin/
         cp projects/AppStore/appstore.py projects/APPLaunch/dist/bin/
+        cp projects/Calculator/dist/M5CardputerZero-Calculator projects/APPLaunch/dist/bin/
         mkdir -p projects/APPLaunch/dist/APPLaunch/share/images
         cp projects/AppStore/share/images/store_wordmark.png projects/APPLaunch/dist/APPLaunch/share/images/ 2>/dev/null || true
         cp projects/AppStore/share/images/store_arrow_*.png projects/APPLaunch/dist/APPLaunch/share/images/ 2>/dev/null || true

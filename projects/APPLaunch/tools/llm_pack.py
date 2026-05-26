@@ -89,8 +89,8 @@ def create_applaunch_deb(version='0.1', src_folder='../dist', revision='m5stack1
         raise FileNotFoundError(f'Binary {BIN_NAME} not found in {src_folder}')
     shutil.copy2(bin_src, os.path.join(deb_folder, BIN_PATH, BIN_NAME))
 
-    # ------------------------------------------------------- copy AppStore binary + backend
-    for extra in ['M5CardputerZero-AppStore', 'appstore.py']:
+    # ------------------------------------------------------- copy bundled app binaries + backends
+    for extra in ['M5CardputerZero-AppStore', 'appstore.py', 'M5CardputerZero-Calculator']:
         extra_src = os.path.join(src_folder, 'bin', extra)
         if os.path.exists(extra_src):
             dest = os.path.join(deb_folder, BIN_PATH, extra)
