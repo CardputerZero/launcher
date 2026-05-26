@@ -5,18 +5,9 @@
 	path = projects/CardputerZero-Emulator/lib/lvgl
 	url = https://github.com/lvgl/lvgl.git
 	shallow = true
-[submodule "projects/2048"]
-	path = projects/2048
-	url = https://github.com/CardputerZero/2048.git
 [submodule "projects/Calculator"]
 	path = projects/Calculator
 	url = https://github.com/CardputerZero/Calculator.git
-[submodule "projects/StreamPlayer"]
-	path = projects/StreamPlayer
-	url = https://github.com/CardputerZero/StreamPlayer.git
-[submodule "projects/AudioSpectrum"]
-	path = projects/AudioSpectrum
-	url = https://github.com/CardputerZero/AudioSpectrum.git
 [submodule "projects/AppStore"]
 	path = projects/AppStore
 	url = https://github.com/CardputerZero/AppStore.git

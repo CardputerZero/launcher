@@ -43,11 +43,8 @@ M5CardputerZero-UserDemo/
 │   │           ├── Animation/  # 动画效果
 │   │           ├── fonts/      # 字体资源
 │   │           └── images/     # 图片资源
-│   ├── 2048/                   # 2048 游戏
 │   ├── Calculator/             # 计算器
 │   ├── AppStore/               # 应用商店
-│   ├── AudioSpectrum/          # 音频频谱
-│   ├── StreamPlayer/           # 流媒体播放器
 │   └── HelloWorld/             # Hello World 示例
 ├── ext_components/             # 外部组件（Miniaudio 等）
 ├── doc/                        # 文档资源
