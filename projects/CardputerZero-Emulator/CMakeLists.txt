@@ -11,6 +11,21 @@ set(REPO_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../..)
 set(APPLAUNCH  ${REPO_ROOT}/projects/APPLaunch/main)
 set(USERDEMO   ${REPO_ROOT}/projects/UserDemo/main)
 
+file(GLOB PAGE_APP_HEADERS
+    RELATIVE ${APPLAUNCH}/ui/components
+    CONFIGURE_DEPENDS
+    ${APPLAUNCH}/ui/components/page_app/*.hpp
+)
+list(SORT PAGE_APP_HEADERS)
+if(PAGE_APP_HEADERS)
+    file(WRITE ${APPLAUNCH}/ui/components/page_app.h "#pragma once\n\n")
+    foreach(PAGE_APP_HEADER ${PAGE_APP_HEADERS})
+        file(APPEND ${APPLAUNCH}/ui/components/page_app.h "#include \"${PAGE_APP_HEADER}\"\n")
+    endforeach()
+else()
+    message(FATAL_ERROR "No APPLaunch page_app headers found")
+endif()
+
 # ---------------------------------------------------------------------------
 # SDL2 + Freetype (skip for Emscripten — uses its own ports)
 # ---------------------------------------------------------------------------
