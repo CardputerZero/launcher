@@ -90,6 +90,8 @@ private:
     lv_obj_t *ping_hint_lbl_ = nullptr;
     bool ping_running_ = false;
 
+    const struct key_item *cur_elm_ = nullptr;
+
     // ==================== helper: styled label ====================
     static lv_obj_t *make_label(lv_obj_t *parent, const char *text,
                                 int x, int y, uint32_t color = 0xE6EDF3,
@@ -103,7 +105,7 @@ private:
         return lbl;
     }
 
-    // ==================== keycode to char ====================
+    // ==================== input helpers ====================
     static char keycode_to_char(uint32_t key)
     {
         if (key >= KEY_1 && key <= KEY_9) return '1' + (key - KEY_1);
@@ -117,6 +119,30 @@ private:
         if (key == KEY_SPACE) return ' ';
         if (key == 52) return '.'; // KEY_DOT
         return 0;
+    }
+
+    static bool is_port_target_char(char ch)
+    {
+        return (ch >= '0' && ch <= '9') || ch == '.';
+    }
+
+    static bool is_ping_host_char(char ch)
+    {
+        return (ch >= '0' && ch <= '9') ||
+               (ch >= 'a' && ch <= 'z') ||
+               (ch >= 'A' && ch <= 'Z') ||
+               ch == '.' || ch == '-' || ch == '_' || ch == ':';
+    }
+
+    char input_char_from_event(uint32_t key, bool (*allow)(char)) const
+    {
+        if (cur_elm_ && cur_elm_->utf8[0] && cur_elm_->utf8[1] == '\0') {
+            char ch = cur_elm_->utf8[0];
+            if (allow(ch)) return ch;
+        }
+
+        char ch = keycode_to_char(key);
+        return (ch && allow(ch)) ? ch : 0;
     }
 
     // ==================== menu data init ====================
@@ -416,7 +442,7 @@ private:
                 port_update_input();
                 return;
             }
-            char ch = keycode_to_char(key);
+            char ch = input_char_from_event(key, is_port_target_char);
             if (ch) {
                 port_ip_buf_ += ch;
                 port_update_input();
@@ -637,7 +663,7 @@ private:
                 ping_update_input();
                 return;
             }
-            char ch = keycode_to_char(key);
+            char ch = input_char_from_event(key, is_ping_host_char);
             if (ch) {
                 ping_host_buf_ += ch;
                 ping_update_input();
@@ -897,6 +923,7 @@ private:
     {
         if (IS_KEY_RELEASED(e))
         {
+            cur_elm_ = (const struct key_item *)lv_event_get_param(e);
             uint32_t key = LV_EVENT_KEYBOARD_GET_KEY(e);
             switch (view_state_)
             {
@@ -904,6 +931,7 @@ private:
             case ViewState::SUB:   handle_sub_key(key);  break;
             case ViewState::INPUT: handle_sub_key(key);  break;
             }
+            cur_elm_ = nullptr;
         }
     }
 
