@@ -32,6 +32,7 @@ if "cross" in os.environ.get("CONFIG_DEFAULT_FILE", ''):
         os.makedirs("build/config")
         with open("build/config/config_tmp.mk", "w") as f:
             f.write(f'CONFIG_TOOLCHAIN_SYSROOT="{static_lib_path}"\n')
+            f.write(f'CONFIG_TOOLCHAIN_FLAGS="-I{static_lib_path}/usr/include/aarch64-linux-gnu"\n')
 
 os.environ["SDK_PATH"] = str(sdk_path)
 os.environ["EXT_COMPONENTS_PATH"] = str(sdk_path.parent / "ext_components")
