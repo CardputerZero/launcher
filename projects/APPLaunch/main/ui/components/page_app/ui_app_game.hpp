@@ -145,7 +145,7 @@ private:
         lv_obj_clear_flag(game_area_, LV_OBJ_FLAG_SCROLLABLE);
 
         // -- Show ready screen --
-        show_overlay("Press ENTER to Start");
+        show_overlay("Press OK to Start");
     }
 
     // ==================== Overlay text (centered) ====================
@@ -207,7 +207,7 @@ private:
         }
 
         char buf[80];
-        snprintf(buf, sizeof(buf), "Game Over! Score: %d\nENTER: Restart  ESC: Quit", score_);
+        snprintf(buf, sizeof(buf), "Game Over! Score: %d\nOK: Restart  ESC: Quit", score_);
         show_overlay(buf);
     }
 
@@ -412,7 +412,7 @@ private:
             state_ = STATE_READY;
             lv_obj_clean(game_area_);
             overlay_lbl_ = nullptr;
-            show_overlay("Press ENTER to Start");
+            show_overlay("Press OK to Start");
             score_ = 0;
             update_score_label();
             break;

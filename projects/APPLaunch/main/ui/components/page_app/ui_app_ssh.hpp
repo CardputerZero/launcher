@@ -103,7 +103,7 @@ private:
         lv_obj_set_style_text_font(lbl_title, &lv_font_montserrat_14, LV_PART_MAIN | LV_STATE_DEFAULT);
 
         lv_obj_t *lbl_hint_title = lv_label_create(title_bar);
-        lv_label_set_text(lbl_hint_title, "ENTER:Connect  ESC:Back");
+        lv_label_set_text(lbl_hint_title, "OK:Connect  ESC:Back");
         lv_obj_set_align(lbl_hint_title, LV_ALIGN_RIGHT_MID);
         lv_obj_set_x(lbl_hint_title, -4);
         lv_obj_set_style_text_color(lbl_hint_title, lv_color_hex(0x7EA8D8), LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -197,7 +197,7 @@ private:
 
         // hint at bottom
         lv_obj_t *lbl_bottom = lv_label_create(bg);
-        lv_label_set_text(lbl_bottom, "UP/DN:field  Type to edit  ENTER:Connect  ESC:Back");
+        lv_label_set_text(lbl_bottom, "UP/DN:field  Type to edit  OK:Connect  ESC:Back");
         lv_obj_set_pos(lbl_bottom, 10, 135);
         lv_obj_set_width(lbl_bottom, 300);
         lv_label_set_long_mode(lbl_bottom, LV_LABEL_LONG_CLIP);

@@ -128,7 +128,7 @@ private:
         lv_obj_set_style_text_font(lbl_title, &lv_font_montserrat_14, LV_PART_MAIN | LV_STATE_DEFAULT);
 
         lv_obj_t *lbl_hint = lv_label_create(title_bar);
-        lv_label_set_text(lbl_hint, "Type+ENTER:send  ESC:back");
+        lv_label_set_text(lbl_hint, "Type+OK:send  ESC:back");
         lv_obj_set_align(lbl_hint, LV_ALIGN_RIGHT_MID);
         lv_obj_set_x(lbl_hint, -4);
         lv_obj_set_style_text_color(lbl_hint, lv_color_hex(0x7EA8D8), LV_PART_MAIN | LV_STATE_DEFAULT);

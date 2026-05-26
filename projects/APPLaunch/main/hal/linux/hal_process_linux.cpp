@@ -11,6 +11,7 @@
 #include <thread>
 #include <linux/input.h>
 #include <pwd.h>
+#include <grp.h>
 
 extern "C" {
     extern void keyboard_pause(void);
@@ -54,12 +55,19 @@ static void exec_as_user(const char *exec_path)
 {
     const char *user = get_run_user();
     if (getuid() == 0 && strcmp(user, "root") != 0) {
-        char cmd[2048];
-        snprintf(cmd, sizeof(cmd), "runuser -l %s -c '%s'", user, exec_path);
-        execlp("/bin/sh", "sh", "-c", cmd, (char *)NULL);
-    } else {
-        execlp("/bin/sh", "sh", "-c", exec_path, (char *)NULL);
+        struct passwd *pw = getpwnam(user);
+        if (pw) {
+            initgroups(pw->pw_name, pw->pw_gid);
+            setgid(pw->pw_gid);
+            setuid(pw->pw_uid);
+            setenv("HOME", pw->pw_dir, 1);
+            setenv("USER", pw->pw_name, 1);
+            setenv("LOGNAME", pw->pw_name, 1);
+            setenv("SHELL", pw->pw_shell[0] ? pw->pw_shell : "/bin/bash", 1);
+            chdir(pw->pw_dir);
+        }
     }
+    execlp("/bin/sh", "sh", "-c", exec_path, (char *)NULL);
 }
 
 /* ------------------------------------------------------------------
@@ -248,3 +256,4 @@ void hal_system_reboot(void)
     printf("[HAL] reboot\n");
     system("sudo reboot");
 }
+// rebuild trigger

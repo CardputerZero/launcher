@@ -678,7 +678,7 @@ private:
         ui_obj_["ui_folder_path_lbl"] = lbl_path;
 
         lv_obj_t *lbl_h = lv_label_create(panel);
-        lv_label_set_text(lbl_h, "UP/DN:sel  RIGHT:enter dir  LEFT:up  ENTER:load");
+        lv_label_set_text(lbl_h, "UP/DN:sel  RIGHT:enter dir  LEFT:up  OK:load");
         lv_obj_set_pos(lbl_h, 2, 132);
         lv_obj_set_width(lbl_h, 312);
         lv_label_set_long_mode(lbl_h, LV_LABEL_LONG_CLIP);
@@ -833,7 +833,7 @@ private:
         lv_obj_set_style_text_font(lbl_t, &lv_font_montserrat_12, LV_PART_MAIN | LV_STATE_DEFAULT);
 
         lv_obj_t *lbl_h = lv_label_create(panel);
-        lv_label_set_text(lbl_h, "UP/DOWN: select   ENTER: play   p/ESC: cancel");
+        lv_label_set_text(lbl_h, "UP/DOWN: select   OK: play   p/ESC: cancel");
         lv_obj_set_pos(lbl_h, 2, 132);
         lv_obj_set_style_text_color(lbl_h, lv_color_hex(0x2A6A4A), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_text_font(lbl_h, &lv_font_montserrat_10, LV_PART_MAIN | LV_STATE_DEFAULT);

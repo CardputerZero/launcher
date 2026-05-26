@@ -102,6 +102,11 @@ private:
 
     // ---- Bluetooth state ----
     lv_obj_t *bt_status_lbl_ = nullptr;
+    lv_obj_t *bt_list_cont_ = nullptr;
+    lv_obj_t *bt_hint_lbl_ = nullptr;
+    hal_bt_device_t bt_devices_[BT_DEVICE_MAX];
+    int bt_device_count_ = 0;
+    int bt_sel_ = 0;
     int bt_powered_ = 0;
 
     // ---- Power sub-page labels ----
@@ -276,7 +281,7 @@ private:
                     "LVGL    : 9.x",
                     "OS Build: " __DATE__,
                     launcher_build,
-                    "Shortcut: Ctrl+S screenshot",
+                    "Shortcut: Ctrl+Alt+S screenshot",
                 };
                 for (int i = 0; i < 5; ++i) {
                     lv_obj_t *lbl = lv_label_create(c);
@@ -312,7 +317,7 @@ private:
         lv_obj_set_style_pad_all(wifi_list_cont_, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_clear_flag(wifi_list_cont_, LV_OBJ_FLAG_SCROLLABLE);
 
-        make_label(c, "UP/DN:select ENTER:connect R:refresh", 0, 102, 0x555555, &lv_font_montserrat_10);
+        make_label(c, "UP/DN:select OK:connect R:refresh", 0, 102, 0x555555, &lv_font_montserrat_10);
 
         wifi_do_scan();
     }
@@ -433,7 +438,7 @@ private:
         lv_obj_set_width(pw_input_lbl_, 200);
         lv_label_set_long_mode(pw_input_lbl_, LV_LABEL_LONG_CLIP);
 
-        pw_hint_lbl_ = make_label(content, "Type password, ENTER to connect, ESC to cancel", 0, 50, 0x555555, &lv_font_montserrat_10);
+        pw_hint_lbl_ = make_label(content, "Type password, OK to connect, ESC to cancel", 0, 50, 0x555555, &lv_font_montserrat_10);
     }
 
     void wifi_pw_update_display()
@@ -457,6 +462,7 @@ private:
         if (key == KEY_ENTER) {
             if (pw_hint_lbl_)
                 lv_label_set_text(pw_hint_lbl_, "Connecting...");
+            lv_refr_now(NULL);
             int ret = hal_wifi_connect(wifi_pw_ssid_.c_str(), wifi_pw_buf_.c_str());
             view_state_ = ViewState::SUB;
             lv_obj_t *content = ui_obj_.count("sub_content") ? ui_obj_["sub_content"] : nullptr;
@@ -464,8 +470,15 @@ private:
                 lv_obj_clean(content);
                 build_wifi_page(content);
             }
-            if (ret == 0)
+            if (ret == 0) {
                 wifi_refresh_status();
+            } else {
+                if (wifi_status_lbl_) {
+                    lv_label_set_text(wifi_status_lbl_, "Connection failed");
+                    lv_obj_set_style_text_color(wifi_status_lbl_,
+                        lv_color_hex(0xE74C3C), LV_PART_MAIN | LV_STATE_DEFAULT);
+                }
+            }
             return;
         }
         if (key == KEY_BACKSPACE) {
@@ -500,15 +513,79 @@ private:
         bt_powered_ = st.powered;
 
         char buf[128];
-        snprintf(buf, sizeof(buf), "%s  Bluetooth: %s",
-                 LV_SYMBOL_BLUETOOTH, bt_powered_ ? "ON" : "OFF");
-        bt_status_lbl_ = make_label(c, buf, 0, 8, bt_powered_ ? 0x58A6FF : 0xADD8E6, &lv_font_montserrat_14);
+        snprintf(buf, sizeof(buf), "%s  Bluetooth: %s  %s",
+                 LV_SYMBOL_BLUETOOTH, bt_powered_ ? "ON" : "OFF", st.address);
+        bt_status_lbl_ = make_label(c, buf, 0, 2, bt_powered_ ? 0x58A6FF : 0xADD8E6);
 
-        char addr_buf[64];
-        snprintf(addr_buf, sizeof(addr_buf), "Address: %s", st.address);
-        make_label(c, addr_buf, 0, 34, 0x888888);
+        bt_list_cont_ = lv_obj_create(c);
+        lv_obj_set_size(bt_list_cont_, 296, 72);
+        lv_obj_set_pos(bt_list_cont_, 0, 18);
+        lv_obj_set_style_bg_opa(bt_list_cont_, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_border_width(bt_list_cont_, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_pad_all(bt_list_cont_, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_clear_flag(bt_list_cont_, LV_OBJ_FLAG_SCROLLABLE);
 
-        make_label(c, "Press ENTER to toggle", 0, 58, 0x555555);
+        bt_hint_lbl_ = make_label(c, "OK:toggle S:scan  ESC:back", 0, 94, 0x555555, &lv_font_montserrat_10);
+
+        if (bt_powered_) {
+            make_label(bt_list_cont_, "Press S to scan...", 4, 8, 0x888888);
+        } else {
+            make_label(bt_list_cont_, "Bluetooth is OFF. OK to enable.", 4, 8, 0x888888);
+        }
+    }
+
+    void bt_do_scan()
+    {
+        if (!bt_powered_) return;
+        if (bt_hint_lbl_)
+            lv_label_set_text(bt_hint_lbl_, "Scanning (4s)...");
+        lv_refr_now(NULL);
+        bt_device_count_ = hal_bt_scan(bt_devices_, BT_DEVICE_MAX);
+        bt_sel_ = 0;
+        bt_build_device_rows();
+        if (bt_hint_lbl_)
+            lv_label_set_text(bt_hint_lbl_, "OK:toggle S:scan UP/DN:select ESC:back");
+    }
+
+    void bt_build_device_rows()
+    {
+        if (!bt_list_cont_) return;
+        lv_obj_clean(bt_list_cont_);
+
+        if (bt_device_count_ == 0) {
+            make_label(bt_list_cont_, "No devices found", 4, 8, 0x888888);
+            return;
+        }
+
+        int visible = 4;
+        int offset = bt_sel_ - visible / 2;
+        if (offset < 0) offset = 0;
+        if (offset > bt_device_count_ - visible) offset = bt_device_count_ - visible;
+        if (offset < 0) offset = 0;
+
+        for (int vi = 0; vi < visible && (vi + offset) < bt_device_count_; ++vi) {
+            int di = vi + offset;
+            bool sel = (di == bt_sel_);
+            hal_bt_device_t *dev = &bt_devices_[di];
+
+            lv_obj_t *row = lv_obj_create(bt_list_cont_);
+            lv_obj_set_size(row, 294, 16);
+            lv_obj_set_pos(row, 0, vi * 18);
+            lv_obj_set_style_radius(row, 3, LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_obj_set_style_border_width(row, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_obj_set_style_pad_all(row, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+
+            uint32_t bg = sel ? 0x1F3A5F : 0x161B22;
+            lv_obj_set_style_bg_color(row, lv_color_hex(bg), LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_obj_set_style_bg_opa(row, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+            char txt[128];
+            snprintf(txt, sizeof(txt), "%s %s  %s",
+                     LV_SYMBOL_BLUETOOTH, dev->name, dev->address);
+            uint32_t tc = sel ? 0xFFFFFF : 0xCCCCCC;
+            make_label(row, txt, 4, 0, tc, &lv_font_montserrat_10);
+        }
     }
 
     void handle_bt_key(uint32_t key)
@@ -518,14 +595,31 @@ private:
             bt_powered_ = !bt_powered_;
             hal_bt_set_power(bt_powered_);
             if (bt_status_lbl_) {
+                hal_bt_status_t st = hal_bt_get_status();
                 char buf[128];
-                snprintf(buf, sizeof(buf), "%s  Bluetooth: %s",
-                         LV_SYMBOL_BLUETOOTH, bt_powered_ ? "ON" : "OFF");
+                snprintf(buf, sizeof(buf), "%s  Bluetooth: %s  %s",
+                         LV_SYMBOL_BLUETOOTH, bt_powered_ ? "ON" : "OFF", st.address);
                 lv_label_set_text(bt_status_lbl_, buf);
                 lv_obj_set_style_text_color(bt_status_lbl_,
                     lv_color_hex(bt_powered_ ? 0x58A6FF : 0xADD8E6),
                     LV_PART_MAIN | LV_STATE_DEFAULT);
             }
+            if (bt_list_cont_) {
+                lv_obj_clean(bt_list_cont_);
+                if (bt_powered_)
+                    make_label(bt_list_cont_, "Press S to scan...", 4, 8, 0x888888);
+                else
+                    make_label(bt_list_cont_, "Bluetooth is OFF. OK to enable.", 4, 8, 0x888888);
+            }
+            break;
+        case KEY_S:
+            bt_do_scan();
+            break;
+        case KEY_UP:
+            if (bt_sel_ > 0) { --bt_sel_; bt_build_device_rows(); }
+            break;
+        case KEY_DOWN:
+            if (bt_sel_ < bt_device_count_ - 1) { ++bt_sel_; bt_build_device_rows(); }
             break;
         case KEY_ESC:
             close_sub_page();
@@ -597,7 +691,7 @@ private:
     // ==================== Sound sub-page ====================
     void build_sound_page(lv_obj_t *c)
     {
-        vol_val_ = hal_volume_read();
+        vol_val_ = hal_config_get_int("volume", hal_volume_read());
         if (vol_val_ < 0) vol_val_ = 39;
         vol_muted_ = (vol_val_ == 0) ? 1 : 0;
 
@@ -605,14 +699,14 @@ private:
         vol_bar_ = make_bar(c, 0, 24, 220, 12, vol_val_, 63, 0x2ECC71);
 
         char buf[32];
-        snprintf(buf, sizeof(buf), "%d/%d", vol_val_, 63);
+        snprintf(buf, sizeof(buf), "%d%%", vol_val_ * 100 / 63);
         vol_lbl_ = make_label(c, buf, 230, 21, 0xFFFFFF);
 
         char mute_buf[32];
         snprintf(mute_buf, sizeof(mute_buf), "Mute: %s", vol_muted_ ? "ON" : "OFF");
         mute_lbl_ = make_label(c, mute_buf, 0, 50, vol_muted_ ? 0xE74C3C : 0xE6EDF3);
 
-        make_label(c, "LEFT/RIGHT: volume  ENTER: mute  ESC: back", 0, 74, 0x555555, &lv_font_montserrat_10);
+        make_label(c, "LEFT/RIGHT: volume  OK: mute  ESC: back", 0, 74, 0x555555, &lv_font_montserrat_10);
     }
 
     void handle_sound_key(uint32_t key)
@@ -622,6 +716,8 @@ private:
             vol_val_ -= 3;
             if (vol_val_ < 0) vol_val_ = 0;
             hal_volume_write(vol_val_);
+            hal_config_set_int("volume", vol_val_);
+            hal_config_save();
             vol_muted_ = (vol_val_ == 0) ? 1 : 0;
             update_vol_ui();
             break;
@@ -629,6 +725,8 @@ private:
             vol_val_ += 3;
             if (vol_val_ > 63) vol_val_ = 63;
             hal_volume_write(vol_val_);
+            hal_config_set_int("volume", vol_val_);
+            hal_config_save();
             vol_muted_ = 0;
             update_vol_ui();
             break;
@@ -642,6 +740,8 @@ private:
                 vol_muted_ = 1;
             }
             hal_volume_write(vol_val_);
+            hal_config_set_int("volume", vol_val_);
+            hal_config_save();
             update_vol_ui();
             break;
         case KEY_ESC:
@@ -658,7 +758,7 @@ private:
             lv_bar_set_value(vol_bar_, vol_val_, LV_ANIM_ON);
         if (vol_lbl_) {
             char buf[32];
-            snprintf(buf, sizeof(buf), "%d/%d", vol_val_, 63);
+            snprintf(buf, sizeof(buf), "%d%%", vol_val_ * 100 / 63);
             lv_label_set_text(vol_lbl_, buf);
         }
         if (mute_lbl_) {
@@ -699,7 +799,7 @@ private:
         lv_obj_clear_flag(pwr_calib_row_, LV_OBJ_FLAG_SCROLLABLE);
         make_label(pwr_calib_row_, LV_SYMBOL_RIGHT " Battery Calib", 5, 1, 0xFFFFFF, &lv_font_montserrat_10);
 
-        pwr_hint_lbl_ = make_label(c, "Auto refresh 1s   ENTER: calib   ESC: back", 0, 130, 0x6E7681, &lv_font_montserrat_10);
+        pwr_hint_lbl_ = make_label(c, "Auto refresh 1s   OK: calib   ESC: back", 0, 130, 0x6E7681, &lv_font_montserrat_10);
         refresh_power_page();
         pwr_timer_ = lv_timer_create(UISetupPage::power_timer_cb, 1000, this);
     }
@@ -761,7 +861,7 @@ private:
         lv_obj_set_width(prompt, 296);
         lv_obj_set_style_text_align(prompt, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-        make_label(c, "ENTER: confirm    ESC: cancel",
+        make_label(c, "OK: confirm    ESC: cancel",
                    0, 96, 0x6E7681, &lv_font_montserrat_10);
     }
 
@@ -840,7 +940,7 @@ private:
         lv_obj_set_width(bqmon_path_lbl_, 292);
         lv_label_set_long_mode(bqmon_path_lbl_, LV_LABEL_LONG_WRAP);
 
-        bqmon_status_lbl_ = make_label(c, "ENTER: refresh  ESC: back", 0, 104, 0x555555, &lv_font_montserrat_10);
+        bqmon_status_lbl_ = make_label(c, "OK: refresh  ESC: back", 0, 104, 0x555555, &lv_font_montserrat_10);
         refresh_bqmon_page();
     }
 
@@ -891,7 +991,7 @@ private:
         snprintf(path_buf, sizeof(path_buf), "sysfs: %s", bq_path.c_str());
         if (bqmon_path_lbl_) lv_label_set_text(bqmon_path_lbl_, path_buf);
         if (bqmon_status_lbl_)
-            lv_label_set_text(bqmon_status_lbl_, ok ? "ENTER/R: refresh  ESC: back" : "Read failed: check bq27220 sysfs files.");
+            lv_label_set_text(bqmon_status_lbl_, ok ? "OK/R: refresh  ESC: back" : "Read failed: check bq27220 sysfs files.");
     }
 
     static bool bqmon_read_long(const std::string &path, long &value)
@@ -1001,7 +1101,7 @@ private:
     {
         bqcal_sel_ = 0;
         bqcal_info_lbl_ = make_label(c, "", 0, 0, 0x58A6FF, &lv_font_montserrat_12);
-        bqcal_status_lbl_ = make_label(c, "ENTER: run  UP/DN: select  ESC: back", 0, 106, 0x555555, &lv_font_montserrat_10);
+        bqcal_status_lbl_ = make_label(c, "OK: run  UP/DN: select  ESC: back", 0, 106, 0x555555, &lv_font_montserrat_10);
 
         const char *actions[BQCAL_ACT_COUNT] = {
             "Refresh battery data",
@@ -1161,7 +1261,7 @@ private:
         lv_obj_set_style_text_font(lbl_title, &lv_font_montserrat_14, LV_PART_MAIN | LV_STATE_DEFAULT);
 
         lv_obj_t *lbl_hint = lv_label_create(title_bar);
-        lv_label_set_text(lbl_hint, "UP/DN:select  ENTER:open  ESC:back");
+        lv_label_set_text(lbl_hint, "UP/DN:select  OK:open  ESC:back");
         lv_obj_set_align(lbl_hint, LV_ALIGN_RIGHT_MID);
         lv_obj_set_x(lbl_hint, -4);
         lv_obj_set_style_text_color(lbl_hint, lv_color_hex(0x7EA8D8), LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -1337,6 +1437,8 @@ private:
         wifi_list_cont_  = nullptr;
         wifi_status_lbl_ = nullptr;
         bt_status_lbl_   = nullptr;
+        bt_list_cont_    = nullptr;
+        bt_hint_lbl_     = nullptr;
         bright_bar_ = nullptr;
         bright_lbl_ = nullptr;
         vol_bar_  = nullptr;
@@ -1462,6 +1564,16 @@ private:
             break;
         }
     }
+};
+
+#else // HAL_PLATFORM_SDL — stub for emulator builds
+#include "../ui_app_page.hpp"
+
+class UISetupPage : public app_base
+{
+public:
+    UISetupPage() : app_base() { set_page_title("SETUP"); }
+    ~UISetupPage() {}
 };
 
 #endif // !HAL_PLATFORM_SDL
