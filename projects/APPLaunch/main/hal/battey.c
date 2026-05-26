@@ -26,5 +26,5 @@ void battery_timer_cb(lv_timer_t *timer)
     if(working)
         return;
     working = 1;
-    thpool_add_work(g_launch_thread_pool, _battery_timer_cb, &working);
+    thpool_add_work(g_launch_thread_pool, (void (*)(void *))_battery_timer_cb, &working);
 }
