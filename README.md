@@ -43,11 +43,8 @@ M5CardputerZero-UserDemo/
 │   │           ├── Animation/  # Animation effects
 │   │           ├── fonts/      # Font assets
 │   │           └── images/     # Image assets
-│   ├── 2048/                   # 2048 game
 │   ├── Calculator/             # Calculator
 │   ├── AppStore/               # App store
-│   ├── AudioSpectrum/          # Audio spectrum
-│   ├── StreamPlayer/           # Stream player
 │   └── HelloWorld/             # Hello World example
 ├── ext_components/             # External components (Miniaudio, etc.)
 ├── doc/                        # Documentation resources

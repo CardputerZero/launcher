@@ -100,8 +100,19 @@ def create_applaunch_deb(version='0.1', src_folder='../dist', revision='m5stack1
             print(f'  Included: {extra}')
 
     # ------------------------------------------------------- APPLaunch/
-    print(os.path.join(src_folder, "APPLaunch"), os.path.join(deb_folder, INSTALL_PREFIX))
-    shutil.copytree(os.path.join(src_folder, "APPLaunch"), os.path.join(deb_folder, INSTALL_PREFIX), dirs_exist_ok=True)
+    source_app_tree = os.path.abspath(os.path.join(tools_dir, '..', 'APPLaunch'))
+    app_src = source_app_tree if os.path.exists(source_app_tree) else os.path.join(src_folder, "APPLaunch")
+    app_dst = os.path.join(deb_folder, INSTALL_PREFIX)
+    print(app_src, app_dst)
+    shutil.copytree(app_src, app_dst, dirs_exist_ok=True)
+
+    appstore_images = os.path.abspath(os.path.join(tools_dir, '..', '..', 'AppStore', 'share', 'images'))
+    if os.path.isdir(appstore_images):
+        images_dst = os.path.join(app_dst, 'share', 'images')
+        os.makedirs(images_dst, exist_ok=True)
+        for pattern in ('store_wordmark.png', 'store_arrow_*.png'):
+            for image_src in glob.glob(os.path.join(appstore_images, pattern)):
+                shutil.copy2(image_src, os.path.join(images_dst, os.path.basename(image_src)))
 
 
     # ------------------------------------------------------- DEBIAN/control
@@ -175,7 +186,7 @@ if __name__ == '__main__':
         os.system('rm -rf ./*.deb m5stack_*')
         sys.exit(0)
 
-    version    = '0.2'
+    version    = '0.2.1'
     src_folder = '../dist'
     revision   = 'm5stack1'
 
