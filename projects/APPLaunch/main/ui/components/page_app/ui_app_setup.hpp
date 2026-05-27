@@ -887,8 +887,13 @@ private:
         // Default sub_selected to position ~3 if enough items
         int sub_center_vi = ROW_CENTER;
 
-        // Sub items using shared carousel label — track min X for arrow positioning
+        // Sub items — two passes: create labels, then place indicators aligned
+        struct SubLabelInfo { lv_obj_t *lbl; int si; int right_edge; };
+        SubLabelInfo sub_labels[ROWS_VISIBLE] = {};
+        int sub_label_count = 0;
         int right_min_x = SCREEN_W;
+        int right_max_edge = 0;
+
         for (int vi = 0; vi < ROWS_VISIBLE; ++vi) {
             int si = sub_selected_idx_ - sub_center_vi + vi;
             if (si < 0 || si >= sub_count) continue;
@@ -896,18 +901,30 @@ private:
             SubItem &sub = item.sub_items[si];
             lv_obj_t *lbl = create_carousel_label(cont, vi, sub_center_vi,
                                                    sub.label.c_str(), SUB_CENTER_X, true);
-
             lv_obj_update_layout(lbl);
             int lx = lv_obj_get_x(lbl);
+            int tw = lv_obj_get_width(lbl);
             if (lx < right_min_x) right_min_x = lx;
+            if (lx + tw > right_max_edge) right_max_edge = lx + tw;
 
-            // Toggle indicator (to the right of text)
-            if (sub.is_toggle) {
-                int tw = lv_obj_get_width(lbl);
-                lv_obj_t *ind = lv_img_create(cont);
-                lv_img_set_src(ind, sub.toggle_state ? img_ok_.c_str() : img_cross_.c_str());
-                lv_obj_set_pos(ind, lx + tw + 6, lv_obj_get_y(lbl) + 2);
-            }
+            sub_labels[sub_label_count++] = {lbl, si, lx + tw};
+        }
+
+        // Place toggle indicators aligned at max_right_edge + 10
+        int indicator_x = right_max_edge + 10;
+        for (int i = 0; i < sub_label_count; ++i) {
+            SubItem &sub = item.sub_items[sub_labels[i].si];
+            if (!sub.is_toggle) continue;
+
+            lv_obj_t *lbl = sub_labels[i].lbl;
+            lv_obj_t *ind = lv_img_create(cont);
+            lv_img_set_src(ind, sub.toggle_state ? img_ok_.c_str() : img_cross_.c_str());
+            // Vertically center indicator with the label
+            lv_obj_update_layout(ind);
+            int ind_h = lv_obj_get_height(ind);
+            int lbl_y = lv_obj_get_y(lbl);
+            int lbl_h = lv_obj_get_height(lbl);
+            lv_obj_set_pos(ind, indicator_x, lbl_y + (lbl_h - ind_h) / 2);
         }
 
         // Blue arrow centered between left text right edge and right column left edge
