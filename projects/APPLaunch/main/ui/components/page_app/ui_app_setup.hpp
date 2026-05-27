@@ -14,6 +14,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
+#include <ctime>
 #include <fcntl.h>
 #ifndef _WIN32
 #include <unistd.h>
@@ -130,39 +131,36 @@ private:
     // ==================== Menu init ====================
     void menu_init()
     {
-        // --- Launcher (app enable/disable, OX toggle) ---
+        // --- Launcher (app enable/disable, OX toggle with persistence) ---
         {
             MenuItem m;
             m.label = "Launcher";
-            m.sub_items = {
-                {"Python",   true, true, nullptr},
-                {"Store",    true, true, nullptr},   // always enabled (enforced)
-                {"CLI",      true, true, nullptr},   // always enabled (enforced)
-                {"CLAW",     true, true, nullptr},
-                {"Setting",  true, true, nullptr},   // always enabled (enforced)
-                {"Music",    true, true, nullptr},
-                {"Audio",    true, true, nullptr},
-                {"Hack",     true, true, nullptr},
-                {"Game",     true, true, nullptr},
-                {"Math",     true, true, nullptr},
-                {"IP Panel", true, true, nullptr},
-                {"Stocks",   true, true, nullptr},
-                {"Chat",     true, true, nullptr},
-                {"e-Mail",   true, true, nullptr},
-                {"File",     true, true, nullptr},
-                {"AICli",    true, true, nullptr},
-                {"SSH",      true, true, nullptr},
-                {"Mesh",     true, true, nullptr},
-                {"Rec",      true, true, nullptr},
-                {"Camera",   true, true, nullptr},
-                {"UnitEnv",  true, true, nullptr},
-                {"Midi",     true, true, nullptr},
-                {"Gpio",     true, true, nullptr},
-                {"LoRa",     true, true, nullptr},
-                {"Gallery",  true, true, nullptr},
-                {"HikePod",  true, true, nullptr},
-                {"Tank",     true, true, nullptr},
+            static const char *app_keys[] = {
+                "Python", "Store", "CLI", "CLAW", "Setting",
+                "Music", "Audio", "Hack", "Game", "Math",
+                "IP_Panel", "Stocks", "Chat", "e-Mail", "File",
+                "AICli", "SSH", "Mesh", "Rec", "Camera",
+                "UnitEnv", "Midi", "Gpio", "LoRa", "Gallery",
+                "HikePod", "Tank"
             };
+            static const char *app_labels[] = {
+                "Python", "Store", "CLI", "CLAW", "Setting",
+                "Music", "Audio", "Hack", "Game", "Math",
+                "IP Panel", "Stocks", "Chat", "e-Mail", "File",
+                "AICli", "SSH", "Mesh", "Rec", "Camera",
+                "UnitEnv", "Midi", "Gpio", "LoRa", "Gallery",
+                "HikePod", "Tank"
+            };
+            // Always-on apps (cannot be disabled)
+            static const char *always_on[] = {"Store", "CLI", "Setting"};
+
+            for (int i = 0; i < 27; ++i) {
+                char cfg_key[64];
+                snprintf(cfg_key, sizeof(cfg_key), "app_%s", app_keys[i]);
+                bool enabled = hal_config_get_int(cfg_key, 1) != 0;
+                m.sub_items.push_back({app_labels[i], true, enabled,
+                    [this, i]() { save_app_toggle(i); }});
+            }
             menu_items_.push_back(m);
         }
         // --- Boot ---
@@ -404,10 +402,37 @@ private:
         system(cmd);
     }
 
+    void save_app_toggle(int idx)
+    {
+        static const char *app_keys[] = {
+            "Python", "Store", "CLI", "CLAW", "Setting",
+            "Music", "Audio", "Hack", "Game", "Math",
+            "IP_Panel", "Stocks", "Chat", "e-Mail", "File",
+            "AICli", "SSH", "Mesh", "Rec", "Camera",
+            "UnitEnv", "Midi", "Gpio", "LoRa", "Gallery",
+            "HikePod", "Tank"
+        };
+        // Enforce always-on apps
+        static const char *always_on[] = {"Store", "CLI", "Setting"};
+        for (auto *ao : always_on) {
+            if (strcmp(app_keys[idx], ao) == 0) {
+                // Force back to enabled
+                menu_items_[0].sub_items[idx].toggle_state = true;
+                return;
+            }
+        }
+        char cfg_key[64];
+        snprintf(cfg_key, sizeof(cfg_key), "app_%s", app_keys[idx]);
+        bool enabled = menu_items_[0].sub_items[idx].toggle_state;
+        hal_config_set_int(cfg_key, enabled ? 1 : 0);
+        hal_config_save();
+    }
+
     void factory_reset()
     {
-        remove("/usr/share/APPLaunch/settings.json");
-        // TODO: reload defaults
+        // Delete config file and restart
+        remove("/var/lib/applaunch/settings");
+        hal_system_reboot();
     }
 
     // ==================== WiFi functions ====================
@@ -1092,7 +1117,7 @@ private:
             // On release, also throttle to prevent double-trigger
             uint32_t now = lv_tick_get();
             if (key == KEY_UP || key == KEY_DOWN) {
-                if (now - last_repeat_tick_ < 150) return;
+                if (now - last_repeat_tick_ < 300) return;
                 last_repeat_tick_ = now;
             }
         }
