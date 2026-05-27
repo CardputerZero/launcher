@@ -9,6 +9,8 @@ Import('env')
 with open(env['PROJECT_TOOL_S']) as f:
     exec(f.read())
 
+rootfs_path=os.environ.get("CONFIG_TOOLCHAIN_SYSROOT", "")
+
 def wget_github(url):
     repo = _parse.parse("{}://{}/{}/{}.git", url)
     repo_name = repo[3]
@@ -116,22 +118,15 @@ if 'linux_x86_sdl2_config_defaults.mk' in os.environ.get("CONFIG_DEFAULT_FILE", 
 # x86 cross
 if 'linux_x86_cross_cp0_config_defaults.mk' in os.environ.get("CONFIG_DEFAULT_FILE", ''):
     lvgl_component['DEFINITIONS'] += ['-D_REENTRANT']
-    lvgl_component['INCLUDE'] += ['/usr/include/freetype2', '/usr/include/libpng16']
+    lvgl_component['INCLUDE'] += [f'{rootfs_path}/usr/include/freetype2', 
+                                  f'{rootfs_path}/usr/include/libpng16',
+                                  f'{rootfs_path}/usr/include/libcamera',
+                                  ]
 
     SRCS += Glob('hal/linux/*.c*')
     REQUIREMENTS += ['input', 'xkbcommon', 'udev', 'freetype']
-    # add libcamera — note: pkg-config name is 'libcamera', not 'camera'.
-    # Linker still wants -lcamera but we need explicit cflags for the headers.
     REQUIREMENTS += ['camera', 'camera-base', 'jpeg']
-    try:
-        DEFINITIONS += subprocess.check_output(
-            ['pkg-config', '--cflags', 'libcamera'], text=True).split()
-    except Exception:
-        # Fallback: assume Debian's standard libcamera header layout under the
-        # configured sysroot. CONFIG_TOOLCHAIN_SYSROOT is empty for native builds.
-        _sr = os.environ.get('CONFIG_TOOLCHAIN_SYSROOT', '')
-        DEFINITIONS += [f'-I{_sr}/usr/include/libcamera']
-    LDFLAGS += [f'{os.environ.get("CONFIG_TOOLCHAIN_SYSROOT", "")}/usr/lib/aarch64-linux-gnu/libstdc++.so.6']
+    LDFLAGS += [f'{rootfs_path}/usr/lib/aarch64-linux-gnu/libstdc++.so.6']
     DEFINITIONS += ['-Wno-format-truncation']
 if 'mac_cross_cp0_config_defaults.mk' in os.environ.get("CONFIG_DEFAULT_FILE", ''):
     lvgl_component['DEFINITIONS'] += ['-D_REENTRANT']
