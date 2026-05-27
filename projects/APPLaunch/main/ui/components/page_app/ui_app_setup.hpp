@@ -27,6 +27,7 @@
 #include "hal/hal_settings.h"
 #include "hal/hal_process.h"
 #include "hal/hal_config.h"
+#include "hal/hal_audio.h"
 
 // ============================================================
 //  系统设置界面  UISetupPage  (Carousel Design)
@@ -108,6 +109,13 @@ private:
     static constexpr int ROWS_VISIBLE = 7;
     static constexpr int ROW_CENTER   = 3;
 
+    // Audio feedback paths
+    std::string snd_enter_;
+    std::string snd_back_;
+
+    void play_enter() { if (!snd_enter_.empty()) hal_audio_play(snd_enter_.c_str()); }
+    void play_back()  { if (!snd_back_.empty()) hal_audio_play(snd_back_.c_str()); }
+
     void cache_image_paths()
     {
         img_arrow_up_    = img_path("setting_red_up.png");
@@ -115,6 +123,8 @@ private:
         img_right_arrow_ = img_path("setting_right_arrow.png");
         img_ok_          = img_path("setting_ok.png");
         img_cross_       = img_path("setting_cross.png");
+        snd_enter_       = audio_path("key_enter.wav");
+        snd_back_        = audio_path("key_back.wav");
     }
 
     // ==================== Menu init ====================
@@ -693,9 +703,9 @@ private:
         }
         if (arrow_x < left_right_edge + 2) arrow_x = left_right_edge + 2;
 
-        // Vertically center the arrow (19px tall) within the row, +1 nudge down
+        // Vertically center the arrow (19px tall) within the row
         static constexpr int ARROW_H = 19;
-        int arrow_y = row_y(ROW_CENTER) + (row_h() - ARROW_H) / 2 + 1;
+        int arrow_y = row_y(ROW_CENTER) + (row_h() - ARROW_H) / 2;
 
         lv_obj_t *arrow = lv_img_create(parent);
         lv_img_set_src(arrow, img_right_arrow_.c_str());
@@ -738,7 +748,7 @@ private:
         lv_label_set_text(hint_lbl_, "ok:enter");
         lv_obj_set_pos(hint_lbl_, SCREEN_W - 80, row_y(ROW_CENTER) + (row_h() - 14) / 2);
         lv_obj_set_style_text_color(hint_lbl_, lv_color_hex(0x00CC66), LV_PART_MAIN);
-        lv_obj_set_style_text_font(hint_lbl_, &lv_font_montserrat_12, LV_PART_MAIN);
+        lv_obj_set_style_text_font(hint_lbl_, g_font_bold_14 ? g_font_bold_14 : &lv_font_montserrat_14, LV_PART_MAIN);
 
         // Row labels
         for (int vi = 0; vi < ROWS_VISIBLE; ++vi) {
@@ -926,7 +936,7 @@ private:
             lv_label_set_text(hint, "ok:enter");
         lv_obj_set_pos(hint, SCREEN_W - 80, row_y(sub_center_vi) + (row_h() - 14) / 2);
         lv_obj_set_style_text_color(hint, lv_color_hex(0x00CC66), LV_PART_MAIN);
-        lv_obj_set_style_text_font(hint, &lv_font_montserrat_12, LV_PART_MAIN);
+        lv_obj_set_style_text_font(hint, g_font_bold_14 ? g_font_bold_14 : &lv_font_montserrat_14, LV_PART_MAIN);
     }
 
     // ==================== Value select view (3rd level) ====================
@@ -995,7 +1005,7 @@ private:
         lv_label_set_text(hint, "ok:set");
         lv_obj_set_pos(hint, SCREEN_W - 70, row_y(ROW_CENTER) + (row_h() - 14) / 2);
         lv_obj_set_style_text_color(hint, lv_color_hex(0x00CC66), LV_PART_MAIN);
-        lv_obj_set_style_text_font(hint, &lv_font_montserrat_12, LV_PART_MAIN);
+        lv_obj_set_style_text_font(hint, g_font_bold_14 ? g_font_bold_14 : &lv_font_montserrat_14, LV_PART_MAIN);
     }
 
     void rebuild_view()
@@ -1070,6 +1080,7 @@ private:
             break;
         case KEY_ENTER:
         case KEY_RIGHT: {
+            play_enter();
             MenuItem &m = menu_items_[selected_idx_];
             if (m.on_enter) m.on_enter();
             if (!m.sub_items.empty()) {
@@ -1081,6 +1092,7 @@ private:
             break;
         }
         case KEY_ESC:
+            play_back();
             if (go_back_home) go_back_home();
             break;
         default:
@@ -1102,6 +1114,7 @@ private:
             break;
         case KEY_ENTER:
         case KEY_RIGHT: {
+            play_enter();
             if (sub_selected_idx_ < sub_count) {
                 SubItem &sub = item.sub_items[sub_selected_idx_];
                 if (sub.is_toggle) {
@@ -1116,6 +1129,7 @@ private:
         }
         case KEY_ESC:
         case KEY_LEFT:
+            play_back();
             view_state_ = ViewState::MAIN;
             build_main_view();
             break;
