@@ -478,7 +478,10 @@ private:
         }
         if (arrow_x < left_right_edge + 2) arrow_x = left_right_edge + 2;
 
-        int arrow_y = lv_obj_get_y(left_lbl);
+        // Vertically center the arrow (19px tall) within the row
+        static constexpr int ARROW_H = 19;
+        int arrow_y = row_y(ROW_CENTER) + (row_h() - ARROW_H) / 2;
+
         lv_obj_t *arrow = lv_img_create(parent);
         lv_img_set_src(arrow, img_right_arrow_.c_str());
         lv_obj_set_pos(arrow, arrow_x, arrow_y);
