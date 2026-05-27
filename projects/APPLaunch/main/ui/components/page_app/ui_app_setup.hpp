@@ -163,13 +163,13 @@ private:
             }
             menu_items_.push_back(m);
         }
-        // --- Boot ---
+        // --- Boot (with confirmation via value select) ---
         {
             MenuItem m;
             m.label = "Boot";
             m.sub_items = {
-                {"Reboot",   false, false, [this]() { hal_system_reboot(); }},
-                {"Shutdown", false, false, [this]() { hal_system_shutdown(); }},
+                {"Reboot",   false, false, [this]() { enter_confirm_action("Reboot?", [this](){ hal_system_reboot(); }); }},
+                {"Shutdown", false, false, [this]() { enter_confirm_action("Shutdown?", [this](){ hal_system_shutdown(); }); }},
             };
             menu_items_.push_back(m);
         }
@@ -212,7 +212,7 @@ private:
             };
             menu_items_.push_back(m);
         }
-        // --- Info (display only — values refreshed on enter) ---
+        // --- Info (auto-refresh with timer) ---
         {
             MenuItem m;
             m.label = "Info";
@@ -220,8 +220,23 @@ private:
                 {"Battery: --%",     false, false, nullptr},
                 {"Temp: --C",        false, false, nullptr},
                 {"Current: --mA",    false, false, nullptr},
+                {"Voltage: --V",     false, false, nullptr},
+                {"BQ Calibrate",     false, false, [this]() { enter_bq_calibrate(); }},
             };
-            m.on_enter = [this]() { refresh_info_values(); };
+            m.on_enter = [this]() { refresh_info_values(); start_info_timer(); };
+            menu_items_.push_back(m);
+        }
+        // --- About ---
+        {
+            MenuItem m;
+            m.label = "About";
+            m.sub_items = {
+                {"CardputerZero",    false, false, nullptr},
+                {"LVGL 9.x",        false, false, nullptr},
+                {"",                 false, false, nullptr},
+                {"",                 false, false, nullptr},
+            };
+            m.on_enter = [this]() { refresh_about_info(); };
             menu_items_.push_back(m);
         }
         // --- ExtPort ---
@@ -501,7 +516,6 @@ private:
 
     void refresh_info_values()
     {
-        // Find the Info menu item and update its sub_items labels
         for (auto &m : menu_items_) {
             if (m.label != "Info") continue;
             hal_battery_info_t bat = hal_battery_read();
@@ -512,8 +526,12 @@ private:
             m.sub_items[1].label = buf;
             snprintf(buf, sizeof(buf), "Current: %dmA", bat.valid ? bat.current_ma : 0);
             m.sub_items[2].label = buf;
+            snprintf(buf, sizeof(buf), "Voltage: %.2fV", bat.valid ? bat.voltage_mv / 1000.0 : 0.0);
+            m.sub_items[3].label = buf;
             break;
         }
+        // Refresh the sub view if currently showing Info
+        if (view_state_ == ViewState::SUB) build_sub_view();
     }
 
     // ==================== RTC ====================
@@ -630,7 +648,8 @@ private:
 
     void bt_do_scan()
     {
-        // TODO: show BT scan results in a list page (similar to WiFi)
+        hal_bt_device_t devices[BT_DEVICE_MAX];
+        hal_bt_scan(devices, BT_DEVICE_MAX);
     }
 
     // ==================== Ethernet ====================
@@ -729,6 +748,91 @@ private:
                "wget -q https://github.com/CardputerZero/M5CardputerZero-Launcher/releases/latest/download/applaunch_*.deb -O /tmp/launcher_update.deb 2>/dev/null && "
                "dpkg -i /tmp/launcher_update.deb >/dev/null 2>&1 && "
                "systemctl restart APPLaunch &");
+    }
+
+    // ==================== Confirm action (Reboot/Shutdown) ====================
+    std::function<void()> confirm_action_;
+
+    void enter_confirm_action(const char *title, std::function<void()> action)
+    {
+        confirm_action_ = action;
+        val_title_ = title;
+        val_options_ = {"Yes", "No"};
+        val_sel_idx_ = 1; // default to No
+        view_state_ = ViewState::VALUE_SELECT;
+        transition_enter_level();
+    }
+
+    // ==================== Info timer (auto-refresh) ====================
+    lv_timer_t *info_timer_ = nullptr;
+
+    void start_info_timer()
+    {
+        stop_info_timer();
+        info_timer_ = lv_timer_create([](lv_timer_t *t) {
+            UISetupPage *self = (UISetupPage *)lv_timer_get_user_data(t);
+            if (self && self->view_state_ == ViewState::SUB) self->refresh_info_values();
+        }, 1000, this);
+    }
+
+    void stop_info_timer()
+    {
+        if (info_timer_) { lv_timer_delete(info_timer_); info_timer_ = nullptr; }
+    }
+
+    // ==================== BQ27220 Calibration ====================
+    void enter_bq_calibrate()
+    {
+        val_title_ = "BQ Calib";
+        val_options_ = {"Enter CAL", "CC Offset", "Board Offset", "Exit CAL"};
+        val_sel_idx_ = 0;
+        view_state_ = ViewState::VALUE_SELECT;
+        transition_enter_level();
+    }
+
+    void apply_bq_calibrate()
+    {
+#ifdef __linux__
+        static constexpr const char *BQ_DEV = "/dev/i2c-1";
+        static constexpr int BQ_ADDR = 0x55;
+        int cmds[] = {0x0081, 0x000A, 0x0009, 0x0080}; // Enter/CC/Board/Exit
+        int fd = open(BQ_DEV, O_RDWR);
+        if (fd < 0) return;
+        struct i2c_msg msg;
+        struct i2c_rdwr_ioctl_data data;
+        unsigned char buf[3] = {0x00, (unsigned char)(cmds[val_sel_idx_] & 0xFF),
+                                      (unsigned char)((cmds[val_sel_idx_] >> 8) & 0xFF)};
+        msg.addr = BQ_ADDR; msg.flags = 0; msg.len = 3; msg.buf = buf;
+        data.msgs = &msg; data.nmsgs = 1;
+        ioctl(fd, I2C_RDWR, &data);
+        close(fd);
+#endif
+    }
+
+    // ==================== About ====================
+    void refresh_about_info()
+    {
+        for (auto &m : menu_items_) {
+            if (m.label != "About") continue;
+            m.sub_items[0].label = "Device: M5Cardputer Zero";
+            m.sub_items[1].label = "LVGL: 9.x";
+            char buf[64];
+            snprintf(buf, sizeof(buf), "Build: %s", __DATE__);
+            m.sub_items[2].label = buf;
+            snprintf(buf, sizeof(buf), "Commit: %s", LAUNCHER_GIT_COMMIT);
+            m.sub_items[3].label = buf;
+            break;
+        }
+    }
+
+    // ==================== Bluetooth scan ====================
+    void bt_do_scan_impl()
+    {
+        // TODO: implement BT scan list page similar to WiFi
+        // For now just trigger scan
+        hal_bt_device_t devices[BT_DEVICE_MAX];
+        int count = hal_bt_scan(devices, BT_DEVICE_MAX);
+        (void)count;
     }
 
     void factory_reset()
@@ -890,6 +994,10 @@ private:
         } else if (val_title_ == "Year" || val_title_ == "Month" || val_title_ == "Day" ||
                    val_title_ == "Hour" || val_title_ == "Minute" || val_title_ == "Second") {
             apply_rtc_value();
+        } else if (val_title_ == "Reboot?" || val_title_ == "Shutdown?") {
+            if (val_sel_idx_ == 0 && confirm_action_) confirm_action_(); // "Yes"
+        } else if (val_title_ == "BQ Calib") {
+            apply_bq_calibrate();
         }
     }
 
@@ -1584,6 +1692,7 @@ private:
         case KEY_ESC:
         case KEY_LEFT:
             play_back();
+            stop_info_timer();
             view_state_ = ViewState::MAIN;
             build_main_view();
             break;
