@@ -160,7 +160,7 @@ private:
             MenuItem m;
             m.label = "Boot";
             m.sub_items = {
-                {"Startup",  false, false, nullptr},  // 3rd: Launcher / CLI
+                {"Startup",  false, false, [this]() { enter_startup_select(); }},
                 {"Reboot",   false, false, [this]() { hal_system_reboot(); }},
                 {"Shutdown", false, false, [this]() { hal_system_shutdown(); }},
             };
@@ -283,6 +283,15 @@ private:
         val_title_ = "Resolution";
         val_options_ = {"1280x720", "640x480"};
         val_sel_idx_ = 0;
+        view_state_ = ViewState::VALUE_SELECT;
+        build_value_view();
+    }
+
+    void enter_startup_select()
+    {
+        val_title_ = "Startup";
+        val_options_ = {"Launcher", "CLI"};
+        val_sel_idx_ = hal_config_get_int("startup_mode", 0);
         view_state_ = ViewState::VALUE_SELECT;
         build_value_view();
     }
@@ -522,6 +531,9 @@ private:
             hal_config_save();
         } else if (val_title_ == "Resolution") {
             hal_config_set_int("cam_resolution", val_sel_idx_);
+            hal_config_save();
+        } else if (val_title_ == "Startup") {
+            hal_config_set_int("startup_mode", val_sel_idx_);
             hal_config_save();
         } else if (val_title_ == "Year" || val_title_ == "Month" || val_title_ == "Day" ||
                    val_title_ == "Hour" || val_title_ == "Minute" || val_title_ == "Second") {
