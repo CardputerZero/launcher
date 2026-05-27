@@ -749,7 +749,7 @@ private:
         hint_lbl_ = lv_label_create(cont);
         lv_label_set_text(hint_lbl_, "ok:enter");
         lv_obj_set_style_text_color(hint_lbl_, lv_color_hex(0x00CC66), LV_PART_MAIN);
-        lv_obj_set_style_text_font(hint_lbl_, &lv_font_montserrat_12, LV_PART_MAIN);
+        lv_obj_set_style_text_font(hint_lbl_, g_font_bold_12 ? g_font_bold_12 : &lv_font_montserrat_12, LV_PART_MAIN);
         lv_obj_update_layout(hint_lbl_);
         int hint_w = lv_obj_get_width(hint_lbl_);
         int hint_h = lv_obj_get_height(hint_lbl_);
@@ -957,7 +957,7 @@ private:
         else
             lv_label_set_text(hint, "ok:enter");
         lv_obj_set_style_text_color(hint, lv_color_hex(0x00CC66), LV_PART_MAIN);
-        lv_obj_set_style_text_font(hint, &lv_font_montserrat_12, LV_PART_MAIN);
+        lv_obj_set_style_text_font(hint, g_font_bold_12 ? g_font_bold_12 : &lv_font_montserrat_12, LV_PART_MAIN);
         lv_obj_update_layout(hint);
         int sub_hint_w = lv_obj_get_width(hint);
         int sub_hint_h = lv_obj_get_height(hint);
@@ -1029,7 +1029,7 @@ private:
         lv_obj_t *hint = lv_label_create(cont);
         lv_label_set_text(hint, "ok:set");
         lv_obj_set_style_text_color(hint, lv_color_hex(0x00CC66), LV_PART_MAIN);
-        lv_obj_set_style_text_font(hint, &lv_font_montserrat_12, LV_PART_MAIN);
+        lv_obj_set_style_text_font(hint, g_font_bold_12 ? g_font_bold_12 : &lv_font_montserrat_12, LV_PART_MAIN);
         lv_obj_update_layout(hint);
         int val_hint_w = lv_obj_get_width(hint);
         int val_hint_h = lv_obj_get_height(hint);
