@@ -745,12 +745,14 @@ private:
         lv_obj_set_style_border_width(sel_bg_, 0, LV_PART_MAIN);
         lv_obj_clear_flag(sel_bg_, LV_OBJ_FLAG_SCROLLABLE);
 
-        // Hint label (right side of selected bar)
+        // Hint label (right-aligned, 6px from right edge)
         hint_lbl_ = lv_label_create(cont);
         lv_label_set_text(hint_lbl_, "ok:enter");
-        lv_obj_set_pos(hint_lbl_, SCREEN_W - 80, row_y(ROW_CENTER) + (row_h() - 14) / 2);
         lv_obj_set_style_text_color(hint_lbl_, lv_color_hex(0x00CC66), LV_PART_MAIN);
         lv_obj_set_style_text_font(hint_lbl_, g_font_bold_14 ? g_font_bold_14 : &lv_font_montserrat_14, LV_PART_MAIN);
+        lv_obj_update_layout(hint_lbl_);
+        int hint_w = lv_obj_get_width(hint_lbl_);
+        lv_obj_set_pos(hint_lbl_, SCREEN_W - 6 - hint_w, row_y(ROW_CENTER) + (row_h() - 14) / 2);
 
         // Row labels
         for (int vi = 0; vi < ROWS_VISIBLE; ++vi) {
@@ -946,16 +948,18 @@ private:
             lv_obj_set_pos(a, sub_arrow_x, LIST_H - 14);
         }
 
-        // Hint for selected sub item
+        // Hint for selected sub item (right-aligned, 6px from right edge)
         SubItem &cur_sub = item.sub_items[sub_selected_idx_];
         lv_obj_t *hint = lv_label_create(cont);
         if (cur_sub.is_toggle)
-            lv_label_set_text(hint, cur_sub.toggle_state ? "ok:unselect" : "ok:select");
+            lv_label_set_text(hint, cur_sub.toggle_state ? "ok:hide" : "ok:select");
         else
             lv_label_set_text(hint, "ok:enter");
-        lv_obj_set_pos(hint, SCREEN_W - 80, row_y(sub_center_vi) + (row_h() - 14) / 2);
         lv_obj_set_style_text_color(hint, lv_color_hex(0x00CC66), LV_PART_MAIN);
         lv_obj_set_style_text_font(hint, g_font_bold_14 ? g_font_bold_14 : &lv_font_montserrat_14, LV_PART_MAIN);
+        lv_obj_update_layout(hint);
+        int hint_w = lv_obj_get_width(hint);
+        lv_obj_set_pos(hint, SCREEN_W - 6 - hint_w, row_y(sub_center_vi) + (row_h() - 14) / 2);
     }
 
     // ==================== Value select view (3rd level) ====================
