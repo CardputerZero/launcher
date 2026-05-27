@@ -958,6 +958,10 @@ private:
         is_animating_ = true;
         selected_idx_ = new_idx;
 
+        // Bounce the corresponding arrow
+        if (direction < 0) bounce_arrow(arrow_up_obj_, -1);
+        else bounce_arrow(arrow_down_obj_, 1);
+
         // Update arrow visibility
         if (arrow_up_obj_) {
             if (selected_idx_ > 0) lv_obj_clear_flag(arrow_up_obj_, LV_OBJ_FLAG_HIDDEN);
@@ -1213,6 +1217,21 @@ private:
         else if (view_state_ == ViewState::SUB) build_sub_view();
         else if (view_state_ == ViewState::VALUE_SELECT) build_value_view();
         else if (view_state_ == ViewState::WIFI_LIST) build_wifi_list();
+    }
+
+    // Bounce animation for orange arrows (small Y displacement + return)
+    void bounce_arrow(lv_obj_t *arrow, int direction)
+    {
+        if (!arrow || lv_obj_has_flag(arrow, LV_OBJ_FLAG_HIDDEN)) return;
+        int cur_y = lv_obj_get_y(arrow);
+        lv_anim_t a;
+        lv_anim_init(&a);
+        lv_anim_set_var(&a, arrow);
+        lv_anim_set_exec_cb(&a, (lv_anim_exec_xcb_t)lv_obj_set_y);
+        lv_anim_set_values(&a, cur_y + direction * 4, cur_y);
+        lv_anim_set_time(&a, 150);
+        lv_anim_set_path_cb(&a, lv_anim_path_ease_out);
+        lv_anim_start(&a);
     }
 
     // Dual-container slide transition
