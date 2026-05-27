@@ -523,25 +523,43 @@ private:
     // vi = visual slot (0..ROWS_VISIBLE-1), center_vi = which slot is "selected"
     // center_x = the pixel X where text center aligns
     // text = label string, hide if empty
+    // smaller = true for sub-menu columns (one font size smaller)
     lv_obj_t *create_carousel_label(lv_obj_t *parent, int vi, int center_vi,
-                                     const char *text, int center_x)
+                                     const char *text, int center_x, bool smaller = false)
     {
         int dist = vi > center_vi ? vi - center_vi : center_vi - vi;
         const lv_font_t *font;
         uint32_t color;
         int opa;
-        if (dist == 0) {
-            font = g_font_bold_20 ? g_font_bold_20 : &lv_font_montserrat_18;
-            color = 0xFFFFFF; opa = 255;
-        } else if (dist == 1) {
-            font = g_font_bold_14 ? g_font_bold_14 : &lv_font_montserrat_16;
-            color = 0xAAAAAA; opa = 220;
-        } else if (dist == 2) {
-            font = g_font_bold_12 ? g_font_bold_12 : &lv_font_montserrat_14;
-            color = 0x777777; opa = 170;
+        if (!smaller) {
+            if (dist == 0) {
+                font = g_font_bold_20 ? g_font_bold_20 : &lv_font_montserrat_18;
+                color = 0xFFFFFF; opa = 255;
+            } else if (dist == 1) {
+                font = g_font_bold_14 ? g_font_bold_14 : &lv_font_montserrat_16;
+                color = 0xAAAAAA; opa = 220;
+            } else if (dist == 2) {
+                font = g_font_bold_12 ? g_font_bold_12 : &lv_font_montserrat_14;
+                color = 0x777777; opa = 170;
+            } else {
+                font = &lv_font_montserrat_12;
+                color = 0x555555; opa = 130;
+            }
         } else {
-            font = &lv_font_montserrat_12;
-            color = 0x555555; opa = 130;
+            // Smaller variant for sub-menu / right column
+            if (dist == 0) {
+                font = g_font_bold_14 ? g_font_bold_14 : &lv_font_montserrat_16;
+                color = 0xFFFFFF; opa = 255;
+            } else if (dist == 1) {
+                font = g_font_bold_12 ? g_font_bold_12 : &lv_font_montserrat_14;
+                color = 0xAAAAAA; opa = 220;
+            } else if (dist == 2) {
+                font = &lv_font_montserrat_12;
+                color = 0x777777; opa = 170;
+            } else {
+                font = &lv_font_montserrat_10;
+                color = 0x555555; opa = 130;
+            }
         }
 
         lv_obj_t *lbl = lv_label_create(parent);
@@ -760,7 +778,7 @@ private:
         static constexpr int SUB_CENTER_X = 160;
 
         if (sub_count == 0) {
-            create_carousel_label(cont, ROW_CENTER, ROW_CENTER, "(no options)", SUB_CENTER_X);
+            create_carousel_label(cont, ROW_CENTER, ROW_CENTER, "(no options)", SUB_CENTER_X, true);
             return;
         }
 
@@ -775,7 +793,7 @@ private:
 
             SubItem &sub = item.sub_items[si];
             lv_obj_t *lbl = create_carousel_label(cont, vi, sub_center_vi,
-                                                   sub.label.c_str(), SUB_CENTER_X);
+                                                   sub.label.c_str(), SUB_CENTER_X, true);
             if (vi == sub_center_vi) right_center_lbl = lbl;
 
             // Toggle indicator (to the right of text)
@@ -856,7 +874,7 @@ private:
             int val_i = val_sel_idx_ - ROW_CENTER + vi;
             if (val_i < 0 || val_i >= val_count) continue;
             lv_obj_t *lbl = create_carousel_label(cont, vi, ROW_CENTER,
-                                                   val_options_[val_i].c_str(), VAL_CENTER_X);
+                                                   val_options_[val_i].c_str(), VAL_CENTER_X, true);
             if (vi == ROW_CENTER) val_right_lbl = lbl;
         }
 
