@@ -52,7 +52,7 @@ public:
 private:
     lv_obj_t *play_gif;
 private:
-    std::string app_name = img_path("audio.gif");
+    std::string app_name = img_path("audio.png");
     
     /*
      * ============================================================

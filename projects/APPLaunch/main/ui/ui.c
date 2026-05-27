@@ -93,6 +93,7 @@ lv_font_t *g_font_cn_20 = NULL;
 lv_font_t *g_font_cn_14 = NULL;
 lv_font_t *g_font_cn_12 = NULL;
 lv_font_t *g_font_mono_12 = NULL;   /* 终端专用等宽字体 */
+lv_font_t *g_font_bold_20 = NULL;   /* 设置页选中项粗体 */
 lv_font_t *g_font_bold_14 = NULL;   /* App名称加粗字体 - 中间 */
 lv_font_t *g_font_bold_12 = NULL;   /* App名称加粗字体 - 侧面 */
 
@@ -154,6 +155,9 @@ void font_manager_init(void)
     {
         static char bold_path[512];
         snprintf(bold_path, sizeof(bold_path), "%s/Montserrat-Bold.ttf", hal_path_font_dir());
+        g_font_bold_20 = lv_freetype_font_create(
+            bold_path, LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 18,
+            LV_FREETYPE_FONT_STYLE_BOLD);
         g_font_bold_14 = lv_freetype_font_create(
             bold_path, LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 16,
             LV_FREETYPE_FONT_STYLE_BOLD);
@@ -167,6 +171,7 @@ void font_manager_init(void)
     if (!g_font_cn_14)  g_font_cn_14  = (lv_font_t *)&lv_font_montserrat_14;
     if (!g_font_cn_12)  g_font_cn_12  = (lv_font_t *)&lv_font_montserrat_12;
     if (!g_font_mono_12) g_font_mono_12 = (lv_font_t *)&lv_font_montserrat_12;
+    if (!g_font_bold_20) g_font_bold_20 = (lv_font_t *)&lv_font_montserrat_18;
     if (!g_font_bold_14) g_font_bold_14 = (lv_font_t *)&lv_font_montserrat_14;
     if (!g_font_bold_12) g_font_bold_12 = (lv_font_t *)&lv_font_montserrat_12;
 }
