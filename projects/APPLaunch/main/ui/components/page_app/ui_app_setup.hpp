@@ -228,9 +228,19 @@ private:
         {
             MenuItem m;
             m.label = "ExtPort";
+            bool usb_en = hal_config_get_int("extport_usb", 1) != 0;
+            bool vout_en = hal_config_get_int("extport_5vout", 1) != 0;
             m.sub_items = {
-                {"USB",   true, true, nullptr},   // Enable/Disable toggle
-                {"5VOUT", true, true, nullptr},   // Enable/Disable toggle
+                {"USB",   true, usb_en, [this]() {
+                    bool en = menu_items_[7].sub_items[0].toggle_state;
+                    hal_config_set_int("extport_usb", en ? 1 : 0);
+                    hal_config_save();
+                }},
+                {"5VOUT", true, vout_en, [this]() {
+                    bool en = menu_items_[7].sub_items[1].toggle_state;
+                    hal_config_set_int("extport_5vout", en ? 1 : 0);
+                    hal_config_save();
+                }},
             };
             menu_items_.push_back(m);
         }
