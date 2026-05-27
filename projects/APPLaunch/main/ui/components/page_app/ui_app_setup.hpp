@@ -232,13 +232,14 @@ private:
             MenuItem m;
             m.label = "RTC";
             m.sub_items = {
-                {"Year",   false, false, nullptr},  // +/- adjust
-                {"Month",  false, false, nullptr},
-                {"Day",    false, false, nullptr},
-                {"Hour",   false, false, nullptr},
-                {"Minute", false, false, nullptr},
-                {"Second", false, false, nullptr},
+                {"Year",   false, false, [this]() { enter_rtc_adjust(0); }},
+                {"Month",  false, false, [this]() { enter_rtc_adjust(1); }},
+                {"Day",    false, false, [this]() { enter_rtc_adjust(2); }},
+                {"Hour",   false, false, [this]() { enter_rtc_adjust(3); }},
+                {"Minute", false, false, [this]() { enter_rtc_adjust(4); }},
+                {"Second", false, false, [this]() { enter_rtc_adjust(5); }},
             };
+            m.on_enter = [this]() { refresh_rtc_values(); };
             menu_items_.push_back(m);
         }
         // --- Reset ---
@@ -310,11 +311,70 @@ private:
         }
     }
 
+    // ==================== RTC ====================
+    int rtc_values_[6] = {2026, 1, 1, 0, 0, 0}; // Y/M/D/H/Min/S
+    int rtc_field_ = 0;
+
+    void refresh_rtc_values()
+    {
+        time_t now = time(NULL);
+        struct tm *t = localtime(&now);
+        if (t) {
+            rtc_values_[0] = t->tm_year + 1900;
+            rtc_values_[1] = t->tm_mon + 1;
+            rtc_values_[2] = t->tm_mday;
+            rtc_values_[3] = t->tm_hour;
+            rtc_values_[4] = t->tm_min;
+            rtc_values_[5] = t->tm_sec;
+        }
+        // Update labels
+        for (auto &m : menu_items_) {
+            if (m.label != "RTC") continue;
+            char buf[32];
+            const char *names[] = {"Year", "Month", "Day", "Hour", "Minute", "Second"};
+            for (int i = 0; i < 6; ++i) {
+                snprintf(buf, sizeof(buf), "%s: %d", names[i], rtc_values_[i]);
+                m.sub_items[i].label = buf;
+            }
+            break;
+        }
+    }
+
+    void enter_rtc_adjust(int field)
+    {
+        rtc_field_ = field;
+        // Use value select with current value as center
+        const char *names[] = {"Year", "Month", "Day", "Hour", "Minute", "Second"};
+        val_title_ = names[field];
+        // Generate options: current-2, current-1, current, current+1, current+2
+        val_options_.clear();
+        int cur = rtc_values_[field];
+        for (int i = -2; i <= 2; ++i) {
+            char buf[16];
+            snprintf(buf, sizeof(buf), "%d", cur + i);
+            val_options_.push_back(buf);
+        }
+        val_sel_idx_ = 2; // center = current value
+        view_state_ = ViewState::VALUE_SELECT;
+        build_value_view();
+    }
+
+    void apply_rtc_value()
+    {
+        int new_val = rtc_values_[rtc_field_] + (val_sel_idx_ - 2);
+        rtc_values_[rtc_field_] = new_val;
+        // Apply to system via date command
+        char cmd[128];
+        snprintf(cmd, sizeof(cmd), "date -s '%04d-%02d-%02d %02d:%02d:%02d'",
+                 rtc_values_[0], rtc_values_[1], rtc_values_[2],
+                 rtc_values_[3], rtc_values_[4], rtc_values_[5]);
+        system(cmd);
+    }
+
     void factory_reset()
     {
-        // TODO: delete settings.json and reload defaults
-        // remove("/path/to/settings.json");
-        // reload_settings();
+        remove("/usr/share/APPLaunch/settings.json");
+        // TODO: reload defaults
     }
 
     // ==================== WiFi functions ====================
@@ -461,9 +521,11 @@ private:
             hal_config_set_int("dark_time", times[val_sel_idx_]);
             hal_config_save();
         } else if (val_title_ == "Resolution") {
-            // TODO: save camera resolution
             hal_config_set_int("cam_resolution", val_sel_idx_);
             hal_config_save();
+        } else if (val_title_ == "Year" || val_title_ == "Month" || val_title_ == "Day" ||
+                   val_title_ == "Hour" || val_title_ == "Minute" || val_title_ == "Second") {
+            apply_rtc_value();
         }
     }
 
