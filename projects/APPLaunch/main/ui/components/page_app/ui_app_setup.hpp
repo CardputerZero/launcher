@@ -259,6 +259,53 @@ private:
             m.on_enter = [this]() { refresh_rtc_values(); };
             menu_items_.push_back(m);
         }
+        // --- Bluetooth ---
+        {
+            MenuItem m;
+            m.label = "Bluetooth";
+            m.sub_items = {
+                {"Power",  true, false, [this]() { bt_toggle_power(); }},
+                {"Scan",   false, false, [this]() { bt_do_scan(); }},
+            };
+            m.on_enter = [this]() { refresh_bt_status(); };
+            menu_items_.push_back(m);
+        }
+        // --- Ethernet ---
+        {
+            MenuItem m;
+            m.label = "Ethernet";
+            m.sub_items = {
+                {"IP: --",      false, false, nullptr},
+                {"Gateway: --", false, false, nullptr},
+                {"MAC: --",     false, false, nullptr},
+            };
+            m.on_enter = [this]() { refresh_ethernet_info(); };
+            menu_items_.push_back(m);
+        }
+        // --- Account ---
+        {
+            MenuItem m;
+            m.label = "Account";
+            m.sub_items = {
+                {"Username", false, false, nullptr},
+                {"Password", false, false, nullptr},
+                {"Hostname", false, false, nullptr},
+            };
+            m.on_enter = [this]() { refresh_account_info(); };
+            menu_items_.push_back(m);
+        }
+        // --- Update ---
+        {
+            MenuItem m;
+            m.label = "Update";
+            m.sub_items = {
+                {"Check System",   false, false, [this]() { check_system_update(); }},
+                {"Update Launcher", false, false, [this]() { update_launcher(); }},
+                {"Version: --",    false, false, nullptr},
+            };
+            m.on_enter = [this]() { refresh_version_info(); };
+            menu_items_.push_back(m);
+        }
         // --- Reset ---
         {
             MenuItem m;
@@ -559,9 +606,133 @@ private:
         hal_config_save();
     }
 
+    // ==================== Bluetooth ====================
+    void refresh_bt_status()
+    {
+        hal_bt_status_t st = hal_bt_get_status();
+        // Find Bluetooth menu and update Power toggle state
+        for (auto &m : menu_items_) {
+            if (m.label != "Bluetooth") continue;
+            m.sub_items[0].toggle_state = st.powered != 0;
+            break;
+        }
+    }
+
+    void bt_toggle_power()
+    {
+        for (auto &m : menu_items_) {
+            if (m.label != "Bluetooth") continue;
+            bool on = m.sub_items[0].toggle_state;
+            hal_bt_set_power(on ? 1 : 0);
+            break;
+        }
+    }
+
+    void bt_do_scan()
+    {
+        // TODO: show BT scan results in a list page (similar to WiFi)
+    }
+
+    // ==================== Ethernet ====================
+    void refresh_ethernet_info()
+    {
+        for (auto &m : menu_items_) {
+            if (m.label != "Ethernet") continue;
+            // Read IP info via system commands
+            char buf[128];
+            FILE *fp;
+            // IP address
+            fp = popen("ip -4 addr show eth0 2>/dev/null | grep inet | awk '{print $2}' | head -1", "r");
+            if (fp) {
+                if (fgets(buf, sizeof(buf), fp)) {
+                    buf[strcspn(buf, "\n")] = 0;
+                    m.sub_items[0].label = std::string("IP: ") + (buf[0] ? buf : "N/A");
+                } else {
+                    m.sub_items[0].label = "IP: N/A";
+                }
+                pclose(fp);
+            }
+            // Gateway
+            fp = popen("ip route | grep default | grep eth0 | awk '{print $3}' | head -1", "r");
+            if (fp) {
+                if (fgets(buf, sizeof(buf), fp)) {
+                    buf[strcspn(buf, "\n")] = 0;
+                    m.sub_items[1].label = std::string("GW: ") + (buf[0] ? buf : "N/A");
+                } else {
+                    m.sub_items[1].label = "GW: N/A";
+                }
+                pclose(fp);
+            }
+            // MAC
+            fp = popen("cat /sys/class/net/eth0/address 2>/dev/null", "r");
+            if (fp) {
+                if (fgets(buf, sizeof(buf), fp)) {
+                    buf[strcspn(buf, "\n")] = 0;
+                    m.sub_items[2].label = std::string("MAC: ") + (buf[0] ? buf : "N/A");
+                } else {
+                    m.sub_items[2].label = "MAC: N/A";
+                }
+                pclose(fp);
+            }
+            break;
+        }
+    }
+
+    // ==================== Account ====================
+    void refresh_account_info()
+    {
+        for (auto &m : menu_items_) {
+            if (m.label != "Account") continue;
+            char buf[128];
+            FILE *fp = popen("whoami", "r");
+            if (fp) {
+                if (fgets(buf, sizeof(buf), fp)) {
+                    buf[strcspn(buf, "\n")] = 0;
+                    m.sub_items[0].label = std::string("User: ") + buf;
+                }
+                pclose(fp);
+            }
+            m.sub_items[1].label = "Password: ****";
+            fp = popen("hostname", "r");
+            if (fp) {
+                if (fgets(buf, sizeof(buf), fp)) {
+                    buf[strcspn(buf, "\n")] = 0;
+                    m.sub_items[2].label = std::string("Host: ") + buf;
+                }
+                pclose(fp);
+            }
+            break;
+        }
+    }
+
+    // ==================== Update ====================
+    void refresh_version_info()
+    {
+        for (auto &m : menu_items_) {
+            if (m.label != "Update") continue;
+            m.sub_items[2].label = std::string("Version: ") + LAUNCHER_GIT_COMMIT;
+            break;
+        }
+    }
+
+    void check_system_update()
+    {
+        // Run apt update check in background
+        system("apt update >/dev/null 2>&1 &");
+        // TODO: show result in UI
+    }
+
+    void update_launcher()
+    {
+        // Pull latest from GitHub and rebuild
+        system("cd /usr/share/APPLaunch && "
+               "wget -q https://github.com/CardputerZero/M5CardputerZero-Launcher/releases/latest/download/applaunch_*.deb -O /tmp/launcher_update.deb 2>/dev/null && "
+               "dpkg -i /tmp/launcher_update.deb >/dev/null 2>&1 && "
+               "systemctl restart APPLaunch &");
+    }
+
     void factory_reset()
     {
-        // Delete config file and restart
         remove("/var/lib/applaunch/settings");
         hal_system_reboot();
     }
@@ -937,12 +1108,10 @@ private:
         arrow_up_obj_ = lv_img_create(cont);
         lv_img_set_src(arrow_up_obj_, img_arrow_up_.c_str());
         lv_obj_set_pos(arrow_up_obj_, arrow_x, 2);
-        if (selected_idx_ <= 0) lv_obj_add_flag(arrow_up_obj_, LV_OBJ_FLAG_HIDDEN);
 
         arrow_down_obj_ = lv_img_create(cont);
         lv_img_set_src(arrow_down_obj_, img_arrow_down_.c_str());
         lv_obj_set_pos(arrow_down_obj_, arrow_x, LIST_H - 14);
-        if (selected_idx_ >= count - 1) lv_obj_add_flag(arrow_down_obj_, LV_OBJ_FLAG_HIDDEN);
 
         is_animating_ = false;
     }
@@ -952,25 +1121,19 @@ private:
     {
         int count = (int)menu_items_.size();
         int new_idx = selected_idx_ + direction;
+
+        // Always bounce the arrow (even at boundary)
+        if (direction < 0) bounce_arrow(arrow_up_obj_, -1);
+        else bounce_arrow(arrow_down_obj_, 1);
+
         if (new_idx < 0 || new_idx >= count) return;
         if (is_animating_) return;
 
         is_animating_ = true;
         selected_idx_ = new_idx;
 
-        // Bounce the corresponding arrow
-        if (direction < 0) bounce_arrow(arrow_up_obj_, -1);
-        else bounce_arrow(arrow_down_obj_, 1);
-
-        // Update arrow visibility
-        if (arrow_up_obj_) {
-            if (selected_idx_ > 0) lv_obj_clear_flag(arrow_up_obj_, LV_OBJ_FLAG_HIDDEN);
-            else lv_obj_add_flag(arrow_up_obj_, LV_OBJ_FLAG_HIDDEN);
-        }
-        if (arrow_down_obj_) {
-            if (selected_idx_ < count - 1) lv_obj_clear_flag(arrow_down_obj_, LV_OBJ_FLAG_HIDDEN);
-            else lv_obj_add_flag(arrow_down_obj_, LV_OBJ_FLAG_HIDDEN);
-        }
+        // Arrows always visible — bounce only when not at boundary
+        // (animate_scroll already blocks at boundaries)
 
         // Update text content for each slot
         for (int vi = 0; vi < ROWS_VISIBLE; ++vi) {
@@ -1222,7 +1385,7 @@ private:
     // Bounce animation for orange arrows (small Y displacement + return)
     void bounce_arrow(lv_obj_t *arrow, int direction)
     {
-        if (!arrow || lv_obj_has_flag(arrow, LV_OBJ_FLAG_HIDDEN)) return;
+        if (!arrow) return;
         int cur_y = lv_obj_get_y(arrow);
         lv_anim_t a;
         lv_anim_init(&a);
