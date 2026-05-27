@@ -120,13 +120,59 @@ private:
     // ==================== Menu init ====================
     void menu_init()
     {
+        // --- Launcher (app enable/disable, OX toggle) ---
+        {
+            MenuItem m;
+            m.label = "Launcher";
+            m.sub_items = {
+                {"Python",   true, true, nullptr},
+                {"Store",    true, true, nullptr},   // always enabled (enforced)
+                {"CLI",      true, true, nullptr},   // always enabled (enforced)
+                {"CLAW",     true, true, nullptr},
+                {"Setting",  true, true, nullptr},   // always enabled (enforced)
+                {"Music",    true, true, nullptr},
+                {"Audio",    true, true, nullptr},
+                {"Hack",     true, true, nullptr},
+                {"Game",     true, true, nullptr},
+                {"Math",     true, true, nullptr},
+                {"IP Panel", true, true, nullptr},
+                {"Stocks",   true, true, nullptr},
+                {"Chat",     true, true, nullptr},
+                {"e-Mail",   true, true, nullptr},
+                {"File",     true, true, nullptr},
+                {"AICli",    true, true, nullptr},
+                {"SSH",      true, true, nullptr},
+                {"Mesh",     true, true, nullptr},
+                {"Rec",      true, true, nullptr},
+                {"Camera",   true, true, nullptr},
+                {"UnitEnv",  true, true, nullptr},
+                {"Midi",     true, true, nullptr},
+                {"Gpio",     true, true, nullptr},
+                {"LoRa",     true, true, nullptr},
+                {"Gallery",  true, true, nullptr},
+                {"HikePod",  true, true, nullptr},
+                {"Tank",     true, true, nullptr},
+            };
+            menu_items_.push_back(m);
+        }
+        // --- Boot ---
+        {
+            MenuItem m;
+            m.label = "Boot";
+            m.sub_items = {
+                {"Startup",  false, false, nullptr},  // 3rd: Launcher / CLI
+                {"Reboot",   false, false, [this]() { hal_system_reboot(); }},
+                {"Shutdown", false, false, [this]() { hal_system_shutdown(); }},
+            };
+            menu_items_.push_back(m);
+        }
         // --- Screen ---
         {
             MenuItem m;
             m.label = "Screen";
             m.sub_items = {
                 {"Brightness", false, false, [this]() { enter_brightness_adjust(); }},
-                {"DarkTime",   false, false, nullptr},
+                {"DarkTime",   false, false, [this]() { enter_darktime_adjust(); }},
             };
             menu_items_.push_back(m);
         }
@@ -135,11 +181,10 @@ private:
             MenuItem m;
             m.label = "WiFi";
             m.sub_items = {
-                {"Scan",    false, false, [this]() { wifi_do_scan(); rebuild_view(); }},
-                {"Enable",  true, true,  [this]() { wifi_toggle_enable(); }},
                 {"reset",   false, false, [this]() { hal_wifi_disconnect(); rebuild_view(); }},
+                {"Scan",    false, false, [this]() { enter_wifi_scan(); }},
+                {"Enable",  true, true,  [this]() { wifi_toggle_enable(); }},
             };
-            m.custom_key_handler = [this](uint32_t key) { handle_wifi_custom_key(key); };
             menu_items_.push_back(m);
         }
         // --- Speaker ---
@@ -147,9 +192,7 @@ private:
             MenuItem m;
             m.label = "Speaker";
             m.sub_items = {
-                {"Volume Up",   false, false, [this]() { volume_adjust(5); }},
-                {"Volume Down", false, false, [this]() { volume_adjust(-5); }},
-                {"Mute",        true, false,  [this]() { volume_toggle_mute(); }},
+                {"Volume", false, false, [this]() { enter_volume_adjust(); }},
             };
             menu_items_.push_back(m);
         }
@@ -157,32 +200,103 @@ private:
         {
             MenuItem m;
             m.label = "Camera";
-            m.sub_items = {};
-            menu_items_.push_back(m);
-        }
-        // --- Boot ---
-        {
-            MenuItem m;
-            m.label = "Boot";
             m.sub_items = {
-                {"Reboot",   false, false, [this]() { hal_system_reboot(); }},
-                {"Shutdown", false, false, [this]() { hal_system_shutdown(); }},
+                {"Resolution", false, false, [this]() { enter_camera_resolution(); }},
             };
             menu_items_.push_back(m);
         }
-        // --- Launcher ---
+        // --- Info ---
         {
             MenuItem m;
-            m.label = "Launcher";
+            m.label = "Info";
             m.sub_items = {
-                {"Store", true, true, nullptr},
-                {"CLI",   true, true, nullptr},
-                {"Math",  true, true, nullptr},
-                {"Rec",   true, true, nullptr},
-                {"Music", true, true, nullptr},
+                {"Battery",     false, false, nullptr},  // display only
+                {"Temperature", false, false, nullptr},  // display only
+                {"Current",     false, false, nullptr},  // display only
             };
             menu_items_.push_back(m);
         }
+        // --- ExtPort ---
+        {
+            MenuItem m;
+            m.label = "ExtPort";
+            m.sub_items = {
+                {"USB",   true, true, nullptr},   // Enable/Disable toggle
+                {"5VOUT", true, true, nullptr},   // Enable/Disable toggle
+            };
+            menu_items_.push_back(m);
+        }
+        // --- RTC ---
+        {
+            MenuItem m;
+            m.label = "RTC";
+            m.sub_items = {
+                {"Year",   false, false, nullptr},  // +/- adjust
+                {"Month",  false, false, nullptr},
+                {"Day",    false, false, nullptr},
+                {"Hour",   false, false, nullptr},
+                {"Minute", false, false, nullptr},
+                {"Second", false, false, nullptr},
+            };
+            menu_items_.push_back(m);
+        }
+        // --- Reset ---
+        {
+            MenuItem m;
+            m.label = "Reset";
+            m.sub_items = {
+                {"Factory Reset", false, false, [this]() { factory_reset(); }},
+            };
+            menu_items_.push_back(m);
+        }
+    }
+
+    // ==================== Placeholder functions for new menus ====================
+    void enter_darktime_adjust()
+    {
+        val_title_ = "DarkTime";
+        val_options_ = {"Never", "10S", "30S", "60S", "300S"};
+        val_sel_idx_ = 2; // default 30S
+        view_state_ = ViewState::VALUE_SELECT;
+        build_value_view();
+    }
+
+    void enter_volume_adjust()
+    {
+        val_title_ = "Volume";
+        val_options_ = {"100%", "75%", "50%", "25%", "0%"};
+        vol_val_ = hal_config_get_int("volume", hal_volume_read());
+        int pct = vol_val_ * 100 / 63;
+        if (pct >= 87) val_sel_idx_ = 0;
+        else if (pct >= 62) val_sel_idx_ = 1;
+        else if (pct >= 37) val_sel_idx_ = 2;
+        else if (pct >= 12) val_sel_idx_ = 3;
+        else val_sel_idx_ = 4;
+        view_state_ = ViewState::VALUE_SELECT;
+        build_value_view();
+    }
+
+    void enter_camera_resolution()
+    {
+        val_title_ = "Resolution";
+        val_options_ = {"1280x720", "640x480"};
+        val_sel_idx_ = 0;
+        view_state_ = ViewState::VALUE_SELECT;
+        build_value_view();
+    }
+
+    void enter_wifi_scan()
+    {
+        // TODO: PSP-style WiFi scan list page
+        wifi_do_scan();
+        rebuild_view();
+    }
+
+    void factory_reset()
+    {
+        // TODO: delete settings.json and reload defaults
+        // remove("/path/to/settings.json");
+        // reload_settings();
     }
 
     // ==================== WiFi functions ====================
@@ -193,9 +307,7 @@ private:
 
     void wifi_toggle_enable()
     {
-        MenuItem &m = menu_items_[1]; // WiFi
-        bool &enabled = m.sub_items[1].toggle_state;
-        enabled = !enabled;
+        // Toggle is handled by the generic sub_key handler (toggle_state flip)
         // TODO: actual wifi enable/disable HAL call
     }
 
@@ -287,34 +399,14 @@ private:
         lv_label_set_text(pw_input_lbl_, display.c_str());
     }
 
-    // ==================== Volume functions ====================
-    void volume_adjust(int delta)
+    // ==================== Volume (via value select) ====================
+    void apply_volume()
     {
-        vol_val_ = hal_config_get_int("volume", hal_volume_read());
-        vol_val_ += delta;
-        if (vol_val_ < 0) vol_val_ = 0;
-        if (vol_val_ > 63) vol_val_ = 63;
-        hal_volume_write(vol_val_);
-        hal_config_set_int("volume", vol_val_);
+        int pcts[] = {100, 75, 50, 25, 0};
+        int new_val = 63 * pcts[val_sel_idx_] / 100;
+        hal_volume_write(new_val);
+        hal_config_set_int("volume", new_val);
         hal_config_save();
-        rebuild_view();
-    }
-
-    void volume_toggle_mute()
-    {
-        MenuItem &m = menu_items_[2]; // Speaker
-        bool &muted = m.sub_items[2].toggle_state;
-        muted = !muted;
-        if (muted) {
-            vol_val_ = 0;
-        } else {
-            vol_val_ = hal_config_get_int("volume", 39);
-            if (vol_val_ == 0) vol_val_ = 39;
-        }
-        hal_volume_write(vol_val_);
-        hal_config_set_int("volume", vol_val_);
-        hal_config_save();
-        rebuild_view();
     }
 
     // ==================== Brightness ====================
@@ -333,15 +425,28 @@ private:
         build_value_view();
     }
 
-    void apply_brightness()
+    void apply_value_selection()
     {
-        int mx = hal_backlight_max();
-        int pcts[] = {100, 75, 50, 25};
-        int new_val = mx * pcts[val_sel_idx_] / 100;
-        if (new_val < 1) new_val = 1;
-        hal_backlight_write(new_val);
-        hal_config_set_int("brightness", new_val);
-        hal_config_save();
+        if (val_title_ == "Brightness") {
+            int mx = hal_backlight_max();
+            int pcts[] = {100, 75, 50, 25};
+            int new_val = mx * pcts[val_sel_idx_] / 100;
+            if (new_val < 1) new_val = 1;
+            hal_backlight_write(new_val);
+            hal_config_set_int("brightness", new_val);
+            hal_config_save();
+        } else if (val_title_ == "Volume") {
+            apply_volume();
+        } else if (val_title_ == "DarkTime") {
+            // TODO: save dark time setting
+            int times[] = {0, 10, 30, 60, 300};
+            hal_config_set_int("dark_time", times[val_sel_idx_]);
+            hal_config_save();
+        } else if (val_title_ == "Resolution") {
+            // TODO: save camera resolution
+            hal_config_set_int("cam_resolution", val_sel_idx_);
+            hal_config_save();
+        }
     }
 
     // ==================== Power timer ====================
@@ -904,7 +1009,7 @@ private:
             break;
         case KEY_ENTER:
         case KEY_RIGHT:
-            apply_brightness();
+            apply_value_selection();
             view_state_ = ViewState::SUB;
             build_sub_view();
             break;
