@@ -1003,17 +1003,25 @@ private:
 
     void on_event(lv_event_t *e)
     {
-        if (!IS_KEY_RELEASED(e)) return;
+        bool released = IS_KEY_RELEASED(e);
+        bool pressed = IS_KEY_PRESSED(e);
+        if (!released && !pressed) return;
+
         struct key_item *elm = (struct key_item *)lv_event_get_param(e);
         cur_elm_ = elm;
         uint32_t key = elm->key_code;
         key = remap_fzxc(key);
 
+        // For held keys (pressed), only handle UP/DOWN navigation
+        if (pressed && key != KEY_UP && key != KEY_DOWN) return;
+
         switch (view_state_) {
         case ViewState::MAIN:         handle_main_key(key); break;
         case ViewState::SUB:          handle_sub_key(key);  break;
         case ViewState::VALUE_SELECT: handle_value_key(key); break;
-        case ViewState::WIFI_PW:      handle_wifi_pw_key(key); break;
+        case ViewState::WIFI_PW:
+            if (released) handle_wifi_pw_key(key);
+            break;
         }
     }
 
