@@ -745,14 +745,15 @@ private:
         lv_obj_set_style_border_width(sel_bg_, 0, LV_PART_MAIN);
         lv_obj_clear_flag(sel_bg_, LV_OBJ_FLAG_SCROLLABLE);
 
-        // Hint label (right-aligned, 6px from right edge)
+        // Hint label (right-aligned, 6px from right edge, smaller font)
         hint_lbl_ = lv_label_create(cont);
         lv_label_set_text(hint_lbl_, "ok:enter");
         lv_obj_set_style_text_color(hint_lbl_, lv_color_hex(0x00CC66), LV_PART_MAIN);
-        lv_obj_set_style_text_font(hint_lbl_, g_font_bold_14 ? g_font_bold_14 : &lv_font_montserrat_14, LV_PART_MAIN);
+        lv_obj_set_style_text_font(hint_lbl_, &lv_font_montserrat_12, LV_PART_MAIN);
         lv_obj_update_layout(hint_lbl_);
         int hint_w = lv_obj_get_width(hint_lbl_);
-        lv_obj_set_pos(hint_lbl_, SCREEN_W - 6 - hint_w, row_y(ROW_CENTER) + (row_h() - 14) / 2);
+        int hint_h = lv_obj_get_height(hint_lbl_);
+        lv_obj_set_pos(hint_lbl_, SCREEN_W - 6 - hint_w, row_y(ROW_CENTER) + (row_h() - hint_h) / 2);
 
         // Row labels
         for (int vi = 0; vi < ROWS_VISIBLE; ++vi) {
@@ -914,8 +915,8 @@ private:
             sub_labels[sub_label_count++] = {lbl, si, lx + tw};
         }
 
-        // Place toggle indicators at fixed x=230
-        int indicator_x = 230;
+        // Place toggle indicators at fixed x=220
+        int indicator_x = 220;
         for (int i = 0; i < sub_label_count; ++i) {
             SubItem &sub = item.sub_items[sub_labels[i].si];
             if (!sub.is_toggle) continue;
@@ -948,7 +949,7 @@ private:
             lv_obj_set_pos(a, sub_arrow_x, LIST_H - 14);
         }
 
-        // Hint for selected sub item (right-aligned, 6px from right edge)
+        // Hint for selected sub item (right-aligned, 6px from right edge, smaller font)
         SubItem &cur_sub = item.sub_items[sub_selected_idx_];
         lv_obj_t *hint = lv_label_create(cont);
         if (cur_sub.is_toggle)
@@ -956,10 +957,11 @@ private:
         else
             lv_label_set_text(hint, "ok:enter");
         lv_obj_set_style_text_color(hint, lv_color_hex(0x00CC66), LV_PART_MAIN);
-        lv_obj_set_style_text_font(hint, g_font_bold_14 ? g_font_bold_14 : &lv_font_montserrat_14, LV_PART_MAIN);
+        lv_obj_set_style_text_font(hint, &lv_font_montserrat_12, LV_PART_MAIN);
         lv_obj_update_layout(hint);
-        int hint_w = lv_obj_get_width(hint);
-        lv_obj_set_pos(hint, SCREEN_W - 6 - hint_w, row_y(sub_center_vi) + (row_h() - 14) / 2);
+        int sub_hint_w = lv_obj_get_width(hint);
+        int sub_hint_h = lv_obj_get_height(hint);
+        lv_obj_set_pos(hint, SCREEN_W - 6 - sub_hint_w, row_y(sub_center_vi) + (row_h() - sub_hint_h) / 2);
     }
 
     // ==================== Value select view (3rd level) ====================
@@ -1023,12 +1025,15 @@ private:
             lv_obj_set_pos(a, val_arrow_x, LIST_H - 14);
         }
 
-        // Hint
+        // Hint (right-aligned, smaller font)
         lv_obj_t *hint = lv_label_create(cont);
         lv_label_set_text(hint, "ok:set");
-        lv_obj_set_pos(hint, SCREEN_W - 70, row_y(ROW_CENTER) + (row_h() - 14) / 2);
         lv_obj_set_style_text_color(hint, lv_color_hex(0x00CC66), LV_PART_MAIN);
-        lv_obj_set_style_text_font(hint, g_font_bold_14 ? g_font_bold_14 : &lv_font_montserrat_14, LV_PART_MAIN);
+        lv_obj_set_style_text_font(hint, &lv_font_montserrat_12, LV_PART_MAIN);
+        lv_obj_update_layout(hint);
+        int val_hint_w = lv_obj_get_width(hint);
+        int val_hint_h = lv_obj_get_height(hint);
+        lv_obj_set_pos(hint, SCREEN_W - 6 - val_hint_w, row_y(ROW_CENTER) + (row_h() - val_hint_h) / 2);
     }
 
     void rebuild_view()
