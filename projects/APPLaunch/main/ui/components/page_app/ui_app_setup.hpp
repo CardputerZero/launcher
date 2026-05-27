@@ -910,8 +910,8 @@ private:
             sub_labels[sub_label_count++] = {lbl, si, lx + tw};
         }
 
-        // Place toggle indicators aligned at max_right_edge + 10
-        int indicator_x = right_max_edge + 10;
+        // Place toggle indicators at fixed x=230
+        int indicator_x = 230;
         for (int i = 0; i < sub_label_count; ++i) {
             SubItem &sub = item.sub_items[sub_labels[i].si];
             if (!sub.is_toggle) continue;
