@@ -1215,33 +1215,68 @@ private:
         else if (view_state_ == ViewState::WIFI_LIST) build_wifi_list();
     }
 
-    // Slide transition: animate list_cont X from start_x to 0
-    void slide_transition(int start_x)
+    // Dual-container slide transition
+    // direction: +1 = enter deeper (old slides left, new slides in from right)
+    //            -1 = go back (old slides right, new slides in from left)
+    void slide_transition(int direction)
     {
-        lv_obj_t *cont = ui_obj_["list_cont"];
-        if (!cont) return;
-        lv_anim_t a;
-        lv_anim_init(&a);
-        lv_anim_set_var(&a, cont);
-        lv_anim_set_exec_cb(&a, (lv_anim_exec_xcb_t)lv_obj_set_x);
-        lv_anim_set_values(&a, start_x, 0);
-        lv_anim_set_time(&a, 200);
-        lv_anim_set_path_cb(&a, lv_anim_path_ease_out);
-        lv_anim_start(&a);
+        lv_obj_t *bg = ui_obj_["bg"];
+        lv_obj_t *old_cont = ui_obj_["list_cont"];
+        if (!bg || !old_cont) { rebuild_view(); return; }
+
+        // Create new container for the new content
+        lv_obj_t *new_cont = lv_obj_create(bg);
+        lv_obj_set_size(new_cont, SCREEN_W, LIST_H);
+        lv_obj_set_pos(new_cont, direction * SCREEN_W, 0);
+        lv_obj_set_style_radius(new_cont, 0, LV_PART_MAIN);
+        lv_obj_set_style_bg_opa(new_cont, 0, LV_PART_MAIN);
+        lv_obj_set_style_border_width(new_cont, 0, LV_PART_MAIN);
+        lv_obj_set_style_pad_all(new_cont, 0, LV_PART_MAIN);
+        lv_obj_clear_flag(new_cont, LV_OBJ_FLAG_SCROLLABLE);
+
+        // Switch list_cont to new container and rebuild
+        ui_obj_["list_cont"] = new_cont;
+        rebuild_view();
+
+        // Animate old container sliding out
+        lv_anim_t a_old;
+        lv_anim_init(&a_old);
+        lv_anim_set_var(&a_old, old_cont);
+        lv_anim_set_exec_cb(&a_old, (lv_anim_exec_xcb_t)lv_obj_set_x);
+        lv_anim_set_values(&a_old, 0, -direction * SCREEN_W);
+        lv_anim_set_time(&a_old, 200);
+        lv_anim_set_path_cb(&a_old, lv_anim_path_ease_out);
+        lv_anim_set_completed_cb(&a_old, slide_old_done_cb);
+        lv_anim_set_user_data(&a_old, old_cont);
+        lv_anim_start(&a_old);
+
+        // Animate new container sliding in
+        lv_anim_t a_new;
+        lv_anim_init(&a_new);
+        lv_anim_set_var(&a_new, new_cont);
+        lv_anim_set_exec_cb(&a_new, (lv_anim_exec_xcb_t)lv_obj_set_x);
+        lv_anim_set_values(&a_new, direction * SCREEN_W, 0);
+        lv_anim_set_time(&a_new, 200);
+        lv_anim_set_path_cb(&a_new, lv_anim_path_ease_out);
+        lv_anim_start(&a_new);
     }
 
-    // Enter deeper level (slide in from right)
+    static void slide_old_done_cb(lv_anim_t *a)
+    {
+        lv_obj_t *old_cont = (lv_obj_t *)lv_anim_get_user_data(a);
+        if (old_cont) lv_obj_del(old_cont);
+    }
+
+    // Enter deeper level (old slides left, new from right)
     void transition_enter_level()
     {
-        rebuild_view();
-        slide_transition(SCREEN_W / 2);
+        slide_transition(1);
     }
 
-    // Return to shallower level (slide in from left)
+    // Return to shallower level (old slides right, new from left)
     void transition_back_level()
     {
-        rebuild_view();
-        slide_transition(-SCREEN_W / 2);
+        slide_transition(-1);
     }
 
     // ==================== Events ====================
