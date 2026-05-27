@@ -361,29 +361,44 @@ private:
     void enter_rtc_adjust(int field)
     {
         rtc_field_ = field;
-        // Use value select with current value as center
         const char *names[] = {"Year", "Month", "Day", "Hour", "Minute", "Second"};
         val_title_ = names[field];
-        // Generate options: current-2, current-1, current, current+1, current+2
-        val_options_.clear();
+
+        // Generate valid range options centered on current value
         int cur = rtc_values_[field];
-        for (int i = -2; i <= 2; ++i) {
+        // Min/max per field: Year[2000-2099], Month[1-12], Day[1-31], Hour[0-23], Min[0-59], Sec[0-59]
+        int mins[] = {2000, 1, 1, 0, 0, 0};
+        int maxs[] = {2099, 12, 31, 23, 59, 59};
+
+        val_options_.clear();
+        for (int i = -3; i <= 3; ++i) {
+            int v = cur + i;
+            if (v < mins[field]) v = mins[field];
+            if (v > maxs[field]) v = maxs[field];
             char buf[16];
-            snprintf(buf, sizeof(buf), "%d", cur + i);
+            snprintf(buf, sizeof(buf), "%d", v);
+            // Avoid duplicates at boundaries
+            if (!val_options_.empty() && val_options_.back() == buf) continue;
             val_options_.push_back(buf);
         }
-        val_sel_idx_ = 2; // center = current value
+        // Find current value index
+        val_sel_idx_ = 0;
+        char cur_str[16];
+        snprintf(cur_str, sizeof(cur_str), "%d", cur);
+        for (int i = 0; i < (int)val_options_.size(); ++i) {
+            if (val_options_[i] == cur_str) { val_sel_idx_ = i; break; }
+        }
         view_state_ = ViewState::VALUE_SELECT;
         build_value_view();
     }
 
     void apply_rtc_value()
     {
-        int new_val = rtc_values_[rtc_field_] + (val_sel_idx_ - 2);
+        int new_val = atoi(val_options_[val_sel_idx_].c_str());
         rtc_values_[rtc_field_] = new_val;
         // Apply to system via date command
         char cmd[128];
-        snprintf(cmd, sizeof(cmd), "date -s '%04d-%02d-%02d %02d:%02d:%02d'",
+        snprintf(cmd, sizeof(cmd), "sudo date -s '%04d-%02d-%02d %02d:%02d:%02d' >/dev/null 2>&1",
                  rtc_values_[0], rtc_values_[1], rtc_values_[2],
                  rtc_values_[3], rtc_values_[4], rtc_values_[5]);
         system(cmd);
