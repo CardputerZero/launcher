@@ -504,30 +504,19 @@ private:
         const char *names[] = {"Year", "Month", "Day", "Hour", "Minute", "Second"};
         val_title_ = names[field];
 
-        // Generate valid range options centered on current value
+        // Generate valid range: all values in range, current in the middle
         int cur = rtc_values_[field];
-        // Min/max per field: Year[2000-2099], Month[1-12], Day[1-31], Hour[0-23], Min[0-59], Sec[0-59]
         int mins[] = {2000, 1, 1, 0, 0, 0};
         int maxs[] = {2099, 12, 31, 23, 59, 59};
 
         val_options_.clear();
-        for (int i = -3; i <= 3; ++i) {
-            int v = cur + i;
-            if (v < mins[field]) v = mins[field];
-            if (v > maxs[field]) v = maxs[field];
+        for (int v = mins[field]; v <= maxs[field]; ++v) {
             char buf[16];
             snprintf(buf, sizeof(buf), "%d", v);
-            // Avoid duplicates at boundaries
-            if (!val_options_.empty() && val_options_.back() == buf) continue;
             val_options_.push_back(buf);
         }
-        // Find current value index
-        val_sel_idx_ = 0;
-        char cur_str[16];
-        snprintf(cur_str, sizeof(cur_str), "%d", cur);
-        for (int i = 0; i < (int)val_options_.size(); ++i) {
-            if (val_options_[i] == cur_str) { val_sel_idx_ = i; break; }
-        }
+        // Set selection to current value
+        val_sel_idx_ = cur - mins[field];
         view_state_ = ViewState::VALUE_SELECT;
         build_value_view();
     }
