@@ -674,22 +674,22 @@ private:
 
     static constexpr int ARROW_W = 18;
 
-    // Place blue arrow between left_lbl and right_lbl (only at center row)
-    void place_blue_arrow(lv_obj_t *parent, lv_obj_t *left_lbl, lv_obj_t *right_lbl)
+    // Place blue arrow between left column and right column.
+    // Uses left_lbl's right edge and right_min_x (leftmost x of any right-column item)
+    // to center the arrow in the gap between them.
+    void place_blue_arrow(lv_obj_t *parent, lv_obj_t *left_lbl, int right_min_x)
     {
-        if (!left_lbl || !right_lbl) return;
+        if (!left_lbl || right_min_x <= 0) return;
         lv_obj_update_layout(left_lbl);
-        lv_obj_update_layout(right_lbl);
 
         int left_right_edge = lv_obj_get_x(left_lbl) + lv_obj_get_width(left_lbl);
-        int center_left_edge = lv_obj_get_x(right_lbl);
-        int gap = center_left_edge - left_right_edge;
+        int gap = right_min_x - left_right_edge;
 
         int arrow_x;
         if (gap >= ARROW_W) {
             arrow_x = left_right_edge + (gap - ARROW_W) / 2;
         } else {
-            arrow_x = center_left_edge - ARROW_W;
+            arrow_x = right_min_x - ARROW_W;
         }
         if (arrow_x < left_right_edge + 2) arrow_x = left_right_edge + 2;
 
@@ -722,7 +722,7 @@ private:
         int count = (int)menu_items_.size();
 
         // Selected item background (312px wide, 22px tall, gray, no radius)
-        static constexpr int SEL_BAR_H = 22;
+        static constexpr int SEL_BAR_H = 23;
         static constexpr int SEL_BAR_W = 312;
         sel_bg_ = lv_obj_create(cont);
         lv_obj_set_size(sel_bg_, SEL_BAR_W, SEL_BAR_H);
@@ -845,7 +845,7 @@ private:
         int count = (int)menu_items_.size();
 
         // Gray highlight bar (same as main view, behind everything)
-        static constexpr int SEL_BAR_H = 22;
+        static constexpr int SEL_BAR_H = 23;
         static constexpr int SEL_BAR_W = 312;
         lv_obj_t *bar = lv_obj_create(cont);
         lv_obj_set_size(bar, SEL_BAR_W, SEL_BAR_H);
@@ -877,8 +877,8 @@ private:
         // Default sub_selected to position ~3 if enough items
         int sub_center_vi = ROW_CENTER;
 
-        // Sub items using shared carousel label
-        lv_obj_t *right_center_lbl = nullptr;
+        // Sub items using shared carousel label — track min X for arrow positioning
+        int right_min_x = SCREEN_W;
         for (int vi = 0; vi < ROWS_VISIBLE; ++vi) {
             int si = sub_selected_idx_ - sub_center_vi + vi;
             if (si < 0 || si >= sub_count) continue;
@@ -886,22 +886,23 @@ private:
             SubItem &sub = item.sub_items[si];
             lv_obj_t *lbl = create_carousel_label(cont, vi, sub_center_vi,
                                                    sub.label.c_str(), SUB_CENTER_X, true);
-            if (vi == sub_center_vi) right_center_lbl = lbl;
+
+            lv_obj_update_layout(lbl);
+            int lx = lv_obj_get_x(lbl);
+            if (lx < right_min_x) right_min_x = lx;
 
             // Toggle indicator (to the right of text)
             if (sub.is_toggle) {
-                lv_obj_update_layout(lbl);
                 int tw = lv_obj_get_width(lbl);
-                int lx = lv_obj_get_x(lbl);
                 lv_obj_t *ind = lv_img_create(cont);
                 lv_img_set_src(ind, sub.toggle_state ? img_ok_.c_str() : img_cross_.c_str());
                 lv_obj_set_pos(ind, lx + tw + 6, lv_obj_get_y(lbl) + 2);
             }
         }
 
-        // Blue arrow between left and right center labels
-        if (left_center_lbl && right_center_lbl)
-            place_blue_arrow(cont, left_center_lbl, right_center_lbl);
+        // Blue arrow centered between left text right edge and right column left edge
+        if (left_center_lbl && sub_count > 0)
+            place_blue_arrow(cont, left_center_lbl, right_min_x);
 
         // Up/down arrows for sub (centered at SUB_CENTER_X)
         int sub_arrow_x = SUB_CENTER_X - 8;
@@ -959,20 +960,22 @@ private:
             if (vi == ROW_CENTER) val_left_lbl = lbl;
         }
 
-        // Right column: value options as carousel at SUB_CENTER_X (160)
+        // Right column: value options — track min X for stable arrow
         static constexpr int VAL_CENTER_X = 160;
-        lv_obj_t *val_right_lbl = nullptr;
+        int val_right_min_x = SCREEN_W;
         for (int vi = 0; vi < ROWS_VISIBLE; ++vi) {
             int val_i = val_sel_idx_ - ROW_CENTER + vi;
             if (val_i < 0 || val_i >= val_count) continue;
             lv_obj_t *lbl = create_carousel_label(cont, vi, ROW_CENTER,
                                                    val_options_[val_i].c_str(), VAL_CENTER_X, true);
-            if (vi == ROW_CENTER) val_right_lbl = lbl;
+            lv_obj_update_layout(lbl);
+            int lx = lv_obj_get_x(lbl);
+            if (lx < val_right_min_x) val_right_min_x = lx;
         }
 
-        // Blue arrow between left and right
-        if (val_left_lbl && val_right_lbl)
-            place_blue_arrow(cont, val_left_lbl, val_right_lbl);
+        // Blue arrow centered between left and right columns
+        if (val_left_lbl && val_count > 0)
+            place_blue_arrow(cont, val_left_lbl, val_right_min_x);
 
         // Arrows for value column
         int val_arrow_x = VAL_CENTER_X - 8;
@@ -1013,6 +1016,9 @@ private:
         if (self) self->on_event(e);
     }
 
+    uint32_t last_repeat_tick_ = 0;
+    static constexpr uint32_t REPEAT_INTERVAL_MS = 300;
+
     void on_event(lv_event_t *e)
     {
         bool released = IS_KEY_RELEASED(e);
@@ -1024,8 +1030,13 @@ private:
         uint32_t key = elm->key_code;
         key = remap_fzxc(key);
 
-        // For held keys (pressed), only handle UP/DOWN navigation
-        if (pressed && key != KEY_UP && key != KEY_DOWN) return;
+        // For held keys (pressed), only handle UP/DOWN with throttle
+        if (pressed) {
+            if (key != KEY_UP && key != KEY_DOWN) return;
+            uint32_t now = lv_tick_get();
+            if (now - last_repeat_tick_ < REPEAT_INTERVAL_MS) return;
+            last_repeat_tick_ = now;
+        }
 
         switch (view_state_) {
         case ViewState::MAIN:         handle_main_key(key); break;
