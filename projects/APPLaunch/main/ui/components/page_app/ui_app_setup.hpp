@@ -40,7 +40,7 @@
 
 class UISetupPage : public app_base
 {
-    enum class ViewState { MAIN, SUB, VALUE_SELECT, WIFI_PW };
+    enum class ViewState { MAIN, SUB, VALUE_SELECT, WIFI_LIST, WIFI_PW };
 
     struct SubItem {
         std::string label;
@@ -303,11 +303,143 @@ private:
         build_value_view();
     }
 
+    int wifi_list_sel_ = 0;
+
     void enter_wifi_scan()
     {
-        // TODO: PSP-style WiFi scan list page
         wifi_do_scan();
-        rebuild_view();
+        wifi_list_sel_ = 0;
+        view_state_ = ViewState::WIFI_LIST;
+        build_wifi_list();
+    }
+
+    void build_wifi_list()
+    {
+        lv_obj_t *cont = ui_obj_["list_cont"];
+        lv_obj_clean(cont);
+
+        // Title
+        lv_obj_t *title = lv_label_create(cont);
+        lv_label_set_text(title, "WiFi Networks");
+        lv_obj_set_pos(title, 8, 2);
+        lv_obj_set_style_text_color(title, lv_color_hex(0x58A6FF), LV_PART_MAIN);
+        lv_obj_set_style_text_font(title, g_font_bold_12 ? g_font_bold_12 : &lv_font_montserrat_12, LV_PART_MAIN);
+
+        // Column headers
+        lv_obj_t *h1 = lv_label_create(cont);
+        lv_label_set_text(h1, "SSID");
+        lv_obj_set_pos(h1, 8, 18);
+        lv_obj_set_style_text_color(h1, lv_color_hex(0x888888), LV_PART_MAIN);
+        lv_obj_set_style_text_font(h1, &lv_font_montserrat_10, LV_PART_MAIN);
+
+        lv_obj_t *h2 = lv_label_create(cont);
+        lv_label_set_text(h2, "Security");
+        lv_obj_set_pos(h2, 180, 18);
+        lv_obj_set_style_text_color(h2, lv_color_hex(0x888888), LV_PART_MAIN);
+        lv_obj_set_style_text_font(h2, &lv_font_montserrat_10, LV_PART_MAIN);
+
+        lv_obj_t *h3 = lv_label_create(cont);
+        lv_label_set_text(h3, "Signal");
+        lv_obj_set_pos(h3, 270, 18);
+        lv_obj_set_style_text_color(h3, lv_color_hex(0x888888), LV_PART_MAIN);
+        lv_obj_set_style_text_font(h3, &lv_font_montserrat_10, LV_PART_MAIN);
+
+        if (wifi_ap_count_ == 0) {
+            lv_obj_t *empty = lv_label_create(cont);
+            lv_label_set_text(empty, "No networks found. Press R to rescan.");
+            lv_obj_set_pos(empty, 8, 50);
+            lv_obj_set_style_text_color(empty, lv_color_hex(0x666666), LV_PART_MAIN);
+            lv_obj_set_style_text_font(empty, &lv_font_montserrat_12, LV_PART_MAIN);
+            return;
+        }
+
+        // List items (show up to 5 visible, scrolled)
+        int visible = 5;
+        int offset = wifi_list_sel_ - visible / 2;
+        if (offset < 0) offset = 0;
+        if (offset > wifi_ap_count_ - visible) offset = wifi_ap_count_ - visible;
+        if (offset < 0) offset = 0;
+
+        for (int vi = 0; vi < visible && (vi + offset) < wifi_ap_count_; ++vi) {
+            int ai = vi + offset;
+            bool sel = (ai == wifi_list_sel_);
+            hal_wifi_ap_t *ap = &wifi_aps_[ai];
+            int y = 30 + vi * 22;
+
+            // Selection highlight
+            if (sel) {
+                lv_obj_t *bg = lv_obj_create(cont);
+                lv_obj_set_size(bg, SCREEN_W - 8, 20);
+                lv_obj_set_pos(bg, 4, y);
+                lv_obj_set_style_radius(bg, 2, LV_PART_MAIN);
+                lv_obj_set_style_bg_color(bg, lv_color_hex(0x1F3A5F), LV_PART_MAIN);
+                lv_obj_set_style_bg_opa(bg, 255, LV_PART_MAIN);
+                lv_obj_set_style_border_width(bg, 0, LV_PART_MAIN);
+                lv_obj_clear_flag(bg, LV_OBJ_FLAG_SCROLLABLE);
+            }
+
+            uint32_t tc = sel ? 0xFFFFFF : 0xCCCCCC;
+            if (ap->in_use) tc = 0x58A6FF;
+
+            // SSID
+            lv_obj_t *ssid = lv_label_create(cont);
+            lv_label_set_text(ssid, ap->ssid);
+            lv_obj_set_pos(ssid, 8, y + 2);
+            lv_obj_set_style_text_color(ssid, lv_color_hex(tc), LV_PART_MAIN);
+            lv_obj_set_style_text_font(ssid, &lv_font_montserrat_12, LV_PART_MAIN);
+            lv_obj_set_width(ssid, 165);
+            lv_label_set_long_mode(ssid, LV_LABEL_LONG_CLIP);
+
+            // Security
+            lv_obj_t *sec = lv_label_create(cont);
+            lv_label_set_text(sec, ap->security[0] ? ap->security : "Open");
+            lv_obj_set_pos(sec, 180, y + 2);
+            lv_obj_set_style_text_color(sec, lv_color_hex(tc), LV_PART_MAIN);
+            lv_obj_set_style_text_font(sec, &lv_font_montserrat_10, LV_PART_MAIN);
+
+            // Signal
+            char sig_buf[16];
+            snprintf(sig_buf, sizeof(sig_buf), "%d%%", ap->signal);
+            lv_obj_t *sig = lv_label_create(cont);
+            lv_label_set_text(sig, sig_buf);
+            lv_obj_set_pos(sig, 275, y + 2);
+            lv_obj_set_style_text_color(sig, lv_color_hex(tc), LV_PART_MAIN);
+            lv_obj_set_style_text_font(sig, &lv_font_montserrat_10, LV_PART_MAIN);
+        }
+
+        // Hint
+        lv_obj_t *hint = lv_label_create(cont);
+        lv_label_set_text(hint, "OK:connect  R:rescan  ESC:back");
+        lv_obj_set_pos(hint, 8, LIST_H - 14);
+        lv_obj_set_style_text_color(hint, lv_color_hex(0x555555), LV_PART_MAIN);
+        lv_obj_set_style_text_font(hint, &lv_font_montserrat_10, LV_PART_MAIN);
+    }
+
+    void handle_wifi_list_key(uint32_t key)
+    {
+        switch (key) {
+        case KEY_UP:
+            if (wifi_list_sel_ > 0) { --wifi_list_sel_; build_wifi_list(); }
+            break;
+        case KEY_DOWN:
+            if (wifi_list_sel_ < wifi_ap_count_ - 1) { ++wifi_list_sel_; build_wifi_list(); }
+            break;
+        case KEY_ENTER:
+            if (wifi_ap_count_ > 0) wifi_try_connect(wifi_list_sel_);
+            break;
+        case KEY_R:
+            wifi_do_scan();
+            wifi_list_sel_ = 0;
+            build_wifi_list();
+            break;
+        case KEY_ESC:
+        case KEY_LEFT:
+            view_state_ = ViewState::SUB;
+            build_sub_view();
+            break;
+        default:
+            break;
+        }
     }
 
     void refresh_info_values()
@@ -505,7 +637,7 @@ private:
     void handle_wifi_pw_key(uint32_t key)
     {
         if (key == KEY_ESC) {
-            view_state_ = ViewState::SUB;
+            view_state_ = ViewState::WIFI_LIST;
             rebuild_view();
             return;
         }
@@ -513,7 +645,8 @@ private:
             if (pw_hint_lbl_) lv_label_set_text(pw_hint_lbl_, "Connecting...");
             lv_refr_now(NULL);
             hal_wifi_connect(wifi_pw_ssid_.c_str(), wifi_pw_buf_.c_str());
-            view_state_ = ViewState::SUB;
+            view_state_ = ViewState::WIFI_LIST;
+            wifi_do_scan();
             rebuild_view();
             return;
         }
@@ -1080,6 +1213,7 @@ private:
         if (view_state_ == ViewState::MAIN) build_main_view();
         else if (view_state_ == ViewState::SUB) build_sub_view();
         else if (view_state_ == ViewState::VALUE_SELECT) build_value_view();
+        else if (view_state_ == ViewState::WIFI_LIST) build_wifi_list();
     }
 
     // ==================== Events ====================
@@ -1126,6 +1260,7 @@ private:
         case ViewState::MAIN:         handle_main_key(key); break;
         case ViewState::SUB:          handle_sub_key(key);  break;
         case ViewState::VALUE_SELECT: handle_value_key(key); break;
+        case ViewState::WIFI_LIST:    handle_wifi_list_key(key); break;
         case ViewState::WIFI_PW:
             if (released) handle_wifi_pw_key(key);
             break;
