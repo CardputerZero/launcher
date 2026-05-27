@@ -170,7 +170,6 @@ private:
             MenuItem m;
             m.label = "Boot";
             m.sub_items = {
-                {"Startup",  false, false, [this]() { enter_startup_select(); }},
                 {"Reboot",   false, false, [this]() { hal_system_reboot(); }},
                 {"Shutdown", false, false, [this]() { hal_system_shutdown(); }},
             };
@@ -1074,6 +1073,13 @@ private:
             uint32_t now = lv_tick_get();
             if (now - last_repeat_tick_ < REPEAT_INTERVAL_MS) return;
             last_repeat_tick_ = now;
+        } else {
+            // On release, also throttle to prevent double-trigger
+            uint32_t now = lv_tick_get();
+            if (key == KEY_UP || key == KEY_DOWN) {
+                if (now - last_repeat_tick_ < 150) return;
+                last_repeat_tick_ = now;
+            }
         }
 
         switch (view_state_) {
