@@ -675,7 +675,9 @@ private:
         int lx = center_x - tw / 2;
         if (lx < 4) lx = 4;
         int font_h = lv_font_get_line_height(font);
-        lv_obj_set_pos(lbl, lx, row_y(vi) + (row_h() - font_h) / 2);
+        int ly = row_y(vi) + (row_h() - font_h) / 2;
+        if (smaller) ly += 1;
+        lv_obj_set_pos(lbl, lx, ly);
 
         if (!text || !text[0])
             lv_obj_add_flag(lbl, LV_OBJ_FLAG_HIDDEN);
