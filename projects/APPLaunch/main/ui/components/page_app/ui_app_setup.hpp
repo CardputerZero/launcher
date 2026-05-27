@@ -277,7 +277,7 @@ private:
         val_options_ = {"Never", "10S", "30S", "60S", "300S"};
         val_sel_idx_ = 2; // default 30S
         view_state_ = ViewState::VALUE_SELECT;
-        build_value_view();
+        transition_enter_level();
     }
 
     void enter_volume_adjust()
@@ -292,7 +292,7 @@ private:
         else if (pct >= 12) val_sel_idx_ = 3;
         else val_sel_idx_ = 4;
         view_state_ = ViewState::VALUE_SELECT;
-        build_value_view();
+        transition_enter_level();
     }
 
     void enter_camera_resolution()
@@ -301,7 +301,7 @@ private:
         val_options_ = {"1280x720", "640x480"};
         val_sel_idx_ = 0;
         view_state_ = ViewState::VALUE_SELECT;
-        build_value_view();
+        transition_enter_level();
     }
 
     void enter_startup_select()
@@ -310,7 +310,7 @@ private:
         val_options_ = {"Launcher", "CLI"};
         val_sel_idx_ = hal_config_get_int("startup_mode", 0);
         view_state_ = ViewState::VALUE_SELECT;
-        build_value_view();
+        transition_enter_level();
     }
 
     int wifi_list_sel_ = 0;
@@ -518,7 +518,7 @@ private:
         // Set selection to current value
         val_sel_idx_ = cur - mins[field];
         view_state_ = ViewState::VALUE_SELECT;
-        build_value_view();
+        transition_enter_level();
     }
 
     void apply_rtc_value()
@@ -690,7 +690,7 @@ private:
         else if (pct >= 37) val_sel_idx_ = 2;
         else val_sel_idx_ = 3;
         view_state_ = ViewState::VALUE_SELECT;
-        build_value_view();
+        transition_enter_level();
     }
 
     void apply_value_selection()
@@ -1215,6 +1215,35 @@ private:
         else if (view_state_ == ViewState::WIFI_LIST) build_wifi_list();
     }
 
+    // Slide transition: animate list_cont X from start_x to 0
+    void slide_transition(int start_x)
+    {
+        lv_obj_t *cont = ui_obj_["list_cont"];
+        if (!cont) return;
+        lv_anim_t a;
+        lv_anim_init(&a);
+        lv_anim_set_var(&a, cont);
+        lv_anim_set_exec_cb(&a, (lv_anim_exec_xcb_t)lv_obj_set_x);
+        lv_anim_set_values(&a, start_x, 0);
+        lv_anim_set_time(&a, 200);
+        lv_anim_set_path_cb(&a, lv_anim_path_ease_out);
+        lv_anim_start(&a);
+    }
+
+    // Enter deeper level (slide in from right)
+    void transition_enter_level()
+    {
+        rebuild_view();
+        slide_transition(SCREEN_W / 2);
+    }
+
+    // Return to shallower level (slide in from left)
+    void transition_back_level()
+    {
+        rebuild_view();
+        slide_transition(-SCREEN_W / 2);
+    }
+
     // ==================== Events ====================
     void event_handler_init()
     {
@@ -1361,12 +1390,12 @@ private:
         case KEY_RIGHT:
             apply_value_selection();
             view_state_ = ViewState::SUB;
-            build_sub_view();
+            transition_back_level();
             break;
         case KEY_ESC:
         case KEY_LEFT:
             view_state_ = ViewState::SUB;
-            build_sub_view();
+            transition_back_level();
             break;
         default:
             break;
