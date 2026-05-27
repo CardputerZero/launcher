@@ -352,6 +352,16 @@ int hal_wifi_connect(const char *ssid, const char *password)
     return ok ? 0 : -1;
 }
 
+int hal_wifi_disconnect(void)
+{
+    FILE *p = popen("nmcli dev disconnect wlan0 2>&1", "r");
+    if (!p) return -1;
+    char buf[256]; int ok = 0;
+    while (fgets(buf, sizeof(buf), p)) { if (strstr(buf, "successfully")) ok = 1; }
+    pclose(p);
+    return ok ? 0 : -1;
+}
+
 hal_bt_status_t hal_bt_get_status(void)
 {
     hal_bt_status_t st;

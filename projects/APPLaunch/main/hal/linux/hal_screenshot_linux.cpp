@@ -44,7 +44,17 @@ int hal_screenshot_save(const char *dir)
         return -3;
     }
 
-    mkdir(dir, 0755);
+    {
+        struct stat st;
+        if (stat(dir, &st) != 0) {
+            char tmp[512];
+            snprintf(tmp, sizeof(tmp), "%s", dir);
+            for (char *p = tmp + 1; *p; ++p) {
+                if (*p == '/') { *p = 0; mkdir(tmp, 0755); *p = '/'; }
+            }
+            mkdir(tmp, 0755);
+        }
+    }
 
     time_t now = time(NULL);
     struct tm *t = localtime(&now);

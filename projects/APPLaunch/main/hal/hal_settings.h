@@ -52,6 +52,7 @@ int  hal_volume_write(int val);
 hal_wifi_status_t hal_wifi_get_status(void);
 int  hal_wifi_scan(hal_wifi_ap_t *out, int max_aps);
 int  hal_wifi_connect(const char *ssid, const char *password);
+int  hal_wifi_disconnect(void);
 
 #define BT_DEVICE_MAX  16
 #define BT_NAME_MAX    64
