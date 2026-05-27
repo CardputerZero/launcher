@@ -205,15 +205,16 @@ private:
             };
             menu_items_.push_back(m);
         }
-        // --- Info ---
+        // --- Info (display only — values refreshed on enter) ---
         {
             MenuItem m;
             m.label = "Info";
             m.sub_items = {
-                {"Battery",     false, false, nullptr},  // display only
-                {"Temperature", false, false, nullptr},  // display only
-                {"Current",     false, false, nullptr},  // display only
+                {"Battery: --%",     false, false, nullptr},
+                {"Temp: --C",        false, false, nullptr},
+                {"Current: --mA",    false, false, nullptr},
             };
+            m.on_enter = [this]() { refresh_info_values(); };
             menu_items_.push_back(m);
         }
         // --- ExtPort ---
@@ -290,6 +291,23 @@ private:
         // TODO: PSP-style WiFi scan list page
         wifi_do_scan();
         rebuild_view();
+    }
+
+    void refresh_info_values()
+    {
+        // Find the Info menu item and update its sub_items labels
+        for (auto &m : menu_items_) {
+            if (m.label != "Info") continue;
+            hal_battery_info_t bat = hal_battery_read();
+            char buf[64];
+            snprintf(buf, sizeof(buf), "Battery: %d%%", bat.valid ? bat.soc : 0);
+            m.sub_items[0].label = buf;
+            snprintf(buf, sizeof(buf), "Temp: %.1fC", bat.valid ? bat.temperature_c10 / 10.0 : 0.0);
+            m.sub_items[1].label = buf;
+            snprintf(buf, sizeof(buf), "Current: %dmA", bat.valid ? bat.current_ma : 0);
+            m.sub_items[2].label = buf;
+            break;
+        }
     }
 
     void factory_reset()
@@ -960,13 +978,12 @@ private:
         case KEY_ENTER:
         case KEY_RIGHT: {
             MenuItem &m = menu_items_[selected_idx_];
+            if (m.on_enter) m.on_enter();
             if (!m.sub_items.empty()) {
                 view_state_ = ViewState::SUB;
                 int sc = (int)m.sub_items.size();
                 sub_selected_idx_ = sc > ROW_CENTER ? ROW_CENTER : sc - 1;
                 build_sub_view();
-            } else if (m.on_enter) {
-                m.on_enter();
             }
             break;
         }
