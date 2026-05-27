@@ -681,9 +681,9 @@ private:
         }
         if (arrow_x < left_right_edge + 2) arrow_x = left_right_edge + 2;
 
-        // Vertically center the arrow (19px tall) within the row
+        // Vertically center the arrow (19px tall) within the row, +1 nudge down
         static constexpr int ARROW_H = 19;
-        int arrow_y = row_y(ROW_CENTER) + (row_h() - ARROW_H) / 2;
+        int arrow_y = row_y(ROW_CENTER) + (row_h() - ARROW_H) / 2 + 1;
 
         lv_obj_t *arrow = lv_img_create(parent);
         lv_img_set_src(arrow, img_right_arrow_.c_str());
