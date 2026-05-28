@@ -30,7 +30,7 @@
  * ============================================================ */
 struct keyboard_queue_t keyboard_queue;
 pthread_mutex_t keyboard_mutex = PTHREAD_MUTEX_INITIALIZER;
-volatile int LVGL_HOME_KEY_FLAGE = 0;
+volatile int LVGL_HOME_KEY_FLAG = 0;
 volatile int LVGL_RUN_FLAGE = 1;
 volatile uint32_t LV_EVENT_KEYBOARD;
 
@@ -343,11 +343,11 @@ static void enqueue_key(const struct key_item *src) {
     utf8_dbg[di] = '\0';
     printf("[KBD] enqueue code=%u state=%s sym=%s utf8='%s' cp=0x%x mods=0x%x run=%d home_flag=%d\n",
            elm->key_code, kbd_state_name(elm->key_state), elm->sym_name,
-           utf8_dbg, elm->codepoint, elm->mods, LVGL_RUN_FLAGE, LVGL_HOME_KEY_FLAGE);
+           utf8_dbg, elm->codepoint, elm->mods, LVGL_RUN_FLAGE, LVGL_HOME_KEY_FLAG);
 
     if(elm->key_code == KEY_ESC) {
-        LVGL_HOME_KEY_FLAGE = elm->key_state;
-        printf("[KBD] LVGL_HOME_KEY_FLAGE := %d\n", LVGL_HOME_KEY_FLAGE);
+        LVGL_HOME_KEY_FLAG = elm->key_state;
+        printf("[KBD] LVGL_HOME_KEY_FLAG := %d\n", LVGL_HOME_KEY_FLAG);
     }
 
     if(LVGL_RUN_FLAGE)

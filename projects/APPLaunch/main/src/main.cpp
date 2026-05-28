@@ -284,7 +284,7 @@ void APPLaunch_lock()
             lv_obj_invalidate(lv_scr_act());
         }
     } else {
-        if (LVGL_HOME_KEY_FLAGE) {
+        if (LVGL_HOME_KEY_FLAG) {
             if (home_back_status == 0) {
                 home_back_status = 1;
                 start_time = std::chrono::steady_clock::now();

@@ -35,7 +35,7 @@ struct key_item {
 STAILQ_HEAD(keyboard_queue_t, key_item);
 extern struct keyboard_queue_t keyboard_queue;
 extern pthread_mutex_t keyboard_mutex;
-extern volatile int LVGL_HOME_KEY_FLAGE;
+extern volatile int LVGL_HOME_KEY_FLAG;
 extern volatile int LVGL_RUN_FLAGE;
 extern volatile uint32_t LV_EVENT_KEYBOARD;
 
