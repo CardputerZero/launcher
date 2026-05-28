@@ -594,7 +594,7 @@ private:
         lv_timer_enable(false);
         lv_refr_now(disp);
 
-        int ret = hal_process_exec_blocking(it->Exec.c_str(), &LVGL_HOME_KEY_FLAGE);
+        int ret = hal_process_exec_blocking(it->Exec.c_str(), &LVGL_HOME_KEY_FLAGE, 0);
         printf("App %s exited with code %d\n", it->Exec.c_str(), ret);
         lv_timer_enable(true);
         if (indev) lv_indev_set_group(lv_indev_get_next(NULL), Screen1group);
