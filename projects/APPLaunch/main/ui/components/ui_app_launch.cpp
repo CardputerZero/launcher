@@ -96,6 +96,14 @@ struct app
         bool terminal,
         bool sysplause);
 
+    // ① 外部命令 (with run_as_root)
+    app(std::string name,
+        std::string icon,
+        std::string exec,
+        bool terminal,
+        bool sysplause,
+        bool run_as_root);
+
     // ② 内置 UI 页面
     template <class PageT>
     app(std::string name,
@@ -127,7 +135,7 @@ public:
                               img_path("python_100.png"), "python3", true, false);
         app_list.emplace_back("STORE",
                               img_path("store_100.png"),
-                              "/usr/share/APPLaunch/bin/M5CardputerZero-AppStore", false);
+                              "/usr/share/APPLaunch/bin/M5CardputerZero-AppStore", false, true, true);
         app_list.emplace_back("CLI",
                               img_path("cli_100.png"), "bash", true, false);
         app_list.emplace_back("CLAW",
@@ -301,9 +309,9 @@ public:
         p->exec(exec);
     }
 
-    void launch_Exec(const std::string &exec)
+    void launch_Exec(const std::string &exec, bool keep_root = false)
     {
-        printf("Launching external app: %s\n", exec.c_str());
+        printf("Launching external app: %s (keep_root=%d)\n", exec.c_str(), keep_root);
         /* Show overlay BEFORE we tear down LVGL input/timers so the user
          * gets immediate feedback when ENTER was pressed. The overlay
          * stays drawn on the framebuffer right up until the child takes
@@ -317,7 +325,7 @@ public:
         lv_timer_enable(false);
         lv_refr_now(disp);
 
-        int ret = hal_process_exec_blocking(exec.c_str(), &LVGL_HOME_KEY_FLAGE);
+        int ret = hal_process_exec_blocking(exec.c_str(), &LVGL_HOME_KEY_FLAGE, keep_root ? 1 : 0);
         printf("App %s exited with code %d\n", exec.c_str(), ret);
         lv_timer_enable(true);
         if (indev)
@@ -657,6 +665,22 @@ inline app::app(std::string name,
             ctx->launch_Exec_in_terminal(exec, sysplause);
         else
             ctx->launch_Exec(exec);
+    };
+}
+
+inline app::app(std::string name,
+                std::string icon,
+                std::string exec,
+                bool terminal,
+                bool sysplause,
+                bool run_as_root)
+    : Name(std::move(name)), Icon(std::move(icon)){
+    launch = [exec = std::move(exec), terminal, sysplause, run_as_root](app_launch_S *ctx)
+    {
+        if (terminal)
+            ctx->launch_Exec_in_terminal(exec, sysplause);
+        else
+            ctx->launch_Exec(exec, run_as_root);
     };
 }
 

@@ -81,7 +81,8 @@ static void exec_as_user(const char *exec_path)
  *  - keyboard_pause() still suspends libinput so APPLauncher's LVGL
  *    keyboard thread doesn't react while the app is in the foreground.
  * ------------------------------------------------------------------ */
-int hal_process_exec_blocking(const char *exec_path, volatile int *home_key_flag)
+int hal_process_exec_blocking(const char *exec_path, volatile int *home_key_flag,
+                              int keep_root)
 {
     (void)home_key_flag;
 
@@ -105,7 +106,10 @@ int hal_process_exec_blocking(const char *exec_path, volatile int *home_key_flag
     if (pid == 0) {
         close(evfd);
         setpgid(0, 0);
-        exec_as_user(exec_path);
+        if (keep_root)
+            execlp("/bin/sh", "sh", "-c", exec_path, (char *)NULL);
+        else
+            exec_as_user(exec_path);
         _exit(127);
     }
     /* Also set it in the parent in case setpgid races the child. */
@@ -224,13 +228,16 @@ void hal_process_kill(int pid, int grace_ms)
     }
 }
 
-hal_pid_t hal_process_spawn(const char *exec_path)
+hal_pid_t hal_process_spawn(const char *exec_path, int keep_root)
 {
     pid_t pid = fork();
     if (pid < 0) return -1;
     if (pid == 0) {
         setpgid(0, 0);
-        exec_as_user(exec_path);
+        if (keep_root)
+            execlp("/bin/sh", "sh", "-c", exec_path, (char *)NULL);
+        else
+            exec_as_user(exec_path);
         _exit(127);
     }
     setpgid(pid, pid);
