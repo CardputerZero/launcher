@@ -165,6 +165,14 @@ void UiRecorder::createPageRecording(lv_obj_t* page)
     lv_obj_clear_flag(recWaveContainer_, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_style_radius(recWaveContainer_, 4, 0);
 
+    recWaveLine_ = lv_line_create(recWaveContainer_);
+    lv_obj_set_size(recWaveLine_, 280, 50);
+    lv_obj_set_pos(recWaveLine_, 0, 0);
+    lv_obj_set_style_line_color(recWaveLine_, kColorHighlight, 0);
+    lv_obj_set_style_line_width(recWaveLine_, 2, 0);
+    lv_line_set_y_invert(recWaveLine_, true);
+    lv_line_set_points_mutable(recWaveLine_, recWavePoints_.data(), recWavePoints_.size());
+
     lblRecTimer_ = lv_label_create(page);
     lv_obj_set_pos(lblRecTimer_, 0, 88);
     lv_obj_set_width(lblRecTimer_, kScreenW);
@@ -241,6 +249,22 @@ void UiRecorder::createPagePlayback(lv_obj_t* page)
     lv_obj_clear_flag(playWaveContainer_, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_style_radius(playWaveContainer_, 4, 0);
 
+    playWaveLine_ = lv_line_create(playWaveContainer_);
+    lv_obj_set_size(playWaveLine_, 280, 50);
+    lv_obj_set_pos(playWaveLine_, 0, 0);
+    lv_obj_set_style_line_color(playWaveLine_, kColorHighlight, 0);
+    lv_obj_set_style_line_width(playWaveLine_, 2, 0);
+    lv_line_set_y_invert(playWaveLine_, true);
+    lv_line_set_points_mutable(playWaveLine_, playWavePoints_.data(), playWavePoints_.size());
+
+    playProgressLine_ = lv_line_create(playWaveContainer_);
+    lv_obj_set_size(playProgressLine_, 280, 50);
+    lv_obj_set_pos(playProgressLine_, 0, 0);
+    lv_obj_set_style_line_color(playProgressLine_, lv_color_hex(0xFF0000), 0);
+    lv_obj_set_style_line_width(playProgressLine_, 2, 0);
+    lv_line_set_y_invert(playProgressLine_, true);
+    lv_line_set_points_mutable(playProgressLine_, playProgressPoints_, 2);
+
     lblPlayTimer_ = lv_label_create(page);
     lv_obj_set_pos(lblPlayTimer_, 0, 88);
     lv_obj_set_width(lblPlayTimer_, kScreenW);
@@ -277,7 +301,7 @@ void UiRecorder::updateBottomLabels(UiPage page, bool isPaused)
     LabelSet labels = {"--", "--", "--", "--", "--"};
     switch (page) {
         case UiPage::Home:
-            labels = {"List", "48k", "Rec", "--", "Exit"};
+            labels = {"List", lastState_.sampleRate.c_str(), "Rec", "--", "Exit"};
             break;
         case UiPage::FileList:
             labels = {"Up", "Down", "Play", "Rename", "Exit"};
@@ -362,6 +386,55 @@ void UiRecorder::updatePageContent(const RecorderState& state)
     // Playback
     lv_label_set_text(lblPlayFilename_, fname);
     lv_label_set_text(lblPlayTimer_, state.timerText.c_str());
+
+    // Update recording waveform
+    if (currentPage_ == UiPage::Recording) {
+        constexpr int count = 128;
+        float stepX = 280.0f / (count - 1);
+        for (int i = 0; i < count; i++) {
+            recWavePoints_[i].x = i * stepX;
+            float v = state.recWaveform[i];
+            // Clamp to [-1, 1]
+            if (v < -1.0f) v = -1.0f;
+            if (v > 1.0f) v = 1.0f;
+            // y_invert enabled: y=0 at bottom, y=50 at top.
+            // Center line is y=25. Positive values go up, negative go down.
+            recWavePoints_[i].y = 25.0f + v * 25.0f;
+        }
+        lv_obj_invalidate(recWaveLine_);
+    }
+
+    // Update playback waveform and progress
+    if (currentPage_ == UiPage::Playback) {
+        if (state.hasPlayWaveform) {
+            constexpr int count = 256;
+            float stepX = 280.0f / (count - 1);
+            for (int i = 0; i < count; i++) {
+                playWavePoints_[i].x = i * stepX;
+                float v = state.playWaveform[i];
+                if (v < 0.0f) v = 0.0f;
+                if (v > 1.0f) v = 1.0f;
+                // y_invert enabled: draw envelope from bottom to top
+                playWavePoints_[i].y = v * 50.0f;
+            }
+            lv_obj_invalidate(playWaveLine_);
+        }
+
+        // Progress line
+        float dur = state.playbackDuration;
+        float pos = state.playbackPosition;
+        if (dur > 0.0f) {
+            float ratio = pos / dur;
+            if (ratio < 0.0f) ratio = 0.0f;
+            if (ratio > 1.0f) ratio = 1.0f;
+            int px = static_cast<int>(ratio * 280.0f);
+            playProgressPoints_[0].x = px;
+            playProgressPoints_[0].y = 0;
+            playProgressPoints_[1].x = px;
+            playProgressPoints_[1].y = 50;
+            lv_obj_invalidate(playProgressLine_);
+        }
+    }
 
     // Update bottom labels in case sample rate or speed changed
     updateBottomLabels(currentPage_, isPlaybackPaused_);

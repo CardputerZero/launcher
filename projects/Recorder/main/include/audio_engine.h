@@ -43,6 +43,13 @@ public:
     float playbackPosition() const;
     float playbackDuration() const;
 
+    // Extended APIs
+    void seekPlayback(float seconds);
+    void setPlaybackSpeed(float speed);
+    void getRecordingWaveform(float* out, int count) const;
+    void getPlaybackWaveform(float* out, int count) const;
+    bool hasPlaybackWaveform() const;
+
     using UpdateCallback = std::function<void()>;
     void setUpdateCallback(UpdateCallback cb);
 

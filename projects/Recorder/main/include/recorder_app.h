@@ -1,6 +1,7 @@
 #pragma once
 
 #include "audio_engine.h"
+#include <array>
 #include <atomic>
 #include <future>
 #include <functional>
@@ -34,6 +35,11 @@ struct RecorderState {
     int selectedFileIndex;
     std::string sampleRate;      // e.g. "48k"
     std::string playbackSpeed;   // e.g. "1.0X"
+    float playbackPosition = 0;  // seconds
+    float playbackDuration = 0;  // seconds
+    std::array<float, 128> recWaveform{};
+    std::array<float, 256> playWaveform{};
+    bool hasPlayWaveform = false;
 };
 
 class IRecorderView {

@@ -4,7 +4,12 @@
 #define MINIAUDIO_IMPLEMENTATION
 #include "miniaudio.h"
 
+#include <algorithm>
+#include <array>
+#include <cmath>
 #include <cstring>
+#include <mutex>
+#include <vector>
 
 struct AudioEngineImpl {
     ma_context context{};
@@ -20,14 +25,27 @@ struct AudioEngineImpl {
 
     FILE* playFile = nullptr;
     uint32_t playSampleRate = 48000;
+    uint32_t deviceSampleRate = 48000;
     uint8_t playChannels = 1;
     uint32_t playTotalFrames = 0;
     uint32_t playDataOffset = 0;
     uint32_t playCurrentFrame = 0;
+    float playbackSpeed = 1.0f;
 
     std::atomic<AudioState> state{AudioState::Idle};
     std::atomic<bool> playbackFinished{false};
     AudioEngine::UpdateCallback updateCb;
+
+    // Recording waveform ring buffer
+    static constexpr int kRecWaveformSize = 128;
+    std::array<float, kRecWaveformSize> recWaveform{};
+    mutable std::mutex recWaveformMutex;
+    size_t recWaveformIndex = 0;
+
+    // Playback waveform
+    static constexpr int kPlayWaveformSize = 256;
+    std::array<float, kPlayWaveformSize> playWaveform{};
+    bool hasPlayWaveform = false;
 
     ~AudioEngineImpl() {
         if (recDevice) {
@@ -185,14 +203,57 @@ bool AudioEngine::startPlayback(const std::string& filepath)
 
     impl_->playChannels = static_cast<uint8_t>(channels);
     impl_->playSampleRate = sampleRate;
+    impl_->deviceSampleRate = sampleRate;
+    impl_->playbackSpeed = 1.0f;
     impl_->playTotalFrames = dataSize / (channels * sizeof(int16_t));
     impl_->playCurrentFrame = 0;
     impl_->playDataOffset = ftell(impl_->playFile);
 
+    // Generate playback waveform
+    {
+        long savedPos = ftell(impl_->playFile);
+        size_t bytesPerFrame = impl_->playChannels * sizeof(int16_t);
+        uint32_t totalFrames = impl_->playTotalFrames;
+        int outCount = AudioEngineImpl::kPlayWaveformSize;
+        uint32_t framesPerBin = totalFrames / outCount;
+        if (framesPerBin < 1) framesPerBin = 1;
+
+        fseek(impl_->playFile, impl_->playDataOffset, SEEK_SET);
+        std::vector<int16_t> buffer(framesPerBin * impl_->playChannels);
+
+        for (int i = 0; i < outCount; i++) {
+            uint32_t toRead = framesPerBin;
+            long curPos = ftell(impl_->playFile);
+            fseek(impl_->playFile, 0, SEEK_END);
+            long endPos = ftell(impl_->playFile);
+            fseek(impl_->playFile, curPos, SEEK_SET);
+            uint32_t remaining = static_cast<uint32_t>((endPos - curPos) / static_cast<long>(bytesPerFrame));
+            if (toRead > remaining) toRead = remaining;
+
+            if (toRead > 0) {
+                if (toRead > buffer.size() / impl_->playChannels) {
+                    buffer.resize(toRead * impl_->playChannels);
+                }
+                size_t read = fread(buffer.data(), bytesPerFrame, toRead, impl_->playFile);
+                int16_t peak = 0;
+                for (size_t j = 0; j < read * impl_->playChannels; j++) {
+                    if (std::abs(buffer[j]) > std::abs(peak)) {
+                        peak = buffer[j];
+                    }
+                }
+                impl_->playWaveform[i] = std::abs(peak) / 32768.0f;
+            } else {
+                impl_->playWaveform[i] = 0.0f;
+            }
+        }
+        impl_->hasPlayWaveform = true;
+        fseek(impl_->playFile, savedPos, SEEK_SET);
+    }
+
     ma_device_config config = ma_device_config_init(ma_device_type_playback);
     config.playback.format = ma_format_s16;
     config.playback.channels = impl_->playChannels;
-    config.sampleRate = impl_->playSampleRate;
+    config.sampleRate = impl_->deviceSampleRate;
     config.dataCallback = playbackCallback;
     config.pUserData = this;
 
@@ -255,7 +316,10 @@ void AudioEngine::stopPlayback()
     }
     impl_->playTotalFrames = 0;
     impl_->playCurrentFrame = 0;
+    impl_->playbackSpeed = 1.0f;
+    impl_->deviceSampleRate = 48000;
     impl_->playbackFinished.store(false);
+    impl_->hasPlayWaveform = false;
     impl_->state.store(AudioState::Idle);
 }
 
@@ -278,12 +342,119 @@ float AudioEngine::recordingDuration() const
 
 float AudioEngine::playbackPosition() const
 {
-    return static_cast<float>(impl_->playCurrentFrame) / static_cast<float>(impl_->playSampleRate);
+    if (impl_->deviceSampleRate == 0) return 0;
+    return static_cast<float>(impl_->playCurrentFrame) / static_cast<float>(impl_->deviceSampleRate);
 }
 
 float AudioEngine::playbackDuration() const
 {
+    if (impl_->playSampleRate == 0) return 0;
     return static_cast<float>(impl_->playTotalFrames) / static_cast<float>(impl_->playSampleRate);
+}
+
+void AudioEngine::seekPlayback(float seconds)
+{
+    if (!impl_->playFile) return;
+    float dur = playbackDuration();
+    if (seconds < 0) seconds = 0;
+    if (seconds > dur) seconds = dur;
+
+    uint32_t fileFrame = static_cast<uint32_t>(seconds * impl_->playSampleRate);
+    if (fileFrame > impl_->playTotalFrames) fileFrame = impl_->playTotalFrames;
+
+    size_t bytesPerFrame = impl_->playChannels * sizeof(int16_t);
+    fseek(impl_->playFile, static_cast<long>(impl_->playDataOffset + fileFrame * bytesPerFrame), SEEK_SET);
+    impl_->playCurrentFrame = static_cast<uint32_t>(seconds * impl_->deviceSampleRate);
+}
+
+void AudioEngine::setPlaybackSpeed(float speed)
+{
+    if (!impl_->playFile || speed <= 0.0f) return;
+    if (speed == impl_->playbackSpeed) return;
+
+    AudioState currentState = impl_->state.load();
+    if (currentState != AudioState::Playing && currentState != AudioState::PlayPaused) return;
+
+    uint32_t oldDeviceSampleRate = impl_->deviceSampleRate;
+    uint32_t currentFrame = impl_->playCurrentFrame;
+
+    if (impl_->playDevice) {
+        ma_device_stop(impl_->playDevice);
+        ma_device_uninit(impl_->playDevice);
+        delete impl_->playDevice;
+        impl_->playDevice = nullptr;
+    }
+
+    impl_->playbackSpeed = speed;
+    impl_->deviceSampleRate = static_cast<uint32_t>(impl_->playSampleRate * speed);
+
+    ma_device_config config = ma_device_config_init(ma_device_type_playback);
+    config.playback.format = ma_format_s16;
+    config.playback.channels = impl_->playChannels;
+    config.sampleRate = impl_->deviceSampleRate;
+    config.dataCallback = playbackCallback;
+    config.pUserData = this;
+
+    impl_->playDevice = new ma_device();
+    memset(impl_->playDevice, 0, sizeof(ma_device));
+    ma_result result = ma_device_init(&impl_->context, &config, impl_->playDevice);
+    if (result != MA_SUCCESS) {
+        impl_->deviceSampleRate = impl_->playSampleRate;
+        impl_->playbackSpeed = 1.0f;
+        config.sampleRate = impl_->deviceSampleRate;
+        result = ma_device_init(&impl_->context, &config, impl_->playDevice);
+        if (result != MA_SUCCESS) {
+            delete impl_->playDevice;
+            impl_->playDevice = nullptr;
+            fclose(impl_->playFile);
+            impl_->playFile = nullptr;
+            impl_->state.store(AudioState::Idle);
+            return;
+        }
+    }
+
+    float posSec = static_cast<float>(currentFrame) / static_cast<float>(oldDeviceSampleRate);
+    uint32_t fileFrame = static_cast<uint32_t>(posSec * impl_->playSampleRate);
+    if (fileFrame > impl_->playTotalFrames) fileFrame = impl_->playTotalFrames;
+
+    size_t bytesPerFrame = impl_->playChannels * sizeof(int16_t);
+    fseek(impl_->playFile, static_cast<long>(impl_->playDataOffset + fileFrame * bytesPerFrame), SEEK_SET);
+    impl_->playCurrentFrame = static_cast<uint32_t>(posSec * impl_->deviceSampleRate);
+
+    if (currentState == AudioState::Playing) {
+        ma_device_start(impl_->playDevice);
+    } else {
+        impl_->state.store(AudioState::PlayPaused);
+    }
+}
+
+void AudioEngine::getRecordingWaveform(float* out, int count) const
+{
+    if (count > AudioEngineImpl::kRecWaveformSize) count = AudioEngineImpl::kRecWaveformSize;
+    if (count <= 0) return;
+    std::lock_guard<std::mutex> lock(impl_->recWaveformMutex);
+    for (int i = 0; i < count; i++) {
+        size_t idx = (impl_->recWaveformIndex + AudioEngineImpl::kRecWaveformSize - count + i) % AudioEngineImpl::kRecWaveformSize;
+        out[i] = impl_->recWaveform[idx];
+    }
+}
+
+void AudioEngine::getPlaybackWaveform(float* out, int count) const
+{
+    if (count > AudioEngineImpl::kPlayWaveformSize) count = AudioEngineImpl::kPlayWaveformSize;
+    if (count <= 0) return;
+    if (!impl_->hasPlayWaveform) {
+        for (int i = 0; i < count; i++) out[i] = 0;
+        return;
+    }
+    for (int i = 0; i < count; i++) {
+        out[i] = impl_->playWaveform[i];
+    }
+}
+
+bool AudioEngine::hasPlaybackWaveform() const
+{
+    return impl_->hasPlayWaveform;
 }
 
 void AudioEngine::setUpdateCallback(UpdateCallback cb)
@@ -298,6 +469,21 @@ void AudioEngine::onRecordingData(const void* input, ma_uint32 frameCount)
     size_t written = fwrite(input, 1, bytesToWrite, impl_->recFile);
     if (written == bytesToWrite) {
         impl_->recTotalFrames += frameCount;
+
+        const int16_t* samples = static_cast<const int16_t*>(input);
+        int16_t peak = 0;
+        for (ma_uint32 i = 0; i < frameCount * impl_->recChannels; i++) {
+            if (std::abs(samples[i]) > std::abs(peak)) {
+                peak = samples[i];
+            }
+        }
+        float normalized = peak / 32768.0f;
+        {
+            std::lock_guard<std::mutex> lock(impl_->recWaveformMutex);
+            impl_->recWaveform[impl_->recWaveformIndex] = normalized;
+            impl_->recWaveformIndex = (impl_->recWaveformIndex + 1) % AudioEngineImpl::kRecWaveformSize;
+        }
+
         if (impl_->updateCb) impl_->updateCb();
     }
 }
@@ -310,7 +496,9 @@ void AudioEngine::onPlaybackData(void* output, ma_uint32 frameCount)
     }
     size_t bytesPerFrame = impl_->playChannels * sizeof(int16_t);
     size_t bytesToRead = frameCount * bytesPerFrame;
+    long beforePos = ftell(impl_->playFile);
     size_t read = fread(output, 1, bytesToRead, impl_->playFile);
+    long afterPos = ftell(impl_->playFile);
 
     if (read < bytesToRead) {
         memset(static_cast<uint8_t*>(output) + read, 0, bytesToRead - read);

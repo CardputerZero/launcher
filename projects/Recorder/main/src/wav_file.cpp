@@ -59,14 +59,52 @@ bool wav_file_finalize(FILE* file)
 
 bool wav_file_read_header(FILE* file, uint16_t& channels, uint32_t& sampleRate, uint32_t& dataSize)
 {
-    WavHeader h;
-    if (fread(&h, sizeof(h), 1, file) != 1) return false;
-    if (std::memcmp(h.riff, "RIFF", 4) != 0 || std::memcmp(h.wave, "WAVE", 4) != 0) return false;
-    if (h.audioFormat != 1) return false; // PCM only
-    if (h.bitsPerSample != 16) return false; // s16 only
+    // RIFF header
+    char riff[4];
+    uint32_t fileSize;
+    char wave[4];
+    if (fread(riff, 1, 4, file) != 4) return false;
+    if (fread(&fileSize, 4, 1, file) != 1) return false;
+    if (fread(wave, 1, 4, file) != 4) return false;
+    if (std::memcmp(riff, "RIFF", 4) != 0 || std::memcmp(wave, "WAVE", 4) != 0) return false;
 
-    channels = h.channels;
-    sampleRate = h.sampleRate;
-    dataSize = h.dataSize;
-    return true;
+    channels = 0;
+    sampleRate = 0;
+    dataSize = 0;
+    uint16_t bitsPerSample = 0;
+
+    while (!feof(file)) {
+        char chunkId[4];
+        uint32_t chunkSize;
+        if (fread(chunkId, 1, 4, file) != 4) break;
+        if (fread(&chunkSize, 4, 1, file) != 1) break;
+
+        if (std::memcmp(chunkId, "fmt ", 4) == 0) {
+            uint16_t audioFormat;
+            if (fread(&audioFormat, 2, 1, file) != 1) return false;
+            if (audioFormat != 1) return false; // PCM only
+            if (fread(&channels, 2, 1, file) != 1) return false;
+            if (fread(&sampleRate, 4, 1, file) != 1) return false;
+            // Skip byteRate (4) + blockAlign (2)
+            if (fseek(file, 6, SEEK_CUR) != 0) return false;
+            if (fread(&bitsPerSample, 2, 1, file) != 1) return false;
+            // Skip any extra fmt bytes (pad to even boundary)
+            uint32_t skip = chunkSize > 16 ? chunkSize - 16 : 0;
+            if (skip > 0) {
+                if (fseek(file, skip, SEEK_CUR) != 0) return false;
+            }
+        }
+        else if (std::memcmp(chunkId, "data", 4) == 0) {
+            dataSize = chunkSize;
+            // File pointer is now at start of PCM data
+            return (channels != 0 && sampleRate != 0 && dataSize > 0 && bitsPerSample == 16);
+        }
+        else {
+            // Skip unknown chunk (pad to even size as per RIFF spec)
+            uint32_t skip = (chunkSize + 1) & ~1U;
+            if (fseek(file, skip, SEEK_CUR) != 0) return false;
+        }
+    }
+
+    return false;
 }

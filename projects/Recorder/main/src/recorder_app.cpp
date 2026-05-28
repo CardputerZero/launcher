@@ -102,10 +102,20 @@ void RecorderApp::onAction(const std::string& action)
         else if (playbackSpeed_ == "1.5X") playbackSpeed_ = "1.75X";
         else if (playbackSpeed_ == "1.75X") playbackSpeed_ = "2.0X";
         else playbackSpeed_ = "0.5X";
+
+        float speed = 1.0f;
+        if (playbackSpeed_ == "0.5X") speed = 0.5f;
+        else if (playbackSpeed_ == "0.75X") speed = 0.75f;
+        else if (playbackSpeed_ == "1.0X") speed = 1.0f;
+        else if (playbackSpeed_ == "1.25X") speed = 1.25f;
+        else if (playbackSpeed_ == "1.5X") speed = 1.5f;
+        else if (playbackSpeed_ == "1.75X") speed = 1.75f;
+        else if (playbackSpeed_ == "2.0X") speed = 2.0f;
+        engine_.setPlaybackSpeed(speed);
     } else if (action == "seek_back") {
-        // TODO: implement seek
+        engine_.seekPlayback(engine_.playbackPosition() - 10.0f);
     } else if (action == "seek_fwd") {
-        // TODO: implement seek
+        engine_.seekPlayback(engine_.playbackPosition() + 10.0f);
     } else if (action == "rename") {
         // TODO: implement rename
     } else if (action == "delete") {
@@ -201,6 +211,8 @@ RecorderState RecorderApp::getState() const
         case AppState::PlayPaused: {
             float pos = engine_.playbackPosition();
             float dur = engine_.playbackDuration();
+            rs.playbackPosition = pos;
+            rs.playbackDuration = dur;
             int pmin = static_cast<int>(pos) / 60;
             int psec = static_cast<int>(pos) % 60;
             int dmin = static_cast<int>(dur) / 60;
@@ -234,6 +246,14 @@ RecorderState RecorderApp::getState() const
     rs.sampleRate = sampleRate_;
     rs.playbackSpeed = playbackSpeed_;
     rs.hintText = "";
+
+    engine_.getRecordingWaveform(rs.recWaveform.data(), static_cast<int>(rs.recWaveform.size()));
+    if (engine_.hasPlaybackWaveform()) {
+        engine_.getPlaybackWaveform(rs.playWaveform.data(), static_cast<int>(rs.playWaveform.size()));
+        rs.hasPlayWaveform = true;
+    } else {
+        rs.hasPlayWaveform = false;
+    }
 
     return rs;
 }

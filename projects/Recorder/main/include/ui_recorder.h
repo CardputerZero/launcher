@@ -68,6 +68,8 @@ private:
     // Recording
     lv_obj_t* lblRecFilename_ = nullptr;
     lv_obj_t* recWaveContainer_ = nullptr;
+    lv_obj_t* recWaveLine_ = nullptr;
+    std::array<lv_point_precise_t, 128> recWavePoints_{};
     lv_obj_t* lblRecTimer_ = nullptr;
 
     // RecPaused
@@ -81,6 +83,10 @@ private:
     // Playback
     lv_obj_t* lblPlayFilename_ = nullptr;
     lv_obj_t* playWaveContainer_ = nullptr;
+    lv_obj_t* playWaveLine_ = nullptr;
+    lv_obj_t* playProgressLine_ = nullptr;
+    std::array<lv_point_precise_t, 256> playWavePoints_{};
+    lv_point_precise_t playProgressPoints_[2]{};
     lv_obj_t* lblPlayTimer_ = nullptr;
 
     // State cache
