@@ -7,9 +7,11 @@
 #include <windows.h>
 #endif
 
-int hal_process_exec_blocking(const char *exec_path, volatile int *home_key_flag)
+int hal_process_exec_blocking(const char *exec_path, volatile int *home_key_flag,
+                              int keep_root)
 {
     (void)home_key_flag;
+    (void)keep_root;
 #ifdef _WIN32
     STARTUPINFOA si = {}; si.cb = sizeof(si);
     PROCESS_INFORMATION pi = {};
@@ -41,9 +43,10 @@ void hal_process_kill(int pid, int grace_ms)
     (void)pid; (void)grace_ms;
 }
 
-hal_pid_t hal_process_spawn(const char *exec_path)
+hal_pid_t hal_process_spawn(const char *exec_path, int keep_root)
 {
     (void)exec_path;
+    (void)keep_root;
     return -1;
 }
 
@@ -74,8 +77,10 @@ void hal_system_reboot(void)
 #include <chrono>
 #include <thread>
 
-int hal_process_exec_blocking(const char *exec_path, volatile int *home_key_flag)
+int hal_process_exec_blocking(const char *exec_path, volatile int *home_key_flag,
+                              int keep_root)
 {
+    (void)keep_root;
     pid_t pid = fork();
     if (pid < 0) return -1;
     if (pid == 0) {
@@ -161,8 +166,9 @@ void hal_process_kill(int pid, int grace_ms)
     }
 }
 
-hal_pid_t hal_process_spawn(const char *exec_path)
+hal_pid_t hal_process_spawn(const char *exec_path, int keep_root)
 {
+    (void)keep_root;
     pid_t pid = fork();
     if (pid < 0) return -1;
     if (pid == 0) {
