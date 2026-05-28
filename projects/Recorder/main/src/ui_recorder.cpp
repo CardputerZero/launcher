@@ -1,14 +1,5 @@
 #include "ui_recorder.h"
-#include "recorder_app.h"
 #include "compat/input_keys.h"
-
-#include <cstdio>
-
-UiRecorder& UiRecorder::instance()
-{
-    static UiRecorder ui;
-    return ui;
-}
 
 void UiRecorder::init(lv_obj_t* parent)
 {
@@ -23,21 +14,18 @@ void UiRecorder::buildUi(lv_obj_t* parent)
     lv_obj_set_style_bg_color(parent, lv_color_hex(0x1A1A2E), 0);
     lv_obj_set_style_bg_opa(parent, LV_OPA_COVER, 0);
 
-    // Status label (top left)
     lblStatus_ = lv_label_create(parent);
     lv_obj_set_pos(lblStatus_, 10, 10);
     lv_obj_set_style_text_font(lblStatus_, &lv_font_montserrat_14, 0);
     lv_obj_set_style_text_color(lblStatus_, lv_color_hex(0xE0E0E0), 0);
     lv_label_set_text(lblStatus_, "IDLE");
 
-    // Timer label (top right)
     lblTimer_ = lv_label_create(parent);
     lv_obj_set_pos(lblTimer_, 220, 10);
     lv_obj_set_style_text_font(lblTimer_, &lv_font_montserrat_14, 0);
     lv_obj_set_style_text_color(lblTimer_, lv_color_hex(0xE0E0E0), 0);
     lv_label_set_text(lblTimer_, "");
 
-    // File name label (center)
     lblFile_ = lv_label_create(parent);
     lv_obj_set_pos(lblFile_, 10, 55);
     lv_obj_set_width(lblFile_, 300);
@@ -46,7 +34,6 @@ void UiRecorder::buildUi(lv_obj_t* parent)
     lv_label_set_long_mode(lblFile_, LV_LABEL_LONG_SCROLL_CIRCULAR);
     lv_label_set_text(lblFile_, "No recordings");
 
-    // Hint label (bottom)
     lblHint_ = lv_label_create(parent);
     lv_obj_set_pos(lblHint_, 10, 142);
     lv_obj_set_width(lblHint_, 300);
@@ -55,41 +42,18 @@ void UiRecorder::buildUi(lv_obj_t* parent)
     lv_label_set_text(lblHint_, "[Enter]Rec [P]Play [S]Stop [<- ->]File [Esc]Quit");
 }
 
-void UiRecorder::update()
+void UiRecorder::update(const RecorderState& state)
 {
-    uint32_t now = lv_tick_get();
-    if (now - lastUpdate_ < 200) return;
-    lastUpdate_ = now;
-
-    RecorderApp::instance().engine().poll();
-    refreshDisplay();
+    if (!lblStatus_) return;
+    lv_label_set_text(lblStatus_, state.statusText.c_str());
+    lv_label_set_text(lblTimer_, state.timerText.c_str());
+    lv_label_set_text(lblFile_, state.currentFileName.c_str());
+    lv_label_set_text(lblHint_, state.hintText.c_str());
 }
 
-void UiRecorder::refreshDisplay()
+void UiRecorder::setActionHandler(std::function<void(const std::string&)> handler)
 {
-    auto& app = RecorderApp::instance();
-    lv_label_set_text(lblStatus_, app.statusText().c_str());
-    lv_label_set_text(lblTimer_, app.timerText().c_str());
-    lv_label_set_text(lblFile_, app.currentFileName().c_str());
-
-    auto s = app.state();
-    switch (s) {
-        case AppState::Idle:
-            lv_label_set_text(lblHint_, "[Enter]Rec [Space]Play [<- ->]File [Esc]Quit");
-            break;
-        case AppState::Recording:
-            lv_label_set_text(lblHint_, "[P]Pause [Enter]Stop");
-            break;
-        case AppState::RecPaused:
-            lv_label_set_text(lblHint_, "[P]Resume [Enter]Stop");
-            break;
-        case AppState::Playing:
-            lv_label_set_text(lblHint_, "[Space]Pause [S]Stop [<- ->]File");
-            break;
-        case AppState::PlayPaused:
-            lv_label_set_text(lblHint_, "[Space]Resume [S]Stop");
-            break;
-    }
+    actionHandler_ = handler;
 }
 
 void UiRecorder::onKeyPressed(uint32_t key_code)
@@ -99,33 +63,32 @@ void UiRecorder::onKeyPressed(uint32_t key_code)
     lastKeyCode_ = key_code;
     lastKeyTime_ = now;
 
-    auto& app = RecorderApp::instance();
+    if (!actionHandler_) return;
 
     switch (key_code) {
         case KEY_ENTER:
         case KEY_KPENTER:
-            app.toggleRecord();      // Enter: start/stop recording
+            actionHandler_("toggle_record");
             break;
         case KEY_P:
-            app.pauseResumeRecord(); // P: pause/resume recording
+            actionHandler_("toggle_pause");
             break;
         case KEY_SPACE:
-            app.togglePlay();        // Space: play/pause playback
+            actionHandler_("toggle_play");
             break;
         case KEY_S:
-            app.stop();              // S: stop current operation
+            actionHandler_("stop");
             break;
         case KEY_ESC:
-            app.stop();              // Esc: stop and quit
+            actionHandler_("stop");
             break;
         case KEY_LEFT:
-            app.prevFile();
+            actionHandler_("prev_file");
             break;
         case KEY_RIGHT:
-            app.nextFile();
+            actionHandler_("next_file");
             break;
         default:
             break;
     }
-    refreshDisplay();
 }

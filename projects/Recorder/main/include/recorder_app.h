@@ -1,6 +1,10 @@
 #pragma once
 
 #include "audio_engine.h"
+#include <atomic>
+#include <future>
+#include <functional>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -18,45 +22,67 @@ struct RecordingInfo {
     float duration;
 };
 
+struct RecorderState {
+    AppState state;
+    std::string statusText;
+    std::string timerText;
+    std::string currentFileName;
+    std::string hintText;
+    std::vector<RecordingInfo> fileList;
+    int selectedFileIndex;
+};
+
+class IRecorderView {
+public:
+    virtual ~IRecorderView() = default;
+    virtual void update(const RecorderState& state) = 0;
+    virtual void setActionHandler(std::function<void(const std::string&)> handler) = 0;
+};
+
 class RecorderApp {
 public:
-    static RecorderApp& instance();
+    RecorderApp();
+    ~RecorderApp();
 
     bool init();
     void deinit();
 
-    // Actions
-    void toggleRecord();      // Enter: start/stop recording
-    void pauseResumeRecord(); // P: pause/resume recording
-    void togglePlay();        // Space: play/pause playback
-    void stop();              // S: stop current operation
-    void prevFile();
-    void nextFile();
+    void setView(IRecorderView* view);
 
-    // State queries
-    AppState state() const;
-    std::string statusText() const;
-    std::string timerText() const;
-    std::string currentFileName() const;
-    std::vector<RecordingInfo> fileList() const;
+    // Unified action entry point
+    void onAction(const std::string& action);
 
-    // Audio engine access for UI callbacks
-    AudioEngine& engine() { return engine_; }
+    // Call from main loop
+    void poll();
 
-    // Scan recordings directory
-    void scanFiles();
+    // Build current state snapshot
+    RecorderState getState() const;
 
 private:
-    RecorderApp() = default;
-    ~RecorderApp() = default;
-    RecorderApp(const RecorderApp&) = delete;
-    RecorderApp& operator=(const RecorderApp&) = delete;
+    void notifyView();
+    void handleToggleRecord();
+    void handleTogglePlay();
+    void handleTogglePause();
+    void handleStop();
+    void handlePrevFile();
+    void handleNextFile();
 
+    void scanFiles();
+    void asyncScanFiles();
     std::string generateFilename();
     std::string recordingsDir();
+    void clampFileIndex();
 
     AudioEngine engine_;
+    IRecorderView* view_ = nullptr;
+
+    mutable std::mutex filesMutex_;
     std::vector<RecordingInfo> files_;
     int currentFileIndex_ = -1;
     std::string lastRecordingPath_;
+
+    std::future<void> scanFuture_;
+    std::atomic<bool> filesDirty_{false};
+    AudioState lastAudioState_ = AudioState::Idle;
+    uint32_t lastNotifyTime_ = 0;
 };

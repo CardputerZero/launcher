@@ -1,10 +1,10 @@
 #include "recorder_app.h"
 #include "wav_file.h"
 #include "compat/input_keys.h"
+#include "lvgl/lvgl.h"
 
 #include <algorithm>
 #include <chrono>
-#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
@@ -14,129 +14,100 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-RecorderApp& RecorderApp::instance()
-{
-    static RecorderApp app;
-    return app;
-}
+RecorderApp::RecorderApp() = default;
+RecorderApp::~RecorderApp() = default;
 
 bool RecorderApp::init()
 {
     engine_.initialize();
     scanFiles();
+    lastAudioState_ = engine_.state();
     return true;
 }
 
 void RecorderApp::deinit()
 {
+    if (scanFuture_.valid()) {
+        scanFuture_.wait();
+    }
     engine_.shutdown();
 }
 
-void RecorderApp::toggleRecord()
+void RecorderApp::setView(IRecorderView* view)
 {
-    AppState s = state();
-    if (s == AppState::Idle) {
-        lastRecordingPath_ = generateFilename();
-        if (engine_.startRecording(lastRecordingPath_)) {
-            scanFiles();
+    view_ = view;
+    notifyView();
+}
+
+void RecorderApp::onAction(const std::string& action)
+{
+    if (action == "toggle_record") {
+        handleToggleRecord();
+    } else if (action == "toggle_play") {
+        handleTogglePlay();
+    } else if (action == "toggle_pause") {
+        handleTogglePause();
+    } else if (action == "stop") {
+        handleStop();
+    } else if (action == "prev_file") {
+        handlePrevFile();
+    } else if (action == "next_file") {
+        handleNextFile();
+    }
+    notifyView();
+}
+
+void RecorderApp::poll()
+{
+    engine_.poll();
+
+    uint32_t now = lv_tick_get();
+    bool needNotify = false;
+
+    if (now - lastNotifyTime_ >= 200) {
+        lastNotifyTime_ = now;
+        needNotify = true;
+    }
+
+    if (filesDirty_.exchange(false)) {
+        needNotify = true;
+    }
+
+    AudioState current = engine_.state();
+    if (current != lastAudioState_) {
+        lastAudioState_ = current;
+        needNotify = true;
+    }
+
+    if (needNotify) {
+        notifyView();
+    }
+}
+
+RecorderState RecorderApp::getState() const
+{
+    RecorderState rs;
+    rs.state = [this]() {
+        switch (engine_.state()) {
+            case AudioState::Idle:       return AppState::Idle;
+            case AudioState::Recording:  return AppState::Recording;
+            case AudioState::RecPaused:  return AppState::RecPaused;
+            case AudioState::Playing:    return AppState::Playing;
+            case AudioState::PlayPaused: return AppState::PlayPaused;
         }
-    } else if (s == AppState::Recording || s == AppState::RecPaused) {
-        engine_.stopRecording();
-        scanFiles();
-    } else if (s == AppState::Playing || s == AppState::PlayPaused) {
-        engine_.stopPlayback();
-        lastRecordingPath_ = generateFilename();
-        engine_.startRecording(lastRecordingPath_);
+        return AppState::Idle;
+    }();
+
+    switch (rs.state) {
+        case AppState::Idle:       rs.statusText = "IDLE"; break;
+        case AppState::Recording:  rs.statusText = "RECORDING"; break;
+        case AppState::RecPaused:  rs.statusText = "REC PAUSED"; break;
+        case AppState::Playing:    rs.statusText = "PLAYING"; break;
+        case AppState::PlayPaused: rs.statusText = "PLAY PAUSED"; break;
     }
-}
 
-void RecorderApp::pauseResumeRecord()
-{
-    AppState s = state();
-    if (s == AppState::Recording) {
-        engine_.pauseRecording();
-    } else if (s == AppState::RecPaused) {
-        engine_.resumeRecording();
-    }
-}
-
-void RecorderApp::togglePlay()
-{
-    AppState s = state();
-    if (s == AppState::Idle) {
-        if (files_.empty()) return;
-        if (currentFileIndex_ < 0 || currentFileIndex_ >= static_cast<int>(files_.size())) {
-            currentFileIndex_ = static_cast<int>(files_.size()) - 1;
-        }
-        engine_.startPlayback(files_[currentFileIndex_].filepath);
-    } else if (s == AppState::Playing) {
-        engine_.pausePlayback();
-    } else if (s == AppState::PlayPaused) {
-        engine_.resumePlayback();
-    } else if (s == AppState::Recording || s == AppState::RecPaused) {
-        engine_.stopRecording();
-        scanFiles();
-        if (files_.empty()) return;
-        if (currentFileIndex_ < 0 || currentFileIndex_ >= static_cast<int>(files_.size())) {
-            currentFileIndex_ = static_cast<int>(files_.size()) - 1;
-        }
-        engine_.startPlayback(files_[currentFileIndex_].filepath);
-    }
-}
-
-void RecorderApp::stop()
-{
-    AppState s = state();
-    if (s == AppState::Recording || s == AppState::RecPaused) {
-        engine_.stopRecording();
-        scanFiles();
-    } else if (s == AppState::Playing || s == AppState::PlayPaused) {
-        engine_.stopPlayback();
-    }
-}
-
-void RecorderApp::prevFile()
-{
-    if (files_.empty()) return;
-    if (currentFileIndex_ > 0) currentFileIndex_--;
-    else currentFileIndex_ = static_cast<int>(files_.size()) - 1;
-}
-
-void RecorderApp::nextFile()
-{
-    if (files_.empty()) return;
-    if (currentFileIndex_ < static_cast<int>(files_.size()) - 1) currentFileIndex_++;
-    else currentFileIndex_ = 0;
-}
-
-AppState RecorderApp::state() const
-{
-    switch (engine_.state()) {
-        case AudioState::Idle:       return AppState::Idle;
-        case AudioState::Recording:  return AppState::Recording;
-        case AudioState::RecPaused:  return AppState::RecPaused;
-        case AudioState::Playing:    return AppState::Playing;
-        case AudioState::PlayPaused: return AppState::PlayPaused;
-    }
-    return AppState::Idle;
-}
-
-std::string RecorderApp::statusText() const
-{
-    switch (state()) {
-        case AppState::Idle:       return "IDLE";
-        case AppState::Recording:  return "RECORDING";
-        case AppState::RecPaused:  return "REC PAUSED";
-        case AppState::Playing:    return "PLAYING";
-        case AppState::PlayPaused: return "PLAY PAUSED";
-    }
-    return "UNKNOWN";
-}
-
-std::string RecorderApp::timerText() const
-{
     std::ostringstream oss;
-    switch (state()) {
+    switch (rs.state) {
         case AppState::Recording:
         case AppState::RecPaused: {
             float d = engine_.recordingDuration();
@@ -163,29 +134,147 @@ std::string RecorderApp::timerText() const
         default:
             break;
     }
-    return oss.str();
-}
+    rs.timerText = oss.str();
 
-std::string RecorderApp::currentFileName() const
-{
-    if (state() == AppState::Recording || state() == AppState::RecPaused) {
-        size_t pos = lastRecordingPath_.find_last_of('/');
-        return lastRecordingPath_.substr(pos + 1);
-    }
-    if (state() == AppState::Playing || state() == AppState::PlayPaused) {
-        if (currentFileIndex_ >= 0 && currentFileIndex_ < static_cast<int>(files_.size())) {
-            return files_[currentFileIndex_].filename;
+    {
+        std::lock_guard<std::mutex> lock(filesMutex_);
+        rs.fileList = files_;
+        rs.selectedFileIndex = currentFileIndex_;
+
+        if (rs.state == AppState::Recording || rs.state == AppState::RecPaused) {
+            size_t pos = lastRecordingPath_.find_last_of('/');
+            rs.currentFileName = lastRecordingPath_.substr(pos + 1);
+        } else if (!files_.empty() && currentFileIndex_ >= 0 && currentFileIndex_ < static_cast<int>(files_.size())) {
+            rs.currentFileName = files_[currentFileIndex_].filename;
+        } else {
+            rs.currentFileName = "No recordings";
         }
     }
-    if (!files_.empty() && currentFileIndex_ >= 0 && currentFileIndex_ < static_cast<int>(files_.size())) {
-        return files_[currentFileIndex_].filename;
+
+    switch (rs.state) {
+        case AppState::Idle:       rs.hintText = "[Enter]Rec [Space]Play [<- ->]File [Esc]Quit"; break;
+        case AppState::Recording:  rs.hintText = "[P]Pause [Enter]Stop"; break;
+        case AppState::RecPaused:  rs.hintText = "[P]Resume [Enter]Stop"; break;
+        case AppState::Playing:    rs.hintText = "[Space]Pause [S]Stop [<- ->]File"; break;
+        case AppState::PlayPaused: rs.hintText = "[Space]Resume [S]Stop"; break;
     }
-    return "No recordings";
+
+    return rs;
 }
 
-std::vector<RecordingInfo> RecorderApp::fileList() const
+void RecorderApp::notifyView()
 {
-    return files_;
+    if (view_) {
+        view_->update(getState());
+    }
+}
+
+void RecorderApp::handleToggleRecord()
+{
+    switch (engine_.state()) {
+        case AudioState::Idle:
+            lastRecordingPath_ = generateFilename();
+            engine_.startRecording(lastRecordingPath_);
+            asyncScanFiles();
+            break;
+        case AudioState::Recording:
+        case AudioState::RecPaused:
+            engine_.stopRecording();
+            asyncScanFiles();
+            break;
+        case AudioState::Playing:
+        case AudioState::PlayPaused:
+            engine_.stopPlayback();
+            lastRecordingPath_ = generateFilename();
+            engine_.startRecording(lastRecordingPath_);
+            break;
+    }
+}
+
+void RecorderApp::handleTogglePlay()
+{
+    switch (engine_.state()) {
+        case AudioState::Idle:
+            if (files_.empty()) return;
+            clampFileIndex();
+            engine_.startPlayback(files_[currentFileIndex_].filepath);
+            break;
+        case AudioState::Playing:
+            engine_.pausePlayback();
+            break;
+        case AudioState::PlayPaused:
+            engine_.resumePlayback();
+            break;
+        case AudioState::Recording:
+        case AudioState::RecPaused:
+            engine_.stopRecording();
+            asyncScanFiles();
+            if (files_.empty()) return;
+            clampFileIndex();
+            engine_.startPlayback(files_[currentFileIndex_].filepath);
+            break;
+    }
+}
+
+void RecorderApp::handleTogglePause()
+{
+    switch (engine_.state()) {
+        case AudioState::Recording:
+            engine_.pauseRecording();
+            break;
+        case AudioState::RecPaused:
+            engine_.resumeRecording();
+            break;
+        case AudioState::Playing:
+            engine_.pausePlayback();
+            break;
+        case AudioState::PlayPaused:
+            engine_.resumePlayback();
+            break;
+        default:
+            break;
+    }
+}
+
+void RecorderApp::handleStop()
+{
+    switch (engine_.state()) {
+        case AudioState::Recording:
+        case AudioState::RecPaused:
+            engine_.stopRecording();
+            asyncScanFiles();
+            break;
+        case AudioState::Playing:
+        case AudioState::PlayPaused:
+            engine_.stopPlayback();
+            break;
+        default:
+            break;
+    }
+}
+
+void RecorderApp::handlePrevFile()
+{
+    std::lock_guard<std::mutex> lock(filesMutex_);
+    if (files_.empty()) return;
+    if (currentFileIndex_ > 0) currentFileIndex_--;
+    else currentFileIndex_ = static_cast<int>(files_.size()) - 1;
+}
+
+void RecorderApp::handleNextFile()
+{
+    std::lock_guard<std::mutex> lock(filesMutex_);
+    if (files_.empty()) return;
+    if (currentFileIndex_ < static_cast<int>(files_.size()) - 1) currentFileIndex_++;
+    else currentFileIndex_ = 0;
+}
+
+void RecorderApp::clampFileIndex()
+{
+    std::lock_guard<std::mutex> lock(filesMutex_);
+    if (currentFileIndex_ < 0 || currentFileIndex_ >= static_cast<int>(files_.size())) {
+        currentFileIndex_ = files_.empty() ? -1 : static_cast<int>(files_.size()) - 1;
+    }
 }
 
 std::string RecorderApp::recordingsDir()
@@ -227,7 +316,7 @@ std::string RecorderApp::generateFilename()
 
 void RecorderApp::scanFiles()
 {
-    files_.clear();
+    std::vector<RecordingInfo> result;
     std::string dir = recordingsDir();
     DIR* d = opendir(dir.c_str());
     if (!d) return;
@@ -250,16 +339,31 @@ void RecorderApp::scanFiles()
             info.filename = entry->d_name;
             info.filepath = path;
             info.duration = static_cast<float>(dataSize) / (sampleRate * channels * sizeof(int16_t));
-            files_.push_back(info);
+            result.push_back(info);
         }
         fclose(f);
     }
     closedir(d);
 
-    std::sort(files_.begin(), files_.end(),
+    std::sort(result.begin(), result.end(),
               [](const RecordingInfo& a, const RecordingInfo& b) { return a.filename > b.filename; });
 
-    if (!files_.empty() && currentFileIndex_ < 0) {
-        currentFileIndex_ = 0;
+    {
+        std::lock_guard<std::mutex> lock(filesMutex_);
+        files_ = std::move(result);
+        if (!files_.empty() && currentFileIndex_ < 0) {
+            currentFileIndex_ = 0;
+        }
     }
+}
+
+void RecorderApp::asyncScanFiles()
+{
+    if (scanFuture_.valid()) {
+        scanFuture_.wait();
+    }
+    scanFuture_ = std::async(std::launch::async, [this]() {
+        scanFiles();
+        filesDirty_.store(true);
+    });
 }

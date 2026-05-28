@@ -4,7 +4,6 @@
 #define MINIAUDIO_IMPLEMENTATION
 #include "miniaudio.h"
 
-#include <cstdio>
 #include <cstring>
 
 struct AudioEngineImpl {
@@ -53,14 +52,7 @@ extern "C" {
     {
         (void)pOutput;
         AudioEngine* self = static_cast<AudioEngine*>(pDevice->pUserData);
-        if (!self->impl_ || !self->impl_->recFile) return;
-
-        size_t bytesToWrite = frameCount * self->impl_->recChannels * sizeof(int16_t);
-        size_t written = fwrite(pInput, 1, bytesToWrite, self->impl_->recFile);
-        if (written == bytesToWrite) {
-            self->impl_->recTotalFrames += frameCount;
-            if (self->impl_->updateCb) self->impl_->updateCb();
-        }
+        self->onRecordingData(pInput, frameCount);
     }
 
     static void playbackCallback(ma_device* pDevice, void* pOutput,
@@ -68,25 +60,7 @@ extern "C" {
     {
         (void)pInput;
         AudioEngine* self = static_cast<AudioEngine*>(pDevice->pUserData);
-        if (!self->impl_ || !self->impl_->playFile) {
-            memset(pOutput, 0, frameCount * pDevice->playback.channels * sizeof(int16_t));
-            return;
-        }
-
-        size_t bytesPerFrame = self->impl_->playChannels * sizeof(int16_t);
-        size_t bytesToRead = frameCount * bytesPerFrame;
-        size_t read = fread(pOutput, 1, bytesToRead, self->impl_->playFile);
-
-        if (read < bytesToRead) {
-            memset(static_cast<uint8_t*>(pOutput) + read, 0, bytesToRead - read);
-            self->impl_->playCurrentFrame += static_cast<uint32_t>(read / bytesPerFrame);
-            if (read == 0) {
-                self->impl_->playbackFinished.store(true);
-            }
-        } else {
-            self->impl_->playCurrentFrame += frameCount;
-            if (self->impl_->updateCb) self->impl_->updateCb();
-        }
+        self->onPlaybackData(pOutput, frameCount);
     }
 }
 
@@ -315,4 +289,37 @@ float AudioEngine::playbackDuration() const
 void AudioEngine::setUpdateCallback(UpdateCallback cb)
 {
     impl_->updateCb = cb;
+}
+
+void AudioEngine::onRecordingData(const void* input, ma_uint32 frameCount)
+{
+    if (!impl_->recFile) return;
+    size_t bytesToWrite = frameCount * impl_->recChannels * sizeof(int16_t);
+    size_t written = fwrite(input, 1, bytesToWrite, impl_->recFile);
+    if (written == bytesToWrite) {
+        impl_->recTotalFrames += frameCount;
+        if (impl_->updateCb) impl_->updateCb();
+    }
+}
+
+void AudioEngine::onPlaybackData(void* output, ma_uint32 frameCount)
+{
+    if (!impl_->playFile) {
+        memset(output, 0, frameCount * impl_->playChannels * sizeof(int16_t));
+        return;
+    }
+    size_t bytesPerFrame = impl_->playChannels * sizeof(int16_t);
+    size_t bytesToRead = frameCount * bytesPerFrame;
+    size_t read = fread(output, 1, bytesToRead, impl_->playFile);
+
+    if (read < bytesToRead) {
+        memset(static_cast<uint8_t*>(output) + read, 0, bytesToRead - read);
+        impl_->playCurrentFrame += static_cast<uint32_t>(read / bytesPerFrame);
+        if (read == 0) {
+            impl_->playbackFinished.store(true);
+        }
+    } else {
+        impl_->playCurrentFrame += frameCount;
+        if (impl_->updateCb) impl_->updateCb();
+    }
 }

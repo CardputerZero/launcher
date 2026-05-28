@@ -31,6 +31,7 @@ volatile sig_atomic_t g_quit_requested = 0;
 lv_obj_t *g_root = nullptr;
 lv_indev_t *g_keyboard_indev = nullptr;
 lv_group_t *g_group = nullptr;
+UiRecorder *g_ui = nullptr;
 
 void request_quit()
 {
@@ -93,29 +94,7 @@ void handle_keyboard_event(lv_event_t *event)
         request_quit();
         return;
     }
-    UiRecorder::instance().onKeyPressed(key_code);
-}
-
-void build_ui()
-{
-    g_root = lv_screen_active();
-    lv_obj_set_size(g_root, kScreenWidth, kScreenHeight);
-    lv_obj_clear_flag(g_root, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_bg_color(g_root, lv_color_hex(0x1A1A2E), 0);
-    lv_obj_set_style_bg_opa(g_root, LV_OPA_COVER, 0);
-
-    UiRecorder::instance().init(g_root);
-
-    lv_obj_add_event_cb(g_root, handle_keyboard_event,
-                        static_cast<lv_event_code_t>(LV_EVENT_KEYBOARD), nullptr);
-#if LV_USE_SDL
-    lv_obj_add_event_cb(g_root, handle_keyboard_event, LV_EVENT_KEY, nullptr);
-#endif
-
-    g_group = lv_group_create();
-    lv_group_add_obj(g_group, g_root);
-    lv_group_focus_obj(g_root);
-    if (g_keyboard_indev) lv_indev_set_group(g_keyboard_indev, g_group);
+    if (g_ui) g_ui->onKeyPressed(key_code);
 }
 
 #if LV_USE_EVDEV
@@ -208,20 +187,47 @@ int main()
     std::signal(SIGTERM, handle_signal);
     std::signal(SIGPIPE, SIG_IGN);
 
-    RecorderApp::instance().init();
+    RecorderApp app;
+    UiRecorder ui;
+
+    ui.setActionHandler([&](const std::string& action) {
+        app.onAction(action);
+    });
+
+    app.init();
 
     lv_init();
     lv_linux_disp_init();
     LV_EVENT_KEYBOARD = lv_event_register_id();
     lv_linux_indev_init();
-    build_ui();
+
+    g_root = lv_screen_active();
+    lv_obj_set_size(g_root, kScreenWidth, kScreenHeight);
+    lv_obj_clear_flag(g_root, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_bg_color(g_root, lv_color_hex(0x1A1A2E), 0);
+    lv_obj_set_style_bg_opa(g_root, LV_OPA_COVER, 0);
+
+    g_ui = &ui;
+    ui.init(g_root);
+    app.setView(&ui);
+
+    lv_obj_add_event_cb(g_root, handle_keyboard_event,
+                        static_cast<lv_event_code_t>(LV_EVENT_KEYBOARD), nullptr);
+#if LV_USE_SDL
+    lv_obj_add_event_cb(g_root, handle_keyboard_event, LV_EVENT_KEY, nullptr);
+#endif
+
+    g_group = lv_group_create();
+    lv_group_add_obj(g_group, g_root);
+    lv_group_focus_obj(g_root);
+    if (g_keyboard_indev) lv_indev_set_group(g_keyboard_indev, g_group);
 
     while (!g_quit_requested) {
-        UiRecorder::instance().update();
+        app.poll();
         lv_timer_handler();
         usleep(5000);
     }
 
-    RecorderApp::instance().deinit();
+    app.deinit();
     return 0;
 }
