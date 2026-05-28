@@ -9,6 +9,18 @@ Import('env')
 with open(env['PROJECT_TOOL_S']) as f:
     exec(f.read())
 
+def pkg_config_cflags(pkg):
+    try:
+        return subprocess.check_output(['pkg-config', '--cflags', pkg], text=True).split()
+    except Exception:
+        return []
+
+def pkg_config_ldflags(pkg):
+    try:
+        return subprocess.check_output(['pkg-config', '--libs', pkg], text=True).split()
+    except Exception:
+        return []
+
 rootfs_path=os.environ.get("CONFIG_TOOLCHAIN_SYSROOT", "")
 
 def wget_github(url):
@@ -107,6 +119,8 @@ lvgl_component['SRCS'] = list(filter(
 SRCS += Glob('hal/*.c*')
 # x86
 if 'linux_x86_sdl2_config_defaults.mk' in os.environ.get("CONFIG_DEFAULT_FILE", ''):
+    DEFINITIONS += ['-DHAL_PLATFORM_SDL=1']
+
     lvgl_component['DEFINITIONS'] += pkg_config_cflags("freetype2")
     lvgl_component['REQUIREMENTS'] += pkg_config_ldflags("freetype2")
 
