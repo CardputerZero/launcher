@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=Recorder
+Exec=/usr/share/APPLaunch/bin/M5CardputerZero-Recorder
+Terminal=false
+Icon=share/images/Recorder.png
+Type=Application
