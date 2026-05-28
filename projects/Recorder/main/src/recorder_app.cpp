@@ -22,6 +22,7 @@ bool RecorderApp::init()
     engine_.initialize();
     scanFiles();
     lastAudioState_ = engine_.state();
+    appState_ = AppState::Idle;
     return true;
 }
 
@@ -53,6 +54,62 @@ void RecorderApp::onAction(const std::string& action)
         handlePrevFile();
     } else if (action == "next_file") {
         handleNextFile();
+    } else if (action == "list") {
+        appState_ = AppState::FileList;
+    } else if (action == "home") {
+        appState_ = AppState::Idle;
+    } else if (action == "done") {
+        if (engine_.state() == AudioState::Recording || engine_.state() == AudioState::RecPaused) {
+            engine_.stopRecording();
+            asyncScanFiles();
+        }
+        appState_ = AppState::SaveConfirm;
+    } else if (action == "save") {
+        appState_ = AppState::Idle;
+    } else if (action == "exit") {
+        switch (appState_) {
+            case AppState::Recording:
+            case AppState::RecPaused:
+                engine_.stopRecording();
+                asyncScanFiles();
+                appState_ = AppState::Idle;
+                break;
+            case AppState::SaveConfirm:
+                appState_ = AppState::Idle;
+                break;
+            case AppState::FileList:
+                appState_ = AppState::Idle;
+                break;
+            case AppState::Playing:
+            case AppState::PlayPaused:
+                engine_.stopPlayback();
+                appState_ = AppState::FileList;
+                break;
+            default:
+                break;
+        }
+    } else if (action == "quit") {
+        // Handled in main.cpp
+    } else if (action == "cycle_rate") {
+        if (sampleRate_ == "16k") sampleRate_ = "44.1k";
+        else if (sampleRate_ == "44.1k") sampleRate_ = "48k";
+        else sampleRate_ = "16k";
+    } else if (action == "speed") {
+        if (playbackSpeed_ == "0.5X") playbackSpeed_ = "0.75X";
+        else if (playbackSpeed_ == "0.75X") playbackSpeed_ = "1.0X";
+        else if (playbackSpeed_ == "1.0X") playbackSpeed_ = "1.25X";
+        else if (playbackSpeed_ == "1.25X") playbackSpeed_ = "1.5X";
+        else if (playbackSpeed_ == "1.5X") playbackSpeed_ = "1.75X";
+        else if (playbackSpeed_ == "1.75X") playbackSpeed_ = "2.0X";
+        else playbackSpeed_ = "0.5X";
+    } else if (action == "seek_back") {
+        // TODO: implement seek
+    } else if (action == "seek_fwd") {
+        // TODO: implement seek
+    } else if (action == "rename") {
+        // TODO: implement rename
+    } else if (action == "delete") {
+        handleDelete();
     }
     notifyView();
 }
@@ -76,6 +133,7 @@ void RecorderApp::poll()
     AudioState current = engine_.state();
     if (current != lastAudioState_) {
         lastAudioState_ = current;
+        syncStateFromEngine();
         needNotify = true;
     }
 
@@ -84,26 +142,48 @@ void RecorderApp::poll()
     }
 }
 
+void RecorderApp::syncStateFromEngine()
+{
+    AudioState audio = engine_.state();
+    switch (audio) {
+        case AudioState::Idle:
+            if (appState_ == AppState::Recording || appState_ == AppState::RecPaused ||
+                appState_ == AppState::Playing || appState_ == AppState::PlayPaused) {
+                appState_ = AppState::Idle;
+            }
+            break;
+        case AudioState::Recording:
+            appState_ = AppState::Recording;
+            break;
+        case AudioState::RecPaused:
+            appState_ = AppState::RecPaused;
+            break;
+        case AudioState::Playing:
+            if (appState_ != AppState::Playing && appState_ != AppState::PlayPaused) {
+                appState_ = AppState::Playing;
+            }
+            break;
+        case AudioState::PlayPaused:
+            if (appState_ != AppState::Playing && appState_ != AppState::PlayPaused) {
+                appState_ = AppState::PlayPaused;
+            }
+            break;
+    }
+}
+
 RecorderState RecorderApp::getState() const
 {
     RecorderState rs;
-    rs.state = [this]() {
-        switch (engine_.state()) {
-            case AudioState::Idle:       return AppState::Idle;
-            case AudioState::Recording:  return AppState::Recording;
-            case AudioState::RecPaused:  return AppState::RecPaused;
-            case AudioState::Playing:    return AppState::Playing;
-            case AudioState::PlayPaused: return AppState::PlayPaused;
-        }
-        return AppState::Idle;
-    }();
+    rs.state = appState_;
 
     switch (rs.state) {
-        case AppState::Idle:       rs.statusText = "IDLE"; break;
-        case AppState::Recording:  rs.statusText = "RECORDING"; break;
-        case AppState::RecPaused:  rs.statusText = "REC PAUSED"; break;
-        case AppState::Playing:    rs.statusText = "PLAYING"; break;
-        case AppState::PlayPaused: rs.statusText = "PLAY PAUSED"; break;
+        case AppState::Idle:        rs.statusText = "Recorder"; break;
+        case AppState::Recording:   rs.statusText = "Recording"; break;
+        case AppState::RecPaused:   rs.statusText = "Paused"; break;
+        case AppState::SaveConfirm: rs.statusText = "Save"; break;
+        case AppState::FileList:    rs.statusText = "Files"; break;
+        case AppState::Playing:     rs.statusText = "Playing"; break;
+        case AppState::PlayPaused:  rs.statusText = "Paused"; break;
     }
 
     std::ostringstream oss;
@@ -141,23 +221,19 @@ RecorderState RecorderApp::getState() const
         rs.fileList = files_;
         rs.selectedFileIndex = currentFileIndex_;
 
-        if (rs.state == AppState::Recording || rs.state == AppState::RecPaused) {
+        if (rs.state == AppState::Recording || rs.state == AppState::RecPaused || rs.state == AppState::SaveConfirm) {
             size_t pos = lastRecordingPath_.find_last_of('/');
             rs.currentFileName = lastRecordingPath_.substr(pos + 1);
         } else if (!files_.empty() && currentFileIndex_ >= 0 && currentFileIndex_ < static_cast<int>(files_.size())) {
             rs.currentFileName = files_[currentFileIndex_].filename;
         } else {
-            rs.currentFileName = "No recordings";
+            rs.currentFileName = "";
         }
     }
 
-    switch (rs.state) {
-        case AppState::Idle:       rs.hintText = "[Enter]Rec [Space]Play [<- ->]File [Esc]Quit"; break;
-        case AppState::Recording:  rs.hintText = "[P]Pause [Enter]Stop"; break;
-        case AppState::RecPaused:  rs.hintText = "[P]Resume [Enter]Stop"; break;
-        case AppState::Playing:    rs.hintText = "[Space]Pause [S]Stop [<- ->]File"; break;
-        case AppState::PlayPaused: rs.hintText = "[Space]Resume [S]Stop"; break;
-    }
+    rs.sampleRate = sampleRate_;
+    rs.playbackSpeed = playbackSpeed_;
+    rs.hintText = "";
 
     return rs;
 }
@@ -267,6 +343,23 @@ void RecorderApp::handleNextFile()
     if (files_.empty()) return;
     if (currentFileIndex_ < static_cast<int>(files_.size()) - 1) currentFileIndex_++;
     else currentFileIndex_ = 0;
+}
+
+void RecorderApp::handleDelete()
+{
+    std::lock_guard<std::mutex> lock(filesMutex_);
+    if (files_.empty() || currentFileIndex_ < 0 || currentFileIndex_ >= static_cast<int>(files_.size())) {
+        return;
+    }
+    std::string path = files_[currentFileIndex_].filepath;
+    files_.erase(files_.begin() + currentFileIndex_);
+    if (currentFileIndex_ >= static_cast<int>(files_.size())) {
+        currentFileIndex_ = files_.empty() ? -1 : static_cast<int>(files_.size()) - 1;
+    }
+    // Delete file in background
+    std::async(std::launch::async, [path]() {
+        unlink(path.c_str());
+    });
 }
 
 void RecorderApp::clampFileIndex()

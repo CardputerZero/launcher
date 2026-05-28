@@ -32,6 +32,7 @@ lv_obj_t *g_root = nullptr;
 lv_indev_t *g_keyboard_indev = nullptr;
 lv_group_t *g_group = nullptr;
 UiRecorder *g_ui = nullptr;
+RecorderApp *g_app = nullptr;
 
 void request_quit()
 {
@@ -83,6 +84,12 @@ void handle_keyboard_event(lv_event_t *event)
             case 'p': case 'P': key_code = KEY_P; break;
             case 's': case 'S': key_code = KEY_S; break;
             case ' ':           key_code = KEY_SPACE; break;
+            // Map digits to F4-F8 for SDL testing convenience
+            case '1':           key_code = KEY_F4; break;
+            case '2':           key_code = KEY_F5; break;
+            case '3':           key_code = KEY_F6; break;
+            case '4':           key_code = KEY_F7; break;
+            case '5':           key_code = KEY_F8; break;
             default:            key_code = lv_key; break;
         }
         pressed = true;
@@ -189,9 +196,14 @@ int main()
 
     RecorderApp app;
     UiRecorder ui;
+    g_app = &app;
 
     ui.setActionHandler([&](const std::string& action) {
-        app.onAction(action);
+        if (action == "quit") {
+            request_quit();
+        } else {
+            app.onAction(action);
+        }
     });
 
     app.init();
@@ -204,7 +216,7 @@ int main()
     g_root = lv_screen_active();
     lv_obj_set_size(g_root, kScreenWidth, kScreenHeight);
     lv_obj_clear_flag(g_root, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_bg_color(g_root, lv_color_hex(0x1A1A2E), 0);
+    lv_obj_set_style_bg_color(g_root, lv_color_hex(0xE8E8EC), 0);
     lv_obj_set_style_bg_opa(g_root, LV_OPA_COVER, 0);
 
     g_ui = &ui;

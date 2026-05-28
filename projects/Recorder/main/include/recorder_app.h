@@ -9,11 +9,13 @@
 #include <vector>
 
 enum class AppState {
-    Idle,
-    Recording,
-    RecPaused,
-    Playing,
-    PlayPaused,
+    Idle,         // Home entry page
+    Recording,    // Recording in progress
+    RecPaused,    // Recording paused
+    SaveConfirm,  // Save recording dialog
+    FileList,     // Saved recordings list
+    Playing,      // Playback in progress
+    PlayPaused,   // Playback paused
 };
 
 struct RecordingInfo {
@@ -30,6 +32,8 @@ struct RecorderState {
     std::string hintText;
     std::vector<RecordingInfo> fileList;
     int selectedFileIndex;
+    std::string sampleRate;      // e.g. "48k"
+    std::string playbackSpeed;   // e.g. "1.0X"
 };
 
 class IRecorderView {
@@ -60,12 +64,15 @@ public:
 
 private:
     void notifyView();
+    void syncStateFromEngine();
+
     void handleToggleRecord();
     void handleTogglePlay();
     void handleTogglePause();
     void handleStop();
     void handlePrevFile();
     void handleNextFile();
+    void handleDelete();
 
     void scanFiles();
     void asyncScanFiles();
@@ -85,4 +92,8 @@ private:
     std::atomic<bool> filesDirty_{false};
     AudioState lastAudioState_ = AudioState::Idle;
     uint32_t lastNotifyTime_ = 0;
+
+    AppState appState_ = AppState::Idle;
+    std::string sampleRate_ = "48k";
+    std::string playbackSpeed_ = "1.0X";
 };
