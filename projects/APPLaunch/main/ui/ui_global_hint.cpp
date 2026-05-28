@@ -96,14 +96,14 @@ static void hint_timer_cb(lv_timer_t *t)
 static void show_hint(const char *text);
 
 /* Poll while ESC is held. Fires every HINT_ESC_POLL_MS. If ESC is
- * released (LVGL_HOME_KEY_FLAGE == 0) we just pause ourselves — the
+ * released (LVGL_HOME_KEY_FLAG == 0) we just pause ourselves — the
  * release path also explicitly pauses, this is belt-and-suspenders.
  * If ESC is still down and has been held >= HINT_ESC_HOLD_MS, show
  * the toast once and pause until the next fresh ESC press. */
 static void esc_poll_timer_cb(lv_timer_t *t)
 {
     /* ESC no longer held — nothing to do until a new key-down. */
-    if (LVGL_HOME_KEY_FLAGE == 0 || s_esc_down_tick == 0) {
+    if (LVGL_HOME_KEY_FLAG == 0 || s_esc_down_tick == 0) {
         if (t) lv_timer_pause(t);
         return;
     }

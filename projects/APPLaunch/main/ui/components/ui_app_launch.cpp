@@ -325,7 +325,7 @@ public:
         lv_timer_enable(false);
         lv_refr_now(disp);
 
-        int ret = hal_process_exec_blocking(exec.c_str(), &LVGL_HOME_KEY_FLAGE, keep_root ? 1 : 0);
+        int ret = hal_process_exec_blocking(exec.c_str(), &LVGL_HOME_KEY_FLAG, keep_root ? 1 : 0);
         printf("App %s exited with code %d\n", exec.c_str(), ret);
         lv_timer_enable(true);
         if (indev)

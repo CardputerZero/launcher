@@ -365,7 +365,7 @@ private:
         pid_t pid_ret;
         if (end_status == 0)
         {
-            if (LVGL_HOME_KEY_FLAGE)
+            if (LVGL_HOME_KEY_FLAG)
             {
                 end_status = 1;
                 start_time = std::chrono::steady_clock::now();
@@ -373,7 +373,7 @@ private:
         }
         if (end_status == 1)
         {
-            if (LVGL_HOME_KEY_FLAGE)
+            if (LVGL_HOME_KEY_FLAG)
             {
                 end_time = std::chrono::steady_clock::now();
                 if (std::chrono::duration_cast<std::chrono::seconds>(end_time - start_time).count() >= 5)
