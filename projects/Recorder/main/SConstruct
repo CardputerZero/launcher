@@ -14,7 +14,7 @@ INCLUDE = [ADir("."), ADir("include")]
 PRIVATE_INCLUDE = []
 REQUIREMENTS = ["lvgl_component", "pthread", "Miniaudio"]
 if "CONFIG_V9_5_LV_USE_SDL" not in os.environ:
-    REQUIREMENTS += ["input", "xkbcommon", "udev", "tinyalsa_component"]
+    REQUIREMENTS += ["input", "xkbcommon", "udev"]
 STATIC_LIB = []
 DYNAMIC_LIB = []
 DEFINITIONS = []

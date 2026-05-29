@@ -235,13 +235,17 @@ bool AudioEngine::startPlayback(const std::string& filepath)
                     buffer.resize(toRead * impl_->playChannels);
                 }
                 size_t read = fread(buffer.data(), bytesPerFrame, toRead, impl_->playFile);
-                int16_t peak = 0;
-                for (size_t j = 0; j < read * impl_->playChannels; j++) {
-                    if (std::abs(buffer[j]) > std::abs(peak)) {
-                        peak = buffer[j];
-                    }
+                double sumSq = 0.0;
+                size_t sampleCount = read * impl_->playChannels;
+                for (size_t j = 0; j < sampleCount; j++) {
+                    double s = static_cast<double>(buffer[j]) / 32768.0;
+                    sumSq += s * s;
                 }
-                impl_->playWaveform[i] = std::abs(peak) / 32768.0f;
+                float rms = (sampleCount > 0) ? static_cast<float>(std::sqrt(sumSq / sampleCount)) : 0.0f;
+                // Map RMS to logarithmic/dB scale: -36dB ~ 0dB mapped to 0~1
+                float db = 20.0f * std::log10(rms + 1e-6f);
+                if (db < -36.0f) db = -36.0f;
+                impl_->playWaveform[i] = (db + 36.0f) / 36.0f;
             } else {
                 impl_->playWaveform[i] = 0.0f;
             }
@@ -472,15 +476,24 @@ void AudioEngine::onRecordingData(const void* input, ma_uint32 frameCount)
 
         const int16_t* samples = static_cast<const int16_t*>(input);
         int16_t peak = 0;
-        for (ma_uint32 i = 0; i < frameCount * impl_->recChannels; i++) {
+        double sumSq = 0.0;
+        uint32_t sampleCount = frameCount * impl_->recChannels;
+        for (ma_uint32 i = 0; i < sampleCount; i++) {
             if (std::abs(samples[i]) > std::abs(peak)) {
                 peak = samples[i];
             }
+            double s = static_cast<double>(samples[i]) / 32768.0;
+            sumSq += s * s;
         }
-        float normalized = peak / 32768.0f;
+        float rms = (sampleCount > 0) ? static_cast<float>(std::sqrt(sumSq / sampleCount)) : 0.0f;
+        // Map RMS to logarithmic/dB scale: -36dB ~ 0dB mapped to 0~1, keep sign from peak
+        float db = 20.0f * std::log10(rms + 1e-6f);
+        if (db < -36.0f) db = -36.0f;
+        float dbNorm = (db + 36.0f) / 36.0f;
+        if (peak < 0) dbNorm = -dbNorm;
         {
             std::lock_guard<std::mutex> lock(impl_->recWaveformMutex);
-            impl_->recWaveform[impl_->recWaveformIndex] = normalized;
+            impl_->recWaveform[impl_->recWaveformIndex] = dbNorm;
             impl_->recWaveformIndex = (impl_->recWaveformIndex + 1) % AudioEngineImpl::kRecWaveformSize;
         }
 

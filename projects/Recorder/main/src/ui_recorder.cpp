@@ -90,7 +90,7 @@ void UiRecorder::createBottomBar(lv_obj_t* parent)
         lblBottomBtns_[i] = lv_label_create(bottomBar_);
         lv_obj_set_pos(lblBottomBtns_[i], i * kBtnW, 0);
         lv_obj_set_size(lblBottomBtns_[i], kBtnW, kBottomH);
-        lv_obj_set_style_text_font(lblBottomBtns_[i], &lv_font_montserrat_10, 0);
+        lv_obj_set_style_text_font(lblBottomBtns_[i], &lv_font_montserrat_12, 0);
         lv_obj_set_style_text_color(lblBottomBtns_[i], kColorText, 0);
         lv_obj_set_style_text_align(lblBottomBtns_[i], LV_TEXT_ALIGN_CENTER, 0);
         lv_label_set_text(lblBottomBtns_[i], "--");
