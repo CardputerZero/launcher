@@ -2,7 +2,7 @@
 
 [English](./README.md)
 
-基于 [M5Stack_Linux_Libs](https://github.com/m5stack/M5Stack_Linux_Libs) SDK 开发的 M5Cardputer Zero 应用集合。该项目展示了如何在 M5Cardputer Zero（AArch64 Linux）设备上使用 **LVGL 9.5** 构建图形界面应用。
+基于 [M5Stack_Linux_Libs](https://github.com/m5stack/M5Stack_Linux_Libs) SDK 开发的 M5CardputerZero 应用集合。该项目展示了如何在 M5CardputerZero（AArch64 Linux）设备上使用 **LVGL 9.5** 构建图形界面应用。
 
 仓库包含两个主要项目：
 - **UserDemo** — 基础用户演示程序，展示状态栏和简单 UI
@@ -61,7 +61,7 @@ M5CardputerZero-UserDemo/
 - 基于 LVGL 9.5 的图形界面
 - 支持两种显示后端：
   - **SDL2**：用于 PC 端仿真调试（默认编译模式）
-  - **Linux Framebuffer（ST7789V）**：用于 M5Cardputer Zero 设备端运行
+  - **Linux Framebuffer（ST7789V）**：用于 M5CardputerZero 设备端运行
 - evdev 键盘/触摸输入支持（设备端）
 - 使用 SCons + Kconfig 构建系统，可通过 `scons menuconfig` 灵活配置
 
@@ -130,7 +130,7 @@ scons -j$(nproc)
 
 编译产物位于 `projects/APPLaunch/dist/` 目录下，可执行文件名为 `M5CardputerZero-APPLaunch`。
 
-#### 方式二：交叉编译（AArch64，部署到 M5Cardputer Zero 设备）
+#### 方式二：交叉编译（AArch64，部署到 M5CardputerZero 设备）
 
 需要安装 AArch64 交叉编译工具链：
 
@@ -178,7 +178,7 @@ scons -j$(nproc)
 
 编译产物位于 `projects/UserDemo/build/` 目录下，可执行文件名为 `M5CardputerZero-UserDemo`。
 
-#### 方式二：交叉编译（AArch64，部署到 M5Cardputer Zero 设备）
+#### 方式二：交叉编译（AArch64，部署到 M5CardputerZero 设备）
 
 需要安装 AArch64 交叉编译工具链：
 
@@ -238,7 +238,7 @@ cd projects/APPLaunch
 ./dist/M5CardputerZero-APPLaunch
 ```
 
-#### M5Cardputer Zero 设备端
+#### M5CardputerZero 设备端
 
 通过 SSH 部署（配置见 `projects/APPLaunch/setup.ini`）：
 
@@ -277,7 +277,7 @@ cd projects/UserDemo
 ./dist/M5CardputerZero-UserDemo
 ```
 
-#### M5Cardputer Zero 设备端
+#### M5CardputerZero 设备端
 
 将编译产物推送到设备：
 
@@ -335,4 +335,4 @@ export LV_LINUX_KEYBOARD_DEVICE=/dev/input/by-path/platform-3f804000.i2c-event
 - [M5Stack_Linux_Libs SDK](https://github.com/m5stack/M5Stack_Linux_Libs)
 - [LVGL 文档](https://docs.lvgl.io/)
 - [SquareLine Studio](https://squareline.io/)
-- [M5Cardputer Zero 产品页](https://docs.m5stack.com/)
+- [M5CardputerZero 产品页](https://docs.m5stack.com/)

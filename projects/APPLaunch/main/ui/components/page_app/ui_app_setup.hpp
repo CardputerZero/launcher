@@ -814,7 +814,7 @@ private:
     {
         for (auto &m : menu_items_) {
             if (m.label != "About") continue;
-            m.sub_items[0].label = "Device: M5Cardputer Zero";
+            m.sub_items[0].label = "Device: M5CardputerZero";
             m.sub_items[1].label = "LVGL: 9.x";
             char buf[64];
             snprintf(buf, sizeof(buf), "Build: %s", __DATE__);

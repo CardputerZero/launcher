@@ -2,7 +2,7 @@
 
 [中文](./README_ZH.md)
 
-A collection of applications for the **M5Cardputer Zero** device, built on the [M5Stack_Linux_Libs](https://github.com/m5stack/M5Stack_Linux_Libs) SDK. This project demonstrates how to develop graphical UI applications using **LVGL 9.5** on M5Cardputer Zero (AArch64 Linux).
+A collection of applications for the **M5CardputerZero** device, built on the [M5Stack_Linux_Libs](https://github.com/m5stack/M5Stack_Linux_Libs) SDK. This project demonstrates how to develop graphical UI applications using **LVGL 9.5** on M5CardputerZero (AArch64 Linux).
 
 The repository contains two main projects:
 - **UserDemo** — Basic user demo showcasing status bar and simple UI
@@ -61,7 +61,7 @@ M5CardputerZero-UserDemo/
 - Graphical UI powered by LVGL 9.5
 - Two display backends:
   - **SDL2** — PC simulation for local debugging (default build mode)
-  - **Linux Framebuffer (ST7789V)** — runs on the M5Cardputer Zero device
+  - **Linux Framebuffer (ST7789V)** — runs on the M5CardputerZero device
 - evdev keyboard/touch input support (on-device)
 - SCons + Kconfig build system with `scons menuconfig` for flexible configuration
 
@@ -130,7 +130,7 @@ scons -j$(nproc)
 
 The compiled binary will be located in the `projects/APPLaunch/dist/` directory, named `M5CardputerZero-APPLaunch`.
 
-#### Option 2: Cross-Compile for AArch64 (M5Cardputer Zero device)
+#### Option 2: Cross-Compile for AArch64 (M5CardputerZero device)
 
 Install the AArch64 cross-compilation toolchain:
 
@@ -178,7 +178,7 @@ scons -j$(nproc)
 
 The compiled binary will be located in the `projects/UserDemo/dist/` directory, named `M5CardputerZero-UserDemo`.
 
-#### Option 2: Cross-Compile for AArch64 (M5Cardputer Zero device)
+#### Option 2: Cross-Compile for AArch64 (M5CardputerZero device)
 
 Install the AArch64 cross-compilation toolchain:
 
@@ -242,7 +242,7 @@ cd projects/APPLaunch
 ./dist/M5CardputerZero-APPLaunch
 ```
 
-#### M5Cardputer Zero Device
+#### M5CardputerZero Device
 
 Deploy via SSH (configurable in `projects/APPLaunch/setup.ini`):
 
@@ -281,7 +281,7 @@ cd projects/UserDemo
 ./dist/M5CardputerZero-UserDemo
 ```
 
-#### M5Cardputer Zero Device
+#### M5CardputerZero Device
 
 Copy the binary to the device:
 
@@ -339,4 +339,4 @@ To customize the UI, edit the project in SquareLine Studio and regenerate the co
 - [M5Stack_Linux_Libs SDK](https://github.com/m5stack/M5Stack_Linux_Libs)
 - [LVGL Documentation](https://docs.lvgl.io/)
 - [SquareLine Studio](https://squareline.io/)
-- [M5Cardputer Zero Product Page](https://docs.m5stack.com/)
+- [M5CardputerZero Product Page](https://docs.m5stack.com/)
