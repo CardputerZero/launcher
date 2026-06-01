@@ -67,9 +67,14 @@ void handle_keyboard_event(lv_event_t *event)
 
     if (lv_event_get_code(event) == static_cast<lv_event_code_t>(LV_EVENT_KEYBOARD)) {
         auto *key = static_cast<key_item *>(lv_event_get_param(event));
-        if (!key || key->key_state != KBD_KEY_PRESSED) return; // Ignore release and repeat
+        if (!key || key->key_state == KBD_KEY_RELEASED) return; // Ignore release, allow repeat
         key_code = key->key_code;
-        pressed = true;
+        bool isRepeat = (key->key_state == KBD_KEY_REPEATED);
+        if (g_ui && key->codepoint >= 32 && key->codepoint < 127 && !isRepeat) {
+            g_ui->onCharTyped(key->codepoint);
+        }
+        if (g_ui) g_ui->onKeyPressed(key_code, isRepeat);
+        return;
     }
 #if LV_USE_SDL
     else if (lv_event_get_code(event) == LV_EVENT_KEY) {
@@ -91,6 +96,9 @@ void handle_keyboard_event(lv_event_t *event)
             case '4':           key_code = KEY_F7; break;
             case '5':           key_code = KEY_F8; break;
             default:            key_code = lv_key; break;
+        }
+        if (g_ui && lv_key >= 32 && lv_key < 127) {
+            g_ui->onCharTyped(lv_key);
         }
         pressed = true;
     }

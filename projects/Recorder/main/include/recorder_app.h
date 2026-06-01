@@ -102,4 +102,9 @@ private:
     AppState appState_ = AppState::Idle;
     std::string sampleRate_ = "48k";
     std::string playbackSpeed_ = "1.0X";
+
+    // Filename editing state (used by SaveConfirm and rename)
+    std::string editingName_;
+    bool isRenaming_ = false;
+    std::string renameOriginalPath_;
 };

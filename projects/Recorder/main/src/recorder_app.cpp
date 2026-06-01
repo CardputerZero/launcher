@@ -63,9 +63,44 @@ void RecorderApp::onAction(const std::string& action)
             engine_.stopRecording();
             asyncScanFiles();
         }
+        {
+            size_t pos = lastRecordingPath_.find_last_of('/');
+            std::string fname = lastRecordingPath_.substr(pos + 1);
+            size_t dot = fname.find_last_of('.');
+            if (dot != std::string::npos) editingName_ = fname.substr(0, dot);
+            else editingName_ = fname;
+        }
+        isRenaming_ = false;
+        renameOriginalPath_.clear();
         appState_ = AppState::SaveConfirm;
-    } else if (action == "save") {
-        appState_ = AppState::Idle;
+    } else if (action.rfind("save", 0) == 0) {
+        std::string newName;
+        if (action.length() > 5 && action[4] == ':') {
+            newName = action.substr(5);
+        } else {
+            newName = editingName_;
+        }
+        if (newName.empty()) newName = "recording";
+        std::string newFilename = newName + ".wav";
+        std::string dir = recordingsDir();
+        std::string newPath = dir + "/" + newFilename;
+        if (isRenaming_) {
+            if (renameOriginalPath_ != newPath) {
+                ::rename(renameOriginalPath_.c_str(), newPath.c_str());
+                asyncScanFiles();
+            }
+        } else {
+            if (lastRecordingPath_ != newPath) {
+                ::rename(lastRecordingPath_.c_str(), newPath.c_str());
+                lastRecordingPath_ = newPath;
+                asyncScanFiles();
+            }
+        }
+        editingName_.clear();
+        bool wasRenaming = isRenaming_;
+        isRenaming_ = false;
+        renameOriginalPath_.clear();
+        appState_ = wasRenaming ? AppState::FileList : AppState::Idle;
     } else if (action == "exit") {
         switch (appState_) {
             case AppState::Recording:
@@ -75,7 +110,18 @@ void RecorderApp::onAction(const std::string& action)
                 appState_ = AppState::Idle;
                 break;
             case AppState::SaveConfirm:
-                appState_ = AppState::Idle;
+                if (isRenaming_) {
+                    appState_ = AppState::FileList;
+                } else {
+                    if (!lastRecordingPath_.empty()) {
+                        unlink(lastRecordingPath_.c_str());
+                        asyncScanFiles();
+                    }
+                    appState_ = AppState::Idle;
+                }
+                editingName_.clear();
+                isRenaming_ = false;
+                renameOriginalPath_.clear();
                 break;
             case AppState::FileList:
                 appState_ = AppState::Idle;
@@ -117,7 +163,16 @@ void RecorderApp::onAction(const std::string& action)
     } else if (action == "seek_fwd") {
         engine_.seekPlayback(engine_.playbackPosition() + 10.0f);
     } else if (action == "rename") {
-        // TODO: implement rename
+        std::lock_guard<std::mutex> lock(filesMutex_);
+        if (!files_.empty() && currentFileIndex_ >= 0 && currentFileIndex_ < static_cast<int>(files_.size())) {
+            renameOriginalPath_ = files_[currentFileIndex_].filepath;
+            std::string fname = files_[currentFileIndex_].filename;
+            size_t dot = fname.find_last_of('.');
+            if (dot != std::string::npos) editingName_ = fname.substr(0, dot);
+            else editingName_ = fname;
+            isRenaming_ = true;
+            appState_ = AppState::SaveConfirm;
+        }
     } else if (action == "delete") {
         handleDelete();
     }
@@ -157,9 +212,10 @@ void RecorderApp::syncStateFromEngine()
     AudioState audio = engine_.state();
     switch (audio) {
         case AudioState::Idle:
-            if (appState_ == AppState::Recording || appState_ == AppState::RecPaused ||
-                appState_ == AppState::Playing || appState_ == AppState::PlayPaused) {
+            if (appState_ == AppState::Recording || appState_ == AppState::RecPaused) {
                 appState_ = AppState::Idle;
+            } else if (appState_ == AppState::Playing || appState_ == AppState::PlayPaused) {
+                appState_ = AppState::FileList;
             }
             break;
         case AudioState::Recording:
@@ -233,7 +289,9 @@ RecorderState RecorderApp::getState() const
         rs.fileList = files_;
         rs.selectedFileIndex = currentFileIndex_;
 
-        if (rs.state == AppState::Recording || rs.state == AppState::RecPaused || rs.state == AppState::SaveConfirm) {
+        if (rs.state == AppState::SaveConfirm) {
+            rs.currentFileName = editingName_ + ".wav";
+        } else if (rs.state == AppState::Recording || rs.state == AppState::RecPaused) {
             size_t pos = lastRecordingPath_.find_last_of('/');
             rs.currentFileName = lastRecordingPath_.substr(pos + 1);
         } else if (!files_.empty() && currentFileIndex_ >= 0 && currentFileIndex_ < static_cast<int>(files_.size())) {

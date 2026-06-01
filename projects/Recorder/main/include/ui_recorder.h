@@ -23,7 +23,8 @@ public:
     void setActionHandler(std::function<void(const std::string&)> handler) override;
 
     // Keyboard event from input system
-    void onKeyPressed(uint32_t key_code);
+    void onKeyPressed(uint32_t key_code, bool isRepeat = false);
+    void onCharTyped(uint32_t codepoint);
 
 private:
     void buildUi(lv_obj_t* parent);
@@ -78,7 +79,8 @@ private:
     lv_obj_t* lblPauseTimer_ = nullptr;
 
     // SaveConfirm
-    lv_obj_t* lblSaveFilename_ = nullptr;
+    lv_obj_t* taEdit_ = nullptr;
+    std::string editOriginalName_;
 
     // Playback
     lv_obj_t* lblPlayFilename_ = nullptr;
@@ -95,5 +97,6 @@ private:
 
     uint32_t lastKeyTime_ = 0;
     uint32_t lastKeyCode_ = 0;
+    uint32_t backspaceRepeatCount_ = 0;
     std::function<void(const std::string&)> actionHandler_;
 };

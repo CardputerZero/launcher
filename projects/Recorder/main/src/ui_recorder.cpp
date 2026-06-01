@@ -217,14 +217,23 @@ void UiRecorder::createPageRecPaused(lv_obj_t* page)
 // ---------- Save Confirm Page ----------
 void UiRecorder::createPageSaveConfirm(lv_obj_t* page)
 {
-    lblSaveFilename_ = lv_label_create(page);
-    lv_obj_set_pos(lblSaveFilename_, 10, 40);
-    lv_obj_set_width(lblSaveFilename_, 300);
-    lv_obj_set_style_text_font(lblSaveFilename_, &lv_font_montserrat_14, 0);
-    lv_obj_set_style_text_color(lblSaveFilename_, kColorText, 0);
-    lv_obj_set_style_text_align(lblSaveFilename_, LV_TEXT_ALIGN_CENTER, 0);
-    lv_label_set_long_mode(lblSaveFilename_, LV_LABEL_LONG_SCROLL_CIRCULAR);
-    lv_label_set_text(lblSaveFilename_, "");
+    taEdit_ = lv_textarea_create(page);
+    lv_obj_set_pos(taEdit_, 10, 35);
+    lv_obj_set_size(taEdit_, 300, 30);
+    lv_obj_set_style_text_font(taEdit_, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_color(taEdit_, kColorText, 0);
+    lv_obj_set_style_bg_opa(taEdit_, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(taEdit_, 0, 0);
+    lv_obj_set_style_pad_all(taEdit_, 0, 0);
+    lv_textarea_set_one_line(taEdit_, true);
+    lv_textarea_set_text(taEdit_, "");
+    lv_textarea_set_text_selection(taEdit_, true);
+
+    // Cursor styling
+    lv_obj_set_style_border_width(taEdit_, 2, LV_PART_CURSOR);
+    lv_obj_set_style_border_color(taEdit_, kColorHighlight, LV_PART_CURSOR);
+    lv_obj_set_style_bg_opa(taEdit_, LV_OPA_50, LV_PART_CURSOR);
+    lv_obj_set_style_bg_color(taEdit_, kColorHighlight, LV_PART_CURSOR);
 }
 
 // ---------- Playback Page ----------
@@ -313,7 +322,7 @@ void UiRecorder::updateBottomLabels(UiPage page, bool isPaused)
             labels = {"--", "--", "Continue", "Done", "Exit"};
             break;
         case UiPage::SaveConfirm:
-            labels = {"--", "--", "--", "Save", "Exit"};
+            labels = {"Undo", "<-", "->", "Save", "Exit"};
             break;
         case UiPage::Playback:
             labels = {lastState_.playbackSpeed.c_str(), "-10s", isPaused ? "Play" : "Pause", "+10s", "Exit"};
@@ -330,6 +339,8 @@ void UiRecorder::updateBottomLabels(UiPage page, bool isPaused)
 // ---------- Content update ----------
 void UiRecorder::updatePageContent(const RecorderState& state)
 {
+    // Detect page transitions before updating lastState_
+    bool enteringSaveConfirm = (lastState_.state != AppState::SaveConfirm && state.state == AppState::SaveConfirm);
     lastState_ = state;
 
     // Status bar
@@ -379,9 +390,22 @@ void UiRecorder::updatePageContent(const RecorderState& state)
     const char* fname = state.currentFileName.empty() ? "" : state.currentFileName.c_str();
     lv_label_set_text(lblRecFilename_, fname);
     lv_label_set_text(lblPauseFilename_, fname);
-    lv_label_set_text(lblSaveFilename_, fname);
     lv_label_set_text(lblRecTimer_, state.timerText.c_str());
     lv_label_set_text(lblPauseTimer_, state.timerText.c_str());
+
+    if (enteringSaveConfirm && taEdit_) {
+        std::string nameOnly = state.currentFileName;
+        size_t dot = nameOnly.find_last_of('.');
+        if (dot != std::string::npos) nameOnly = nameOnly.substr(0, dot);
+        lv_textarea_set_text(taEdit_, nameOnly.c_str());
+        lv_textarea_set_cursor_pos(taEdit_, LV_TEXTAREA_CURSOR_LAST);
+        lv_obj_t* label = lv_textarea_get_label(taEdit_);
+        if (label) {
+            lv_label_set_text_selection_start(label, 0);
+            lv_label_set_text_selection_end(label, nameOnly.length());
+        }
+        editOriginalName_ = nameOnly;
+    }
 
     // Playback
     lv_label_set_text(lblPlayFilename_, fname);
@@ -462,12 +486,59 @@ void UiRecorder::setActionHandler(std::function<void(const std::string&)> handle
 }
 
 // ---------- Key handling ----------
-void UiRecorder::onKeyPressed(uint32_t key_code)
+void UiRecorder::onKeyPressed(uint32_t key_code, bool isRepeat)
 {
     uint32_t now = lv_tick_get();
-    if (key_code == lastKeyCode_ && now - lastKeyTime_ < 200) return;
+    if (!isRepeat && key_code == lastKeyCode_ && now - lastKeyTime_ < 200) return;
     lastKeyCode_ = key_code;
     lastKeyTime_ = now;
+
+    // Direct textarea editing in SaveConfirm
+    if (currentPage_ == UiPage::SaveConfirm) {
+        switch (key_code) {
+            case KEY_F4:
+                if (taEdit_) {
+                    lv_textarea_set_text(taEdit_, editOriginalName_.c_str());
+                    lv_obj_t* label = lv_textarea_get_label(taEdit_);
+                    if (label) {
+                        lv_label_set_text_selection_start(label, 0);
+                        lv_label_set_text_selection_end(label, editOriginalName_.length());
+                    }
+                }
+                return;
+            case KEY_F5:
+                if (taEdit_) {
+                    lv_textarea_cursor_left(taEdit_);
+                    lv_textarea_clear_selection(taEdit_);
+                }
+                return;
+            case KEY_F6:
+                if (taEdit_) {
+                    lv_textarea_cursor_right(taEdit_);
+                    lv_textarea_clear_selection(taEdit_);
+                }
+                return;
+            case KEY_BACKSPACE:
+            case KEY_DELETE:
+                if (taEdit_) {
+                    if (isRepeat) {
+                        backspaceRepeatCount_++;
+                        if (backspaceRepeatCount_ >= 15) {
+                            lv_textarea_set_text(taEdit_, "");
+                            backspaceRepeatCount_ = 0;
+                        } else {
+                            lv_textarea_delete_char(taEdit_);
+                        }
+                    } else {
+                        backspaceRepeatCount_ = 1;
+                        lv_textarea_delete_char(taEdit_);
+                    }
+                }
+                return;
+            default:
+                break;
+        }
+    }
 
     int btnIndex = -1;
     switch (key_code) {
@@ -518,6 +589,14 @@ void UiRecorder::onKeyPressed(uint32_t key_code)
     handleActionForPage(currentPage_, btnIndex);
 }
 
+void UiRecorder::onCharTyped(uint32_t codepoint)
+{
+    if (currentPage_ != UiPage::SaveConfirm || !taEdit_) return;
+    if (codepoint >= 32 && codepoint < 127) {
+        lv_textarea_add_char(taEdit_, codepoint);
+    }
+}
+
 void UiRecorder::handleActionForPage(UiPage page, int btn)
 {
     if (!actionHandler_) return;
@@ -545,7 +624,7 @@ void UiRecorder::handleActionForPage(UiPage page, int btn)
             map = {"", "", "toggle_pause", "done", "exit"};
             break;
         case UiPage::SaveConfirm:
-            map = {"", "", "", "save", "exit"};
+            map = {"undo", "left", "right", "save", "exit"};
             break;
         case UiPage::Playback:
             map = {"speed", "seek_back", "toggle_pause", "seek_fwd", "exit"};
@@ -562,6 +641,15 @@ void UiRecorder::handleActionForPage(UiPage page, int btn)
     }
 
     if (action && action[0] != '\0') {
-        actionHandler_(action);
+        if (page == UiPage::SaveConfirm && btn == 3) {
+            // Save: get edited name from textarea
+            if (taEdit_) {
+                const char* text = lv_textarea_get_text(taEdit_);
+                std::string name = text ? text : "";
+                actionHandler_(std::string("save:") + name);
+            }
+        } else {
+            actionHandler_(action);
+        }
     }
 }
