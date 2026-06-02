@@ -225,7 +225,8 @@ public:
                               img_path("rec_100.png"), page_v<UIRecPage>);
         if (APP_ENABLED("Camera"))
         app_list.emplace_back("CAMERA",
-                              img_path("camera_100.png"), page_v<UICameraPage>);
+                              img_path("camera_100.png"),
+                              "/usr/share/APPLaunch/bin/M5CardputerZero-CameraApp", false);  
         if (APP_ENABLED("UnitEnv"))
         app_list.emplace_back("UnitEnv",
                               img_path("unitenv_100.png"), page_v<UIUnitEnvPage>);
