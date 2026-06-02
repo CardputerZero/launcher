@@ -1734,13 +1734,3 @@ private:
         }
     }
 };
-
-#else // HAL_PLATFORM_SDL — stub for emulator builds
-#include "../ui_app_page.hpp"
-
-class UISetupPage : public app_base
-{
-public:
-    UISetupPage() : app_base() { set_page_title("SETTING"); }
-    ~UISetupPage() {}
-};
