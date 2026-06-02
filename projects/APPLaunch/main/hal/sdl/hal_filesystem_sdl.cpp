@@ -1,4 +1,5 @@
 #include "../hal_filesystem.h"
+#include <stdio.h>   // snprintf
 #include <string.h>
 #include <stdlib.h>
 
