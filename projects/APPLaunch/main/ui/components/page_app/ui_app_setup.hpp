@@ -1,5 +1,11 @@
 #pragma once
-#if !defined(HAL_PLATFORM_SDL)
+// Note: this file used to be wrapped in `#if !defined(HAL_PLATFORM_SDL)` to
+// exclude it from the emulator build, but ui_app_launch.cpp references
+// UISetupPage unconditionally. The class body is HAL-clean (uses hal_wifi_*,
+// hal_battery_*, hal_volume_*); residual raw syscalls (i2c ioctl, popen for
+// IP/whoami, sudo date) are either already inside #ifdef __linux__ or only
+// triggered by user actions that the emulator never performs. Keeping the
+// class compiled on every platform lets the emulator open the SETTING page.
 #define _STRINGIFY(x) #x
 #define STRINGIFY(x) _STRINGIFY(x)
 #ifndef LAUNCHER_GIT_COMMIT_RAW
@@ -1738,5 +1744,3 @@ public:
     UISetupPage() : app_base() { set_page_title("SETTING"); }
     ~UISetupPage() {}
 };
-
-#endif // !HAL_PLATFORM_SDL
