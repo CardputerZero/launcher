@@ -2,6 +2,7 @@
 
 #include "compass_app.h"
 #include "lvgl/lvgl.h"
+#include <array>
 #include <string>
 
 class UiCompass : public ICompassView {
@@ -18,24 +19,33 @@ public:
 
 private:
     void buildUi(lv_obj_t* parent);
-    void createStatusBar(lv_obj_t* parent);
+
+    // Layout constants
+    static constexpr int kScreenW   = 320;
+    static constexpr int kScreenH   = 170;
+    static constexpr int kDiscDia   = 100;
+    static constexpr int kCompassImgSize = 120;
+    static constexpr int kBottomH   = 20;
+    static constexpr int kBtnW      = kScreenW / 5; // 64
 
     lv_obj_t* parent_ = nullptr;
 
-    // Status bar
-    lv_obj_t* statusBar_ = nullptr;
-    lv_obj_t* lblStatusText_ = nullptr;
-
-    // Compass heading (large)
-    lv_obj_t* lblHeading_ = nullptr;
+    // Left panel: Compass
+    lv_obj_t* lblCompassTitle_ = nullptr;
+    lv_obj_t* compassDisc_ = nullptr;
     lv_obj_t* lblYaw_ = nullptr;
 
-    // Sensor values
-    lv_obj_t* lblAccel_ = nullptr;
-    lv_obj_t* lblGyro_ = nullptr;
-    lv_obj_t* lblMag_ = nullptr;
-    lv_obj_t* lblTemp_ = nullptr;
-    lv_obj_t* lblPitchRoll_ = nullptr;
+    // Right panel: IMU
+    lv_obj_t* lblImuTitle_ = nullptr;
+    lv_obj_t* levelDisc_ = nullptr;
+    lv_obj_t* centerDot_ = nullptr;
+    lv_obj_t* levelDot_ = nullptr;
+    lv_obj_t* lblAcc_ = nullptr;
+    lv_obj_t* lblGyr_ = nullptr;
+
+    // Bottom bar (5-segment like Recorder)
+    lv_obj_t* bottomBar_ = nullptr;
+    std::array<lv_obj_t*, 5> lblBottomBtns_{};
 
     // State cache
     CompassState lastState_{};
