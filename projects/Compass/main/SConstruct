@@ -12,7 +12,7 @@ if "CONFIG_TOOLCHAIN_PREFIX" in os.environ:
 SRCS = Glob("src/*.c*")
 INCLUDE = [ADir("."), ADir("include")]
 PRIVATE_INCLUDE = []
-REQUIREMENTS = ["lvgl_component", "pthread"]
+REQUIREMENTS = ["lvgl_component", "pthread", "freetype"]
 if "CONFIG_V9_5_LV_USE_SDL" not in os.environ:
     REQUIREMENTS += ["input", "xkbcommon", "udev"]
 STATIC_LIB = []
@@ -39,6 +39,42 @@ lvgl_component = list(filter(lambda x: x["target"] == "lvgl_component", env["COM
 if MULTIARCH_INCLUDE:
     for component in env["COMPONENTS"]:
         component["INCLUDE"] += [MULTIARCH_INCLUDE]
+
+# FreeType support
+freetype_includes = []
+freetype_link_paths = []
+if "CONFIG_TOOLCHAIN_SYSROOT" in os.environ:
+    sysroot = os.environ["CONFIG_TOOLCHAIN_SYSROOT"].strip('"')
+    ft_inc = os.path.join(sysroot, "usr", "include", "freetype2")
+    ft_lib = os.path.join(sysroot, "usr", "lib", "aarch64-linux-gnu")
+    if os.path.isdir(ft_inc):
+        freetype_includes += [ft_inc]
+    if os.path.isdir(ft_lib):
+        freetype_link_paths += [ft_lib]
+
+# Also check project local static_lib (for cross-compilation or local sysroot)
+local_static_lib = os.path.join(os.path.dirname(str(Dir('.').srcnode())), "static_lib")
+local_ft_inc = os.path.join(local_static_lib, "usr", "include", "freetype2")
+local_ft_lib = os.path.join(local_static_lib, "usr", "lib", "aarch64-linux-gnu")
+if os.path.isdir(local_ft_inc):
+    freetype_includes += [local_ft_inc]
+if os.path.isdir(local_ft_lib):
+    freetype_link_paths += [local_ft_lib]
+
+# Fallback to system paths
+if not freetype_includes:
+    for ft_inc in ["/usr/include/freetype2", "/usr/local/include/freetype2"]:
+        if os.path.exists(ft_inc):
+            freetype_includes += [ft_inc]
+if not freetype_link_paths:
+    for ft_lib in ["/usr/lib", "/usr/local/lib"]:
+        if os.path.exists(ft_lib):
+            freetype_link_paths += [ft_lib]
+
+for component in env["COMPONENTS"]:
+    component["INCLUDE"] += freetype_includes
+    component["LINK_SEARCH_PATH"] += freetype_link_paths
+
 if "CONFIG_V9_5_LV_USE_SDL" in os.environ:
     lvgl_component["REQUIREMENTS"] += ["SDL2"]
     lvgl_component["INCLUDE"] += ["/usr/include/SDL2"]

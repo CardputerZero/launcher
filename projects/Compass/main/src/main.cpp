@@ -225,7 +225,7 @@ int main()
     g_root = lv_screen_active();
     lv_obj_set_size(g_root, kScreenWidth, kScreenHeight);
     lv_obj_clear_flag(g_root, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_bg_color(g_root, lv_color_hex(0xE8E8EC), 0);
+    lv_obj_set_style_bg_color(g_root, lv_color_hex(0x000000), 0);
     lv_obj_set_style_bg_opa(g_root, LV_OPA_COVER, 0);
 
     g_ui = &ui;

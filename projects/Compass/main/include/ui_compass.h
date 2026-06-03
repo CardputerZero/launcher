@@ -1,6 +1,7 @@
 #pragma once
 
 #include "compass_app.h"
+#include "app_font.h"
 #include "lvgl/lvgl.h"
 #include <array>
 #include <string>
@@ -19,16 +20,22 @@ public:
 
 private:
     void buildUi(lv_obj_t* parent);
+    void createStatusBar(lv_obj_t* parent);
+    void createBottomBar(lv_obj_t* parent);
 
     // Layout constants
     static constexpr int kScreenW   = 320;
     static constexpr int kScreenH   = 170;
     static constexpr int kDiscDia   = 100;
     static constexpr int kCompassImgSize = 120;
-    static constexpr int kBottomH   = 20;
+    static constexpr int kStatusH   = 30;
+    static constexpr int kBottomH   = 25;
     static constexpr int kBtnW      = kScreenW / 5; // 64
 
     lv_obj_t* parent_ = nullptr;
+
+    // Status bar
+    lv_obj_t* lblStatusText_ = nullptr;
 
     // Left panel: Compass
     lv_obj_t* lblCompassTitle_ = nullptr;
@@ -44,8 +51,8 @@ private:
     lv_obj_t* lblGyr_ = nullptr;
 
     // Bottom bar (5-segment like Recorder)
-    lv_obj_t* bottomBar_ = nullptr;
     std::array<lv_obj_t*, 5> lblBottomBtns_{};
+    std::array<lv_obj_t*, 5> lblBottomIndicators_{};
 
     // State cache
     CompassState lastState_{};

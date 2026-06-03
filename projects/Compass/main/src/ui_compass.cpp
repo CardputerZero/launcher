@@ -13,6 +13,16 @@ namespace {
 constexpr int kScreenWidth  = 320;
 constexpr int kScreenHeight = 170;
 
+// Colors (dark theme, matching Recorder)
+const lv_color_t kColorBg         = lv_color_hex(0x000000);
+const lv_color_t kColorText       = lv_color_hex(0xFFFFFF);
+const lv_color_t kColorTextGray   = lv_color_hex(0xAAAAAA);
+const lv_color_t kColorLevelDisc  = lv_color_hex(0x222222);
+const lv_color_t kColorLevelBorder= lv_color_hex(0x555555);
+const lv_color_t kColorCenterDot  = lv_color_hex(0x888888);
+const lv_color_t kColorIconList   = lv_color_hex(0x33CC33);
+const lv_color_t kColorIconExit   = lv_color_hex(0xFF0000);
+
 } // namespace
 
 void UiCompass::init(lv_obj_t* parent)
@@ -28,46 +38,51 @@ void UiCompass::setActionHandler(std::function<void(const std::string&)> handler
 
 void UiCompass::buildUi(lv_obj_t* parent)
 {
+    lv_obj_set_size(parent, kScreenW, kScreenH);
+    lv_obj_clear_flag(parent, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_bg_color(parent, kColorBg, 0);
+    lv_obj_set_style_bg_opa(parent, LV_OPA_COVER, 0);
+
     /* ---------- 左侧 Compass 区域 ---------- */
     lblCompassTitle_ = lv_label_create(parent);
     lv_label_set_text(lblCompassTitle_, "Compass");
     lv_obj_set_style_text_font(lblCompassTitle_, &lv_font_montserrat_14, 0);
-    lv_obj_set_style_text_color(lblCompassTitle_, lv_color_hex(0x333333), 0);
+    lv_obj_set_style_text_color(lblCompassTitle_, kColorText, 0);
     lv_obj_set_size(lblCompassTitle_, 160, 16);
     lv_obj_set_style_text_align(lblCompassTitle_, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_pos(lblCompassTitle_, 0, 2);
+    lv_obj_set_pos(lblCompassTitle_, 0, kStatusH - 20);
 
     compassDisc_ = lv_img_create(parent);
     lv_img_set_src(compassDisc_, &img_compass_disc);
-    lv_obj_set_pos(compassDisc_, 20, 22);
+    lv_obj_set_pos(compassDisc_, 20, kStatusH + 2);
     lv_img_set_pivot(compassDisc_, kCompassImgSize / 2, kCompassImgSize / 2);
 
     lblYaw_ = lv_label_create(parent);
     lv_label_set_text(lblYaw_, "---");
     lv_obj_set_style_text_font(lblYaw_, &lv_font_montserrat_12, 0);
-    lv_obj_set_style_text_color(lblYaw_, lv_color_hex(0x333333), 0);
+    lv_obj_set_style_text_color(lblYaw_, kColorText, 0);
     lv_obj_set_size(lblYaw_, 160, 14);
     lv_obj_set_style_text_align(lblYaw_, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_pos(lblYaw_, 0, 128);
+    lv_obj_set_pos(lblYaw_, 0, kScreenH - kBottomH - 24);
 
     /* ---------- 右侧 IMU 区域 ---------- */
     lblImuTitle_ = lv_label_create(parent);
     lv_label_set_text(lblImuTitle_, "IMU");
     lv_obj_set_style_text_font(lblImuTitle_, &lv_font_montserrat_14, 0);
-    lv_obj_set_style_text_color(lblImuTitle_, lv_color_hex(0x333333), 0);
+    lv_obj_set_style_text_color(lblImuTitle_, kColorText, 0);
     lv_obj_set_size(lblImuTitle_, 160, 16);
     lv_obj_set_style_text_align(lblImuTitle_, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_pos(lblImuTitle_, 160, 2);
+    lv_obj_set_pos(lblImuTitle_, 160, kStatusH - 20);
 
     levelDisc_ = lv_obj_create(parent);
     lv_obj_remove_style_all(levelDisc_);
     lv_obj_set_size(levelDisc_, kDiscDia, kDiscDia);
-    lv_obj_set_pos(levelDisc_, 190, 22);
+    lv_obj_set_pos(levelDisc_, 190, kStatusH + 2);
     lv_obj_set_style_radius(levelDisc_, LV_RADIUS_CIRCLE, 0);
-    lv_obj_set_style_bg_color(levelDisc_, lv_color_hex(0xDCDCDC), 0);
+    lv_obj_set_style_bg_color(levelDisc_, kColorLevelDisc, 0);
     lv_obj_set_style_bg_opa(levelDisc_, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(levelDisc_, 2, 0);
-    lv_obj_set_style_border_color(levelDisc_, lv_color_hex(0x999999), 0);
+    lv_obj_set_style_border_color(levelDisc_, kColorLevelBorder, 0);
     lv_obj_set_style_border_opa(levelDisc_, LV_OPA_COVER, 0);
     lv_obj_set_style_pad_all(levelDisc_, 0, 0);
     lv_obj_clear_flag(levelDisc_, LV_OBJ_FLAG_SCROLLABLE);
@@ -77,7 +92,7 @@ void UiCompass::buildUi(lv_obj_t* parent)
     lv_obj_set_size(centerDot_, 8, 8);
     lv_obj_set_pos(centerDot_, 46, 46);
     lv_obj_set_style_radius(centerDot_, LV_RADIUS_CIRCLE, 0);
-    lv_obj_set_style_bg_color(centerDot_, lv_color_hex(0x777777), 0);
+    lv_obj_set_style_bg_color(centerDot_, kColorCenterDot, 0);
     lv_obj_set_style_bg_opa(centerDot_, LV_OPA_COVER, 0);
     lv_obj_clear_flag(centerDot_, LV_OBJ_FLAG_SCROLLABLE);
 
@@ -96,42 +111,66 @@ void UiCompass::buildUi(lv_obj_t* parent)
     lblAcc_ = lv_label_create(parent);
     lv_label_set_text(lblAcc_, "ACC: --- --- ---");
     lv_obj_set_style_text_font(lblAcc_, &lv_font_montserrat_12, 0);
-    lv_obj_set_style_text_color(lblAcc_, lv_color_hex(0x555555), 0);
+    lv_obj_set_style_text_color(lblAcc_, kColorTextGray, 0);
     lv_obj_set_size(lblAcc_, 160, 12);
     lv_obj_set_style_text_align(lblAcc_, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_pos(lblAcc_, 160, 126);
+    lv_obj_set_pos(lblAcc_, 160, kScreenH - kBottomH - 36);
 
     lblGyr_ = lv_label_create(parent);
     lv_label_set_text(lblGyr_, "GYR: --- --- ---");
     lv_obj_set_style_text_font(lblGyr_, &lv_font_montserrat_12, 0);
-    lv_obj_set_style_text_color(lblGyr_, lv_color_hex(0x555555), 0);
+    lv_obj_set_style_text_color(lblGyr_, kColorTextGray, 0);
     lv_obj_set_size(lblGyr_, 160, 12);
     lv_obj_set_style_text_align(lblGyr_, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_pos(lblGyr_, 160, 138);
+    lv_obj_set_pos(lblGyr_, 160, kScreenH - kBottomH - 24);
 
-    /* ---------- 底部栏（五等分，参考 Recorder） ---------- */
-    bottomBar_ = lv_obj_create(parent);
-    lv_obj_remove_style_all(bottomBar_);
-    lv_obj_set_size(bottomBar_, kScreenW, kBottomH);
-    lv_obj_set_pos(bottomBar_, 0, kScreenH - kBottomH);
-    lv_obj_set_style_bg_color(bottomBar_, lv_color_hex(0xD8D8E0), 0);
-    lv_obj_set_style_bg_opa(bottomBar_, LV_OPA_COVER, 0);
-    lv_obj_set_style_pad_all(bottomBar_, 0, 0);
-    lv_obj_clear_flag(bottomBar_, LV_OBJ_FLAG_SCROLLABLE);
+    createStatusBar(parent);
+    createBottomBar(parent);
+}
 
+void UiCompass::createStatusBar(lv_obj_t* parent)
+{
+    lblStatusText_ = lv_label_create(parent);
+    lv_obj_set_pos(lblStatusText_, 0, 6);
+    lv_obj_set_width(lblStatusText_, kScreenW);
+    lv_obj_set_style_text_font(lblStatusText_, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_color(lblStatusText_, kColorText, 0);
+    lv_obj_set_style_text_align(lblStatusText_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_text(lblStatusText_, "Compass");
+}
+
+void UiCompass::createBottomBar(lv_obj_t* parent)
+{
     for (int i = 0; i < 5; i++) {
-        lblBottomBtns_[i] = lv_label_create(bottomBar_);
-        lv_obj_set_pos(lblBottomBtns_[i], i * kBtnW, 0);
+        lblBottomBtns_[i] = lv_label_create(parent);
+        lv_obj_set_pos(lblBottomBtns_[i], i * kBtnW, kScreenH - kBottomH - 4);
         lv_obj_set_size(lblBottomBtns_[i], kBtnW, kBottomH);
         lv_obj_set_style_text_font(lblBottomBtns_[i], &lv_font_montserrat_12, 0);
-        lv_obj_set_style_text_color(lblBottomBtns_[i], lv_color_hex(0x333333), 0);
+        lv_obj_set_style_text_color(lblBottomBtns_[i], kColorText, 0);
         lv_obj_set_style_text_align(lblBottomBtns_[i], LV_TEXT_ALIGN_CENTER, 0);
         lv_label_set_text(lblBottomBtns_[i], "--");
-        lv_obj_set_style_pad_top(lblBottomBtns_[i], 4, 0);
+        lv_obj_set_style_pad_top(lblBottomBtns_[i], 0, 0);
+        lv_obj_add_flag(lblBottomBtns_[i], LV_OBJ_FLAG_OVERFLOW_VISIBLE);
     }
 
-    lv_label_set_text(lblBottomBtns_[0], "Cal");
-    lv_label_set_text(lblBottomBtns_[2], "Exit");
+    for (int i = 0; i < 5; i++) {
+        lblBottomIndicators_[i] = lv_label_create(parent);
+        lv_obj_set_pos(lblBottomIndicators_[i], i * kBtnW, kScreenH - 12);
+        lv_obj_set_size(lblBottomIndicators_[i], kBtnW, 12);
+        lv_obj_set_style_text_font(lblBottomIndicators_[i], &lv_font_montserrat_12, 0);
+        lv_obj_set_style_text_color(lblBottomIndicators_[i], kColorText, 0);
+        lv_obj_set_style_text_align(lblBottomIndicators_[i], LV_TEXT_ALIGN_CENTER, 0);
+        lv_label_set_text(lblBottomIndicators_[i], "|");
+    }
+
+    // Set icons: F4=List (calibrate), F6=Exit
+    lv_obj_set_style_text_font(lblBottomBtns_[0], ui::font::AppFont::svgfont(16), 0);
+    lv_obj_set_style_text_color(lblBottomBtns_[0], kColorIconList, 0);
+    lv_label_set_text(lblBottomBtns_[0], ui::font::ICON_LIST);
+
+    lv_obj_set_style_text_font(lblBottomBtns_[2], ui::font::AppFont::svgfont(16), 0);
+    lv_obj_set_style_text_color(lblBottomBtns_[2], kColorIconExit, 0);
+    lv_label_set_text(lblBottomBtns_[2], ui::font::ICON_EXIT);
 }
 
 void UiCompass::update(const CompassState& state)
@@ -139,6 +178,11 @@ void UiCompass::update(const CompassState& state)
     if (!parent_) return;
 
     char buf[128];
+
+    /* Status bar */
+    if (lblStatusText_) {
+        lv_label_set_text(lblStatusText_, state.statusText.c_str());
+    }
 
     /* 偏航角 + 方位 */
     if (lblYaw_) {
