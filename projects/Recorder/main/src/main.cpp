@@ -217,6 +217,9 @@ int main()
     app.init();
 
     lv_init();
+#if LV_USE_FREETYPE
+    lv_freetype_init(64);
+#endif
     lv_linux_disp_init();
     LV_EVENT_KEYBOARD = lv_event_register_id();
     lv_linux_indev_init();

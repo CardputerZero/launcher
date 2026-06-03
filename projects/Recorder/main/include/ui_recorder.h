@@ -8,8 +8,6 @@
 enum class UiPage {
     Home,
     FileList,
-    Recording,
-    RecPaused,
     SaveConfirm,
     Playback,
 };
@@ -34,8 +32,6 @@ private:
     lv_obj_t* createPageContainer(lv_obj_t* parent);
     void createPageHome(lv_obj_t* page);
     void createPageFileList(lv_obj_t* page);
-    void createPageRecording(lv_obj_t* page);
-    void createPageRecPaused(lv_obj_t* page);
     void createPageSaveConfirm(lv_obj_t* page);
     void createPagePlayback(lv_obj_t* page);
 
@@ -48,35 +44,26 @@ private:
     UiPage currentPage_ = UiPage::Home;
 
     // Status bar
-    lv_obj_t* statusBar_ = nullptr;
     lv_obj_t* lblStatusText_ = nullptr;
 
     // Bottom bar
-    lv_obj_t* bottomBar_ = nullptr;
     std::array<lv_obj_t*, 5> lblBottomBtns_{};
+    std::array<lv_obj_t*, 5> lblBottomIndicators_{};
 
     // Pages
-    std::array<lv_obj_t*, 6> pages_{};
-
-    // Home
-    lv_obj_t* lblHomeReady_ = nullptr;
+    std::array<lv_obj_t*, 4> pages_{};
 
     // FileList
     lv_obj_t* lblFileListEmpty_ = nullptr;
     std::array<lv_obj_t*, 5> lblFileListItems_{};
     int fileListOffset_ = 0;
 
-    // Recording
+    // Home (shared with recording states)
     lv_obj_t* lblRecFilename_ = nullptr;
     lv_obj_t* recWaveContainer_ = nullptr;
     lv_obj_t* recWaveLine_ = nullptr;
     std::array<lv_point_precise_t, 128> recWavePoints_{};
     lv_obj_t* lblRecTimer_ = nullptr;
-
-    // RecPaused
-    lv_obj_t* lblPauseFilename_ = nullptr;
-    lv_obj_t* pauseLine_ = nullptr;
-    lv_obj_t* lblPauseTimer_ = nullptr;
 
     // SaveConfirm
     lv_obj_t* taEdit_ = nullptr;
@@ -84,6 +71,14 @@ private:
 
     // Playback
     lv_obj_t* lblPlayFilename_ = nullptr;
+    lv_obj_t* lblPlayDuration_ = nullptr;
+    static constexpr int kPlayBarCount = 40;
+    std::array<lv_obj_t*, kPlayBarCount> playWaveBars_{};
+    lv_obj_t* playBaseLine_ = nullptr;
+    lv_obj_t* playProgressArrow_ = nullptr;
+    lv_obj_t* playProgressTime_ = nullptr;
+
+    // Legacy (kept but hidden)
     lv_obj_t* playWaveContainer_ = nullptr;
     lv_obj_t* playWaveLine_ = nullptr;
     lv_obj_t* playProgressLine_ = nullptr;

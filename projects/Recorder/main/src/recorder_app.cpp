@@ -225,14 +225,10 @@ void RecorderApp::syncStateFromEngine()
             appState_ = AppState::RecPaused;
             break;
         case AudioState::Playing:
-            if (appState_ != AppState::Playing && appState_ != AppState::PlayPaused) {
-                appState_ = AppState::Playing;
-            }
+            appState_ = AppState::Playing;
             break;
         case AudioState::PlayPaused:
-            if (appState_ != AppState::Playing && appState_ != AppState::PlayPaused) {
-                appState_ = AppState::PlayPaused;
-            }
+            appState_ = AppState::PlayPaused;
             break;
     }
 }
