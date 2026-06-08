@@ -194,9 +194,7 @@ private:
             MenuItem m;
             m.label = "WiFi";
             m.sub_items = {
-                {"reset",   false, false, [this]() { hal_wifi_disconnect(); rebuild_view(); }},
                 {"Scan",    false, false, [this]() { enter_wifi_scan(); }},
-                {"Enable",  true, true,  [this]() { wifi_toggle_enable(); }},
             };
             menu_items_.push_back(m);
         }
