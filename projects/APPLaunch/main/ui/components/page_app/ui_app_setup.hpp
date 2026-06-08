@@ -876,19 +876,39 @@ private:
         hal_wifi_ap_t *ap = &wifi_aps_[idx];
         if (ap->in_use) return;
 
+        bool needs_password = false;
         if (strcmp(ap->security, "Open") == 0 || ap->security[0] == 0) {
-            // Open network: connect directly
+            wifi_show_connecting(ap->ssid);
             hal_wifi_connect(ap->ssid, NULL);
         } else if (wifi_has_saved_profile(ap->ssid)) {
-            // Already have a saved password for this SSID: connect without
-            // asking for password again (nmcli con up uses stored secrets).
+            wifi_show_connecting(ap->ssid);
             hal_wifi_connect(ap->ssid, NULL);
         } else {
-            // New encrypted network: prompt for password
+            needs_password = true;
             wifi_pw_ssid_ = ap->ssid;
             wifi_pw_buf_.clear();
             show_wifi_pw_input();
         }
+        // After a direct connect (no password prompt), refresh the list to
+        // update in_use highlight and the "Connected WiFi:" title.
+        if (!needs_password) {
+            wifi_do_scan();
+            build_wifi_list();
+        }
+    }
+
+    void wifi_show_connecting(const char *ssid)
+    {
+        lv_obj_t *cont = ui_obj_["list_cont"];
+        lv_obj_clean(cont);
+        static char msg[128];
+        snprintf(msg, sizeof(msg), "Connecting to %s...", ssid);
+        lv_obj_t *lbl = lv_label_create(cont);
+        lv_label_set_text(lbl, msg);
+        lv_obj_set_pos(lbl, 8, 60);
+        lv_obj_set_style_text_color(lbl, lv_color_hex(0x58A6FF), LV_PART_MAIN);
+        lv_obj_set_style_text_font(lbl, &lv_font_montserrat_14, LV_PART_MAIN);
+        lv_refr_now(NULL);  // Force immediate screen update before blocking nmcli call
     }
 
     bool wifi_has_saved_profile(const char *ssid)
