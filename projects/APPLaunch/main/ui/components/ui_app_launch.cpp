@@ -569,6 +569,8 @@ public:
     {
         // WiFi signal bars: show/hide + color by strength
         hal_wifi_status_t wifi = hal_wifi_get_status();
+        fprintf(stderr, "[HOME_STATUS] connected=%d sig=%d ssid=%s\n",
+                wifi.connected, wifi.signal, wifi.ssid);
         if (wifi.connected) {
             lv_obj_clear_flag(ui_wifiPanel, LV_OBJ_FLAG_HIDDEN);
             int sig = wifi.signal;

@@ -238,8 +238,9 @@ hal_wifi_status_t hal_wifi_get_status(void)
     memset(&st, 0, sizeof(st));
     char line[256];
 
-    // Use nmcli to check active wifi connection
-    FILE *p = popen("nmcli -t -f TYPE,NAME dev status 2>/dev/null", "r");
+    // Use nmcli to check active wifi connection.
+    // Field is "CONNECTION" (not "NAME") in `nmcli dev status`.
+    FILE *p = popen("nmcli -t -f TYPE,CONNECTION dev status 2>/dev/null", "r");
     if (!p) return st;
     while (fgets(line, sizeof(line), p)) {
         line[strcspn(line, "\n")] = 0;

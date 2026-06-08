@@ -396,9 +396,17 @@ private:
         lv_obj_t *cont = ui_obj_["list_cont"];
         lv_obj_clean(cont);
 
-        // Title
+        // Title + current connection status
         lv_obj_t *title = lv_label_create(cont);
-        lv_label_set_text(title, "WiFi Networks");
+        {
+            hal_wifi_status_t ws = hal_wifi_get_status();
+            static char title_buf[128];
+            if (ws.connected)
+                snprintf(title_buf, sizeof(title_buf), "Connected WiFi: %s  %s", ws.ssid, ws.ip);
+            else
+                snprintf(title_buf, sizeof(title_buf), "WiFi: Not connected");
+            lv_label_set_text(title, title_buf);
+        }
         lv_obj_set_pos(title, 8, 2);
         lv_obj_set_style_text_color(title, lv_color_hex(0x58A6FF), LV_PART_MAIN);
         lv_obj_set_style_text_font(title, g_font_bold_12 ? g_font_bold_12 : &lv_font_montserrat_12, LV_PART_MAIN);
