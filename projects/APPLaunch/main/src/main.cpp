@@ -338,7 +338,14 @@ int main(void)
     }
 
     ui_init();
-    // lv_demo_widgets(); // 用LVGL自带demo测试
+
+    // Force full-screen refresh on startup. LVGL PARTIAL render mode only
+    // redraws dirty areas; if the first frame is missed (e.g. plymouth still
+    // held fb0, or fbdev wasn't ready), the LCD stays black until a user event.
+    // This guarantees the home screen renders immediately after init.
+    lv_obj_invalidate(lv_scr_act());
+    lv_refr_now(NULL);
+
     /*Handle LVGL tasks*/
     printf("Entering main loop...\n");
     while(1) {
