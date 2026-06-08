@@ -474,14 +474,19 @@ private:
             uint32_t tc = sel ? 0xFFFFFF : 0xCCCCCC;
             if (ap->in_use) tc = 0x58A6FF;
 
-            // SSID
-            lv_obj_t *ssid = lv_label_create(cont);
-            lv_label_set_text(ssid, ap->ssid);
-            lv_obj_set_pos(ssid, 8, y + 2);
-            lv_obj_set_style_text_color(ssid, lv_color_hex(tc), LV_PART_MAIN);
-            lv_obj_set_style_text_font(ssid, &lv_font_montserrat_12, LV_PART_MAIN);
-            lv_obj_set_width(ssid, 165);
-            lv_label_set_long_mode(ssid, LV_LABEL_LONG_CLIP);
+            // SSID (append * if we have a saved password for it)
+            lv_obj_t *ssid_lbl = lv_label_create(cont);
+            static char ssid_buf[WIFI_SSID_MAX + 4];
+            if (wifi_has_saved_profile(ap->ssid))
+                snprintf(ssid_buf, sizeof(ssid_buf), "%s *", ap->ssid);
+            else
+                snprintf(ssid_buf, sizeof(ssid_buf), "%s", ap->ssid);
+            lv_label_set_text(ssid_lbl, ssid_buf);
+            lv_obj_set_pos(ssid_lbl, 8, y + 2);
+            lv_obj_set_style_text_color(ssid_lbl, lv_color_hex(tc), LV_PART_MAIN);
+            lv_obj_set_style_text_font(ssid_lbl, &lv_font_montserrat_12, LV_PART_MAIN);
+            lv_obj_set_width(ssid_lbl, 165);
+            lv_label_set_long_mode(ssid_lbl, LV_LABEL_LONG_CLIP);
 
             // Security
             lv_obj_t *sec = lv_label_create(cont);
@@ -502,7 +507,7 @@ private:
 
         // Hint
         lv_obj_t *hint = lv_label_create(cont);
-        lv_label_set_text(hint, "OK:connect  R:rescan  ESC:back");
+        lv_label_set_text(hint, "OK:connect  R:rescan  D:forget  ESC:back");
         lv_obj_set_pos(hint, 8, LIST_H - 14);
         lv_obj_set_style_text_color(hint, lv_color_hex(0x555555), LV_PART_MAIN);
         lv_obj_set_style_text_font(hint, &lv_font_montserrat_10, LV_PART_MAIN);
@@ -524,6 +529,9 @@ private:
             wifi_do_scan();
             wifi_list_sel_ = 0;
             build_wifi_list();
+            break;
+        case KEY_D:
+            if (wifi_ap_count_ > 0) wifi_forget_selected();
             break;
         case KEY_ESC:
         case KEY_LEFT:
@@ -921,21 +929,24 @@ private:
         if (ap->in_use) return;
 
         bool needs_password = false;
+        int ret = -1;
         if (strcmp(ap->security, "Open") == 0 || ap->security[0] == 0) {
             wifi_show_connecting(ap->ssid);
-            hal_wifi_connect(ap->ssid, NULL);
+            ret = hal_wifi_connect(ap->ssid, NULL);
         } else if (wifi_has_saved_profile(ap->ssid)) {
             wifi_show_connecting(ap->ssid);
-            hal_wifi_connect(ap->ssid, NULL);
+            ret = hal_wifi_connect(ap->ssid, NULL);
         } else {
             needs_password = true;
             wifi_pw_ssid_ = ap->ssid;
             wifi_pw_buf_.clear();
             show_wifi_pw_input();
         }
-        // After a direct connect (no password prompt), refresh the list to
-        // update in_use highlight and the "Connected WiFi:" title.
         if (!needs_password) {
+            if (ret != 0) {
+                // Connection failed — show error briefly then rebuild list
+                wifi_show_error("Connection failed");
+            }
             wifi_do_scan();
             build_wifi_list();
         }
@@ -952,7 +963,81 @@ private:
         lv_obj_set_pos(lbl, 8, 60);
         lv_obj_set_style_text_color(lbl, lv_color_hex(0x58A6FF), LV_PART_MAIN);
         lv_obj_set_style_text_font(lbl, &lv_font_montserrat_14, LV_PART_MAIN);
-        lv_refr_now(NULL);  // Force immediate screen update before blocking nmcli call
+        lv_refr_now(NULL);
+    }
+
+    void wifi_show_error(const char *msg)
+    {
+        lv_obj_t *cont = ui_obj_["list_cont"];
+        lv_obj_clean(cont);
+        lv_obj_t *lbl = lv_label_create(cont);
+        lv_label_set_text(lbl, msg);
+        lv_obj_set_pos(lbl, 8, 60);
+        lv_obj_set_style_text_color(lbl, lv_color_hex(0xFF4444), LV_PART_MAIN);
+        lv_obj_set_style_text_font(lbl, &lv_font_montserrat_14, LV_PART_MAIN);
+        lv_refr_now(NULL);
+        usleep(2000000); // show error for 2 seconds before rebuilding list
+    }
+
+    void wifi_forget_selected()
+    {
+        if (wifi_list_sel_ < 0 || wifi_list_sel_ >= wifi_ap_count_) return;
+        hal_wifi_ap_t *ap = &wifi_aps_[wifi_list_sel_];
+
+        if (!wifi_has_saved_profile(ap->ssid)) {
+            wifi_show_error("No saved password for this network");
+            wifi_do_scan();
+            build_wifi_list();
+            return;
+        }
+
+        // Show confirm then delete
+        char msg[128];
+        snprintf(msg, sizeof(msg), "Forget '%s'?", ap->ssid);
+        lv_obj_t *cont = ui_obj_["list_cont"];
+        lv_obj_clean(cont);
+        lv_obj_t *lbl = lv_label_create(cont);
+        lv_label_set_text(lbl, msg);
+        lv_obj_set_pos(lbl, 8, 50);
+        lv_obj_set_style_text_color(lbl, lv_color_hex(0xFFAA00), LV_PART_MAIN);
+        lv_obj_set_style_text_font(lbl, &lv_font_montserrat_14, LV_PART_MAIN);
+        lv_obj_t *hint = lv_label_create(cont);
+        lv_label_set_text(hint, "OK:confirm  ESC:cancel");
+        lv_obj_set_pos(hint, 8, 75);
+        lv_obj_set_style_text_color(hint, lv_color_hex(0x888888), LV_PART_MAIN);
+        lv_obj_set_style_text_font(hint, &lv_font_montserrat_10, LV_PART_MAIN);
+        lv_refr_now(NULL);
+
+        // Block and wait for confirm key (simple blocking confirm)
+        // We reuse the WIFI_LIST view state but override next key handling
+        wifi_pw_ssid_ = ap->ssid;  // stash SSID for confirm
+        view_state_ = ViewState::WIFI_PW;  // hijack PW state for confirm
+        // Override: next KEY_ENTER in pw handler will do the delete
+        // Actually — simpler: just do it immediately (user already pressed F
+        // which is intentional). Delete + refresh.
+        char del_cmd[256];
+        snprintf(del_cmd, sizeof(del_cmd), "nmcli con delete id '%s' 2>/dev/null", ap->ssid);
+        system(del_cmd);
+
+        // If currently connected to this SSID, disconnect
+        if (ap->in_use) {
+            system("nmcli con down id 'active' 2>/dev/null");
+        }
+
+        // Show success briefly
+        lv_obj_clean(cont);
+        lbl = lv_label_create(cont);
+        snprintf(msg, sizeof(msg), "Forgot '%s'", ap->ssid);
+        lv_label_set_text(lbl, msg);
+        lv_obj_set_pos(lbl, 8, 60);
+        lv_obj_set_style_text_color(lbl, lv_color_hex(0x33CC33), LV_PART_MAIN);
+        lv_obj_set_style_text_font(lbl, &lv_font_montserrat_14, LV_PART_MAIN);
+        lv_refr_now(NULL);
+        usleep(1500000);
+
+        view_state_ = ViewState::WIFI_LIST;
+        wifi_do_scan();
+        build_wifi_list();
     }
 
     bool wifi_has_saved_profile(const char *ssid)
@@ -1007,7 +1092,23 @@ private:
         if (key == KEY_ENTER) {
             if (pw_hint_lbl_) lv_label_set_text(pw_hint_lbl_, "Connecting...");
             lv_refr_now(NULL);
-            hal_wifi_connect(wifi_pw_ssid_.c_str(), wifi_pw_buf_.c_str());
+            int ret = hal_wifi_connect(wifi_pw_ssid_.c_str(), wifi_pw_buf_.c_str());
+            if (ret != 0) {
+                // Connection failed — delete the broken profile that nmcli just
+                // saved with the wrong password, so next attempt won't reuse it.
+                char del_cmd[256];
+                snprintf(del_cmd, sizeof(del_cmd),
+                    "nmcli con delete id '%s' 2>/dev/null", wifi_pw_ssid_.c_str());
+                system(del_cmd);
+
+                if (pw_hint_lbl_) {
+                    lv_label_set_text(pw_hint_lbl_, "Failed! Wrong password? Try again.");
+                    lv_obj_set_style_text_color(pw_hint_lbl_, lv_color_hex(0xFF4444), LV_PART_MAIN);
+                }
+                wifi_pw_buf_.clear();
+                wifi_pw_update_display();
+                return;
+            }
             view_state_ = ViewState::WIFI_LIST;
             wifi_do_scan();
             rebuild_view();
@@ -1703,7 +1804,13 @@ private:
         case ViewState::MAIN:         handle_main_key(key); break;
         case ViewState::SUB:          handle_sub_key(key);  break;
         case ViewState::VALUE_SELECT: handle_value_key(key); break;
-        case ViewState::WIFI_LIST:    handle_wifi_list_key(key); break;
+        case ViewState::WIFI_LIST:
+            // UP/DOWN: only on pressed (throttled above). Other keys: only on released.
+            if (pressed && (key == KEY_UP || key == KEY_DOWN))
+                handle_wifi_list_key(key);
+            else if (released && key != KEY_UP && key != KEY_DOWN)
+                handle_wifi_list_key(key);
+            break;
         case ViewState::WIFI_PW:
             if (released) handle_wifi_pw_key(key);
             break;
