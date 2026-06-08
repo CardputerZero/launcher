@@ -877,12 +877,25 @@ private:
         if (ap->in_use) return;
 
         if (strcmp(ap->security, "Open") == 0 || ap->security[0] == 0) {
+            // Open network: connect directly
+            hal_wifi_connect(ap->ssid, NULL);
+        } else if (wifi_has_saved_profile(ap->ssid)) {
+            // Already have a saved password for this SSID: connect without
+            // asking for password again (nmcli con up uses stored secrets).
             hal_wifi_connect(ap->ssid, NULL);
         } else {
+            // New encrypted network: prompt for password
             wifi_pw_ssid_ = ap->ssid;
             wifi_pw_buf_.clear();
             show_wifi_pw_input();
         }
+    }
+
+    bool wifi_has_saved_profile(const char *ssid)
+    {
+        char cmd[256];
+        snprintf(cmd, sizeof(cmd), "nmcli -t -f NAME con show 2>/dev/null | grep -qxF '%s'", ssid);
+        return system(cmd) == 0;
     }
 
     void show_wifi_pw_input()
