@@ -1694,7 +1694,7 @@ private:
                 if (sub.is_toggle) {
                     sub.toggle_state = !sub.toggle_state;
                     if (sub.action) sub.action();
-                    else build_sub_view();
+                    build_sub_view();
                 } else if (sub.action) {
                     sub.action();
                 }
