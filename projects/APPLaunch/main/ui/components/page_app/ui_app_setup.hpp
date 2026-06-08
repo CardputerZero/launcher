@@ -1387,7 +1387,8 @@ private:
             int ind_h = lv_obj_get_height(ind);
             int lbl_y = lv_obj_get_y(lbl);
             int lbl_h = lv_obj_get_height(lbl);
-            lv_obj_set_pos(ind, indicator_x, lbl_y + (lbl_h - ind_h) / 2);
+            int x_offset = sub.toggle_state ? 0 : 1;
+            lv_obj_set_pos(ind, indicator_x + x_offset, lbl_y + (lbl_h - ind_h) / 2);
         }
 
         // Blue arrow centered between left text right edge and right column left edge
