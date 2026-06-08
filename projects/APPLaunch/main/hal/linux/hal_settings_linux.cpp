@@ -318,7 +318,9 @@ int hal_wifi_scan(hal_wifi_ap_t *out, int max_aps)
         if (ptr[0] == 0) continue;
         strncpy(tmp.ssid, ptr, WIFI_SSID_MAX - 1);
 
-        /* Dedup: if same SSID already exists, keep the stronger signal */
+        /* Dedup: if same SSID already exists, keep the stronger signal,
+         * but always preserve in_use flag (the connected AP might not be
+         * the strongest among same-SSID roaming APs). */
         int dup_idx = -1;
         for (int i = 0; i < count; i++) {
             if (strcmp(out[i].ssid, tmp.ssid) == 0) {
@@ -327,8 +329,12 @@ int hal_wifi_scan(hal_wifi_ap_t *out, int max_aps)
             }
         }
         if (dup_idx >= 0) {
-            if (tmp.signal > out[dup_idx].signal)
+            if (tmp.in_use) out[dup_idx].in_use = 1;
+            if (tmp.signal > out[dup_idx].signal) {
+                int saved_in_use = out[dup_idx].in_use;
                 out[dup_idx] = tmp;
+                out[dup_idx].in_use = saved_in_use;
+            }
         } else {
             out[count] = tmp;
             count++;
