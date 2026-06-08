@@ -115,22 +115,34 @@ git submodule update --init --recursive
 
 ## Build
 
-### APPLaunch Project
+### HelloWorld Project
 
-APPLaunch is the primary application launcher project, supporting three build modes:
+HelloWorld is the recommended starter project for verifying the build environment.
 
-#### Option 1: SDL2 Simulation Mode (Linux x86 PC, default)
-
-On an x86_64 host, the SDL2 backend is used by default. Build and run on your PC:
+#### Option 1: Build on Device
 
 ```bash
-cd projects/APPLaunch
+# Enter the project directory
+cd projects/HelloWorld
+# Clean the environment
+scons distclean
+# Build with 8 threads
+scons -j8
+```
+
+#### Option 2: SDL2 Simulation Mode (Linux x86 PC, default)
+
+On an x86_64 host, use the SDL2 backend to build and run on your PC:
+
+```bash
+cd projects/HelloWorld
+export CONFIG_DEFAULT_FILE=linux_x86_sdl2_config_defaults.mk
 scons -j$(nproc)
 ```
 
-The compiled binary will be located in the `projects/APPLaunch/dist/` directory, named `M5CardputerZero-APPLaunch`.
+The compiled binary will be located in the `projects/HelloWorld/dist/` directory, named `HelloWorld`.
 
-#### Option 2: Cross-Compile for AArch64 (M5CardputerZero device)
+#### Option 3: Cross-Compile for AArch64 (M5CardputerZero device)
 
 Install the AArch64 cross-compilation toolchain:
 
@@ -141,18 +153,8 @@ sudo apt install gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
 Enable cross-compilation via environment variable. SConstruct will automatically switch to the Framebuffer backend and download the BSP static libraries:
 
 ```bash
-cd projects/APPLaunch
+cd projects/HelloWorld
 export CONFIG_DEFAULT_FILE=linux_x86_cross_cp0_config_defaults.mk
-scons -j$(nproc)
-```
-
-#### Option 3: macOS Cross-Compile
-
-Cross-compile to AArch64 on macOS. Requires the `aarch64-linux-gnu-` toolchain (e.g., via Homebrew):
-
-```bash
-cd projects/APPLaunch
-export CONFIG_DEFAULT_FILE=darwin_config_defaults.mk
 scons -j$(nproc)
 ```
 
