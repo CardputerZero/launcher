@@ -30,7 +30,8 @@
 #include "compat/input_keys.h"
 
 #include <string.h>
-#include <stdlib.h>
+#include <cstdio>
+#include <cstdlib>
 #include <sys/stat.h>
 #include <unistd.h>
 
