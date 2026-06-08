@@ -515,11 +515,14 @@ private:
         // WiFi status
         hal_wifi_status_t ws = hal_wifi_get_status();
         char wifi_buf[128];
-        if (ws.connected)
-            snprintf(wifi_buf, sizeof(wifi_buf), "WiFi: %s  IP:%s  %d%%",
+        if (ws.connected && ws.ip[0])
+            snprintf(wifi_buf, sizeof(wifi_buf), "WiFi: %s  IP: %s  Signal: %d%%",
                      ws.ssid, ws.ip, ws.signal);
+        else if (ws.connected)
+            snprintf(wifi_buf, sizeof(wifi_buf), "WiFi: %s  (no IP)  Signal: %d%%",
+                     ws.ssid, ws.signal);
         else
-            snprintf(wifi_buf, sizeof(wifi_buf), "WiFi: Disconnected");
+            snprintf(wifi_buf, sizeof(wifi_buf), "WiFi: Not Connected");
         make_label(c, wifi_buf, 0, 102, ws.connected ? 0x2ECC71 : 0x888888, &lv_font_montserrat_10);
     }
 
