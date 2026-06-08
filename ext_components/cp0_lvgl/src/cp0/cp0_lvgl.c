@@ -7,4 +7,5 @@ void cp0_lvgl_init(void)
     init_lvgl_event();
     init_freambuffer_disp();
     init_input();
+    init_audio();
 }

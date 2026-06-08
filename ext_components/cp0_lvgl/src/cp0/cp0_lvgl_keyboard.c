@@ -20,6 +20,7 @@
 #define CP0_KEY_QUEUE_SIZE 10
 #define CP0_EVDEV_KEYCODE_OFFSET 8
 
+#define LV_C_EVENT_KEYBOARD lv_c_event[CP0_C_EVENT_KEYBOARD]
 
 typedef struct {
     uint32_t code;

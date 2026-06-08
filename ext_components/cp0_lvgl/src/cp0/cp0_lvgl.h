@@ -6,7 +6,7 @@ extern "C" {
 
 void init_freambuffer_disp();
 void init_input();
-
+void init_audio();
 #ifdef __cplusplus
 }
 #endif

@@ -26,10 +26,14 @@ typedef struct {
 extern uint32_t lv_c_event[(2*CP0_C_EVENT_END)];
 
 void cp0_lvgl_init(void);
-
-
-
-
+const char *hal_path_audio_dir(void);
 #ifdef __cplusplus
 }
+#include <sigslot/signal.hpp>
+#include <string>
+extern sigslot::signal<std::string> cp0_signal_audio;
+extern sigslot::signal<> cp0_signal_network;
+extern sigslot::signal<> cp0_signal_forkexec;
+extern sigslot::signal<> cp0_signal_screenshot;
+std::string cp0_file_path(std::string file);
 #endif
