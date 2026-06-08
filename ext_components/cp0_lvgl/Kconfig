@@ -1,0 +1,5 @@
+
+menuconfig CP0_LVGL_COMPONENT_ENABLED
+    bool "Enable cp0 lvgl support"
+    default n
+

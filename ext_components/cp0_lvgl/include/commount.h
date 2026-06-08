@@ -1,18 +1,11 @@
 #pragma once
 #include <stdint.h>
 #ifdef __cplusplus
-int lvgl_main(void);
-void ui_init(void) ;
-
-
-
-
-
-
-
-
 extern "C" {
 #endif
+
+void init_lvgl_event();
+
 
 #ifdef __cplusplus
 }
