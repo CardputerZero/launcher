@@ -37,6 +37,19 @@ jobs:
     - name: Install Python build dependencies
       run: pip install scons parse requests tqdm
 
+    - name: Pre-download C-Thread-Pool (avoid flaky GitHub archive fetch during scons)
+      run: |
+        DEST=SDK/github_source/C-Thread-Pool
+        if [ ! -d "$DEST" ]; then
+          for i in 1 2 3; do
+            curl -fsSL -o /tmp/ctp.zip "https://github.com/Pithikos/C-Thread-Pool/archive/refs/heads/master.zip" && break
+            echo "retry $i..."; sleep 5
+          done
+          unzip -q /tmp/ctp.zip -d /tmp/ctp
+          mv /tmp/ctp/C-Thread-Pool-master "$DEST"
+        fi
+        ls "$DEST/thpool.c" && echo "C-Thread-Pool ready"
+
     - name: Build APPLauncher (cross-compile aarch64)
       run: |
         cd projects/APPLaunch
