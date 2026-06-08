@@ -240,6 +240,7 @@ Refer to the HelloWorld build instructions.
 ### Package
 
 ```bash
+# brew install dpkg # mac install dpkg tool.
 cd projects/APPLaunch/tools
 ./llm_pack.py
 ```
