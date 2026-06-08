@@ -214,9 +214,6 @@ scons -c
 # 彻底清理（含配置缓存）
 scons distclean
 
-# 详细编译输出
-scons verbose
-
 # 配置 setup.ini 中的主机 IP 和操作命令后，可使用 scons push 将文件传输到设备并执行指定命令。
 scons push
 ```
