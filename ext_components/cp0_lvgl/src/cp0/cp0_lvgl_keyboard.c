@@ -13,6 +13,8 @@
 #include <string.h>
 #include <unistd.h>
 #include <xkbcommon/xkbcommon.h>
+#include "cp0_lvgl.h"
+
 
 #define CP0_DEFAULT_INPUT_SEAT "seat-cardputer-zero"
 #define CP0_KEY_QUEUE_SIZE 10
@@ -404,48 +406,8 @@ static void cp0_keyboard_read_cb(lv_indev_t *indev, lv_indev_data_t *data)
         cp0_send_keyboard_event(&event);
 }
 
-static void init_freambuffer_disp()
-{
-    lv_display_t *disp = lv_linux_fbdev_create();
-    if (disp == NULL)
-    {
-        printf("Failed to create fbdev display!\n");
-        return;
-    }
-    const char *device = getenv("LV_LINUX_FBDEV_DEVICE");
-    char fbdev[32] = {0};
-    if (device == NULL)
-        while (0)
-        {
-            FILE *fp = popen("grep st7789 /proc/fb | awk '{print $1}'", "r");
-            if (fp == NULL)
-            {
-                perror("popen failed");
-                break;
-            }
 
-            char fb_num[32] = {0};
-            if (fgets(fb_num, sizeof(fb_num), fp) == NULL)
-            {
-                fprintf(stderr, "st7789 framebuffer not found in /proc/fb\n");
-                pclose(fp);
-                break;
-            }
-            pclose(fp);
-
-            fb_num[strcspn(fb_num, "\r\n")] = '\0';
-            snprintf(fbdev, sizeof(fbdev), "/dev/fb%s", fb_num);
-            device = fbdev;
-        }
-    if (device == NULL)
-    {
-        snprintf(fbdev, sizeof(fbdev), "/dev/fb%d", 0);
-        device = fbdev;
-    }
-
-    lv_linux_fbdev_set_file(disp, device);
-}
-static void init_input()
+void init_input()
 {
     cp0_input_ctx_t *ctx = &g_input_ctx;
     const char *seat = getenv_default("LV_LINUX_INPUT_SEAT", CP0_DEFAULT_INPUT_SEAT);
@@ -495,9 +457,3 @@ static void init_input()
     pthread_detach(ctx->thread);
 }
 
-void cp0_lvgl_init(void)
-{
-    init_lvgl_event();
-    init_freambuffer_disp();
-    init_input();
-}
