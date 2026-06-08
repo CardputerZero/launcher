@@ -1,4 +1,4 @@
-# M5CardputerZero-UserDemo
+# launcher
 
 [English](./README.md)
 
@@ -15,7 +15,7 @@ UI 界面由 **SquareLine Studio 1.5.0** 生成，支持 SDL2 仿真模式（本
 ## 项目结构
 
 ```
-M5CardputerZero-UserDemo/
+launcher/
 ├── SDK/                        # M5Stack_Linux_Libs SDK（git submodule）
 │   ├── components/             # 组件库（lvgl_component、DeviceDriver 等）
 │   ├── examples/               # SDK 示例程序
