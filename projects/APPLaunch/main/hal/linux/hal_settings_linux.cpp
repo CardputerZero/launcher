@@ -355,7 +355,11 @@ int hal_wifi_connect(const char *ssid, const char *password)
 
 int hal_wifi_disconnect(void)
 {
-    FILE *p = popen("nmcli dev disconnect wlan0 2>&1", "r");
+    // Use "nmcli con down" (deactivate connection) rather than "nmcli dev
+    // disconnect" (which marks the device unmanaged and prevents autoconnect
+    // until reboot). With "con down", NM may re-autoconnect another profile
+    // shortly after — that's usually what the user wants.
+    FILE *p = popen("nmcli con down id \"$(nmcli -t -f NAME con show --active | grep -v lo | head -1)\" 2>&1", "r");
     if (!p) return -1;
     char buf[256]; int ok = 0;
     while (fgets(buf, sizeof(buf), p)) { if (strstr(buf, "successfully")) ok = 1; }
