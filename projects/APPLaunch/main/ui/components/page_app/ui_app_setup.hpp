@@ -243,6 +243,15 @@ private:
             m.on_enter = [this]() { refresh_about_info(); };
             menu_items_.push_back(m);
         }
+        // --- Help ---
+        {
+            MenuItem m;
+            m.label = "Help";
+            m.sub_items = {
+                {"View Help", false, false, [this]() { enter_help_page(); }},
+            };
+            menu_items_.push_back(m);
+        }
         // --- ExtPort ---
         {
             MenuItem m;
@@ -835,6 +844,41 @@ private:
             m.sub_items[3].label = buf;
             break;
         }
+    }
+
+    // ==================== Help page (full-screen like WiFi scan) ===========
+    void enter_help_page()
+    {
+        view_state_ = ViewState::WIFI_LIST; // reuse WIFI_LIST view state for ESC handling
+        lv_obj_t *cont = ui_obj_["list_cont"];
+        lv_obj_clean(cont);
+
+        int y = 4;
+        auto add_line = [&](const char *text, uint32_t color, const lv_font_t *font) {
+            lv_obj_t *lbl = lv_label_create(cont);
+            lv_label_set_text(lbl, text);
+            lv_obj_set_pos(lbl, 8, y);
+            lv_obj_set_width(lbl, 300);
+            lv_label_set_long_mode(lbl, LV_LABEL_LONG_WRAP);
+            lv_obj_set_style_text_color(lbl, lv_color_hex(color), LV_PART_MAIN);
+            lv_obj_set_style_text_font(lbl, font, LV_PART_MAIN);
+            lv_obj_update_layout(lbl);
+            y += lv_obj_get_height(lbl) + 3;
+        };
+
+        add_line("Help", 0x58A6FF, g_font_bold_14 ? g_font_bold_14 : &lv_font_montserrat_14);
+        add_line("Screenshot: Ctrl+Alt+S", 0xCCCCCC, &lv_font_montserrat_12);
+        add_line("  Saved to ~/Screenshots", 0x888888, &lv_font_montserrat_10);
+        add_line("Home: Hold ESC 5s", 0xCCCCCC, &lv_font_montserrat_12);
+        add_line("Navigate: Arrow keys / OK / ESC", 0xCCCCCC, &lv_font_montserrat_12);
+        add_line("WiFi: Setting > WiFi > Scan", 0xCCCCCC, &lv_font_montserrat_12);
+
+        // Footer
+        lv_obj_t *hint = lv_label_create(cont);
+        lv_label_set_text(hint, "ESC: back");
+        lv_obj_set_pos(hint, 8, LIST_H - 14);
+        lv_obj_set_style_text_color(hint, lv_color_hex(0x555555), LV_PART_MAIN);
+        lv_obj_set_style_text_font(hint, &lv_font_montserrat_10, LV_PART_MAIN);
     }
 
     // ==================== Bluetooth scan ====================

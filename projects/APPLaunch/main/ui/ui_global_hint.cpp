@@ -30,6 +30,9 @@
 #include "compat/input_keys.h"
 
 #include <string.h>
+#include <stdlib.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 /* KEY_RIGHTSHIFT / KEY_COMPOSE exist in <linux/input.h> but the
  * project's non-Linux compat/input_keys.h does not define them.
@@ -233,10 +236,24 @@ extern "C" void ui_global_hint_on_key(const struct key_item *elm)
     /* All other keys: only fire on the initial key-down edge. */
     if (elm->key_state != KBD_KEY_PRESSED) return;
 
-    /* Ctrl+Alt+S: global screenshot */
+    /* Ctrl+Alt+S: global screenshot → ~/Screenshots */
     if (code == KEY_S && (elm->mods & KBD_MOD_CTRL) && (elm->mods & KBD_MOD_ALT)) {
-        int ret = hal_screenshot_save("/var/lib/applaunch/screenshots");
-        show_hint(ret == 0 ? "Screenshot saved" : "Screenshot failed");
+        const char *home = getenv("HOME");
+        char scr_dir[256];
+        snprintf(scr_dir, sizeof(scr_dir), "%s/Screenshots", home ? home : "/tmp");
+        /* Ensure dir exists with correct ownership (real uid/gid, not root) */
+        mkdir(scr_dir, 0755);
+        if (getuid() == 0) {
+            /* Running as root via systemd — chown to the login user */
+            uid_t uid = 1000; gid_t gid = 1000;
+            const char *sudo_uid = getenv("SUDO_UID");
+            const char *sudo_gid = getenv("SUDO_GID");
+            if (sudo_uid) uid = (uid_t)atoi(sudo_uid);
+            if (sudo_gid) gid = (gid_t)atoi(sudo_gid);
+            chown(scr_dir, uid, gid);
+        }
+        int ret = hal_screenshot_save(scr_dir);
+        show_hint(ret == 0 ? "Saved to ~/Screenshots" : "Screenshot failed");
         return;
     }
 
