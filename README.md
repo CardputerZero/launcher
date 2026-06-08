@@ -219,8 +219,6 @@ scons -c
 # Full clean (including configuration cache)
 scons distclean
 
-# Verbose build output
-scons verbose
 
 # After configuring the host IP and operation command in setup.ini,
 # use scons push to transfer files to the device and execute the specified command.

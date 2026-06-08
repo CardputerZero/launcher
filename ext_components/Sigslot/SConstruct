@@ -5,23 +5,24 @@ import os
 with open(env["PROJECT_TOOL_S"]) as f:
     exec(f.read())
 
-if "CONFIG_CP0_LVGL_COMPONENT_ENABLED" in os.environ or "CONFIG_SIGSLOT_COMPONENT_ENABLED" in os.environ:
+env["GIT_REPO_LISTS"]["Sigslot"] = {
+    "url": "https://github.com/palacaze/sigslot.git",
+    "commit": "b588b791b9cf7eb17ff0a74d8aebd4a61166c2e1",
+    "path": os.path.join(os.environ['GIT_REPO_PATH'], "sigslot"),
+}
+
+if "CONFIG_SIGSLOT_COMPONENT_ENABLED" in os.environ:
+    c_path = check_component("Sigslot")
     SRCS = []
-    INCLUDE = [ADir('include')]
+    INCLUDE = [os.path.join(c_path, 'include')]
     PRIVATE_INCLUDE = []
-    REQUIREMENTS = ['lvgl_component']
+    REQUIREMENTS = []
     STATIC_LIB = []
     DYNAMIC_LIB = []
     DEFINITIONS = []
     DEFINITIONS_PRIVATE = []
     LDFLAGS = []
     LINK_SEARCH_PATH = []
-    SRCS += [AFile('src/commount.c')]
-    if 'CONFIG_V9_5_LV_USE_SDL' in os.environ:
-        SRCS += Glob('src/sdl/*.c*')
-    else:
-        SRCS += Glob('src/cp0/*.c*')
-        REQUIREMENTS += ['input', 'xkbcommon', 'udev', 'pthread']
 
     env["COMPONENTS"].append(
         {
