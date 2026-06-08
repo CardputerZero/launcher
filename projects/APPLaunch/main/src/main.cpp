@@ -225,6 +225,11 @@ static void lv_linux_disp_init(void)
 
     lv_linux_fbdev_set_file(disp, device);
 
+    // Force the fbdev driver to ioctl(FBIOPUT_VSCREENINFO) after every flush,
+    // which makes fbtft push the buffer to the SPI LCD immediately. Without
+    // this, fbtft may batch/delay updates causing tearing.
+    lv_linux_fbdev_set_force_refresh(disp, true);
+
     // 打印获取到的分辨率
     lv_coord_t w = lv_display_get_horizontal_resolution(disp);
     lv_coord_t h = lv_display_get_vertical_resolution(disp);
@@ -313,11 +318,16 @@ int main(void)
     lock_file = hal_path_lock_file();
     g_launch_thread_pool = thpool_init(3);
     lv_init();
+    printf("[BOOT] lv_init() done\n");
 
     /*Linux display device init*/
+    printf("[BOOT] lv_linux_disp_init() starting...\n");
     lv_linux_disp_init();
+    printf("[BOOT] lv_linux_disp_init() done\n");
 
+    printf("[BOOT] lv_linux_indev_init() starting...\n");
     lv_linux_indev_init();
+    printf("[BOOT] lv_linux_indev_init() done\n");
 
     LV_EVENT_KEYBOARD = lv_event_register_id();
     LV_EVENT_BATTERY = lv_event_register_id();
@@ -339,19 +349,18 @@ int main(void)
 
     ui_init();
 
-    // Force full-screen refresh on startup. LVGL PARTIAL render mode only
-    // redraws dirty areas; if the first frame is missed (e.g. plymouth still
-    // held fb0, or fbdev wasn't ready), the LCD stays black until a user event.
-    // This guarantees the home screen renders immediately after init.
+    // Force full-screen refresh immediately after init
+    printf("[BOOT] ui_init done, forcing full refresh...\n");
     lv_obj_invalidate(lv_scr_act());
     lv_refr_now(NULL);
+    printf("[BOOT] First frame flushed to fb0.\n");
 
     /*Handle LVGL tasks*/
-    printf("Entering main loop...\n");
+    printf("Entering main loop (FULL render mode)...\n");
     while(1) {
         APPLaunch_lock();
         lv_timer_handler();
-        usleep(1000);
+        usleep(5000);
     }
 
     return 0;
