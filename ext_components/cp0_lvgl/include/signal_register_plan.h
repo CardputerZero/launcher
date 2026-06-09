@@ -1,0 +1,5 @@
+def_hal_fun(void(std::string), cp0_signal_audio_play)
+def_hal_fun(void(), cp0_signal_network)
+def_hal_fun(void(), cp0_signal_forkexec)
+def_hal_fun(void(), cp0_signal_screenshot)
+def_hal_fun(void(std::function<void()>), cp0_signal_battery_pub)

@@ -236,7 +236,7 @@ private:
 extern "C" void init_audio(void)
 {
     std::shared_ptr<AudioSystem> audio = std::make_shared<AudioSystem>();
-    cp0_signal_audio.connect([audio](std::string wav) {
+    cp0_signal_audio_play.append([audio](std::string wav) {
         audio->play(wav);
     });
 }

@@ -9,7 +9,7 @@ if "CONFIG_CP0_LVGL_COMPONENT_ENABLED" in os.environ or "CONFIG_SIGSLOT_COMPONEN
     SRCS = []
     INCLUDE = [ADir('include')]
     PRIVATE_INCLUDE = []
-    REQUIREMENTS = ['lvgl_component', 'Sigslot', 'Miniaudio']
+    REQUIREMENTS = ['lvgl_component', 'Sigslot', 'Miniaudio', 'eventpp']
     STATIC_LIB = []
     DYNAMIC_LIB = []
     DEFINITIONS = []

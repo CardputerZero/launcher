@@ -7,6 +7,7 @@ extern "C" {
 void init_freambuffer_disp();
 void init_input();
 void init_audio();
+void init_battery();
 #ifdef __cplusplus
 }
 #endif

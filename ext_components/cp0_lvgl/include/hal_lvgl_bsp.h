@@ -29,11 +29,16 @@ void cp0_lvgl_init(void);
 const char *hal_path_audio_dir(void);
 #ifdef __cplusplus
 }
-#include <sigslot/signal.hpp>
+// #include <sigslot/signal.hpp>
+#include "eventpp/callbacklist.h"
+#include "eventpp/eventqueue.h"
 #include <string>
-extern sigslot::signal<std::string> cp0_signal_audio;
-extern sigslot::signal<> cp0_signal_network;
-extern sigslot::signal<> cp0_signal_forkexec;
-extern sigslot::signal<> cp0_signal_screenshot;
+#include <functional>
+
+#define def_hal_fun(arg, name) extern eventpp::CallbackList<arg> name;
+#include "signal_register_plan.h"
+#undef def_hal_fun
+extern eventpp::EventQueue<CP0_C_EVENT_t, void (const std::list<std::string>)> cp0_task_queue;
+
 std::string cp0_file_path(std::string file);
 #endif
