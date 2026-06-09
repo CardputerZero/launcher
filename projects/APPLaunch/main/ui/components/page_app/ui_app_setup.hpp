@@ -1805,6 +1805,19 @@ private:
         case KEY_ENTER:
         case KEY_RIGHT:
             apply_value_selection();
+            // After reboot/shutdown, don't animate back — the system is going down.
+            if (val_title_ == "Reboot?" || val_title_ == "Shutdown?") {
+                // Show a brief message, then let the system halt/reboot.
+                lv_obj_t *cont = ui_obj_["list_cont"];
+                lv_obj_clean(cont);
+                lv_obj_t *lbl = lv_label_create(cont);
+                lv_label_set_text(lbl, val_title_ == "Reboot?" ? "Rebooting..." : "Shutting down...");
+                lv_obj_center(lbl);
+                lv_obj_set_style_text_color(lbl, lv_color_hex(0x58A6FF), LV_PART_MAIN);
+                lv_obj_set_style_text_font(lbl, &lv_font_montserrat_14, LV_PART_MAIN);
+                lv_refr_now(NULL);
+                break;
+            }
             view_state_ = ViewState::SUB;
             transition_back_level();
             break;
