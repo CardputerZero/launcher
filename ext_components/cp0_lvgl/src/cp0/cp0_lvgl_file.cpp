@@ -9,11 +9,9 @@
 std::string cp0_file_path(std::string file)
 {
     std::regex pattern(R"(\.(png|wav|ttf)$)", std::regex::icase);
-
-    std::string root_path;
     std::smatch m;
 
-    // std::string root_path = "/usr/share/APPLaunch/";
+    std::string root_path = "/usr/share/APPLaunch/";
     bool matched = std::regex_search(file, m, pattern);
 
     if (matched) {
@@ -25,7 +23,7 @@ std::string cp0_file_path(std::string file)
                        });
 
         if (ext == "png") {
-            return root_path + "share/images/" + file;
+            return "share/images/" + file;
         } else if (ext == "wav") {
             return root_path + "share/audio/" + file;
         } else if (ext == "ttf") {
