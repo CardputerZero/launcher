@@ -184,13 +184,8 @@ void home_screen_load()
     lv_disp_load_scr(ui_Screen1);
     lv_indev_set_group(lv_indev_get_next(NULL), Screen1group);
 
-    static char _startup_snd[256];
-    snprintf(_startup_snd, sizeof(_startup_snd), "%s", cp0_file_path("startup.mp3"));
-    cp0_signal_audio_api_play_file(_startup_snd);
+    cp0_signal_audio_api_play_asset("startup.mp3");
 }
-
-void audio_system_init();
-void audio_load_sounds();
 
 void ui_event_logo_over(lv_event_t * e) {
     static int done = 0;
@@ -199,20 +194,6 @@ void ui_event_logo_over(lv_event_t * e) {
         done = 1;
         SLOGI("[GIF] first LV_EVENT_READY -> pause + home_screen_load()");
         if (startup_gif) lv_gif_pause(startup_gif);
-
-
-        /*
-        * This runs once while the program is running.
-        * This is therefore the best place to initialize audio.
-        *
-        * audio_system_init():
-        *   Open the ALSA device and keep it open.
-        *
-        * audio_load_sounds():
-        *   Preload switch.wav / enter.wav.
-        */
-        audio_system_init();
-        audio_load_sounds();
 
         home_screen_load();
     }

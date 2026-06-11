@@ -33,6 +33,11 @@ public:
         // initialize();
     }
 
+    ~AudioSystem()
+    {
+        uninit_system_play();
+    }
+
 public:
     std::function<void(int, std::string)> _cap_status_callback;
     std::unique_ptr<ma_device> ma_cp0_cap_device;
@@ -41,6 +46,14 @@ public:
     std::unique_ptr<ma_device>  ma_cp0_play_device;
     std::unique_ptr<ma_decoder> ma_cp0_play_decoder;
     std::atomic<bool> play_finished_reported_{false};
+
+    ma_context system_play_context_{};
+    ma_engine system_play_engine_{};
+    ma_sound system_sound_switch_{};
+    ma_sound system_sound_enter_{};
+    bool system_play_inited_ = false;
+    bool system_sounds_loaded_ = false;
+    std::mutex system_play_mutex_;
 
     static constexpr int kRecWaveformSize = 128;
     std::array<float, kRecWaveformSize> rec_waveform_{};
@@ -153,6 +166,106 @@ private:
 
         std::string path = cp0_file_path(file);
         return path.empty() ? file : path;
+    }
+
+    int init_system_play_locked()
+    {
+        if(system_play_inited_) return 0;
+
+        ma_backend backends[] = {
+            ma_backend_pulseaudio
+        };
+
+        ma_result result = ma_context_init(
+            backends,
+            sizeof(backends) / sizeof(backends[0]),
+            NULL,
+            &system_play_context_
+        );
+        if(result != MA_SUCCESS) return -1;
+
+        ma_engine_config engineConfig = ma_engine_config_init();
+        engineConfig.pContext = &system_play_context_;
+        engineConfig.pPlaybackDeviceID = NULL;
+        engineConfig.channels = 2;
+        engineConfig.sampleRate = 48000;
+
+        result = ma_engine_init(&engineConfig, &system_play_engine_);
+        if(result != MA_SUCCESS)
+        {
+            ma_context_uninit(&system_play_context_);
+            return -2;
+        }
+
+        system_play_inited_ = true;
+        return 0;
+    }
+
+    int load_system_sounds_locked()
+    {
+        if(system_sounds_loaded_) return 0;
+
+        int ret = init_system_play_locked();
+        if(ret != 0) return ret;
+
+        std::string switch_path = resolve_play_file("switch.wav", true);
+        std::string enter_path = resolve_play_file("enter.wav", true);
+
+        ma_result result = ma_sound_init_from_file(
+            &system_play_engine_,
+            switch_path.c_str(),
+            MA_SOUND_FLAG_DECODE,
+            NULL,
+            NULL,
+            &system_sound_switch_
+        );
+        if(result != MA_SUCCESS) return -3;
+
+        result = ma_sound_init_from_file(
+            &system_play_engine_,
+            enter_path.c_str(),
+            MA_SOUND_FLAG_DECODE,
+            NULL,
+            NULL,
+            &system_sound_enter_
+        );
+        if(result != MA_SUCCESS)
+        {
+            ma_sound_uninit(&system_sound_switch_);
+            return -4;
+        }
+
+        system_sounds_loaded_ = true;
+        return 0;
+    }
+
+    ma_sound* system_sound_for_name(const std::string& name)
+    {
+        size_t pos = name.find_last_of("/\\");
+        std::string base = (pos == std::string::npos) ? name : name.substr(pos + 1);
+
+        if(base == "switch.wav") return &system_sound_switch_;
+        if(base == "enter.wav") return &system_sound_enter_;
+        return nullptr;
+    }
+
+    void uninit_system_play()
+    {
+        std::lock_guard<std::mutex> lock(system_play_mutex_);
+
+        if(system_sounds_loaded_)
+        {
+            ma_sound_uninit(&system_sound_switch_);
+            ma_sound_uninit(&system_sound_enter_);
+            system_sounds_loaded_ = false;
+        }
+
+        if(system_play_inited_)
+        {
+            ma_engine_uninit(&system_play_engine_);
+            ma_context_uninit(&system_play_context_);
+            system_play_inited_ = false;
+        }
     }
 
     void stop_play_device(bool report_state)
@@ -354,6 +467,20 @@ private:
         }
     }
 public:
+    void system_play(std::string name)
+    {
+        std::lock_guard<std::mutex> lock(system_play_mutex_);
+
+        if(load_system_sounds_locked() != 0) return;
+
+        ma_sound* sound = system_sound_for_name(name);
+        if(sound == nullptr) return;
+
+        ma_sound_stop(sound);
+        ma_sound_seek_to_pcm_frame(sound, 0);
+        ma_sound_start(sound);
+    }
+
     void cap(bool enable)
     {
         if(enable)
@@ -618,5 +745,8 @@ extern "C" void init_audio(void)
 
     cp0_signal_audio_api.append([audio](std::list<std::string> arg, std::function<void(int, std::string)> callback)
                                   { audio->api_call(arg, callback); });
+
+    cp0_signal_system_play.append([audio](std::string name)
+                                  { audio->system_play(name); });
 
 }

@@ -67,6 +67,8 @@ typedef void *cp0_pty_t;
 typedef int cp0_pid_t;
 
 void cp0_signal_audio_api_play_file(const char *path);
+void cp0_signal_audio_api_play_asset(const char *name);
+void cp0_signal_system_play_asset(const char *name);
 
 void cp0_config_init(void);
 int cp0_config_get_int(const char *key, int default_val);

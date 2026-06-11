@@ -15,6 +15,20 @@ void cp0_signal_audio_api_play_file(const char *path)
     }
 }
 
+void cp0_signal_audio_api_play_asset(const char *name)
+{
+    if (name && name[0]) {
+        cp0_signal_audio_api({"Play", std::string(name)}, nullptr);
+    }
+}
+
+void cp0_signal_system_play_asset(const char *name)
+{
+    if (name && name[0]) {
+        cp0_signal_system_play(std::string(name));
+    }
+}
+
 int cp0_volume_read(void)
 {
     int volume = -1;
