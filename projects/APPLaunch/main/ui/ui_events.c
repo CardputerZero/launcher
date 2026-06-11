@@ -10,7 +10,7 @@
 
 #include "compat/input_keys.h"
 
-#define MINIAUDIO_IMPLEMENTATION
+// #define MINIAUDIO_IMPLEMENTATION
 #include "miniaudio.h"
 
 #include "thpool.h"

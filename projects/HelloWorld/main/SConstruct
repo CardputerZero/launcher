@@ -7,7 +7,7 @@ with open(env['PROJECT_TOOL_S']) as f:
 SRCS = Glob('src/*.c*')
 INCLUDE = [ADir('.'), ADir('include')]
 PRIVATE_INCLUDE = []
-REQUIREMENTS = ['cp0_lvgl', 'lvgl_component', 'pthread']
+REQUIREMENTS = ['cp0_lvgl', 'lvgl_component', 'pthread', 'Sigslot', 'eventpp']
 STATIC_LIB = []
 DYNAMIC_LIB = []
 DEFINITIONS = [] #'-std=c++20'
