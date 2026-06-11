@@ -29,6 +29,7 @@
 
 #include <libcamera/camera.h>
 #include <libcamera/camera_manager.h>
+#include <libcamera/control_ids.h>
 #include <libcamera/framebuffer_allocator.h>
 #include <libcamera/formats.h>
 #include <libcamera/pixel_format.h>
@@ -79,6 +80,10 @@ public:
             map_fun(Photo),
             map_fun(Status),
             map_fun(SetCallback),
+            map_fun(SetFrameCallback),
+            map_fun(ZoomIn),
+            map_fun(ZoomOut),
+            map_fun(Pan),
         };
 #undef map_fun
 
@@ -96,6 +101,7 @@ public:
 
 private:
     callback_t status_callback_;
+    callback_t frame_callback_;
     std::mutex mutex_;
 
 #if CP0_CAMERA_HAS_LIBCAMERA
@@ -119,6 +125,10 @@ private:
     int stream_h_ = 150;
     int stream_stride_ = 320 * 2;
     libcamera::PixelFormat stream_format_ = libcamera::formats::RGB565;
+    libcamera::Rectangle scaler_crop_max_{};
+    int zoom_percent_ = 100;
+    int view_x_percent_ = 50;
+    int view_y_percent_ = 50;
 
     std::atomic<bool> capture_requested_{false};
     std::string pending_capture_path_;
@@ -157,6 +167,13 @@ private:
         (void)arg;
         status_callback_ = callback;
         report(callback, 0, "camera callback set\n");
+    }
+
+    void SetFrameCallback(arg_t arg, callback_t callback)
+    {
+        (void)arg;
+        frame_callback_ = callback;
+        report(callback, 0, "camera frame callback set\n");
     }
 
     void Open(arg_t arg, callback_t callback)
@@ -211,6 +228,51 @@ private:
         }
         report(callback, streaming ? 0 : 1, streaming ? "camera streaming\n" : "camera stopped\n");
 #else
+        report(callback, -10, "camera unavailable: libcamera/jpeg headers not found\n");
+#endif
+    }
+
+    void ZoomIn(arg_t arg, callback_t callback)
+    {
+        (void)arg;
+#if CP0_CAMERA_HAS_LIBCAMERA
+        std::lock_guard<std::mutex> lock(mutex_);
+        zoom_percent_ = zoom_percent_ < 250 ? 250 : 500;
+        report(callback, 0, zoom_status_text_locked());
+#else
+        report(callback, -10, "camera unavailable: libcamera/jpeg headers not found\n");
+#endif
+    }
+
+    void ZoomOut(arg_t arg, callback_t callback)
+    {
+        (void)arg;
+#if CP0_CAMERA_HAS_LIBCAMERA
+        std::lock_guard<std::mutex> lock(mutex_);
+        zoom_percent_ = zoom_percent_ > 250 ? 250 : 100;
+        if (zoom_percent_ == 100) {
+            view_x_percent_ = 50;
+            view_y_percent_ = 50;
+        }
+        report(callback, 0, zoom_status_text_locked());
+#else
+        report(callback, -10, "camera unavailable: libcamera/jpeg headers not found\n");
+#endif
+    }
+
+    void Pan(arg_t arg, callback_t callback)
+    {
+#if CP0_CAMERA_HAS_LIBCAMERA
+        const int dx = to_int(nth_arg(arg, 1), 0);
+        const int dy = to_int(nth_arg(arg, 2), 0);
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (zoom_percent_ > 100) {
+            view_x_percent_ = std::max(0, std::min(100, view_x_percent_ + dx * 8));
+            view_y_percent_ = std::max(0, std::min(100, view_y_percent_ + dy * 8));
+        }
+        report(callback, 0, zoom_status_text_locked());
+#else
+        (void)arg;
         report(callback, -10, "camera unavailable: libcamera/jpeg headers not found\n");
 #endif
     }
@@ -271,6 +333,64 @@ private:
         r |= r >> 5;
         g |= g >> 6;
         b |= b >> 5;
+    }
+
+    static uint16_t rgb888_to_rgb565(uint8_t r, uint8_t g, uint8_t b)
+    {
+        return static_cast<uint16_t>(((r & 0xF8) << 8) |
+                                     ((g & 0xFC) << 3) |
+                                     (b >> 3));
+    }
+
+    std::string zoom_status_text_locked() const
+    {
+        char buf[96];
+        std::snprintf(buf, sizeof(buf), "ZOOM %d %d %d\n", zoom_percent_, view_x_percent_, view_y_percent_);
+        return std::string(buf);
+    }
+
+    libcamera::Rectangle crop_rect_locked() const
+    {
+        if (zoom_percent_ <= 100 || scaler_crop_max_.width <= 0 || scaler_crop_max_.height <= 0)
+            return scaler_crop_max_;
+
+        const int max_width = static_cast<int>(scaler_crop_max_.width);
+        const int max_height = static_cast<int>(scaler_crop_max_.height);
+        int crop_w = std::max(1, max_width * 100 / zoom_percent_);
+        int crop_h = std::max(1, max_height * 100 / zoom_percent_);
+        int max_x = std::max(0, max_width - crop_w);
+        int max_y = std::max(0, max_height - crop_h);
+        int x = scaler_crop_max_.x + max_x * std::max(0, std::min(100, view_x_percent_)) / 100;
+        int y = scaler_crop_max_.y + max_y * std::max(0, std::min(100, view_y_percent_)) / 100;
+        return libcamera::Rectangle(x, y, crop_w, crop_h);
+    }
+
+    void apply_crop_locked(libcamera::Request *request) const
+    {
+        if (!request || scaler_crop_max_.width <= 0 || scaler_crop_max_.height <= 0)
+            return;
+        request->controls().set(libcamera::controls::ScalerCrop, crop_rect_locked());
+    }
+
+    bool convert_to_rgb565(const uint8_t *src, size_t bytes_used, std::vector<uint16_t> &rgb565)
+    {
+        std::vector<uint8_t> rgb;
+        if (!convert_to_rgb888(src, bytes_used, rgb))
+            return false;
+        rgb565.assign(stream_w_ * stream_h_, 0);
+        for (int i = 0; i < stream_w_ * stream_h_; ++i)
+            rgb565[i] = rgb888_to_rgb565(rgb[i * 3 + 0], rgb[i * 3 + 1], rgb[i * 3 + 2]);
+        return true;
+    }
+
+    std::string make_frame_payload(const std::vector<uint16_t> &rgb565, int width, int height)
+    {
+        std::string payload;
+        char header[64];
+        const int header_len = std::snprintf(header, sizeof(header), "FRAME %d %d RGB565\n", width, height);
+        payload.assign(header, header_len);
+        payload.append(reinterpret_cast<const char *>(rgb565.data()), rgb565.size() * sizeof(uint16_t));
+        return payload;
     }
 
     bool convert_to_rgb888(const uint8_t *src, size_t bytes_used, std::vector<uint8_t> &rgb)
@@ -447,6 +567,8 @@ private:
         stream_h_ = cfg.size.height;
         stream_stride_ = cfg.stride;
         stream_format_ = cfg.pixelFormat;
+        const auto crop_max = camera_->properties().get(libcamera::properties::ScalerCropMaximum);
+        scaler_crop_max_ = crop_max ? *crop_max : libcamera::Rectangle(0, 0, stream_w_, stream_h_);
 
         allocator_ = std::make_unique<libcamera::FrameBufferAllocator>(camera_);
         if (allocator_->allocate(stream_) < 0)
@@ -490,7 +612,10 @@ private:
         }
 
         for (std::unique_ptr<libcamera::Request> &request : requests_)
+        {
+            apply_crop_locked(request.get());
             camera_->queueRequest(request.get());
+        }
 
         streaming_ = true;
         return 0;
@@ -525,12 +650,15 @@ private:
 
         std::string save_path;
         callback_t callback;
+        callback_t frame_callback;
         std::vector<uint8_t> rgb;
+        std::vector<uint16_t> frame_rgb565;
         int save_w = 0;
         int save_h = 0;
+        int frame_w = 0;
+        int frame_h = 0;
         bool should_capture = capture_requested_.exchange(false);
 
-        if (should_capture)
         {
             std::lock_guard<std::mutex> lock(mutex_);
             auto map_it = mapped_buffers_.find(buffer);
@@ -543,18 +671,25 @@ private:
                     bytes_used = std::min(bytes_used, static_cast<size_t>(metadata.planes()[0].bytesused));
 
                 dma_buf_sync(map_it->second.fd, DMA_BUF_SYNC_START | DMA_BUF_SYNC_READ);
-                bool converted = convert_to_rgb888(src, bytes_used, rgb);
-                dma_buf_sync(map_it->second.fd, DMA_BUF_SYNC_END | DMA_BUF_SYNC_READ);
-
-                if (converted)
+                if (frame_callback_ && convert_to_rgb565(src, bytes_used, frame_rgb565))
+                {
+                    frame_w = stream_w_;
+                    frame_h = stream_h_;
+                    frame_callback = frame_callback_;
+                }
+                if (should_capture && convert_to_rgb888(src, bytes_used, rgb))
                 {
                     save_path = pending_capture_path_;
                     callback = pending_capture_callback_;
                     save_w = stream_w_;
                     save_h = stream_h_;
                 }
+                dma_buf_sync(map_it->second.fd, DMA_BUF_SYNC_END | DMA_BUF_SYNC_READ);
             }
         }
+
+        if (frame_callback && !frame_rgb565.empty())
+            frame_callback(0, make_frame_payload(frame_rgb565, frame_w, frame_h));
 
         if (!save_path.empty())
         {
@@ -567,6 +702,7 @@ private:
             if (camera_ && streaming_)
             {
                 request->reuse(libcamera::Request::ReuseBuffers);
+                apply_crop_locked(request);
                 camera_->queueRequest(request);
             }
         }
@@ -577,6 +713,7 @@ private:
         const bool was_streaming = streaming_;
         streaming_ = false;
         capture_requested_.store(false);
+        frame_callback_ = nullptr;
 
         if (camera_)
         {
