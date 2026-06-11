@@ -168,13 +168,6 @@ SRCS += [
 ]
 INCLUDE += [os.path.join(RadioLib, 'src')]
 
-# add https://github.com/Pithikos/C-Thread-Pool.git
-CThreadPool = wget_github('https://github.com/Pithikos/C-Thread-Pool.git')
-SRCS += [
-    os.path.join(CThreadPool, 'thpool.c')
-]
-INCLUDE += [CThreadPool]
-
 
 # add static files
 STATIC_FILES += [ADir('../APPLaunch')]

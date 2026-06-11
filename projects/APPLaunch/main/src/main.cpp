@@ -17,10 +17,6 @@
 #include "backward.h"
 #endif
 
-#include "thpool.h"
-extern "C" {
-    threadpool g_launch_thread_pool;
-}
 static const char* lock_file = NULL;
 static const char *getenv_default(const char *name, const char *dflt)
 {
@@ -87,7 +83,6 @@ int main(void)
     
     static const std::string default_lock_file = cp0_file_path("lock_file");
     lock_file = default_lock_file.c_str();
-    g_launch_thread_pool = thpool_init(3);
     lv_init();
     printf("[BOOT] lv_init() done\n");
 

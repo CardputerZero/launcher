@@ -13,9 +13,6 @@
 // #define MINIAUDIO_IMPLEMENTATION
 #include "miniaudio.h"
 
-#include "thpool.h"
-
-extern threadpool g_launch_thread_pool;
 
 typedef void (*switch_cb_t)(lv_event_t *);
 
@@ -750,12 +747,7 @@ void main_key_switch(lv_event_t *e)
 
         case KEY_LEFT:
         {
-            /*
-             * This used to be:
-             * thpool_add_work(g_launch_thread_pool, play_audio, caudio_path("switch.wav"));
-             *
-             * Now it directly plays the preloaded sound effect.
-             */
+            /* Play the preloaded sound effect directly before switching pages. */
             if (!lvping_lock)
             {
                 audio_play_switch();
