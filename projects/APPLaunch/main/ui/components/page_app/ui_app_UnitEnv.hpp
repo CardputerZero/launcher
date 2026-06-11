@@ -383,7 +383,7 @@ private:
     void on_refresh_timer()
     {
         /*
-         * If the project has hal_time_str, this can use real time.
+         * If the project has cp0_time_str, this can use real time.
          * Keep a static date format here.
          */
         static int minute = 10;

@@ -18,7 +18,7 @@ extern "C" {
 #include "ui_events.h"
 #include "ui_input_group.h"
 #include "keyboard_input.h"
-#include "hal/hal_settings.h"
+#include "cp0_lvgl_app.h"
 
 #define lv_mem_alloc lv_malloc
 #define lv_mem_free   lv_free
@@ -67,7 +67,7 @@ extern volatile uint32_t LV_EVENT_BATTERY;
 extern volatile uint32_t LV_EVENT_DELL_CPP_DATA;
 
 typedef struct {
-    hal_battery_info_t info;
+    cp0_battery_info_t info;
 } lv_battery_event_data_t;
 
 #define LV_EVENT_BATTERY_GET_INFO(e) (&((lv_battery_event_data_t *)lv_event_get_param(e))->info)

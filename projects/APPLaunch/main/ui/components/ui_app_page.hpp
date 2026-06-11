@@ -14,17 +14,17 @@
 #include <vector>
 #include <keyboard_input.h>
 #include <functional>
-#include "hal/hal_settings.h"
+#include "cp0_lvgl_app.h"
 #define APP_CONSOLE_EXIT_EVENT (lv_event_code_t)(LV_EVENT_LAST + 1)
 
 
 static inline std::string img_path(const char *name)
 {
-    return std::string(hal_path_images_dir()) + PATH_SEP + name;
+    return std::string(cp0_path_images_dir()) + PATH_SEP + name;
 }
 static inline std::string audio_path(const char *name)
 {
-    return std::string(hal_path_audio_dir()) + PATH_SEP + name;
+    return std::string(cp0_path_audio_dir()) + PATH_SEP + name;
 }
 
 class app_
@@ -102,7 +102,7 @@ public:
     {
         home_base *self = static_cast<home_base *>(lv_event_get_user_data(e));
         if (!self || lv_event_get_code(e) != LV_EVENT_BATTERY) return;
-        const hal_battery_info_t *bat = LV_EVENT_BATTERY_GET_INFO(e);
+        const cp0_battery_info_t *bat = LV_EVENT_BATTERY_GET_INFO(e);
         if (bat) self->update_battery_status(*bat);
     }
 
@@ -115,12 +115,12 @@ public:
     void update_status_bar()
     {
         char time_buf[16];
-        hal_time_str(time_buf, sizeof(time_buf));
+        cp0_time_str(time_buf, sizeof(time_buf));
         lv_label_set_text(ui_TOP_time_Label, time_buf);
 
     }
 
-    void update_battery_status(const hal_battery_info_t &bat)
+    void update_battery_status(const cp0_battery_info_t &bat)
     {
         if (bat.valid) {
             int soc = bat.soc;
@@ -250,7 +250,7 @@ public:
     {
         app_base *self = static_cast<app_base *>(lv_event_get_user_data(e));
         if (!self || lv_event_get_code(e) != LV_EVENT_BATTERY) return;
-        const hal_battery_info_t *bat = LV_EVENT_BATTERY_GET_INFO(e);
+        const cp0_battery_info_t *bat = LV_EVENT_BATTERY_GET_INFO(e);
         if (bat) self->update_battery_status(*bat);
     }
 
@@ -263,10 +263,10 @@ public:
     void update_status_bar()
     {
         char time_buf[16];
-        hal_time_str(time_buf, sizeof(time_buf));
+        cp0_time_str(time_buf, sizeof(time_buf));
         lv_label_set_text(ui_TOP_time_Label, time_buf);
 
-        hal_wifi_status_t ws = hal_wifi_get_status();
+        cp0_wifi_status_t ws = cp0_wifi_get_status();
         int sig = ws.connected ? ws.signal : 0;
         uint32_t on_color  = 0x00CCFF;
         uint32_t off_color = 0x4D4D4D;
@@ -283,7 +283,7 @@ public:
             lv_color_hex(sig >= 80 ? on_color : off_color), LV_PART_MAIN | LV_STATE_DEFAULT);
     }
 
-    void update_battery_status(const hal_battery_info_t &bat)
+    void update_battery_status(const cp0_battery_info_t &bat)
     {
         if (bat.valid) {
             int soc = bat.soc;

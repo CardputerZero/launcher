@@ -4,7 +4,7 @@
 #include <unordered_map>
 #include <list>
 #include <string>
-#include "hal/hal_process.h"
+#include "cp0_lvgl_app.h"
 
 // ==================== standard coordinates for 5 slots ====================
 static const lv_coord_t LP_SLOT_X[] = {-177, -99,   0,  99, 177,  -177,  -99,  0,   99,  177  };
@@ -575,7 +575,7 @@ private:
         lv_timer_enable(false);
         lv_refr_now(disp);
 
-        int ret = hal_process_exec_blocking(it->Exec.c_str(), &LVGL_HOME_KEY_FLAG, 0);
+        int ret = cp0_process_exec_blocking(it->Exec.c_str(), &LVGL_HOME_KEY_FLAG, 0);
         printf("App %s exited with code %d\n", it->Exec.c_str(), ret);
         lv_timer_enable(true);
         if (indev) lv_indev_set_group(lv_indev_get_next(NULL), Screen1group);

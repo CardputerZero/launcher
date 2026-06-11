@@ -1,8 +1,8 @@
 #pragma once
 // Note: this file used to be wrapped in `#if !defined(HAL_PLATFORM_SDL)` to
 // exclude it from the emulator build, but ui_app_launch.cpp references
-// UISetupPage unconditionally. The class body is HAL-clean (uses hal_wifi_*,
-// hal_battery_*, hal_volume_*); residual raw syscalls (i2c ioctl, popen for
+// UISetupPage unconditionally. The class body is cp0_lvgl-clean (uses cp0_wifi_*,
+// cp0_battery_*, cp0_volume_*); residual raw syscalls (i2c ioctl, popen for
 // IP/whoami, sudo date) are either already inside #ifdef __linux__ or only
 // triggered by user actions that the emulator never performs. Keeping the
 // class compiled on every platform lets the emulator open the SETTING page.
@@ -31,10 +31,7 @@
 #include <linux/i2c.h>
 #include <linux/i2c-dev.h>
 #endif
-#include "hal/hal_settings.h"
-#include "hal/hal_process.h"
-#include "hal/hal_config.h"
-#include "hal/hal_audio.h"
+#include "cp0_lvgl_app.h"
 
 // ============================================================
 //  System settings screen  UISetupPage  (Carousel Design)
@@ -88,7 +85,7 @@ private:
     std::string img_cross_;
 
     // WiFi state
-    hal_wifi_ap_t wifi_aps_[WIFI_AP_MAX];
+    cp0_wifi_ap_t wifi_aps_[CP0_WIFI_AP_MAX];
     int wifi_ap_count_ = 0;
     std::string wifi_pw_ssid_;
     std::string wifi_pw_buf_;
@@ -120,8 +117,8 @@ private:
     std::string snd_enter_;
     std::string snd_back_;
 
-    void play_enter() { if (!snd_enter_.empty()) hal_audio_play(snd_enter_.c_str()); }
-    void play_back()  { if (!snd_back_.empty()) hal_audio_play(snd_back_.c_str()); }
+    void play_enter() { if (!snd_enter_.empty()) cp0_audio_play(snd_enter_.c_str()); }
+    void play_back()  { if (!snd_back_.empty()) cp0_audio_play(snd_back_.c_str()); }
 
     void cache_image_paths()
     {
@@ -163,7 +160,7 @@ private:
             for (int i = 0; i < 27; ++i) {
                 char cfg_key[64];
                 snprintf(cfg_key, sizeof(cfg_key), "app_%s", app_keys[i]);
-                bool enabled = hal_config_get_int(cfg_key, 1) != 0;
+                bool enabled = cp0_config_get_int(cfg_key, 1) != 0;
                 m.sub_items.push_back({app_labels[i], true, enabled,
                     [this, i]() { save_app_toggle(i); }});
             }
@@ -174,8 +171,8 @@ private:
             MenuItem m;
             m.label = "Boot";
             m.sub_items = {
-                {"Reboot",   false, false, [this]() { enter_confirm_action("Reboot?", [this](){ hal_system_reboot(); }); }},
-                {"Shutdown", false, false, [this]() { enter_confirm_action("Shutdown?", [this](){ hal_system_shutdown(); }); }},
+                {"Reboot",   false, false, [this]() { enter_confirm_action("Reboot?", [this](){ cp0_system_reboot(); }); }},
+                {"Shutdown", false, false, [this]() { enter_confirm_action("Shutdown?", [this](){ cp0_system_shutdown(); }); }},
             };
             menu_items_.push_back(m);
         }
@@ -256,18 +253,18 @@ private:
         {
             MenuItem m;
             m.label = "ExtPort";
-            bool usb_en = hal_config_get_int("extport_usb", 1) != 0;
-            bool vout_en = hal_config_get_int("extport_5vout", 1) != 0;
+            bool usb_en = cp0_config_get_int("extport_usb", 1) != 0;
+            bool vout_en = cp0_config_get_int("extport_5vout", 1) != 0;
             m.sub_items = {
                 {"USB",   true, usb_en, [this]() {
                     bool en = menu_items_[7].sub_items[0].toggle_state;
-                    hal_config_set_int("extport_usb", en ? 1 : 0);
-                    hal_config_save();
+                    cp0_config_set_int("extport_usb", en ? 1 : 0);
+                    cp0_config_save();
                 }},
                 {"5VOUT", true, vout_en, [this]() {
                     bool en = menu_items_[7].sub_items[1].toggle_state;
-                    hal_config_set_int("extport_5vout", en ? 1 : 0);
-                    hal_config_save();
+                    cp0_config_set_int("extport_5vout", en ? 1 : 0);
+                    cp0_config_save();
                 }},
             };
             menu_items_.push_back(m);
@@ -359,7 +356,7 @@ private:
     {
         val_title_ = "Volume";
         val_options_ = {"100%", "75%", "50%", "25%", "0%"};
-        vol_val_ = hal_config_get_int("volume", hal_volume_read());
+        vol_val_ = cp0_config_get_int("volume", cp0_volume_read());
         int pct = vol_val_ * 100 / 63;
         if (pct >= 87) val_sel_idx_ = 0;
         else if (pct >= 62) val_sel_idx_ = 1;
@@ -383,7 +380,7 @@ private:
     {
         val_title_ = "Startup";
         val_options_ = {"Launcher", "CLI"};
-        val_sel_idx_ = hal_config_get_int("startup_mode", 0);
+        val_sel_idx_ = cp0_config_get_int("startup_mode", 0);
         view_state_ = ViewState::VALUE_SELECT;
         transition_enter_level();
     }
@@ -406,7 +403,7 @@ private:
         // Title + current connection status
         lv_obj_t *title = lv_label_create(cont);
         {
-            hal_wifi_status_t ws = hal_wifi_get_status();
+            cp0_wifi_status_t ws = cp0_wifi_get_status();
             static char title_buf[128];
             if (ws.connected)
                 snprintf(title_buf, sizeof(title_buf), "Connected WiFi: %s  %s", ws.ssid, ws.ip);
@@ -456,7 +453,7 @@ private:
         for (int vi = 0; vi < visible && (vi + offset) < wifi_ap_count_; ++vi) {
             int ai = vi + offset;
             bool sel = (ai == wifi_list_sel_);
-            hal_wifi_ap_t *ap = &wifi_aps_[ai];
+            cp0_wifi_ap_t *ap = &wifi_aps_[ai];
             int y = 30 + vi * 22;
 
             // Selection highlight
@@ -476,7 +473,7 @@ private:
 
             // SSID (append * if we have a saved password for it)
             lv_obj_t *ssid_lbl = lv_label_create(cont);
-            static char ssid_buf[WIFI_SSID_MAX + 4];
+            static char ssid_buf[CP0_WIFI_SSID_MAX + 4];
             if (wifi_has_saved_profile(ap->ssid))
                 snprintf(ssid_buf, sizeof(ssid_buf), "%s *", ap->ssid);
             else
@@ -547,7 +544,7 @@ private:
     {
         for (auto &m : menu_items_) {
             if (m.label != "Info") continue;
-            hal_battery_info_t bat = hal_battery_read();
+            cp0_battery_info_t bat = cp0_battery_read();
             char buf[64];
             snprintf(buf, sizeof(buf), "Battery: %d%%", bat.valid ? bat.soc : 0);
             m.sub_items[0].label = buf;
@@ -649,14 +646,14 @@ private:
         char cfg_key[64];
         snprintf(cfg_key, sizeof(cfg_key), "app_%s", app_keys[idx]);
         bool enabled = menu_items_[0].sub_items[idx].toggle_state;
-        hal_config_set_int(cfg_key, enabled ? 1 : 0);
-        hal_config_save();
+        cp0_config_set_int(cfg_key, enabled ? 1 : 0);
+        cp0_config_save();
     }
 
     // ==================== Bluetooth ====================
     void refresh_bt_status()
     {
-        hal_bt_status_t st = hal_bt_get_status();
+        cp0_bt_status_t st = cp0_bt_get_status();
         // Find Bluetooth menu and update Power toggle state
         for (auto &m : menu_items_) {
             if (m.label != "Bluetooth") continue;
@@ -670,15 +667,15 @@ private:
         for (auto &m : menu_items_) {
             if (m.label != "Bluetooth") continue;
             bool on = m.sub_items[0].toggle_state;
-            hal_bt_set_power(on ? 1 : 0);
+            cp0_bt_set_power(on ? 1 : 0);
             break;
         }
     }
 
     void bt_do_scan()
     {
-        hal_bt_device_t devices[BT_DEVICE_MAX];
-        hal_bt_scan(devices, BT_DEVICE_MAX);
+        cp0_bt_device_t devices[CP0_BT_DEVICE_MAX];
+        cp0_bt_scan(devices, CP0_BT_DEVICE_MAX);
     }
 
     // ==================== Ethernet ====================
@@ -894,21 +891,21 @@ private:
     {
         // TODO: implement BT scan list page similar to WiFi
         // For now just trigger scan
-        hal_bt_device_t devices[BT_DEVICE_MAX];
-        int count = hal_bt_scan(devices, BT_DEVICE_MAX);
+        cp0_bt_device_t devices[CP0_BT_DEVICE_MAX];
+        int count = cp0_bt_scan(devices, CP0_BT_DEVICE_MAX);
         (void)count;
     }
 
     void factory_reset()
     {
         remove("/var/lib/applaunch/settings");
-        hal_system_reboot();
+        cp0_system_reboot();
     }
 
     // ==================== WiFi functions ====================
     void wifi_do_scan()
     {
-        wifi_ap_count_ = hal_wifi_scan(wifi_aps_, WIFI_AP_MAX);
+        wifi_ap_count_ = cp0_wifi_scan(wifi_aps_, CP0_WIFI_AP_MAX);
     }
 
     void wifi_toggle_enable()
@@ -925,17 +922,17 @@ private:
     void wifi_try_connect(int idx)
     {
         if (idx < 0 || idx >= wifi_ap_count_) return;
-        hal_wifi_ap_t *ap = &wifi_aps_[idx];
+        cp0_wifi_ap_t *ap = &wifi_aps_[idx];
         if (ap->in_use) return;
 
         bool needs_password = false;
         int ret = -1;
         if (strcmp(ap->security, "Open") == 0 || ap->security[0] == 0) {
             wifi_show_connecting(ap->ssid);
-            ret = hal_wifi_connect(ap->ssid, NULL);
+            ret = cp0_wifi_connect(ap->ssid, NULL);
         } else if (wifi_has_saved_profile(ap->ssid)) {
             wifi_show_connecting(ap->ssid);
-            ret = hal_wifi_connect(ap->ssid, NULL);
+            ret = cp0_wifi_connect(ap->ssid, NULL);
         } else {
             needs_password = true;
             wifi_pw_ssid_ = ap->ssid;
@@ -982,7 +979,7 @@ private:
     void wifi_forget_selected()
     {
         if (wifi_list_sel_ < 0 || wifi_list_sel_ >= wifi_ap_count_) return;
-        hal_wifi_ap_t *ap = &wifi_aps_[wifi_list_sel_];
+        cp0_wifi_ap_t *ap = &wifi_aps_[wifi_list_sel_];
 
         if (!wifi_has_saved_profile(ap->ssid)) {
             wifi_show_error("No saved password for this network");
@@ -1092,7 +1089,7 @@ private:
         if (key == KEY_ENTER) {
             if (pw_hint_lbl_) lv_label_set_text(pw_hint_lbl_, "Connecting...");
             lv_refr_now(NULL);
-            int ret = hal_wifi_connect(wifi_pw_ssid_.c_str(), wifi_pw_buf_.c_str());
+            int ret = cp0_wifi_connect(wifi_pw_ssid_.c_str(), wifi_pw_buf_.c_str());
             if (ret != 0) {
                 // Connection failed — delete the broken profile that nmcli just
                 // saved with the wrong password, so next attempt won't reuse it.
@@ -1137,9 +1134,9 @@ private:
     {
         int pcts[] = {100, 75, 50, 25, 0};
         int new_val = 63 * pcts[val_sel_idx_] / 100;
-        hal_volume_write(new_val);
-        hal_config_set_int("volume", new_val);
-        hal_config_save();
+        cp0_volume_write(new_val);
+        cp0_config_set_int("volume", new_val);
+        cp0_config_save();
     }
 
     // ==================== Brightness ====================
@@ -1147,8 +1144,8 @@ private:
     {
         val_title_ = "Brightness";
         val_options_ = {"100%", "75%", "50%", "25%"};
-        bright_val_ = hal_backlight_read();
-        int mx = hal_backlight_max();
+        bright_val_ = cp0_backlight_read();
+        int mx = cp0_backlight_max();
         int pct = mx > 0 ? bright_val_ * 100 / mx : 100;
         if (pct >= 87) val_sel_idx_ = 0;
         else if (pct >= 62) val_sel_idx_ = 1;
@@ -1161,26 +1158,26 @@ private:
     void apply_value_selection()
     {
         if (val_title_ == "Brightness") {
-            int mx = hal_backlight_max();
+            int mx = cp0_backlight_max();
             int pcts[] = {100, 75, 50, 25};
             int new_val = mx * pcts[val_sel_idx_] / 100;
             if (new_val < 1) new_val = 1;
-            hal_backlight_write(new_val);
-            hal_config_set_int("brightness", new_val);
-            hal_config_save();
+            cp0_backlight_write(new_val);
+            cp0_config_set_int("brightness", new_val);
+            cp0_config_save();
         } else if (val_title_ == "Volume") {
             apply_volume();
         } else if (val_title_ == "DarkTime") {
             // TODO: save dark time setting
             int times[] = {0, 10, 30, 60, 300};
-            hal_config_set_int("dark_time", times[val_sel_idx_]);
-            hal_config_save();
+            cp0_config_set_int("dark_time", times[val_sel_idx_]);
+            cp0_config_save();
         } else if (val_title_ == "Resolution") {
-            hal_config_set_int("cam_resolution", val_sel_idx_);
-            hal_config_save();
+            cp0_config_set_int("cam_resolution", val_sel_idx_);
+            cp0_config_save();
         } else if (val_title_ == "Startup") {
-            hal_config_set_int("startup_mode", val_sel_idx_);
-            hal_config_save();
+            cp0_config_set_int("startup_mode", val_sel_idx_);
+            cp0_config_save();
         } else if (val_title_ == "Year" || val_title_ == "Month" || val_title_ == "Day" ||
                    val_title_ == "Hour" || val_title_ == "Minute" || val_title_ == "Second") {
             apply_rtc_value();

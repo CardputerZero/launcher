@@ -19,8 +19,7 @@
 #include <errno.h>
 #include <sys/select.h>
 #endif
-#include "hal/hal_settings.h"
-#include "hal/hal_network.h"
+#include "cp0_lvgl_app.h"
 #include "compat/input_keys.h"
 
 // ============================================================
@@ -68,7 +67,7 @@ private:
     static constexpr int LIST_H       = 128;
 
     // ---- WiFi Scanner state ----
-    hal_wifi_ap_t wifi_aps_[WIFI_AP_MAX];
+    cp0_wifi_ap_t wifi_aps_[CP0_WIFI_AP_MAX];
     int wifi_ap_count_ = 0;
     int wifi_sel_      = 0;
     lv_obj_t *wifi_list_cont_ = nullptr;
@@ -212,7 +211,7 @@ private:
 
     void wifi_do_scan()
     {
-        wifi_ap_count_ = hal_wifi_scan(wifi_aps_, WIFI_AP_MAX);
+        wifi_ap_count_ = cp0_wifi_scan(wifi_aps_, CP0_WIFI_AP_MAX);
         wifi_sel_ = 0;
         wifi_build_ap_rows();
     }
@@ -236,7 +235,7 @@ private:
         for (int vi = 0; vi < visible && (vi + offset) < wifi_ap_count_; ++vi) {
             int ai = vi + offset;
             bool sel = (ai == wifi_sel_);
-            hal_wifi_ap_t *ap = &wifi_aps_[ai];
+            cp0_wifi_ap_t *ap = &wifi_aps_[ai];
 
             lv_obj_t *row = lv_obj_create(wifi_list_cont_);
             lv_obj_set_size(row, 294, 18);
@@ -490,9 +489,9 @@ private:
         make_label(c, host_buf, 0, 2, 0x58A6FF);
 
         // Network interfaces
-        hal_netif_info_t entries[16];
+        cp0_netif_info_t entries[16];
         int count = 0;
-        hal_network_list(entries, 16, &count);
+        cp0_network_list(entries, 16, &count);
 
         if (count == 0) {
             make_label(c, "No network interfaces found", 0, 22, 0x555555);
@@ -513,7 +512,7 @@ private:
         }
 
         // WiFi status
-        hal_wifi_status_t ws = hal_wifi_get_status();
+        cp0_wifi_status_t ws = cp0_wifi_get_status();
         char wifi_buf[128];
         if (ws.connected && ws.ip[0])
             snprintf(wifi_buf, sizeof(wifi_buf), "WiFi: %s  IP: %s  Signal: %d%%",

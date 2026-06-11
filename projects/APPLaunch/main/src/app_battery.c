@@ -8,7 +8,7 @@ static void _battery_timer_cb(int *workingp)
 {
     lv_battery_event_data_t data;
     memset(&data, 0, sizeof(data));
-    data.info = hal_battery_read();
+    data.info = cp0_battery_read();
     lv_lock();
     lv_obj_t *root = lv_screen_active();
     if(root)

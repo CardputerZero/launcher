@@ -13,9 +13,7 @@
 #include "keyboard_input.h"
 #include "battery.h"
 #include "compat/input_keys.h"
-#include "hal/hal_process.h"
-#include "hal/hal_settings.h"
-#include "hal/hal_config.h"
+#include "cp0_lvgl_app.h"
 #include "global_config.h"
 #if CONFIG_BACKWARD_CPP_ENABLED
 #define BACKWARD_HAS_DW 1
@@ -24,7 +22,6 @@
 #endif
 
 #include "thpool.h"
-#include "hal/hal_paths.h"
 extern "C" {
     threadpool g_launch_thread_pool;
 }
@@ -172,8 +169,8 @@ static void keypad_read_cb(lv_indev_t *indev, lv_indev_data_t *data)
 static void lv_linux_indev_init(void)
 {
     const char *mouse_device = getenv_default("LV_LINUX_MOUSE_DEVICE", NULL);
-    const char *keyboard_device = getenv_default("LV_LINUX_KEYBOARD_DEVICE", hal_path_keyboard_device());
-    const char *keyboard_map = getenv_default("LV_LINUX_KEYBOARD_MAP", hal_path_keyboard_map());
+    const char *keyboard_device = getenv_default("LV_LINUX_KEYBOARD_DEVICE", cp0_path_keyboard_device());
+    const char *keyboard_map = getenv_default("LV_LINUX_KEYBOARD_MAP", cp0_path_keyboard_map());
     setenv("APPLAUNCH_LINUX_KEYBOARD_DEVICE", keyboard_device, 1);
     setenv("APPLAUNCH_LINUX_KEYBOARD_MAP", keyboard_map, 1);
  
@@ -271,7 +268,7 @@ void APPLaunch_lock()
     static std::chrono::time_point<std::chrono::steady_clock> start_time;
 
     int holder_pid = 0;
-    hal_process_check_lock(lock_file, &holder_pid);
+    cp0_process_check_lock(lock_file, &holder_pid);
 
     static int lvgl_lock = 0;
     if (holder_pid == 0) {
@@ -289,7 +286,7 @@ void APPLaunch_lock()
             auto elapsed = std::chrono::steady_clock::now() - start_time;
             auto secs = std::chrono::duration_cast<std::chrono::seconds>(elapsed).count();
             if (secs >= 5) {
-                hal_process_kill(holder_pid, 3000);
+                cp0_process_kill(holder_pid, 3000);
                 home_back_status = 0;
             }
         } else {
@@ -308,7 +305,7 @@ int main(void)
     setenv("PIPEWIRE_RUNTIME_DIR", "/run/user/1000", 1);
     setenv("PULSE_SERVER", "unix:/run/user/1000/pulse/native", 1);
     
-    lock_file = hal_path_lock_file();
+    lock_file = cp0_path_lock_file();
     g_launch_thread_pool = thpool_init(3);
     lv_init();
     printf("[BOOT] lv_init() done\n");
@@ -329,16 +326,16 @@ int main(void)
 
     // Restore saved brightness
     {
-        int saved_bright = hal_config_get_int("brightness", -1);
+        int saved_bright = cp0_config_get_int("brightness", -1);
         if (saved_bright > 0)
-            hal_backlight_write(saved_bright);
+            cp0_backlight_write(saved_bright);
     }
 
     // Restore saved volume
     {
-        int saved_vol = hal_config_get_int("volume", -1);
+        int saved_vol = cp0_config_get_int("volume", -1);
         if (saved_vol >= 0)
-            hal_volume_write(saved_vol);
+            cp0_volume_write(saved_vol);
     }
     init_audio();
     init_camera();

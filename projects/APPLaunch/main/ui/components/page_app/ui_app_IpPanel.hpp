@@ -6,7 +6,7 @@
 #include <vector>
 #include <functional>
 #include <algorithm>
-#include "hal/hal_network.h"
+#include "cp0_lvgl_app.h"
 
 // ============================================================
 //  IP panel screen  UIIpPanelPage
@@ -56,9 +56,9 @@ private:
     {
         iface_list_.clear();
 
-        hal_netif_info_t entries[16];
+        cp0_netif_info_t entries[16];
         int count = 0;
-        if (hal_network_list(entries, 16, &count) != 0)
+        if (cp0_network_list(entries, 16, &count) != 0)
             return;
 
         for (int i = 0; i < count; i++)

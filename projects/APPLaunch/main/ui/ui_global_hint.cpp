@@ -25,7 +25,7 @@
 #include "ui.h"
 #include "keyboard_input.h"
 #include "lvgl/lvgl.h"
-#include "hal/hal_screenshot.h"
+#include "cp0_lvgl_app.h"
 
 #include "compat/input_keys.h"
 
@@ -253,7 +253,7 @@ extern "C" void ui_global_hint_on_key(const struct key_item *elm)
             if (sudo_gid) gid = (gid_t)atoi(sudo_gid);
             chown(scr_dir, uid, gid);
         }
-        int ret = hal_screenshot_save(scr_dir);
+        int ret = cp0_screenshot_save(scr_dir);
         show_hint(ret == 0 ? "Saved to ~/Screenshots" : "Screenshot failed");
         return;
     }

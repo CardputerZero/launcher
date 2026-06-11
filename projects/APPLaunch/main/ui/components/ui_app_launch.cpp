@@ -4,12 +4,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <dirent.h>
-#include "hal/hal_paths.h"
-#include "hal/hal_filesystem.h"
-#include "hal/hal_process.h"
-#include "hal/hal_settings.h"
-#include "hal/hal_config.h"
-#include "hal/hal_audio.h"
+#include "cp0_lvgl_app.h"
 #include <unordered_map>
 #include <list>
 #include <memory>
@@ -118,7 +113,7 @@ class app_launch_S
 {
 private:
     int current_app = 2;
-    hal_watcher_t dir_watcher = NULL;
+    cp0_watcher_t dir_watcher = NULL;
     lv_timer_t *watch_timer = nullptr;  // LVGL 3s timer
     lv_timer_t *status_timer = nullptr; // status-bar refresh timer
     int fixed_count;
@@ -174,7 +169,7 @@ public:
         }
 
         // Dynamic icons filtered by Settings configuration
-        #define APP_ENABLED(key) (hal_config_get_int("app_" key, 1) != 0)
+        #define APP_ENABLED(key) (cp0_config_get_int("app_" key, 1) != 0)
 
         if (APP_ENABLED("Music"))
         app_list.emplace_back("MUSIC",
@@ -319,7 +314,7 @@ public:
         /* Show overlay BEFORE we tear down LVGL input/timers so the user
          * gets immediate feedback when ENTER was pressed. The overlay
          * stays drawn on the framebuffer right up until the child takes
-         * it over via hal_process_exec_blocking(). */
+         * it over via cp0_process_exec_blocking(). */
         ui_loading_show("Loading...");
         lv_disp_t *disp = lv_disp_get_default();
         lv_indev_t *indev = lv_indev_get_next(NULL);
@@ -329,7 +324,7 @@ public:
         lv_timer_enable(false);
         lv_refr_now(disp);
 
-        int ret = hal_process_exec_blocking(exec.c_str(), &LVGL_HOME_KEY_FLAG, keep_root ? 1 : 0);
+        int ret = cp0_process_exec_blocking(exec.c_str(), &LVGL_HOME_KEY_FLAG, keep_root ? 1 : 0);
         printf("App %s exited with code %d\n", exec.c_str(), ret);
         lv_timer_enable(true);
         if (indev)
@@ -367,7 +362,7 @@ public:
 
     void applications_load()
     {
-        const char *app_dir = hal_path_applications_dir();
+        const char *app_dir = cp0_path_applications_dir();
         DIR *dir = opendir(app_dir);
         if (!dir)
         {
@@ -489,7 +484,7 @@ public:
     // ============================================================
     void inotify_init_watch()
     {
-        dir_watcher = hal_dir_watch_start(hal_path_applications_dir());
+        dir_watcher = cp0_dir_watch_start(cp0_path_applications_dir());
     }
 
     // ============================================================
@@ -572,7 +567,7 @@ public:
     void update_home_status_bar()
     {
         // WiFi signal bars: show/hide + color by strength
-        hal_wifi_status_t wifi = hal_wifi_get_status();
+        cp0_wifi_status_t wifi = cp0_wifi_get_status();
         fprintf(stderr, "[HOME_STATUS] connected=%d sig=%d ssid=%s\n",
                 wifi.connected, wifi.signal, wifi.ssid);
         if (wifi.connected) {
@@ -590,11 +585,11 @@ public:
 
         // Time
         char time_buf[16];
-        hal_time_str(time_buf, sizeof(time_buf));
+        cp0_time_str(time_buf, sizeof(time_buf));
         lv_label_set_text(ui_timeLabel, time_buf);
 
         // Battery
-        hal_battery_info_t bat = hal_battery_read();
+        cp0_battery_info_t bat = cp0_battery_read();
         if (bat.valid)
         {
             int soc = bat.soc;
@@ -623,7 +618,7 @@ public:
         if (!self || !self->dir_watcher)
             return;
 
-        if (hal_dir_watch_poll(self->dir_watcher) > 0)
+        if (cp0_dir_watch_poll(self->dir_watcher) > 0)
         {
             printf("app_dir_watch_cb: applications dir changed, reloading...\n");
             self->applications_reload();
@@ -725,7 +720,7 @@ app_launch_S::~app_launch_S()
     }
     if (dir_watcher)
     {
-        hal_dir_watch_stop(dir_watcher);
+        cp0_dir_watch_stop(dir_watcher);
         dir_watcher = NULL;
     }
 }

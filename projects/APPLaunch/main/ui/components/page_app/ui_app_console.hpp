@@ -14,7 +14,7 @@
 #include <vector>
 #include <sstream>
 #include <keyboard_input.h>
-#include "hal/hal_pty.h"
+#include "cp0_lvgl_app.h"
 
 // ============================================================
 //  Terminal console  UIConsolePage
@@ -215,7 +215,7 @@ private:
     bool vt100_skip_until_st = false;
 
     /* ── PTY ──────────────────────────────────────────────── */
-    hal_pty_t pty_handle = NULL;
+    cp0_pty_t pty_handle = NULL;
 
     lv_timer_t *poll_timer = nullptr;
     lv_timer_t *cursor_timer = nullptr;
@@ -680,7 +680,7 @@ private:
                 /* Reply: VT100 (type 0), firmware v10, no options */
                 fprintf(stderr, "[VT100-DBG] SDA reply: \\033[>0;10;0c\n");
                 if (pty_handle != NULL)
-                    hal_pty_write(pty_handle, "\033[>0;10;0c", 10);
+                    cp0_pty_write(pty_handle, "\033[>0;10;0c", 10);
                 break;
             case 'm': /* xterm set-modifyOtherKeys — ignore */
                 fprintf(stderr, "[VT100-DBG] SDA: set-modifyOtherKeys ignored\n");
@@ -811,14 +811,14 @@ private:
         case 'c': /* DA — Device Attributes: reply with \033[?1;0c (VT100) */
             if (pty_handle != NULL) {
                 const char *reply = "\033[?1;0c";
-                hal_pty_write(pty_handle, reply, strlen(reply));
+                cp0_pty_write(pty_handle, reply, strlen(reply));
             }
             break;
         case 'n': /* DSR — Device Status Report */
             fprintf(stderr, "[VT100-DBG] DSR query param[0]=%d\n", vt100_params[0]);
             if (vt100_params[0] == 5) {
                 fprintf(stderr, "[VT100-DBG] DSR 5: reply \\033[0n (OK)\n");
-                if (pty_handle != NULL) hal_pty_write(pty_handle, "\033[0n", 4);
+                if (pty_handle != NULL) cp0_pty_write(pty_handle, "\033[0n", 4);
             } else if (vt100_params[0] == 6) {
                 /* Cursor Position Report */
                 char buf[32];
@@ -826,7 +826,7 @@ private:
                                    vt100_cur_row + 1, vt100_cur_col + 1);
                 fprintf(stderr, "[VT100-DBG] DSR 6: cursor=(%d,%d) reply=%s\n",
                         vt100_cur_row + 1, vt100_cur_col + 1, buf);
-                if (pty_handle != NULL) hal_pty_write(pty_handle, buf, len);
+                if (pty_handle != NULL) cp0_pty_write(pty_handle, buf, len);
             }
             break;
 
@@ -1059,14 +1059,14 @@ private:
         for (const auto &a : args)
             argv.push_back(a.c_str());
         argv.push_back(nullptr);
-        pty_handle = hal_pty_open(cmd.c_str(), argv.data(), COLS, ROWS);
+        pty_handle = cp0_pty_open(cmd.c_str(), argv.data(), COLS, ROWS);
         return pty_handle != NULL;
     }
 
     void stop_pty()
     {
         if (pty_handle) {
-            hal_pty_close(pty_handle);
+            cp0_pty_close(pty_handle);
             pty_handle = NULL;
         }
     }
@@ -1084,7 +1084,7 @@ private:
         int n;
         bool changed = false;
 
-        while ((n = hal_pty_read(pty_handle, buf, sizeof(buf))) > 0)
+        while ((n = cp0_pty_read(pty_handle, buf, sizeof(buf))) > 0)
         {
             vt100_process_bytes(buf, n);
             changed = true;
@@ -1101,7 +1101,7 @@ private:
         else if (pty_handle != NULL)
         {
             int status = 0;
-            if (hal_pty_check_child(pty_handle, &status) == 1)
+            if (cp0_pty_check_child(pty_handle, &status) == 1)
                 child_exited = true;
         }
 
@@ -1112,7 +1112,7 @@ private:
             vt100_process_bytes(hint, (int)strlen(hint));
             vt100_render_all();
             waiting_key_to_exit = true;
-            hal_pty_close(pty_handle);
+            cp0_pty_close(pty_handle);
             pty_handle = NULL;
         }
     }
@@ -1210,7 +1210,7 @@ private:
             for (int ki = 0; ki < len; ki++)
                 fprintf(stderr, "%02X ", (unsigned char)buf[ki]);
             fprintf(stderr, "\n");
-            hal_pty_write(pty_handle, buf, (size_t)len);
+            cp0_pty_write(pty_handle, buf, (size_t)len);
         }
     }
 

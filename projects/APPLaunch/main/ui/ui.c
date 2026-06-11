@@ -8,8 +8,7 @@
 #include <stdio.h>
 #include <sys/stat.h>
 #include "lvgl/src/widgets/gif/lv_gif.h"
-#include "hal/hal_paths.h"
-#include "hal/hal_audio.h"
+#include "cp0_lvgl_app.h"
 ///////////////////// VARIABLES ////////////////////
 
 
@@ -53,7 +52,7 @@ const char *ui_img_camera_png;
 static char _img_path_buf[16][256];
 static void ui_images_init(void)
 {
-    const char *d = hal_path_images_dir();
+    const char *d = cp0_path_images_dir();
     struct { const char **ptr; const char *name; } tbl[] = {
         { &ui_img_zero_png,       "zero.png" },
         { &ui_img_time_png,       "time_bg.png" },
@@ -154,7 +153,7 @@ void font_manager_init(void)
 
     {
         static char bold_path[512];
-        snprintf(bold_path, sizeof(bold_path), "%s/Montserrat-Bold.ttf", hal_path_font_dir());
+        snprintf(bold_path, sizeof(bold_path), "%s/Montserrat-Bold.ttf", cp0_path_font_dir());
         g_font_bold_20 = lv_freetype_font_create(
             bold_path, LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 18,
             LV_FREETYPE_FONT_STYLE_BOLD);
@@ -186,8 +185,8 @@ void home_screen_load()
     lv_indev_set_group(lv_indev_get_next(NULL), Screen1group);
 
     static char _startup_snd[256];
-    snprintf(_startup_snd, sizeof(_startup_snd), "%s/startup.mp3", hal_path_images_dir());
-    hal_audio_play(_startup_snd);
+    snprintf(_startup_snd, sizeof(_startup_snd), "%s/startup.mp3", cp0_path_images_dir());
+    cp0_audio_play(_startup_snd);
 }
 
 void audio_system_init();
@@ -222,7 +221,7 @@ void ui_event_logo_over(lv_event_t * e) {
 static char _gif_path[256];
 void start_startup_gif()
 {
-    snprintf(_gif_path, sizeof(_gif_path), "%s/logo_output.gif", hal_path_images_dir());
+    snprintf(_gif_path, sizeof(_gif_path), "%s/logo_output.gif", cp0_path_images_dir());
     startup_gif = lv_gif_create(NULL);
     lv_gif_set_src(startup_gif, _gif_path);
     lv_obj_center(startup_gif);
@@ -232,10 +231,10 @@ void start_startup_gif()
 
 void ui_init(void)
 {
-    hal_paths_init(NULL);
+    cp0_paths_init(NULL);
     ui_images_init();
-    font_path = hal_path_font_regular();
-    mono_font_path = hal_path_font_mono();
+    font_path = cp0_path_font_regular();
+    mono_font_path = cp0_path_font_mono();
     font_manager_init();
 
     LV_EVENT_GET_COMP_CHILD = lv_event_register_id();
@@ -264,7 +263,7 @@ void ui_init(void)
     #else
     {
         char gif_check[256];
-        snprintf(gif_check, sizeof(gif_check), "%s/logo_output.gif", hal_path_images_dir());
+        snprintf(gif_check, sizeof(gif_check), "%s/logo_output.gif", cp0_path_images_dir());
         FILE *_gif_f = fopen(gif_check, "r");
         if (_gif_f) { fclose(_gif_f); start_startup_gif(); }
         else { home_screen_load(); }
@@ -278,20 +277,20 @@ void ui_init(void)
 char* cimg_path(const char *name)
 {
     static char path_buf[512];
-    snprintf(path_buf, sizeof(path_buf), "%s%s%s", hal_path_images_dir(), PATH_SEP, name);
+    snprintf(path_buf, sizeof(path_buf), "%s%s%s", cp0_path_images_dir(), PATH_SEP, name);
     return path_buf;
 }
 
 char* caudio_path(const char *name)
 {
     static char path_buf[512];
-    snprintf(path_buf, sizeof(path_buf), "%s%s%s", hal_path_audio_dir(), PATH_SEP, name);
+    snprintf(path_buf, sizeof(path_buf), "%s%s%s", cp0_path_audio_dir(), PATH_SEP, name);
     return path_buf;
 }
 
 char* cfont_path(const char *name)
 {
     static char path_buf[512];
-    snprintf(path_buf, sizeof(path_buf), "%s%s%s", hal_path_font_dir(), PATH_SEP, name);
+    snprintf(path_buf, sizeof(path_buf), "%s%s%s", cp0_path_font_dir(), PATH_SEP, name);
     return path_buf;
 }
