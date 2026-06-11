@@ -228,6 +228,7 @@ scons push
 
 ### 打包
 ```bash
+# brew install dpkg # mac 需要安装 dpkg 工具
 cd projects/APPLaunch/tools
 ./llm_pack.py
 ```
