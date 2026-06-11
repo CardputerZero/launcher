@@ -262,30 +262,6 @@ private:
         lv_obj_clear_flag(panel, LV_OBJ_FLAG_SCROLLABLE);
         ui_obj_["panel"] = panel;
 
-        // /*
-        //  * translucent green area that simulates the shadow below the humidity curve
-        //  */
-        // lv_obj_t *green_area = lv_obj_create(panel);
-        // lv_obj_set_size(green_area, 260, 48);
-        // lv_obj_set_pos(green_area, 26, 32);
-        // lv_obj_set_style_radius(green_area, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-        // lv_obj_set_style_bg_color(green_area, lv_color_hex(0x008C5A), LV_PART_MAIN | LV_STATE_DEFAULT);
-        // lv_obj_set_style_bg_opa(green_area, 55, LV_PART_MAIN | LV_STATE_DEFAULT);
-        // lv_obj_set_style_border_width(green_area, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-        // lv_obj_clear_flag(green_area, LV_OBJ_FLAG_SCROLLABLE);
-
-        // /*
-        //  * translucent blue area that simulates the shadow below the temperature curve
-        //  */
-        // lv_obj_t *blue_area = lv_obj_create(panel);
-        // lv_obj_set_size(blue_area, 260, 42);
-        // lv_obj_set_pos(blue_area, 26, 42);
-        // lv_obj_set_style_radius(blue_area, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-        // lv_obj_set_style_bg_color(blue_area, lv_color_hex(0x0077AA), LV_PART_MAIN | LV_STATE_DEFAULT);
-        // lv_obj_set_style_bg_opa(blue_area, 60, LV_PART_MAIN | LV_STATE_DEFAULT);
-        // lv_obj_set_style_border_width(blue_area, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-        // lv_obj_clear_flag(blue_area, LV_OBJ_FLAG_SCROLLABLE);
-
         /*
          * LVGL Chart
          */
@@ -301,8 +277,6 @@ private:
 
         lv_chart_set_type(chart, LV_CHART_TYPE_LINE);
 
-        lv_obj_add_flag(chart, LV_OBJ_FLAG_SEND_DRAW_TASK_EVENTS);
-        lv_obj_add_event_cb(chart, chart_draw_event_cb, LV_EVENT_DRAW_TASK_ADDED, NULL);
 
         /*
          * Use chart_points_num for chart point count
@@ -331,55 +305,6 @@ private:
         ui_obj_["chart"] = chart;
 
         create_axis_labels(panel);
-    }
-
-    static void chart_draw_event_cb(lv_event_t *e)
-    {
-        lv_event_code_t code = lv_event_get_code(e);
-
-        if (code == LV_EVENT_DRAW_TASK_ADDED)
-        {
-            lv_draw_task_t *task = lv_event_get_draw_task(e);
-            if (task == NULL)
-                return;
-
-            lv_draw_dsc_base_t *base_dsc =
-                (lv_draw_dsc_base_t *)lv_draw_task_get_draw_dsc(task);
-
-            if (base_dsc == NULL)
-                return;
-
-            /*
-             * Chart line series usually belong to LV_PART_ITEMS
-             */
-            if (base_dsc->part == LV_PART_ITEMS)
-            {
-
-                if (lv_draw_task_get_type(task) == LV_DRAW_TASK_TYPE_LINE)
-                {
-
-                    lv_draw_line_dsc_t *line_dsc =
-                        (lv_draw_line_dsc_t *)lv_draw_task_get_draw_dsc(task);
-
-                    // {
-                    //     lv_point_precise_t p1 = line_dsc->p1;
-                    //     lv_point_precise_t p2 = line_dsc->p2;
-                    // }
-
-                    // /*
-                    //  * LVGL default line style can be changed here
-                    //  */
-                    // // line_dsc->color = lv_color_hex(0xff0000);
-                    // line_dsc->width = 4;
-                    // line_dsc->opa = LV_OPA_80;
-
-                    // /*
-                    //  * To hide the default line completely:
-                    //  */
-                    // // line_dsc->opa = LV_OPA_TRANSP;
-                }
-            }
-        }
     }
 
     void create_axis_labels(lv_obj_t *panel)

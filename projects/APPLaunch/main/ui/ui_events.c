@@ -192,22 +192,6 @@ int audio_system_init(void)
         return -1;
     }
 
-    /*
-     * Find the ES8388 / ES8389 playback device.
-     *
-     * To use the default PulseAudio output device directly,
-     * remove the audio_find_es8388_device() step,
-     * and set engineConfig.pPlaybackDeviceID to NULL.
-     */
-    // result = audio_find_es8388_device(&g_audio_context, &g_audio_device_id);
-
-    // if (result != MA_SUCCESS) {
-    //     fprintf(stderr, "[AUDIO] audio_find_es8388_device failed: %d\n", result);
-    //     ma_context_uninit(&g_audio_context);
-    //     pthread_mutex_unlock(&g_audio_mutex);
-    //     return -1;
-    // }
-
     ma_engine_config engineConfig = ma_engine_config_init();
 
     /*
@@ -216,13 +200,8 @@ int audio_system_init(void)
     engineConfig.pContext = &g_audio_context;
 
     /*
-     * Specify the PulseAudio playback device.
-     *
-     * To use the default PulseAudio device, change this to:
-     *
-     *     engineConfig.pPlaybackDeviceID = NULL;
+     * Use the default PulseAudio playback device.
      */
-    // engineConfig.pPlaybackDeviceID = &g_audio_device_id;
     engineConfig.pPlaybackDeviceID = NULL;
 
     /*

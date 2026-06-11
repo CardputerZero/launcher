@@ -46,7 +46,6 @@ private:
      */
     void creat_UI()
     {
-        // std::cout << "UIStockPage: app_name = " << app_name << std::endl;
         play_gif = lv_gif_create(ui_root);
         lv_gif_set_src(play_gif, app_name.c_str());
         lv_obj_center(play_gif);
