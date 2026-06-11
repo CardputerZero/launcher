@@ -219,7 +219,6 @@ scons -c
 # Full clean (including configuration cache)
 scons distclean
 
-
 # After configuring the host IP and operation command in setup.ini,
 # use scons push to transfer files to the device and execute the specified command.
 scons push
@@ -238,6 +237,7 @@ Refer to the HelloWorld build instructions.
 ### Package
 
 ```bash
+# brew install dpkg # mac install dpkg tool.
 cd projects/APPLaunch/tools
 ./llm_pack.py
 ```
