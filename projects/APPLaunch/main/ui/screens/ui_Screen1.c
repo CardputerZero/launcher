@@ -265,7 +265,7 @@ void ui_Screen1_screen_init(void)
     lv_obj_set_x(ui_rightLabel, 99);
     lv_obj_set_y(ui_rightLabel, LABEL_Y_SIDE);
     lv_obj_set_align(ui_rightLabel, LV_ALIGN_CENTER);
-    lv_label_set_text(ui_rightLabel, "CLAW");
+    lv_label_set_text(ui_rightLabel, "GAME");
     lv_obj_set_style_text_color(ui_rightLabel, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_font(ui_rightLabel, g_font_bold_14, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(ui_rightLabel, 255, LV_PART_MAIN | LV_STATE_DEFAULT);

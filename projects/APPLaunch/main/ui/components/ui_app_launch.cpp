@@ -18,7 +18,6 @@
 #include <chrono>
 #include <fstream>
 #include <sstream>
-#include "ui_launch_page.hpp"
 #include "../ui_loading.h"
 #include "page_app.h"
 
@@ -138,8 +137,9 @@ public:
                               "/usr/share/APPLaunch/bin/M5CardputerZero-AppStore", false, true, true);
         app_list.emplace_back("CLI",
                               img_path("cli_100.png"), "bash", true, false);
-        app_list.emplace_back("CLAW",
-                              img_path("claw_100.png"), "/home/pi/zeroclaw agent", true);
+        app_list.emplace_back("GAME",
+                              img_path("game_100.png"), page_v<UIGamePage>);
+
         app_list.emplace_back("SETTING",
                               img_path("setting_100.png"), page_v<UISetupPage>);
 
@@ -179,17 +179,6 @@ public:
         if (APP_ENABLED("Music"))
         app_list.emplace_back("MUSIC",
                               img_path("music_100.png"), page_v<UIMusicPage>);
-        if (APP_ENABLED("Audio"))
-        app_list.emplace_back("AUDIO",
-                              img_path("audio_player_100.png"),
-                              "tinyplay -D1 -d0 /home/pi/zhou.wav",
-                              true);
-        if (APP_ENABLED("Hack"))
-        app_list.emplace_back("HACK",
-                              img_path("hack_100.png"), page_v<UIHackPage>);
-        if (APP_ENABLED("Game"))
-        app_list.emplace_back("GAME",
-                              img_path("game_100.png"), page_v<UIGamePage>);
 
         if (APP_ENABLED("Math"))
         app_list.emplace_back("MATH",
@@ -200,20 +189,9 @@ public:
         if (APP_ENABLED("IP_Panel"))
         app_list.emplace_back("IP_PANEL",
                               img_path("ip_panel_100.png"), page_v<UIIpPanelPage>);
-        if (APP_ENABLED("Stocks"))
-        app_list.emplace_back("STOCKS",
-                              img_path("stocks_100.png"), page_v<UIStockPage>);
-        if (APP_ENABLED("Chat"))
-        app_list.emplace_back("CHAT",
-                              img_path("chat_100.png"), page_v<UIchatPage>);
-        if (APP_ENABLED("e-Mail"))
-        app_list.emplace_back("e-Mail",
-                              img_path("e_mail_100.png"), page_v<UIEmailPage>);
         if (APP_ENABLED("File"))
         app_list.emplace_back("FILE",
                               img_path("file_100.png"), page_v<UIFilePage>);
-        if (APP_ENABLED("AICli"))
-        app_list.emplace_back("AICli", img_path("aicli_100.png"), page_v<UIAICliPage>);
         if (APP_ENABLED("SSH"))
         app_list.emplace_back("SSH",
                               img_path("ssh_100.png"), page_v<UISSHPage>);
@@ -226,25 +204,10 @@ public:
         if (APP_ENABLED("Camera"))
         app_list.emplace_back("CAMERA",
                               img_path("camera_100.png"), page_v<UICameraPage>);
-        if (APP_ENABLED("UnitEnv"))
-        app_list.emplace_back("UnitEnv",
-                              img_path("unitenv_100.png"), page_v<UIUnitEnvPage>);
-        if (APP_ENABLED("Midi"))
-        app_list.emplace_back("Midi",
-                              img_path("midi_100.png"), page_v<UIMidiPage>);
-        if (APP_ENABLED("Gpio"))
-        app_list.emplace_back("Gpio",
-                              img_path("gpio_100.png"), page_v<UIGpioPage>);
         if (APP_ENABLED("LoRa"))
         app_list.emplace_back("LORA", img_path("lora_100.png"), page_v<UILoraPage>);
-        if (APP_ENABLED("Gallery"))
-        app_list.emplace_back("GALLERY", img_path("gallery_100.png"), page_v<UIGalleryPage>);
-        if (APP_ENABLED("HikePod"))
-        app_list.emplace_back("HIKEPOD", img_path("hikepod_100.png"), page_v<UIHikePodPage>);
         if (APP_ENABLED("Tank"))
         app_list.emplace_back("TANK", img_path("tank_100.png"), page_v<UITankBattlePage>);
-        app_list.emplace_back("Love",
-                                    img_path("game_100.png"), page_v<UILovyanPage>);
 #endif
         #undef APP_ENABLED
 
