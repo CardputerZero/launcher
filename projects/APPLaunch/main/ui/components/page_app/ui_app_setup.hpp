@@ -142,21 +142,21 @@ private:
             MenuItem m;
             m.label = "Launcher";
             static const char *app_keys[] = {
-                "Python", "Store", "CLI", "CLAW", "Setting",
-                "Music", "Audio", "Game", "Math",
-                "IP_Panel", "Chat", "e-Mail", "File",
+                "Python", "Store", "CLI", "Game", "Setting",
+                "Music", "Math",
+                "IP_Panel", "File",
                 "SSH", "Mesh", "Rec", "Camera",
-                "UnitEnv", "LoRa", "Tank"
+                "LoRa", "Tank"
             };
             static const char *app_labels[] = {
-                "Python", "Store", "CLI", "CLAW", "Setting",
-                "Music", "Audio", "Game", "Math",
-                "IP Panel", "Chat", "e-Mail", "File",
+                "Python", "Store", "CLI", "Game", "Setting",
+                "Music", "Math",
+                "IP Panel", "File",
                 "SSH", "Mesh", "Rec", "Camera",
-                "UnitEnv", "LoRa", "Tank"
+                "LoRa", "Tank"
             };
             // Always-on apps (cannot be disabled)
-            static const char *always_on[] = {"Store", "CLI", "Setting"};
+            static const char *always_on[] = {"Store", "CLI", "Game", "Setting"};
 
             for (int i = 0; i < (int)(sizeof(app_keys) / sizeof(app_keys[0])); ++i) {
                 char cfg_key[64];
@@ -628,14 +628,14 @@ private:
     void save_app_toggle(int idx)
     {
         static const char *app_keys[] = {
-            "Python", "Store", "CLI", "CLAW", "Setting",
-            "Music", "Audio", "Game", "Math",
-            "IP_Panel", "Chat", "e-Mail", "File",
+            "Python", "Store", "CLI", "Game", "Setting",
+            "Music", "Math",
+            "IP_Panel", "File",
             "SSH", "Mesh", "Rec", "Camera",
-            "UnitEnv", "LoRa", "Tank"
+            "LoRa", "Tank"
         };
         // Enforce always-on apps
-        static const char *always_on[] = {"Store", "CLI", "Setting"};
+        static const char *always_on[] = {"Store", "CLI", "Game", "Setting"};
         for (auto *ao : always_on) {
             if (strcmp(app_keys[idx], ao) == 0) {
                 // Force back to enabled
