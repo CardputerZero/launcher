@@ -21,11 +21,11 @@
  *  AI Voice CLI Demo
  *  Screen: 320 x 170
  *
- *  操作：
- *    ENTER / SPACE / 点击 TALK : 开始语音指令流程
- *    ESC                     : 结果页返回 AI 对话界面，否则返回主页
+ *  Controls:
+ *    ENTER / SPACE / click TALK : start the voice-command flow
+ *    ESC                     : return from the result page to the AI dialog; otherwise return to the home screen
  *
- *  流程：
+ *  Flow:
  *    TALK -> din -> waveform + voice command
  *         -> ...processing
  *         -> 5s later
@@ -84,7 +84,7 @@ private:
 private:
     /*
      * ============================================================
-     * 基础工具
+     * Basic utilities
      * ============================================================
      */
     static void delete_timer(lv_timer_t *&timer)
@@ -165,7 +165,7 @@ private:
 private:
     /*
      * ============================================================
-     * UI 构建
+     * UI construction
      * ============================================================
      */
     void creat_UI()
@@ -192,7 +192,7 @@ private:
         create_toast(bg);
 
         /*
-         * 最后创建，保证全屏 hello world 在最上层
+         * Created last so the full-screen hello world stays on top
          */
         create_fullscreen_result(bg);
     }
@@ -237,7 +237,7 @@ private:
         ui_obj_["terminal_card"] = card;
 
         /*
-         * 顶部三个小圆点，模拟 terminal window
+         * Top three dots that simulate a terminal window
          */
         create_dot(card, 10, 9, 0xFF5F57);
         create_dot(card, 23, 9, 0xFFBD2E);
@@ -261,7 +261,7 @@ private:
         ui_obj_["lbl_processing"] = processing;
 
         /*
-         * 输出结果框
+         * Output result box
          */
         lv_obj_t *result_box = lv_obj_create(card);
         lv_obj_set_size(result_box, 284, 22);
@@ -309,7 +309,7 @@ private:
                      &lv_font_montserrat_10, 0x74819B);
 
         /*
-         * 波形图
+         * Waveform
          */
         lv_obj_t *chart = lv_chart_create(card);
         lv_obj_set_size(chart, 210, 18);
@@ -336,7 +336,7 @@ private:
         ui_obj_["wave_chart"] = chart;
 
         /*
-         * TALK 按钮
+         * TALK button
          */
         lv_obj_t *btn = lv_btn_create(card);
         lv_obj_set_size(btn, 62, 27);
@@ -417,7 +417,7 @@ private:
 
     /*
      * ============================================================
-     * 状态与流程
+     * State and flow
      * ============================================================
      */
 
@@ -504,12 +504,12 @@ private:
         set_wave_color(0x37D6FF);
 
         /*
-         * 音频动画持续 3 秒
+         * Audio animation lasts 3 seconds
          */
         wave_timer_ = lv_timer_create(wave_timer_cb, 120, this);
 
         /*
-         * 3 秒后显示识别到的指令并进入 processing
+         * After 3 seconds, show the recognized command and enter processing
          */
         stage_timer_ = lv_timer_create(stage_timer_cb, 3000, this);
     }
@@ -525,7 +525,7 @@ private:
         set_status("AI", 0x2D220A, 0xFFBD2E);
 
         /*
-         * 显示识别到的指令
+         * Show the recognized command
          */
         lv_label_set_text(ui_obj_["lbl_prompt"], "ai>");
         lv_label_set_text(ui_obj_["lbl_voice"], voice_cmd_);
@@ -550,12 +550,12 @@ private:
         reset_wave_low();
 
         /*
-         * processing 动画
+         * processing animation
          */
         processing_timer_ = lv_timer_create(processing_timer_cb, 420, this);
 
         /*
-         * processing 持续 4 秒
+         * processing lasts 4 seconds
          */
         stage_timer_ = lv_timer_create(stage_timer_cb, 4000, this);
     }
@@ -589,7 +589,7 @@ private:
         set_success_wave();
 
         /*
-         * 全屏显示 hello world
+         * Show hello world full-screen
          */
         if (ui_obj_.count("fullscreen_result")) {
             lv_obj_clear_flag(ui_obj_["fullscreen_result"], LV_OBJ_FLAG_HIDDEN);
@@ -665,11 +665,11 @@ private:
     void play_din_tone()
     {
         /*
-         * 如果你的硬件有 buzzer / speaker，可以在这里接入真实音频：
+         * If the hardware has a buzzer / speaker, real audio can be connected here:
          *
          *   buzzer_play(1200, 80);
          *
-         * 这里先用屏幕 toast 表现 din 提示音。
+         * For now, use a screen toast to represent the ding prompt sound.
          */
         show_toast("din");
     }
@@ -710,7 +710,7 @@ private:
         lv_obj_t *chart = ui_obj_["wave_chart"];
 
         /*
-         * 流动波形：丢掉第一个点，追加一个新点。
+         * Flowing waveform: drop the first point and append a new point.
          */
         if (!wave_points_.empty()) {
             wave_points_.erase(wave_points_.begin());

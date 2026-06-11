@@ -37,11 +37,11 @@
 #include "hal/hal_audio.h"
 
 // ============================================================
-//  系统设置界面  UISetupPage  (Carousel Design)
-//  屏幕: 320x170 (顶栏20px, body 320x150)
+//  System settings screen  UISetupPage  (Carousel Design)
+//  Screen: 320x170 (top bar20px, body 320x150)
 //
-//  菜单项 (设计稿): Launcher, Boot, Screen, WiFi, Speaker, Camera
-//  实际对接 HAL: WiFi scan/connect, brightness, volume, power, reboot, about
+//  Menu items (design mockup): Launcher, Boot, Screen, WiFi, Speaker, Camera
+//  Actual HAL integration: WiFi scan/connect, brightness, volume, power, reboot, about
 // ============================================================
 
 class UISetupPage : public app_base

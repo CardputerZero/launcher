@@ -18,17 +18,17 @@
  * ============================================================
  *  UIMidiPage
  *
- *  全屏midi音乐
+ *  Full-screen MIDI music
  *  Screen: 320 x 170
  *
- *  显示内容：
+ *  Displayed content:
  *    - Temperature
  *    - Humidity
- *    - 日期时间
- *    - 温湿度趋势曲线图
+ *    - date and time
+ *    - temperature/humidity trend chart
  *
- *  按键：
- *    ESC 返回主页
+ *  Keys:
+ *    ESC return to the home screen
  * ============================================================
  */
 class UIMidiPage : public app_
@@ -56,7 +56,7 @@ private:
     
     /*
      * ============================================================
-     * UI 构建
+     * UI construction
      * ============================================================
      */
     void creat_UI()
@@ -70,7 +70,7 @@ private:
 private:
     /*
      * ============================================================
-     * 按键事件
+     * Key events
      * ============================================================
      */
     void event_handler_init()

@@ -92,10 +92,10 @@ static uint32_t EVT_TERM_KEY;
 lv_font_t *g_font_cn_20 = NULL;
 lv_font_t *g_font_cn_14 = NULL;
 lv_font_t *g_font_cn_12 = NULL;
-lv_font_t *g_font_mono_12 = NULL;   /* 终端专用等宽字体 */
-lv_font_t *g_font_bold_20 = NULL;   /* 设置页选中项粗体 */
-lv_font_t *g_font_bold_14 = NULL;   /* App名称加粗字体 - 中间 */
-lv_font_t *g_font_bold_12 = NULL;   /* App名称加粗字体 - 侧面 */
+lv_font_t *g_font_mono_12 = NULL;   /* terminal-only monospaced font */
+lv_font_t *g_font_bold_20 = NULL;   /* bold font for selected settings item */
+lv_font_t *g_font_bold_14 = NULL;   /* bold app-name font - center */
+lv_font_t *g_font_bold_12 = NULL;   /* bold app-name font - side */
 
 // // EVENTS
 
@@ -203,14 +203,14 @@ void ui_event_logo_over(lv_event_t * e) {
 
 
         /*
-        * 这里会在程序运行时执行一次。
-        * 所以在这里初始化音频最合适。
+        * This runs once while the program is running.
+        * This is therefore the best place to initialize audio.
         *
         * audio_system_init():
-        *   打开 ALSA 设备，并保持打开。
+        *   Open the ALSA device and keep it open.
         *
         * audio_load_sounds():
-        *   预加载 switch.wav / enter.wav。
+        *   Preload switch.wav / enter.wav.
         */
         audio_system_init();
         audio_load_sounds();
@@ -245,17 +245,17 @@ void ui_init(void)
                                                false, LV_FONT_DEFAULT);
     lv_disp_set_theme(dispp, theme);
 
-    // 初始化各个界面
+    // Initialize each screen
     ui_Screen1_screen_init();
 
-    // 界面信息绑定
+    // Bind screen metadata
     ui_info_bind();
     launch_circle_init();
 
-    // 初始化输入组
+    // Initialize the input group
     input_group_init();
 
-    // 显示开机动画（需要 share/images/logo_output.gif）
+    // Show the boot animation (requires share/images/logo_output.gif)
 #ifndef APPLAUNCH_STARTUP_ANIMATION
     home_screen_load();
 #else

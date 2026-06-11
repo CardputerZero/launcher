@@ -56,7 +56,7 @@ int get_st7789v_fbdev(char *dev_path, size_t buf_size)
     char line[256];
     int  fb_num = -1;
 
-    /* 逐行读取，查找包含 fb_st7789v 的行，格式如：0 fb_st7789v */
+    /* Read line by line and find the line containing fb_st7789v, e.g. 0 fb_st7789v */
     while (fgets(line, sizeof(line), fp) != NULL) {
         if (strstr(line, "fb_st7789v") != NULL) {
             if (sscanf(line, "%d", &fb_num) == 1) {
@@ -117,11 +117,11 @@ static void keypad_read_cb(lv_indev_t *indev, lv_indev_data_t *data)
 {
     (void)indev;
 
-    /* 每次 LVGL 调用，输出队列里一个事件 */
+    /* Output one queued event for each LVGL call */
     // kp_evt_t e;
     data->state = LV_INDEV_STATE_RELEASED;
     data->continue_reading = false;
-    // 出队列
+    // Dequeue
     {
         pthread_mutex_lock(&keyboard_mutex);
         if (!STAILQ_EMPTY(&keyboard_queue))
@@ -180,10 +180,10 @@ static void lv_linux_indev_init(void)
  
     {
         pthread_t keyboard_read_thread_id;
-        pthread_create(&keyboard_read_thread_id,       // 线程ID（输出）
-                                    NULL,       // 线程属性（NULL=默认）
-                                    keyboard_read_thread,// 线程函数
-                                    NULL);      // 传给线程函数的参数
+        pthread_create(&keyboard_read_thread_id,       // thread ID (output)
+                                    NULL,       // thread attributes (NULL=default)
+                                    keyboard_read_thread,// thread function
+                                    NULL);      // argument passed to the thread function
         pthread_detach(keyboard_read_thread_id);
     }
  
@@ -230,7 +230,7 @@ static void lv_linux_disp_init(void)
     // this, fbtft may batch/delay updates causing tearing.
     lv_linux_fbdev_set_force_refresh(disp, true);
 
-    // 打印获取到的分辨率
+    // Print the detected resolution
     lv_coord_t w = lv_display_get_horizontal_resolution(disp);
     lv_coord_t h = lv_display_get_vertical_resolution(disp);
     printf("Framebuffer resolution: %dx%d\n", w, h);

@@ -150,7 +150,7 @@ if 'mac_cross_cp0_config_defaults.mk' in os.environ.get("CONFIG_DEFAULT_FILE", '
     DEFINITIONS += ['-Wno-format-truncation']
 # macOS
 if 'darwin_config_defaults.mk' in os.environ.get("CONFIG_DEFAULT_FILE", ''):
-    # macOS 使用 SDL 后端
+    # macOS Use the SDL backend
     SRCS += Glob('hal/sdl/*.c*')
 
     # nlohmann_json
@@ -160,7 +160,7 @@ if 'darwin_config_defaults.mk' in os.environ.get("CONFIG_DEFAULT_FILE", ''):
     DEFINITIONS += pkg_config_cflags("sdl2")
     REQUIREMENTS += pkg_config_ldflags("sdl2")
 
-    # LVGL SDL driver 也需要 SDL2 头文件/定义
+    # LVGL SDL driver also needs SDL2 headers/defines
     lvgl_component['DEFINITIONS'] += pkg_config_cflags("sdl2")
     lvgl_component['DEFINITIONS'] += ['-D_REENTRANT']
 

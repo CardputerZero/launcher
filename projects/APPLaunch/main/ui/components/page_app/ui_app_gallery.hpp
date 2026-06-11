@@ -10,16 +10,16 @@
 #include <vector>
 
 // ============================================================
-//  相册APP  UIGalleryPage
-//  屏幕分辨率: 320 x 170 (顶栏20px, ui_APP_Container 320x150)
+//  Gallery app  UIGalleryPage
+//  Screen resolution: 320 x 170 (top bar20px, ui_APP_Container 320x150)
 //
-//  默认读取 ./dist/gallery/ 目录下的 .png 文件
-//  按键映射 (原始evdev键码):
-//    44 (KEY_Z)     — 上一张
-//    46 (KEY_C)     — 下一张
-//    57 (KEY_SPACE) — 暂停/继续自动放映
-//    KEY_ESC        — 返回主页
-//  默认3秒循环自动展示，带淡入淡出切换特效
+//  Reads .png files from ./dist/gallery/ by default
+//  Key mapping (raw evdev keycodes):
+//    44 (KEY_Z)     — previous image
+//    46 (KEY_C)     — next image
+//    57 (KEY_SPACE) — pause/resume slideshow
+//    KEY_ESC        — return to the home screen
+//  Auto-plays every 3 seconds by default with fade transitions
 // ============================================================
 class UIGalleryPage : public app_base
 {
@@ -31,7 +31,7 @@ class UIGalleryPage : public app_base
     static constexpr int DISP_W = 320;
     static constexpr int DISP_H = 150;
 
-    // 图片目录（相对程序运行目录）
+    // Image directory (relative to the program working directory)
     static constexpr const char *IMG_DIR      = "./dist/gallery";
     static constexpr const char *LVGL_IMG_DIR = "A:/dist/gallery";
     static constexpr const char *TMP_DIR      = "./dist/gallery/.tmp";
@@ -76,7 +76,7 @@ private:
     std::unordered_map<std::string, std::string> jpg_cache_;
     int tmp_counter_ = 0;
 
-    // 扫描目录下的 PNG 图片
+    // Scan PNG images in the directory
     void scan_images()
     {
         DIR *dp = opendir(IMG_DIR);
@@ -104,7 +104,7 @@ private:
 
     void create_UI()
     {
-        // 背景
+        // Background
         lv_obj_t *bg = lv_obj_create(ui_APP_Container);
         lv_obj_set_size(bg, DISP_W, DISP_H);
         lv_obj_set_pos(bg, 0, 0);
@@ -115,14 +115,14 @@ private:
         lv_obj_set_style_pad_all(bg, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_clear_flag(bg, LV_OBJ_FLAG_SCROLLABLE);
 
-        // 图片显示对象
+        // Image display object
         img_obj_ = lv_img_create(bg);
         lv_obj_set_size(img_obj_, DISP_W, DISP_H);
         lv_obj_set_pos(img_obj_, 0, 0);
         lv_obj_set_style_bg_opa(img_obj_, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_border_width(img_obj_, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-        // 底部信息栏
+        // bottom info bar
         info_label_ = lv_label_create(bg);
         lv_obj_set_pos(info_label_, 4, DISP_H - 18);
         lv_obj_set_width(info_label_, DISP_W - 8);
@@ -132,7 +132,7 @@ private:
         lv_obj_set_style_bg_color(info_label_, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_opa(info_label_, 160, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-        // 暂停指示器
+        // pause indicator
         pause_icon_ = lv_label_create(bg);
         lv_label_set_text(pause_icon_, "||");
         lv_obj_set_pos(pause_icon_, DISP_W - 28, 4);
@@ -157,19 +157,19 @@ private:
 
         if (!is_jpg) return path;
 
-        // 检查缓存
+        // Check cache
         auto it = jpg_cache_.find(path);
         if (it != jpg_cache_.end() && access(it->second.c_str(), F_OK) == 0) {
             return it->second;
         }
 
-        // 生成临时文件路径
+        // Generate temporary file path
         char tmp_name[64];
         snprintf(tmp_name, sizeof(tmp_name), "/gallery_tmp_%d.png", tmp_counter_++);
         std::string tmp_path = std::string(LVGL_TMP_DIR) + tmp_name;
         std::string tmp_sys = std::string(TMP_DIR) + tmp_name;
 
-        // 构建源文件的系统路径（去掉 A: 前缀，保留相对路径）
+        // Build the source file system path (remove the A: prefix and keep a relative path)
         std::string src_sys = path;
         if (src_sys.size() > 2 && src_sys.substr(0, 2) == "A:") {
             src_sys = "." + src_sys.substr(2);
@@ -198,7 +198,7 @@ private:
             return;
         }
 
-        // 获取图片原始尺寸，计算等比缩放
+        // Get original image dimensions and calculate proportional scaling
         lv_image_header_t header;
         lv_result_t res = lv_image_decoder_get_info(display_path.c_str(), &header);
         uint32_t zoom = 256;
@@ -206,7 +206,7 @@ private:
             float sx = (float)DISP_W / (float)header.w;
             float sy = (float)DISP_H / (float)header.h;
             float s = (sx < sy) ? sx : sy;
-            s *= 0.96f; // 留一点边距
+            s *= 0.96f; // leave a small margin
             zoom = (uint32_t)(s * 256.0f);
             if (zoom < 16) zoom = 16;
         }
@@ -246,7 +246,7 @@ private:
             lv_img_set_zoom(img_obj_, pending_zoom_);
             pending_path_.clear();
 
-            // 淡入
+            // Fade in
             lv_anim_t a;
             lv_anim_init(&a);
             lv_anim_set_var(&a, img_obj_);

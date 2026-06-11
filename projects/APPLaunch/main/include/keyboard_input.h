@@ -7,7 +7,7 @@
 extern "C" {
 #endif
 
-// 修饰键位图
+// modifier bitmask
 #define KBD_MOD_SHIFT  (1u << 0)
 #define KBD_MOD_CTRL   (1u << 1)
 #define KBD_MOD_ALT    (1u << 2)
@@ -15,20 +15,20 @@ extern "C" {
 #define KBD_MOD_CAPS   (1u << 4)
 #define KBD_MOD_NUM    (1u << 5)
 
-// 按键状态
+// key state
 #define KBD_KEY_RELEASED  0
 #define KBD_KEY_PRESSED   1
 #define KBD_KEY_REPEATED  2
 
 struct key_item {
-    uint32_t key_code;      // Linux evdev 键码
-    uint32_t keysym;        // 主 XKB keysym (xkb_keysym_t)
-    uint32_t codepoint;     // 对应的 Unicode 码点，无则为 0
-    uint32_t mods;          // 修饰键位图 (KBD_MOD_*)
-    int      key_state;     // 0=释放, 1=按下, 2=重复
-    char     sym_name[65];  // XKB keysym 名字
-    char     utf8[16];      // UTF-8 字符（兼容 compose 产出的多字节）
-    char     flage;         // 判断是否需要 free
+    uint32_t key_code;      // Linux evdev key code
+    uint32_t keysym;        // primary XKB keysym (xkb_keysym_t)
+    uint32_t codepoint;     // corresponding Unicode code point, or 0 if none
+    uint32_t mods;          // modifier bitmask (KBD_MOD_*)
+    int      key_state;     // 0=released, 1=pressed, 2=repeat
+    char     sym_name[65];  // XKB keysym name
+    char     utf8[16];      // UTF-8 character (supports multi-byte compose output)
+    char     flage;         // whether free is required
     STAILQ_ENTRY(key_item) entries;
 };
 

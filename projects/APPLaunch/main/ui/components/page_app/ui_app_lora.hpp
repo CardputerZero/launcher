@@ -90,7 +90,7 @@ struct spi_ioc_transfer {
 
 namespace Lora_APP
 {
-// LoRa APP 入口函数
+// LoRa app entry function
 void ui_app_lora_create(lv_obj_t* parent, lv_obj_t* root);
 void ui_app_lora_set_go_back(std::function<void(void)> go_back);
 void ui_app_lora_destroy(void);
@@ -115,7 +115,7 @@ class PiHal : public RadioLibHal {
 #endif
 
 // ============================================================
-//  硬件配置与状态
+//  Hardware configuration and state
 // ============================================================
 static int g_spi_fd = -1;
 static bool g_lora_tx_mode = false;
@@ -179,7 +179,7 @@ static int g_hat_5vout_last_sysfs_ret = -999;
 static int g_hat_5vout_last_value = -1;
 static bool g_hat_5vout_last_cdev_ok = false;
 
-// 返回回调
+// Back callback
 static std::function<void(void)> g_go_back_home_fn;
 static void (*g_go_back_home_c_fn)(void) = NULL;
 
@@ -188,7 +188,7 @@ void ui_app_lora_set_go_back(std::function<void(void)> go_back)
     g_go_back_home_fn = go_back;
 }
 
-// 应用状态
+// App state
 enum LoraView {
     LORA_VIEW_MESSAGES = 0,
     LORA_VIEW_INFO,
@@ -198,7 +198,7 @@ static LoraView g_lora_view = LORA_VIEW_MESSAGES;
 static bool g_lora_hw_ready = false;
 static bool g_app_active = false;
 
-// UI 对象
+// UI objects
 static lv_obj_t *g_ui_parent = NULL;
 static lv_obj_t *g_ui_root = NULL;
 static lv_obj_t *g_title_label = NULL;
@@ -214,7 +214,7 @@ static lv_obj_t *g_rx_bubble_lbl = NULL;
 static lv_obj_t *g_tx_bubble_bg = NULL;
 static lv_obj_t *g_tx_bubble_lbl = NULL;
 
-// 前向声明
+// Forward declarations
 static uint64_t get_monotonic_ms(void);
 static bool lora_spi_transfer(const uint8_t *tx, uint8_t *rx, size_t len);
 static int gpio_set_value(int gpio, int value);
@@ -261,7 +261,7 @@ static bool handle_app_key(uint32_t key);
 
 
 // ============================================================
-//  GPIO / SPI / I2C 底层（移植自 UserDemo）
+//  GPIO / SPI / I2C low level (ported from UserDemo)
 // ============================================================
 
 static int write_text_file(const char *path, const char *value)
@@ -911,7 +911,7 @@ static void resolve_lora_spi_device(void)
 
 
 // ============================================================
-//  RadioLib HAL / Module / 收发逻辑
+//  RadioLib HAL / Module / TX/RX logic
 // ============================================================
 
 class LinuxRadioLibHal : public PiHal {
@@ -1254,7 +1254,7 @@ static void lora_poll_irq_and_update_ui(void)
 
 
 // ============================================================
-//  硬件初始化
+//  Hardware initialization
 // ============================================================
 
 static void lora_init_hardware(void)
@@ -1380,7 +1380,7 @@ static void lora_init_hardware(void)
 
 
 // ============================================================
-//  UI 渲染（适配 APPLaunch 320x150 容器）
+//  UI rendering (adapted for the APPLaunch 320x150 container)
 // ============================================================
 
 static void lora_ui_clear(void)
@@ -1497,7 +1497,7 @@ static void lora_render_messages_view(void)
         lv_label_set_text(g_title_label, "Messages");
     }
 
-    // 接收消息气泡（左侧，蓝色）
+    // Received message bubble (left, blue)
     if (g_rx_bubble_bg && g_rx_bubble_lbl) {
         lv_obj_clear_flag(g_rx_bubble_bg, LV_OBJ_FLAG_HIDDEN);
         lv_obj_clear_flag(g_rx_bubble_lbl, LV_OBJ_FLAG_HIDDEN);
@@ -1513,7 +1513,7 @@ static void lora_render_messages_view(void)
         }
     }
 
-    // 发送消息气泡（右侧，绿色）
+    // Sent message bubble (right, green)
     if (g_tx_bubble_bg && g_tx_bubble_lbl) {
         if (g_lora_has_sent_message) {
             lv_obj_clear_flag(g_tx_bubble_bg, LV_OBJ_FLAG_HIDDEN);
@@ -1656,7 +1656,7 @@ static void lora_open_send_view(uint32_t first_key)
 
 
 // ============================================================
-//  键盘输入处理
+//  Keyboard input handling
 // ============================================================
 
 static bool is_lora_text_key(uint32_t key)
@@ -1762,18 +1762,18 @@ static void lora_key_event_cb(lv_event_t *e)
 {
     if (lv_event_get_code(e) != (lv_event_code_t)LV_EVENT_KEYBOARD) return;
     struct key_item *elm = (struct key_item *)lv_event_get_param(e);
-    if (!elm || elm->key_state == 0) return; // 忽略释放事件
+    if (!elm || elm->key_state == 0) return; // Ignore release events
 
     uint32_t key = elm->key_code;
     uint32_t cp = elm->codepoint;
 
-    // 对于字母/数字/符号，优先使用 xkbcommon 转换后的 Unicode 码点
+    // For letters/digits/symbols, prefer the Unicode code point converted by xkbcommon
     if (cp >= 'a' && cp <= 'z') key = cp;
     else if (cp >= 'A' && cp <= 'Z') key = cp;
     else if (cp >= '0' && cp <= '9') key = cp;
     else if (cp == ' ' || cp == '-' || cp == '_' || cp == '.' || cp == ',' || cp == '!' || cp == '?' || cp == '#') key = cp;
 
-    // 将方向键/功能键映射为 LV_KEY_*
+    // Map arrow/function keys to LV_KEY_*
     if (key == KEY_UP) key = LV_KEY_UP;
     else if (key == KEY_DOWN) key = LV_KEY_DOWN;
     else if (key == KEY_LEFT) key = LV_KEY_LEFT;
@@ -1788,7 +1788,7 @@ static void lora_key_event_cb(lv_event_t *e)
 }
 
 // ============================================================
-//  LVGL 定时器
+//  LVGL timer
 // ============================================================
 
 static void lora_timer_cb(lv_timer_t *timer)
@@ -1798,14 +1798,14 @@ static void lora_timer_cb(lv_timer_t *timer)
 }
 
 // ============================================================
-//  对外接口
+//  Public API
 // ============================================================
 
 void ui_app_lora_create(lv_obj_t* parent, lv_obj_t* root)
 {
     if (!parent || !root) return;
 
-    // 清理旧状态（如果之前创建过）
+    // Clean up old state (if previously created)
     if (g_lora_timer) {
         lv_timer_delete(g_lora_timer);
         g_lora_timer = NULL;
@@ -1817,17 +1817,17 @@ void ui_app_lora_create(lv_obj_t* parent, lv_obj_t* root)
     g_lora_view = LORA_VIEW_MESSAGES;
     g_lora_sent_popup_until_ms = 0;
 
-    // 创建 UI 标签
-    // Title: 居中顶部
+    // Create UI labels
+    // Title: centered at the top
     g_title_label = lora_make_label(parent, "LoRa-1262", 0, 0, 320, 18,
                                      &lv_font_montserrat_14, lv_color_hex(0x8D44FF), LV_TEXT_ALIGN_CENTER);
 
-    // Content: 主体区域
+    // Content: main content area
     g_content_label = lora_make_label(parent, "", 8, 22, 304, 90,
                                        &lv_font_montserrat_12, lv_color_hex(0xFFFFFF), LV_TEXT_ALIGN_LEFT);
     lv_label_set_long_mode(g_content_label, LV_LABEL_LONG_WRAP);
 
-    // Info lines (用于 info view)
+    // Info lines (for info view)
     g_info_pins = lora_make_label(parent, "", 8, 22, 304, 18,
                                    &lv_font_montserrat_12, lv_color_hex(0xB8FF9C), LV_TEXT_ALIGN_LEFT);
     g_info_device = lora_make_label(parent, "", 8, 42, 304, 18,
@@ -1835,15 +1835,15 @@ void ui_app_lora_create(lv_obj_t* parent, lv_obj_t* root)
     g_info_mode = lora_make_label(parent, "", 8, 62, 304, 18,
                                    &lv_font_montserrat_12, lv_color_hex(0xB8FF9C), LV_TEXT_ALIGN_LEFT);
 
-    // Status: 底部状态
+    // Status: bottom status
     g_info_status = lora_make_label(parent, "", 8, 114, 304, 16,
                                      &lv_font_montserrat_12, lv_color_hex(0xFFD24A), LV_TEXT_ALIGN_LEFT);
 
-    // Hint: 最底部
+    // Hint: bottommost
     g_info_hint = lora_make_label(parent, "", 8, 132, 304, 14,
                                    &lv_font_montserrat_10, lv_color_hex(0x8AA8FF), LV_TEXT_ALIGN_LEFT);
 
-    // 聊天气泡（Messages 视图）
+    // Chat bubbles (Messages view)
     g_rx_bubble_bg = lora_make_bubble(parent, 4, 20, 250, 44, lv_color_hex(0x3A7DFF));
     g_rx_bubble_lbl = lora_make_bubble_label(g_rx_bubble_bg, 234);
     lv_obj_add_flag(g_rx_bubble_bg, LV_OBJ_FLAG_HIDDEN);
@@ -1852,18 +1852,18 @@ void ui_app_lora_create(lv_obj_t* parent, lv_obj_t* root)
     g_tx_bubble_lbl = lora_make_bubble_label(g_tx_bubble_bg, 234);
     lv_obj_add_flag(g_tx_bubble_bg, LV_OBJ_FLAG_HIDDEN);
 
-    // 绑定键盘事件到 root
+    // Bind keyboard events to root
     lv_obj_add_event_cb(root, lora_key_event_cb, (lv_event_code_t)LV_EVENT_KEYBOARD, NULL);
 
-    // 初始化硬件（如果还没初始化）
+    // Initialize hardware (if not initialized yet)
     if (!g_lora_initialized && !g_lora_hw_ready) {
         lora_init_hardware();
     }
 
-    // 渲染页面
+    // Render the page
     lora_render_page();
 
-    // 启动定时器（100ms 周期轮询）
+    // Start timer (100ms polling interval)
     g_lora_timer = lv_timer_create(lora_timer_cb, 100, NULL);
 }
 

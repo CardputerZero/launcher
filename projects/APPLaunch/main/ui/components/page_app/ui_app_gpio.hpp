@@ -9,34 +9,34 @@
 #include <cstdio>
 
 // ============================================================
-//  GPIO 控制界面 UIGpioPage
-//  屏幕分辨率: 320 x 170
+//  GPIO control screen UIGpioPage
+//  Screen resolution: 320 x 170
 //
-//  注意:
-//    本页面不绘制图片中的顶部状态栏。
-//    页面内容绘制在 ui_APP_Container 内，尺寸按 320 x 150 处理。
+//  Note:
+//    This page does not draw the top status bar shown in the image.
+//    Page content is drawn inside ui_APP_Container and treated as 320 x 150.
 //
-//  操作:
-//    FUNC 区:
-//      UP / DOWN     : 选择功能
-//      RIGHT         : 切换到 PIN 区
-//      ENTER         : 应用当前功能
-//      ESC           : 返回主页
+//  Controls:
+//    FUNC area:
+//      UP / DOWN     : select function
+//      RIGHT         : switch to PIN area
+//      ENTER         : apply current function
+//      ESC           : return to the home screen
 //
-//    PIN 区:
-//      UP/DOWN/LEFT/RIGHT : 选择引脚
-//      ENTER              : 回到 FUNC 区
-//      DOWN 到底部        : 切换到 PWM 参数区
-//      ESC                : 返回主页
+//    PIN area:
+//      UP/DOWN/LEFT/RIGHT : select pin
+//      ENTER              : return to FUNC area
+//      DOWN at the bottom        : switch to PWM parameter area
+//      ESC                : return to the home screen
 //
-//    PWM 参数区:
-//      UP / DOWN     : 选择 FREQ / DUTY
-//      LEFT / RIGHT  : 调整数值
-//      ENTER         : 应用 PWM
-//      ESC           : 返回主页
+//    PWM parameter area:
+//      UP / DOWN     : select FREQ / DUTY
+//      LEFT / RIGHT  : adjust value
+//      ENTER         : apply PWM
+//      ESC           : return to the home screen
 //
-//  新增:
-//    G26 / G23 / G22 三个引脚会闪烁。
+//  Added:
+//    G26 / G23 / G22 three pins will blink.
 // ============================================================
 
 class UIGpioPage : public app_base
@@ -69,8 +69,8 @@ public:
         creat_UI();
         event_handler_init();
 
-        // 启动 G26 / G23 / G22 闪烁定时器
-        // 每 500ms 翻转一次状态
+        // Start the G26 / G23 / G22 blink timer
+        // Toggle state every 500ms
         blink_timer_ = lv_timer_create(UIGpioPage::static_blink_timer_cb, 500, this);
     }
 
@@ -89,14 +89,14 @@ private:
 
     FocusZone focus_zone_ = FocusZone::FUNC;
 
-    int selected_pin_   = 1;   // 默认 G23
-    int selected_func_  = 3;   // 默认 PWM
+    int selected_pin_   = 1;   // default G23
+    int selected_func_  = 3;   // default PWM
     int selected_value_ = 0;   // 0: FREQ, 1: DUTY
 
     int pwm_freq_ = 1000;
     int pwm_duty_ = 50;
 
-    // G26 / G23 / G22 闪烁相关
+    // G26 / G23 / G22 blink related
     lv_timer_t *blink_timer_ = nullptr;
     bool blink_on_ = false;
 
@@ -104,19 +104,19 @@ private:
     static constexpr int SCREEN_W = 320;
     static constexpr int SCREEN_H = 150;
 
-    // 左侧功能面板
+    // left function panel
     static constexpr int LEFT_X = 6;
     static constexpr int LEFT_Y = 5;
     static constexpr int LEFT_W = 105;
     static constexpr int LEFT_H = 106;
 
-    // 右侧引脚矩阵
+    // right pin matrix
     static constexpr int PIN_PANEL_X = 115;
     static constexpr int PIN_PANEL_Y = 5;
     static constexpr int PIN_PANEL_W = 200;
     static constexpr int PIN_PANEL_H = 50;
 
-    // 右侧 PWM 参数面板
+    // right PWM parameter panel
     static constexpr int PWM_PANEL_X = 115;
     static constexpr int PWM_PANEL_Y = 60;
     static constexpr int PWM_PANEL_W = 200;
@@ -163,10 +163,10 @@ private:
         return obj;
     }
 
-    // 判断是否是需要闪烁的引脚
+    // Check whether this pin should blink
     static bool is_blink_pin(int idx)
     {
-        // pins_ 中:
+        // pins_ contains:
         // 0 = G26
         // 1 = G23
         // 2 = G22
@@ -187,26 +187,26 @@ private:
     {
         blink_on_ = !blink_on_;
 
-        // 如果需要真实 GPIO 闪烁，可以在这里同步输出
+        // If real GPIO blinking is needed, synchronize output here
         apply_blink_gpio(blink_on_);
 
-        // 刷新 UI，实现 G26/G23/G22 格子闪烁
+        // Refresh the UI to blink G26/G23/G22 cells
         refresh_UI();
     }
 
     void apply_blink_gpio(bool on)
     {
         // =====================================================
-        // 这里接入真实 GPIO 输出逻辑。
+        // Connect real GPIO output logic here.
         //
-        // 例如 ESP-IDF 伪代码:
+        // Example ESP-IDF pseudocode:
         //
         // gpio_set_level(GPIO_NUM_26, on ? 1 : 0);
         // gpio_set_level(GPIO_NUM_23, on ? 1 : 0);
         // gpio_set_level(GPIO_NUM_22, on ? 1 : 0);
         //
-        // 注意:
-        // 真实 GPIO 需要提前配置为输出模式。
+        // Note:
+        // Real GPIO must be configured as output in advance.
         // =====================================================
 
         (void)on;
@@ -365,14 +365,14 @@ private:
         uint32_t bg_color = pin.bg_color;
         uint32_t border_color = pin.border_color;
 
-        // G26 / G23 / G22 闪烁效果
+        // G26 / G23 / G22 blink effect
         if (is_blink_pin(idx)) {
             if (blink_on_) {
-                bg_color = 0xFFD21F;      // 亮黄色
-                border_color = 0xFFFFFF;  // 白色边框
+                bg_color = 0xFFD21F;      // bright yellow
+                border_color = 0xFFFFFF;  // white border
             } else {
-                bg_color = 0x103018;      // 暗绿色
-                border_color = 0x31D843;  // 绿色边框
+                bg_color = 0x103018;      // dark green
+                border_color = 0x31D843;  // green border
             }
         }
 
@@ -387,13 +387,13 @@ private:
         lv_obj_set_style_border_width(cell, selected ? 2 : 1, LV_PART_MAIN | LV_STATE_DEFAULT);
 
         if (focused) {
-            // 当前焦点在 PIN 区，并且选中该引脚
+            // Current focus is in the PIN area and this pin is selected
             lv_obj_set_style_border_color(cell, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
         } else if (selected) {
-            // 当前引脚被选中，但焦点不在 PIN 区
+            // The current pin is selected, but focus is not in the PIN area
             lv_obj_set_style_border_color(cell, lv_color_hex(0xFFD21F), LV_PART_MAIN | LV_STATE_DEFAULT);
         } else {
-            // 普通状态
+            // normal state
             lv_obj_set_style_border_color(cell, lv_color_hex(border_color), LV_PART_MAIN | LV_STATE_DEFAULT);
         }
 
@@ -419,7 +419,7 @@ private:
     {
         lv_obj_t *panel = make_panel(parent, PWM_PANEL_X, PWM_PANEL_Y, PWM_PANEL_W, PWM_PANEL_H);
 
-        // 右上绿色状态点
+        // top-right green status dot
         lv_obj_t *led = lv_obj_create(panel);
         lv_obj_set_size(led, 8, 8);
         lv_obj_set_pos(led, PWM_PANEL_W - 19, 14);
@@ -429,7 +429,7 @@ private:
         lv_obj_set_style_border_width(led, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_clear_flag(led, LV_OBJ_FLAG_SCROLLABLE);
 
-        // FREQ 文本
+        // FREQ text
         make_label(panel, "FREQ:", 10, 4, 0xFFFFFF, &lv_font_montserrat_18);
 
         char freq_buf[32];
@@ -438,7 +438,7 @@ private:
         lv_obj_t *lbl_freq = make_label(panel, freq_buf, 70, 4, 0xFFFFFF, &lv_font_montserrat_18);
         lv_obj_set_style_text_align(lbl_freq, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-        // DUTY 文本
+        // DUTY text
         make_label(panel, "DUTY:", 10, 27, 0xFFFFFF, &lv_font_montserrat_18);
 
         char duty_buf[32];
@@ -447,7 +447,7 @@ private:
         lv_obj_t *lbl_duty = make_label(panel, duty_buf, 70, 27, 0xFFFFFF, &lv_font_montserrat_18);
         lv_obj_set_style_text_align(lbl_duty, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-        // 绿色横线 1
+        // green horizontal line 1
         lv_obj_t *line1 = lv_obj_create(panel);
         lv_obj_set_size(line1, 120, 1);
         lv_obj_set_pos(line1, 68, 20);
@@ -457,7 +457,7 @@ private:
         lv_obj_set_style_border_width(line1, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_clear_flag(line1, LV_OBJ_FLAG_SCROLLABLE);
 
-        // 绿色横线 2
+        // green horizontal line 2
         lv_obj_t *line2 = lv_obj_create(panel);
         lv_obj_set_size(line2, 120, 1);
         lv_obj_set_pos(line2, 68, 43);
@@ -467,7 +467,7 @@ private:
         lv_obj_set_style_border_width(line2, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_clear_flag(line2, LV_OBJ_FLAG_SCROLLABLE);
 
-        // PWM 参数区焦点标记
+        // PWM parameter areafocus marker
         if (focus_zone_ == FocusZone::VALUE) {
             int marker_y = selected_value_ == 0 ? 13 : 36;
 
@@ -682,7 +682,7 @@ private:
 
     void apply_func()
     {
-        // 这里接入真实 GPIO 控制逻辑。
+        // Connect real GPIO control logic here.
         //
         // selected_pin_:
         //   pins_[selected_pin_].name
@@ -701,9 +701,9 @@ private:
 
     void apply_pwm()
     {
-        // 这里接入真实 PWM 输出逻辑。
+        // Connect real PWM output logic here.
         //
-        // 示例:
+        // Example:
         //   pin:       pins_[selected_pin_].name
         //   frequency: pwm_freq_
         //   duty:      pwm_duty_

@@ -7,16 +7,16 @@
 #include "compat/input_keys.h"
 
 // ============================================================
-//  聊天界面  UIchatPage
-//  屏幕分辨率: 320 x 170 
+//  Chat screen  UIchatPage
+//  Screen resolution: 320 x 170
 //
-//  功能:
-//    - 本地聊天 demo UI
-//    - 可滚动消息区域 (绿色气泡=已发送, 灰色气泡=收到)
-//    - 底部文字输入区, 键盘输入字符, ENTER 发送
-//    - 发送后自动回复 (canned responses via LVGL timer)
-//    - BACKSPACE 删除末字符, ESC 返回主页
-//    - 原始按键输入（FZXC → 方向键仅在 launcher，app 内用原始字符）
+//  Features:
+//    - local chat demo UI
+//    - scrollable message area (green bubble=sent, gray bubble=received)
+//    - bottom text input area; keyboard enters characters and ENTER sends
+//    - automatic reply after sending (canned responses via LVGL timer)
+//    - BACKSPACE delete the last character, ESC return to the home screen
+//    - raw key input (FZXC -> arrow keys only in launcher; apps use raw characters)
 // ============================================================
 
 class UIchatPage : public app_

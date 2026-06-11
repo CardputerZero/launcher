@@ -26,7 +26,7 @@
 #include "lvgl/lvgl.h"
 
 /* ============================================================
- *  全局队列
+ *  Global queue
  * ============================================================ */
 struct keyboard_queue_t keyboard_queue;
 pthread_mutex_t keyboard_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -105,19 +105,19 @@ void kbd_dump_keymap_table(void) {}
 
 #if !LV_USE_SDL
 /* ============================================================
- *  参数
+ *  Parameters
  * ============================================================ */
 #define EVDEV_KEYCODE_OFFSET   8
-#define REPEAT_DELAY_MS      500   /* 首次重复前延迟 */
-#define REPEAT_RATE_MS        30   /* 之后每次重复间隔 */
+#define REPEAT_DELAY_MS      500   /* delay before first repeat */
+#define REPEAT_RATE_MS        30   /* interval between subsequent repeats */
 
 /* ============================================================
- *  libinput open/close 回调
+ *  libinput open/close callbacks
  * ============================================================ */
 static int open_restricted(const char *path, int flags, void *user_data) {
     int fd = open(path, flags);
     if (fd < 0) {
-        fprintf(stderr, "无法打开 %s: %s\n", path, strerror(errno));
+        fprintf(stderr, "Failed to open %s: %s\n", path, strerror(errno));
         return -errno;
     }
     /* Grab the device exclusively. Without this, the kernel VT keyboard
@@ -138,7 +138,7 @@ static const struct libinput_interface interface = {
 };
 
 /* ============================================================
- *  TCA8418 自定义键码映射表（与你原来的一致）
+ *  TCA8418 custom keycode mapping table (same as the original one)
  * ============================================================ */
 struct tca8418_keymap_entry {
     uint32_t    keycode;
@@ -204,31 +204,31 @@ tca8418_keymap_lookup(uint32_t keycode) {
 
 
 /* ============================================================
- *  控制键 → 终端控制字符映射表
- *  当 xkbcommon 对功能键不产生 utf8 时，兜底填充 ANSI 转义序列
+ *  Control-key -> terminal control-character mapping table
+ *  When xkbcommon does not produce utf8 for function keys, fill in ANSI escape sequences as fallback
  * ============================================================ */
 struct ctrl_key_utf8_entry {
-    uint32_t    keycode;   /* linux/input.h 中的 KEY_xxx */
-    const char *utf8;      /* 终端控制字符 / ANSI 转义序列 */
+    uint32_t    keycode;   /* KEY_xxx from linux/input.h */
+    const char *utf8;      /* terminal control character / ANSI escape sequence */
 };
 
 static const struct ctrl_key_utf8_entry ctrl_key_utf8_map[] = {
-    /* ---- 单字节控制字符 ---- */
+    /* ---- single-byte control characters ---- */
     { KEY_ENTER,     "\r"      },   /* CR  (0x0D) */
-    { KEY_KPENTER,   "\r"      },   /* CR  小键盘回车 */
+    { KEY_KPENTER,   "\r"      },   /* CR  keypad Enter */
     { KEY_BACKSPACE, "\x7f"    },   /* DEL (0x7F) */
     { KEY_TAB,       "\t"      },   /* HT  (0x09) */
     { KEY_ESC,       "\x1b"    },   /* ESC (0x1B) */
 
-    /* ---- ANSI 方向键 ---- */
+    /* ---- ANSI arrow keys ---- */
     { KEY_UP,        "\033[A"  },   /* CSI A */
     { KEY_DOWN,      "\033[B"  },   /* CSI B */
     { KEY_RIGHT,     "\033[C"  },   /* CSI C */
     { KEY_LEFT,      "\033[D"  },   /* CSI D */
 
-    /* ---- ANSI 编辑键 ---- */
-    { KEY_HOME,      "\033[H"  },   /* CSI H  (或 "\033[1~") */
-    { KEY_END,       "\033[F"  },   /* CSI F  (或 "\033[4~") */
+    /* ---- ANSI editing keys ---- */
+    { KEY_HOME,      "\033[H"  },   /* CSI H  (or "\033[1~") */
+    { KEY_END,       "\033[F"  },   /* CSI F  (or "\033[4~") */
     { KEY_DELETE,    "\033[3~" },   /* SS3 ~ */
     { KEY_INSERT,    "\033[2~" },   /* CSI ~ */
     { KEY_PAGEUP,    "\033[5~" },   /* CSI ~ */
@@ -261,7 +261,7 @@ static const char *ctrl_key_utf8_lookup(uint32_t keycode) {
 
 
 /* ============================================================
- *  键盘上下文
+ *  Keyboard context
  * ============================================================ */
 struct kbd_ctx {
     struct libinput        *li;
@@ -273,14 +273,14 @@ struct kbd_ctx {
     struct xkb_compose_table  *compose_table;
     struct xkb_compose_state  *compose_state;
 
-    /* 按键重复 */
+    /* key repeat */
     int      repeat_fd;
     bool     repeating;
-    struct key_item repeat_template;   /* 保存上次按下的键，用于重复时复制 */
+    struct key_item repeat_template;   /* save the last pressed key for repeat copies */
 };
 
 /* ============================================================
- *  xkbcommon 日志回调
+ *  xkbcommon log callback
  * ============================================================ */
 static void uxkb_log(struct xkb_context *ctx, enum xkb_log_level level,
                      const char *fmt, va_list args)
@@ -290,7 +290,7 @@ static void uxkb_log(struct xkb_context *ctx, enum xkb_log_level level,
 }
 
 /* ============================================================
- *  修饰键位图
+ *  modifier bitmask
  * ============================================================ */
 static uint32_t get_mods(struct xkb_state *state) {
     uint32_t m = 0;
@@ -310,7 +310,7 @@ static uint32_t get_mods(struct xkb_state *state) {
 }
 
 /* ============================================================
- *  LED 更新（走 libinput，无需自己 write evdev）
+ *  LED update (via libinput; no need to write evdev directly)
  * ============================================================ */
 static void update_leds(struct kbd_ctx *kc) {
     enum libinput_led leds = 0;
@@ -324,13 +324,13 @@ static void update_leds(struct kbd_ctx *kc) {
 }
 
 /* ============================================================
- *  入队
+ *  Enqueue
  * ============================================================ */
 static void enqueue_key(const struct key_item *src) {
     struct key_item *elm = malloc(sizeof(*elm));
     if (!elm) return;
     *elm = *src;
-    elm->flage = 0;  // 标记需要 free
+    elm->flage = 0;  // mark as needing free
 
     /* DEBUG: every raw key event from keyboard thread */
     char utf8_dbg[64] = "";
@@ -365,7 +365,7 @@ static void enqueue_key(const struct key_item *src) {
 }
 
 /* ============================================================
- *  按键重复控制
+ *  Key repeat control
  * ============================================================ */
 static void repeat_start(struct kbd_ctx *kc) {
     struct itimerspec ts = {
@@ -381,7 +381,7 @@ static void repeat_stop(struct kbd_ctx *kc) {
     kc->repeating = false;
 }
 
-/* 从 UTF-32 码点编码成 UTF-8，返回字节数 */
+/* Encode a UTF-32 code point as UTF-8 and return the byte count */
 static int utf32_to_utf8(uint32_t cp, char *out, size_t n) {
     if (n < 1) return 0;
     if (cp < 0x80) {
@@ -410,7 +410,7 @@ static int utf32_to_utf8(uint32_t cp, char *out, size_t n) {
 }
 
 /* ============================================================
- *  核心：处理一次按键事件
+ *  Core: handle one key event
  * ============================================================ */
 static void process_key(struct kbd_ctx *kc, uint32_t code, int pressed)
 {
@@ -419,7 +419,7 @@ static void process_key(struct kbd_ctx *kc, uint32_t code, int pressed)
     item.key_code  = code;
     item.key_state = pressed ? KBD_KEY_PRESSED : KBD_KEY_RELEASED;
 
-    /* ---------- 1. TCA8418 自定义键码优先 ---------- */
+    /* ---------- 1. TCA8418 custom keycodes first ---------- */
     const struct tca8418_keymap_entry *mapped = tca8418_keymap_lookup(code);
     if (mapped) {
         xkb_keysym_t sym = xkb_keysym_from_name(mapped->sym_name,
@@ -430,7 +430,7 @@ static void process_key(struct kbd_ctx *kc, uint32_t code, int pressed)
         item.codepoint = (sym != XKB_KEY_NoSymbol) ? xkb_keysym_to_utf32(sym) : 0;
         item.mods      = get_mods(kc->state);
 
-        /* 重复处理 */
+        /* repeat handling */
         if (pressed) {
             kc->repeat_template = item;
             kc->repeat_template.key_state = KBD_KEY_REPEATED;
@@ -442,19 +442,19 @@ static void process_key(struct kbd_ctx *kc, uint32_t code, int pressed)
         return;
     }
 
-    /* ---------- 2. 标准 xkbcommon 流程 ---------- */
+    /* ---------- 2. standard xkbcommon flow ---------- */
     const xkb_keysym_t *syms;
     int num = xkb_state_key_get_syms(kc->state, keycode, &syms);
     xkb_keysym_t one_sym = XKB_KEY_NoSymbol;
 
     if (num == 1) {
-        /* 处理 Lock modifier（参考 uterm + libxkbcommon 建议用法） */
+        /* handle Lock modifiers (following uterm + libxkbcommon recommendations) */
         one_sym = xkb_state_key_get_one_sym(kc->state, keycode);
     } else if (num > 1) {
         one_sym = syms[0];
     }
 
-    /* ---------- 3. Compose 处理（死键等） ---------- */
+    /* ---------- 3. Compose handling (dead keys, etc.) ---------- */
     enum xkb_compose_status cstatus = XKB_COMPOSE_NOTHING;
     bool compose_produced_utf8 = false;
 
@@ -467,12 +467,12 @@ static void process_key(struct kbd_ctx *kc, uint32_t code, int pressed)
             if (csym != XKB_KEY_NoSymbol) {
                 one_sym = csym;
             }
-            /* 获取组合后的 UTF-8 串 */
+            /* get the composed UTF-8 string */
             int n = xkb_compose_state_get_utf8(kc->compose_state,
                                                item.utf8, sizeof(item.utf8));
             if (n > 0) compose_produced_utf8 = true;
 
-            /* 如果没有 keysym 又没有 utf8 可用，视为取消 */
+            /* If neither keysym nor utf8 is available, treat it as canceled */
             if (csym == XKB_KEY_NoSymbol && !compose_produced_utf8)
                 cstatus = XKB_COMPOSE_CANCELLED;
         }
@@ -480,7 +480,7 @@ static void process_key(struct kbd_ctx *kc, uint32_t code, int pressed)
             xkb_compose_state_reset(kc->compose_state);
     }
 
-    /* ---------- 4. 更新 xkb state（必须在 get_syms 之后） ---------- */
+    /* ---------- 4. update xkb state (must be after get_syms) ---------- */
     enum xkb_state_component changed = 0;
     if (pressed)
         changed = xkb_state_update_key(kc->state, keycode, XKB_KEY_DOWN);
@@ -489,34 +489,34 @@ static void process_key(struct kbd_ctx *kc, uint32_t code, int pressed)
     if (changed & XKB_STATE_LEDS)
         update_leds(kc);
 
-    /* ---------- 5. 过滤正在 compose 中或已取消的事件 ---------- */
+    /* ---------- 5. filter events that are composing or canceled ---------- */
     if (cstatus == XKB_COMPOSE_COMPOSING || cstatus == XKB_COMPOSE_CANCELLED)
         return;
     if (num <= 0 && !compose_produced_utf8)
         return;
 
-    /* ---------- 6. 填充 item ---------- */
+    /* ---------- 6. fill item ---------- */
     xkb_keysym_get_name(one_sym, item.sym_name, sizeof(item.sym_name));
     item.keysym    = one_sym;
     item.codepoint = (one_sym != XKB_KEY_NoSymbol)
                          ? xkb_keysym_to_utf32(one_sym) : 0;
     item.mods      = get_mods(kc->state);
 
-    /* 若 compose 没有给出 utf8，则走 xkb_state 拿 */
+    /* If compose did not provide utf8, get it from xkb_state */
     if (item.utf8[0] == '\0') {
         xkb_state_key_get_utf8(kc->state, keycode,
                                item.utf8, sizeof(item.utf8));
         if (item.utf8[0] == '\0' && item.codepoint != 0) {
-            /* get_utf8 会过滤控制字符，回退到手工编码 */
+            /* get_utf8 filters control characters; fall back to manual encoding */
             utf32_to_utf8(item.codepoint, item.utf8, sizeof(item.utf8));
         }
         if (item.codepoint == 0)
             item.codepoint = xkb_state_key_get_utf32(kc->state, keycode);
     }
     
-    /* ---------- 6.5 控制键兜底映射 ---------- */
-    /* xkbcommon 对功能键（UP/DOWN/ENTER/BACKSPACE 等）不产生 utf8，
-    * 这里手动填充 ANSI/VT100 终端控制字符，方便上层消费 */
+    /* ---------- 6.5 control-key fallback mapping ---------- */
+    /* xkbcommon does not produce utf8 for function keys (UP/DOWN/ENTER/BACKSPACE, etc.),
+    * manually fill ANSI/VT100 terminal control characters here for upper layers */
     if (item.utf8[0] == '\0') {
         const char *ctrl = ctrl_key_utf8_lookup(code);
         if (ctrl) {
@@ -524,7 +524,7 @@ static void process_key(struct kbd_ctx *kc, uint32_t code, int pressed)
         }
     }
 
-    /* ---------- 7. 重复控制 ---------- */
+    /* ---------- 7. repeat control ---------- */
     if (pressed && xkb_keymap_key_repeats(kc->keymap, keycode)) {
         kc->repeat_template = item;
         kc->repeat_template.key_state = KBD_KEY_REPEATED;
@@ -534,18 +534,18 @@ static void process_key(struct kbd_ctx *kc, uint32_t code, int pressed)
         repeat_stop(kc);
     }
 
-    /* ---------- 8. 入队 ---------- */
+    /* ---------- 8. Enqueue ---------- */
     enqueue_key(&item);
 }
 
 /* ============================================================
- *  xkb 初始化（带 rmlvo 回退 + compose）
+ *  xkb initialization (with rmlvo fallback + compose)
  * ============================================================ */
 static int init_xkb(struct kbd_ctx *kc,
                     const char *layout, const char *locale)
 {
     kc->ctx = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
-    if (!kc->ctx) { fprintf(stderr, "xkb_context_new 失败\n"); return -1; }
+    if (!kc->ctx) { fprintf(stderr, "xkb_context_new failed\n"); return -1; }
     xkb_context_set_log_fn(kc->ctx, uxkb_log);
 
     struct xkb_rule_names rmlvo = {
@@ -558,17 +558,17 @@ static int init_xkb(struct kbd_ctx *kc,
     kc->keymap = xkb_keymap_new_from_names(kc->ctx, &rmlvo,
                                            XKB_KEYMAP_COMPILE_NO_FLAGS);
     if (!kc->keymap) {
-        /* 空 rmlvo 回退 */
+        /* empty rmlvo fallback */
         struct xkb_rule_names empty = {0};
         kc->keymap = xkb_keymap_new_from_names(kc->ctx, &empty,
                                                XKB_KEYMAP_COMPILE_NO_FLAGS);
     }
-    if (!kc->keymap) { fprintf(stderr, "创建 keymap 失败\n"); return -1; }
+    if (!kc->keymap) { fprintf(stderr, "failed to create keymap\n"); return -1; }
 
     kc->state = xkb_state_new(kc->keymap);
-    if (!kc->state) { fprintf(stderr, "创建 xkb_state 失败\n"); return -1; }
+    if (!kc->state) { fprintf(stderr, "failed to create xkb_state\n"); return -1; }
 
-    /* Compose 表 */
+    /* Compose table */
     if (!locale || !*locale) {
         locale = getenv("LC_ALL");
         if (!locale || !*locale) locale = getenv("LC_CTYPE");
@@ -581,9 +581,9 @@ static int init_xkb(struct kbd_ctx *kc,
         kc->compose_state = xkb_compose_state_new(kc->compose_table,
                                                   XKB_COMPOSE_STATE_NO_FLAGS);
         if (!kc->compose_state)
-            fprintf(stderr, "警告：创建 compose_state 失败，禁用 compose\n");
+            fprintf(stderr, "Warning: failed to create compose_state; disabling compose\n");
     } else {
-        fprintf(stderr, "警告：locale=%s 无 compose 表\n", locale);
+        fprintf(stderr, "Warning: locale=%s has no compose table\n", locale);
     }
     return 0;
 }
@@ -596,7 +596,7 @@ static void free_xkb(struct kbd_ctx *kc) {
     if (kc->ctx)    xkb_context_unref(kc->ctx);
 }
 
-/* 可选：VT 唤醒时重建 state，保留 locked mods/layout（参考 uxkb_dev_wake_up） */
+/* Optional: rebuild state on VT wakeup while preserving locked mods/layout (see uxkb_dev_wake_up) */
 static void kbd_wake_up(struct kbd_ctx *kc) {
     xkb_mod_mask_t locked_mods = xkb_state_serialize_mods(kc->state,
                                                           XKB_STATE_MODS_LOCKED);
@@ -611,7 +611,7 @@ static void kbd_wake_up(struct kbd_ctx *kc) {
 }
 
 /* ============================================================
- *  线程主循环
+ *  Thread main loop
  * ============================================================ */
 void *keyboard_read_thread(void *argv) {
     STAILQ_INIT(&keyboard_queue);
@@ -624,26 +624,26 @@ void *keyboard_read_thread(void *argv) {
 
     /* ---------- 1. libinput ---------- */
     kc.li = libinput_path_create_context(&interface, NULL);
-    if (!kc.li) { fprintf(stderr, "创建 libinput 上下文失败\n"); goto out; }
+    if (!kc.li) { fprintf(stderr, "failed to create libinput context\n"); goto out; }
 
     kc.dev = libinput_path_add_device(kc.li, device_path);
     if (!kc.dev) {
-        fprintf(stderr, "添加设备 %s 失败（可能需要 root 权限）\n", device_path);
+        fprintf(stderr, "Failed to add device %s (root permissions may be required)\n", device_path);
         goto out;
     }
     if (!libinput_device_has_capability(kc.dev, LIBINPUT_DEVICE_CAP_KEYBOARD)) {
-        fprintf(stderr, "%s 不是键盘设备\n", device_path);
+        fprintf(stderr, "%s is not a keyboard device\n", device_path);
         goto out;
     }
 
     /* ---------- 2. xkbcommon ---------- */
     if (init_xkb(&kc, "us", NULL) < 0) goto out;
 
-    /* ---------- 3. 按键重复 timerfd ---------- */
+    /* ---------- 3. key repeat timerfd ---------- */
     kc.repeat_fd = timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC | TFD_NONBLOCK);
     if (kc.repeat_fd < 0) { perror("timerfd_create"); goto out; }
 
-    /* ---------- 4. 事件循环 ---------- */
+    /* ---------- 4. event loop ---------- */
     int li_fd = libinput_get_fd(kc.li);
     struct pollfd pfds[2] = {
         { .fd = li_fd,        .events = POLLIN },
@@ -651,7 +651,7 @@ void *keyboard_read_thread(void *argv) {
     };
 
     g_libinput = kc.li;
-    printf("开始监听键盘输入 (%s)\n", device_path);
+    printf("Start listening for keyboard input (%s)\n", device_path);
     libinput_dispatch(kc.li);
 
     while (1) {
@@ -666,7 +666,7 @@ void *keyboard_read_thread(void *argv) {
         }
         if (pr == 0) continue;
 
-        /* 键盘事件 */
+        /* keyboard event */
         if (pfds[0].revents & POLLIN) {
             libinput_dispatch(kc.li);
             struct libinput_event *ev;
@@ -684,12 +684,12 @@ void *keyboard_read_thread(void *argv) {
             }
         }
 
-        /* 重复定时器触发 */
+        /* repeat timer triggered */
         if (pfds[1].revents & POLLIN) {
             uint64_t exp;
             while (read(kc.repeat_fd, &exp, sizeof(exp)) == sizeof(exp)) {
                 if (kc.repeating) {
-                    /* 刷新 mods（防止 Shift 等在重复期间被改动） */
+                    /* refresh mods (prevents Shift, etc. from changing during repeat) */
                     kc.repeat_template.mods = get_mods(kc.state);
                     enqueue_key(&kc.repeat_template);
                 }
@@ -708,7 +708,7 @@ out:
 #include "ui/ui.h"
 #include "compat/input_keys.h"
 
-/* SDL scancode → Linux keycode mapping for key_item.key_code */
+/* SDL scancode -> Linux keycode mapping for key_item.key_code */
 static uint32_t sdl_scancode_to_linux_keycode(uint32_t sc)
 {
     switch(sc) {
@@ -769,10 +769,10 @@ static uint32_t sdl_scancode_to_linux_keycode(uint32_t sc)
 #include <stdlib.h>
 #include <string.h>
 
-/* 这里必须和你工程里真正定义 key_item 的头文件一致 */
-// #include "your_key_item.h"   /* 里面放 struct key_item 的声明 */
+/* This must match the header that actually defines key_item in your project */
+// #include "your_key_item.h"   /* contains the struct key_item declaration */
 
-/* 修饰键位图，与你 KBD_MOD_* 对齐即可 */
+/* modifier bitmask, align this with KBD_MOD_* */
 #ifndef KBD_MOD_SHIFT
 #define KBD_MOD_SHIFT   (1u << 0)
 #define KBD_MOD_CTRL    (1u << 1)
@@ -793,7 +793,7 @@ typedef struct {
     char     cur_sym_name[65];
     bool     cur_valid;
 
-    /* 新增：记录最近一次按下的字符，供 release 复用 */
+    /* Added: record the most recently pressed character for reuse on release */
     uint32_t last_codepoint;
     char     last_utf8[8];
     size_t   last_utf8_len;
@@ -838,7 +838,7 @@ lv_indev_t * lv_sdl_keyboard_create(void)
  *   STATIC FUNCTIONS
  **********************/
 
-/* 把一个 key_item 事件抛到 active screen 上 */
+/* Dispatch a key_item event to the active screen */
 static void send_key_item_event(lv_sdl_keyboard_t * dev,
                                 uint32_t codepoint,
                                 const char * utf8, size_t utf8_len,
@@ -851,7 +851,7 @@ static void send_key_item_event(lv_sdl_keyboard_t * dev,
     elm->keysym    = dev->cur_keysym;
     elm->codepoint = codepoint;
     elm->mods      = dev->cur_mods;
-    elm->key_state = key_state;       /* 0=释放, 1=按下 */
+    elm->key_state = key_state;       /* 0=released, 1=pressed */
 
     /* sym_name */
     if(dev->cur_sym_name[0]) {
@@ -866,14 +866,14 @@ static void send_key_item_event(lv_sdl_keyboard_t * dev,
         elm->utf8[n] = '\0';
     }
 
-    elm->flage = 1;   /* 标记调用方需要 free（和你原有语义保持一致） */
+    elm->flage = 1;   /* mark that the caller needs to free it (keeps the original semantics) */
 
     lv_obj_t * root = lv_screen_active();
     if(root) {
         lv_obj_send_event(root, (lv_event_code_t)LV_EVENT_KEYBOARD, elm);
     }
 
-    /* 事件是同步派发，这里立即释放 */
+    /* The event is dispatched synchronously; free it immediately here */
     free(elm);
 }
 
@@ -883,15 +883,15 @@ static void sdl_keyboard_read(lv_indev_t * indev, lv_indev_data_t * data)
     const size_t len = lv_strlen(dev->buf);
     data->continue_reading = false;
 
-    /* 释放事件 */
+    /* release event */
     if(dev->dummy_read) {
         dev->dummy_read = false;
         data->state = LV_INDEV_STATE_RELEASED;
-        /* key 也要带上，和按下时一致 */
+        /* include key as well, matching the press event */
         data->key = dev->last_codepoint;
 
         if(dev->cur_valid) {
-            /* 用缓存的按下时信息发 release */
+            /* send release using cached press information */
             send_key_item_event(dev,
                                 dev->last_codepoint,
                                 dev->last_utf8_len ? dev->last_utf8 : NULL,
@@ -900,12 +900,12 @@ static void sdl_keyboard_read(lv_indev_t * indev, lv_indev_data_t * data)
             dev->cur_valid = false;
         }
 
-        /* 清掉缓存 */
+        /* clear cache */
         dev->last_codepoint = 0;
         dev->last_utf8[0]   = '\0';
         dev->last_utf8_len  = 0;
     }
-    /* 按下事件 */
+    /* press event */
     else if(len > 0) {
         dev->dummy_read = true;
         data->state = LV_INDEV_STATE_PRESSED;
@@ -914,16 +914,16 @@ static void sdl_keyboard_read(lv_indev_t * indev, lv_indev_data_t * data)
         uint32_t utf8_len = lv_text_encoded_size(dev->buf);
         if(utf8_len == 0) utf8_len = 1;
 
-        /* 正确解码出 Unicode codepoint */
+        /* decode the Unicode code point correctly */
         uint32_t i = 0;
         uint32_t codepoint = lv_text_encoded_next(dev->buf, &i);
         if(codepoint == 0) {
-            /* 控制字符（LV_KEY_* 等）直接按字节取即可 */
+            /* control characters (LV_KEY_*, etc.) can be read byte by byte */
             codepoint = (uint8_t)dev->buf[0];
         }
         data->key = codepoint;
 
-        /* 缓存这次按下的信息，供 release 用 */
+        /* cache this press information for release */
         dev->last_codepoint = codepoint;
         size_t n = utf8_len < sizeof(dev->last_utf8) - 1 ? utf8_len
                                                         : sizeof(dev->last_utf8) - 1;
@@ -931,10 +931,10 @@ static void sdl_keyboard_read(lv_indev_t * indev, lv_indev_data_t * data)
         dev->last_utf8[n]  = '\0';
         dev->last_utf8_len = n;
 
-        /* 派发按下事件 */
+        /* dispatch press event */
         send_key_item_event(dev, codepoint, dev->buf, utf8_len, 1);
 
-        /* 消费掉已处理的字节 */
+        /* consume processed bytes */
         lv_memmove(dev->buf, dev->buf + utf8_len, len - utf8_len + 1);
     }
     else {
@@ -982,7 +982,7 @@ void lv_sdl_keyboard_handler(SDL_Event * event)
             SDL_Scancode  sc  = event->key.keysym.scancode;
             Uint16        md  = event->key.keysym.mod;
 
-            /* 填充本次事件元信息 — convert SDL scancode to Linux keycode */
+            /* fill metadata for this event — convert SDL scancode to Linux keycode */
             dsc->cur_scancode = sdl_scancode_to_linux_keycode(sc);
             dsc->cur_keysym   = (uint32_t)sym;
             dsc->cur_mods     = 0;
@@ -1001,9 +1001,9 @@ void lv_sdl_keyboard_handler(SDL_Event * event)
             }
             dsc->cur_valid = true;
 
-            /* 控制键 -> LV_KEY_* */
+            /* control keys -> LV_KEY_* */
             const uint32_t ctrl_key = keycode_to_ctrl_key(sym);
-            if(ctrl_key == '\0') return;    /* 普通字符交给 SDL_TEXTINPUT 处理 */
+            if(ctrl_key == '\0') return;    /* normal characters are handled by SDL_TEXTINPUT */
 
             const size_t blen = lv_strlen(dsc->buf);
             if(blen < KEYBOARD_BUFFER_SIZE - 1) {
@@ -1014,7 +1014,7 @@ void lv_sdl_keyboard_handler(SDL_Event * event)
         }
 
         case SDL_TEXTINPUT: {
-            /* 如果之前 KEYDOWN 没来得及填，这里补一下最基本的字段 */
+            /* If KEYDOWN did not fill it earlier, fill the basic fields here */
             if(!dsc->cur_valid) {
                 dsc->cur_scancode = 0;
                 dsc->cur_keysym   = 0;
@@ -1033,8 +1033,8 @@ void lv_sdl_keyboard_handler(SDL_Event * event)
 
     size_t len = lv_strlen(dsc->buf);
     while(len) {
-        lv_indev_read(indev);   /* 按下 -> 发一个 key_item(state=1) */
-        lv_indev_read(indev);   /* dummy release -> 发一个 key_item(state=0) */
+        lv_indev_read(indev);   /* press -> send a key_item(state=1) */
+        lv_indev_read(indev);   /* dummy release -> send a key_item(state=0) */
         len--;
     }
 }

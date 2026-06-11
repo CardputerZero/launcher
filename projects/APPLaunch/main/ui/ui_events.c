@@ -40,7 +40,7 @@ typedef void (*switch_cb_t)(lv_event_t *);
 
 lv_obj_t *launch_circle[100];
 
-// ==================== 5个槽位的标准坐标 ====================
+// ==================== standard coordinates for 5 slots ====================
 
 static const lv_coord_t SLOT_X[] = {-177, -99, 0, 99, 177, -177, -99, 0, 99, 177};
 static const lv_coord_t SLOT_Y[] = {4, -6, -16, -6, 4, LABEL_Y_SIDE, LABEL_Y_SIDE, LABEL_Y_CENTER, LABEL_Y_SIDE, LABEL_Y_SIDE};
@@ -70,7 +70,7 @@ static int g_audio_sounds_loaded = 0;
 static pthread_mutex_t g_audio_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 /**
- * 复制字符串，避免 caudio_path() 如果返回静态 buffer 时被覆盖。
+ * Copy the string so it is not overwritten if caudio_path() returns a static buffer.
  */
 static char *audio_strdup_safe(const char *s)
 {
@@ -89,12 +89,12 @@ static char *audio_strdup_safe(const char *s)
 }
 
 /**
- * 查找 ES8388 / ES8389 播放设备。
+ * Find the ES8388 / ES8389 playback device.
  *
- * 注意：
- * 这里查找的是 PulseAudio / PipeWire-Pulse 暴露出来的播放设备名称。
- * 如果 PulseAudio 中设备名称不包含 ES8388 / ES8389，
- * 可以改成直接使用默认设备。
+ * Note:
+ * This searches the playback device names exposed by PulseAudio / PipeWire-Pulse.
+ * If the PulseAudio device name does not contain ES8388 / ES8389,
+ * switch to using the default device directly.
  */
 static ma_result audio_find_es8388_device(ma_context *context, ma_device_id *outDeviceID)
 {
@@ -142,17 +142,17 @@ static ma_result audio_find_es8388_device(ma_context *context, ma_device_id *out
 }
 
 /**
- * 初始化音频系统。
+ * Initialize the audio system.
  *
- * 这里只使用 PulseAudio 后端。
+ * Only the PulseAudio backend is used here.
  *
- * 也就是说 miniaudio 会通过：
+ * This means miniaudio connects through:
  *
  *     ma_backend_pulseaudio
  *
- * 连接到 PulseAudio 或 pipewire-pulse。
+ * to PulseAudio or pipewire-pulse.
  *
- * 不会直接打开 ALSA 设备。
+ * It does not open ALSA devices directly.
  */
 int audio_system_init(void)
 {
@@ -166,14 +166,14 @@ int audio_system_init(void)
     ma_result result;
 
     /*
-     * 只启用 PulseAudio 后端。
+     * Enable only the PulseAudio backend.
      *
-     * 不要使用：
+     * Do not use:
      *
      *     ma_backend_alsa
      *
-     * 如果系统实际使用 PipeWire，只要 pipewire-pulse 正常运行，
-     * PulseAudio 后端也可以正常工作。
+     * If the system uses PipeWire, as long as pipewire-pulse is running,
+     * the PulseAudio backend also works correctly.
      */
     ma_backend backends[] = {
         ma_backend_pulseaudio
@@ -193,11 +193,11 @@ int audio_system_init(void)
     }
 
     /*
-     * 查找 ES8388 / ES8389 播放设备。
+     * Find the ES8388 / ES8389 playback device.
      *
-     * 如果你想直接使用 PulseAudio 默认输出设备，
-     * 可以删除 audio_find_es8388_device() 这一步，
-     * 并且把 engineConfig.pPlaybackDeviceID 设置为 NULL。
+     * To use the default PulseAudio output device directly,
+     * remove the audio_find_es8388_device() step,
+     * and set engineConfig.pPlaybackDeviceID to NULL.
      */
     // result = audio_find_es8388_device(&g_audio_context, &g_audio_device_id);
 
@@ -211,14 +211,14 @@ int audio_system_init(void)
     ma_engine_config engineConfig = ma_engine_config_init();
 
     /*
-     * 使用 PulseAudio context。
+     * Use the PulseAudio context.
      */
     engineConfig.pContext = &g_audio_context;
 
     /*
-     * 指定 PulseAudio 播放设备。
+     * Specify the PulseAudio playback device.
      *
-     * 如果想使用默认 PulseAudio 设备，可以改成：
+     * To use the default PulseAudio device, change this to:
      *
      *     engineConfig.pPlaybackDeviceID = NULL;
      */
@@ -226,10 +226,10 @@ int audio_system_init(void)
     engineConfig.pPlaybackDeviceID = NULL;
 
     /*
-     * 固定输出格式。
+     * Use a fixed output format.
      *
-     * 如果你的 PulseAudio / PipeWire 默认采样率不是 48000，
-     * 也可以改成 44100。
+     * If the default PulseAudio / PipeWire sample rate is not 48000,
+     * it can also be changed to 44100.
      */
     engineConfig.channels = 2;
     engineConfig.sampleRate = 48000;
@@ -252,10 +252,10 @@ int audio_system_init(void)
 }
 
 /**
- * 预加载 switch.wav 和 enter.wav。
+ * Preload switch.wav and enter.wav.
  *
- * 使用 MA_SOUND_FLAG_DECODE，表示初始化时解码到内存。
- * 播放时不会再重复打开 wav 文件。
+ * Use MA_SOUND_FLAG_DECODE to decode into memory during initialization.
+ * Playback will not reopen the wav file repeatedly.
  */
 int audio_load_sounds(void)
 {
@@ -345,9 +345,9 @@ int audio_load_sounds(void)
 }
 
 /**
- * 播放已经加载的音效。
+ * Play an already loaded sound effect.
  *
- * 如果上一次还没播完，会停止并从头播放。
+ * If the previous playback is still running, stop it and restart from the beginning.
  */
 static void audio_play_loaded_sound(ma_sound *sound)
 {
@@ -367,7 +367,7 @@ static void audio_play_loaded_sound(ma_sound *sound)
 }
 
 /**
- * 播放切换音效。
+ * Play the switch sound effect.
  */
 void audio_play_switch(void)
 {
@@ -375,7 +375,7 @@ void audio_play_switch(void)
 }
 
 /**
- * 播放确认音效。
+ * Play the confirm sound effect.
  */
 void audio_play_enter(void)
 {
@@ -383,11 +383,11 @@ void audio_play_enter(void)
 }
 
 /**
- * 兼容旧的 play_audio(path) 接口。
+ * Keep compatibility with the old play_audio(path) API.
  *
- * 注意：
- * 这个接口不会预加载文件。
- * 但是不会重复打开 PulseAudio 设备。
+ * Note:
+ * This API does not preload files.
+ * However, it does not reopen the PulseAudio device repeatedly.
  */
 void play_audio(char *path)
 {
@@ -413,9 +413,9 @@ void play_audio(char *path)
 }
 
 /**
- * 释放音频系统。
+ * Release the audio system.
  *
- * 如果你的程序有退出流程，退出时调用这个函数。
+ * Call this function during shutdown if the program has an exit flow.
  */
 void audio_system_uninit(void)
 {
@@ -437,7 +437,7 @@ void audio_system_uninit(void)
 }
 
 // ============================================================
-// 初始化
+// Initialize
 // ============================================================
 
 void launch_circle_init()
@@ -520,7 +520,7 @@ static void switchpanleEnableClick(int obj_index, int enable)
 
 
 // ============================================================
-// 将面板强制设定到指定槽位
+// Force the panel to the specified slot
 // ============================================================
 
 static void snap_panel_to_slot(lv_obj_t *panel, int slot)
@@ -542,7 +542,7 @@ static void snap_panel_to_slot(lv_obj_t *panel, int slot)
 
 
 // ============================================================
-// 将标签强制设定到指定槽位
+// Force the label to the specified slot
 // ============================================================
 
 static void snap_label_to_slot(lv_obj_t *label, int slot)
@@ -562,7 +562,7 @@ static void snap_label_to_slot(lv_obj_t *label, int slot)
 
 
 // ============================================================
-// 动画结束后校正所有面板位置
+// Correct all panel positions after animation ends
 // ============================================================
 
 static void snap_all_panels(lv_anim_t *a)
@@ -599,7 +599,7 @@ static void snap_all_panels(lv_anim_t *a)
 
 
 // ============================================================
-// 向右切换，点右箭头时调用
+// Switch right; called when the right arrow is clicked
 // ============================================================
 
 void switchyou(lv_event_t *e)
@@ -647,7 +647,7 @@ void switchyou(lv_event_t *e)
 
 
 // ============================================================
-// 向左切换，点左箭头时调用
+// Switch left; called when the left arrow is clicked
 // ============================================================
 
 void switchzuo(lv_event_t *e)
@@ -772,10 +772,10 @@ void main_key_switch(lv_event_t *e)
         case KEY_LEFT:
         {
             /*
-             * 原来这里是：
+             * This used to be:
              * thpool_add_work(g_launch_thread_pool, play_audio, caudio_path("switch.wav"));
              *
-             * 现在改成直接播放预加载音效。
+             * Now it directly plays the preloaded sound effect.
              */
             if (!lvping_lock)
             {

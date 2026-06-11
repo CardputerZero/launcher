@@ -45,7 +45,7 @@ static void panel_set_icon(lv_obj_t *panel, const char *src)
 }
 
 // ============================================================
-// 启动快捷方式示例
+// Launch shortcut examples
 // ============================================================
 /*
 root@pi:/home/pi# cat /usr/share/APPLaunch/applications/vim.desktop
@@ -57,11 +57,11 @@ Terminal=true
 Icon=share/images/e-Mail_80.png
 */
 
-// 前向声明
+// Forward declarations
 class app_launch_S;
 
 // ============================================================
-// 类型标签
+// Type tag
 // ============================================================
 template <class PageT>
 struct page_t
@@ -73,7 +73,7 @@ template <class PageT>
 inline constexpr page_t<PageT> page_v{};
 
 // ============================================================
-// app:统一的应用描述 + 发射器
+// app:unified app descriptor + launcher
 // ============================================================
 struct app
 {
@@ -83,20 +83,20 @@ struct app
 
     std::function<void(app_launch_S *)> launch;
 
-    // ① 外部命令
+    // ① External command
     app(std::string name,
         std::string icon,
         std::string exec,
         bool terminal);
 
-    // ① 外部命令
+    // ① External command
     app(std::string name,
         std::string icon,
         std::string exec,
         bool terminal,
         bool sysplause);
 
-    // ① 外部命令 (with run_as_root)
+    // ① External command (with run_as_root)
     app(std::string name,
         std::string icon,
         std::string exec,
@@ -104,7 +104,7 @@ struct app
         bool sysplause,
         bool run_as_root);
 
-    // ② 内置 UI 页面
+    // ② Built-in UI page
     template <class PageT>
     app(std::string name,
         std::string icon,
@@ -119,8 +119,8 @@ class app_launch_S
 private:
     int current_app = 2;
     hal_watcher_t dir_watcher = NULL;
-    lv_timer_t *watch_timer = nullptr;  // LVGL 3s 定时器
-    lv_timer_t *status_timer = nullptr; // 状态栏刷新定时器
+    lv_timer_t *watch_timer = nullptr;  // LVGL 3s timer
+    lv_timer_t *status_timer = nullptr; // status-bar refresh timer
     int fixed_count;
 
 public:
@@ -130,7 +130,7 @@ public:
 public:
     app_launch_S()
     {
-        // 固定图标，不允许用户修改
+        // Fixed icon; users cannot modify it
         app_list.emplace_back("Python",
                               img_path("python_100.png"), "python3", true, false);
         app_list.emplace_back("STORE",
@@ -173,7 +173,7 @@ public:
             panel_set_icon(ui_outPanelyou, it->Icon.c_str());
         }
 
-        // 动态图标，根据 Settings 配置过滤
+        // Dynamic icons filtered by Settings configuration
         #define APP_ENABLED(key) (hal_config_get_int("app_" key, 1) != 0)
 
         if (APP_ENABLED("Music"))
@@ -252,13 +252,13 @@ public:
 
         applications_load();
 
-        // 初始化 inotify，监听 applications 目录
+        // Initialize inotify and watch the applications directory
         inotify_init_watch();
 
-        // 创建 LVGL 3s 定时器，周期性检查目录变化
+        // Create a 3s LVGL timer to periodically check directory changes
         watch_timer = lv_timer_create(app_dir_watch_cb, 3000, this);
 
-        // 状态栏定时刷新（时间 + 电量），每5秒更新一次
+        // Refresh the status bar (time + battery) every 5 seconds
         update_home_status_bar();
         status_timer = lv_timer_create(home_status_timer_cb, 5000, this);
     }
@@ -288,7 +288,7 @@ public:
         lv_async_call(lv_go_back_home, this);
     }
 
-    // 改为接收 std::string，不再依赖 app::Exec 成员
+    // Changed to accept std::string and no longer depend on app::Exec
     void launch_Exec_in_terminal(const std::string &exec, bool sysplause = true)
     {
         printf("Launching terminal app: %s\n", exec.c_str());
@@ -374,7 +374,7 @@ public:
         struct dirent *entry;
         while ((entry = readdir(dir)) != NULL)
         {
-            // 仅处理 *.desktop 文件
+            // Process only *.desktop files
             const char *name = entry->d_name;
             size_t len = strlen(name);
             if (len <= 8 || strcmp(name + len - 8, ".desktop") != 0)
@@ -388,7 +388,7 @@ public:
                 continue;
             }
 
-            // 解析 INI 文件
+            // Parse the INI file
             std::string app_name, app_icon, app_exec;
             bool app_terminal = false;
             bool app_sysplause = true;
@@ -397,15 +397,15 @@ public:
             std::string line;
             while (std::getline(ifs, line))
             {
-                // 去除行尾的 \r（Windows 换行符）
+                // Remove trailing \r (Windows newline)
                 if (!line.empty() && line.back() == '\r')
                     line.pop_back();
 
-                // 跳过空行和注释
+                // Skip empty lines and comments
                 if (line.empty() || line[0] == '#' || line[0] == ';')
                     continue;
 
-                // 检测节头
+                // Detect section headers
                 if (line[0] == '[')
                 {
                     in_desktop_entry = (line == "[Desktop Entry]");
@@ -415,7 +415,7 @@ public:
                 if (!in_desktop_entry)
                     continue;
 
-                // 解析 key=value
+                // Parse key=value
                 auto eq = line.find('=');
                 if (eq == std::string::npos)
                     continue;
@@ -423,7 +423,7 @@ public:
                 std::string key = line.substr(0, eq);
                 std::string value = line.substr(eq + 1);
 
-                // 去除 key 首尾空格
+                // Trim leading/trailing spaces from the key
                 auto ltrim = [](std::string &s)
                 {
                     size_t i = 0;
@@ -453,7 +453,7 @@ public:
                     app_sysplause = (value == "true" || value == "True" || value == "1");
             }
 
-            // 必须有 Name 和 Exec 才能注册
+            // Name and Exec are required for registration
             if (app_name.empty() || app_exec.empty())
             {
                 fprintf(stderr, "applications_load: skip %s (missing Name or Exec)\n", filepath.c_str());
@@ -481,7 +481,7 @@ public:
     }
 
     // ============================================================
-    // inotify 初始化：以非阻塞模式监听 applications 目录
+    // Initialize inotify in non-blocking mode and watch the applications directory
     // ============================================================
     void inotify_init_watch()
     {
@@ -489,7 +489,7 @@ public:
     }
 
     // ============================================================
-    // 刷新 UI 面板（根据当前 current_app 更新 5 个槽位）
+    // Refresh UI panels (update 5 slots from current_app)
     // ============================================================
     void refresh_ui_panels()
     {
@@ -497,7 +497,7 @@ public:
         if (sz == 0)
             return;
 
-        // 确保 current_app 在合法范围内
+        // Ensure current_app is in range
         if (current_app >= sz)
             current_app = sz - 1;
 
@@ -507,31 +507,31 @@ public:
             return *std::next(app_list.begin(), idx);
         };
 
-        // 最左外（隐藏）
+        // far left outside (hidden)
         {
             auto &a = app_at(current_app - 2);
             lv_label_set_text(ui_zuoLabelout, a.Name.c_str());
             panel_set_icon(ui_outPanelzuo, a.Icon.c_str());
         }
-        // 左
+        // left
         {
             auto &a = app_at(current_app - 1);
             lv_label_set_text(ui_zuoLabel, a.Name.c_str());
             panel_set_icon(ui_zuoPanel, a.Icon.c_str());
         }
-        // 中心
+        // center
         {
             auto &a = app_at(current_app);
             lv_label_set_text(ui_switchLabel, a.Name.c_str());
             panel_set_icon(ui_switchPanel, a.Icon.c_str());
         }
-        // 右
+        // right
         {
             auto &a = app_at(current_app + 1);
             lv_label_set_text(ui_youLabel, a.Name.c_str());
             panel_set_icon(ui_youPanel, a.Icon.c_str());
         }
-        // 最右外（隐藏）
+        // far right outside (hidden)
         {
             auto &a = app_at(current_app + 2);
             lv_label_set_text(ui_youLabelout, a.Name.c_str());
@@ -541,7 +541,7 @@ public:
     }
 
     // ============================================================
-    // 重新加载动态应用列表（保留固定条目，重扫描 applications 目录）
+    // Reload the dynamic app list (keep fixed entries and rescan applications directory)
     // ============================================================
     void applications_reload()
     {
@@ -556,7 +556,7 @@ public:
     }
 
     // ============================================================
-    // 主页状态栏刷新：时间 + 电量（BQ27220）
+    // Home status-bar refresh: time + battery (BQ27220)
     // ============================================================
     static void home_status_timer_cb(lv_timer_t *timer)
     {
@@ -620,7 +620,7 @@ public:
     }
 
     // ============================================================
-    // LVGL 定时器回调：检测 inotify 事件，有变化则刷新列表
+    // LVGL timer callback: check inotify events and refresh the list on changes
     // ============================================================
     static void app_dir_watch_cb(lv_timer_t *timer)
     {
@@ -639,7 +639,7 @@ public:
 };
 
 // ============================================================
-// app 构造函数的实现(放到 app_launch_S 定义之后)
+// app constructor implementation (placed after app_launch_S definition)
 // ============================================================
 inline app::app(std::string name,
                 std::string icon,
@@ -714,7 +714,7 @@ app::app(std::string name,
 }
 
 // ============================================================
-// app_launch_S 析构函数实现
+// app_launch_S destructor implementation
 // ============================================================
 app_launch_S::~app_launch_S()
 {

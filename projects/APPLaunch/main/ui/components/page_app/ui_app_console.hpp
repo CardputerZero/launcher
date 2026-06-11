@@ -17,26 +17,26 @@
 #include "hal/hal_pty.h"
 
 // ============================================================
-//  终端控制台  UIConsolePage
-//  屏幕分辨率: 320 x 170  (顶栏20px, ui_APP_Container 320x150)
+//  Terminal console  UIConsolePage
+//  Screen resolution: 320 x 170  (top bar20px, ui_APP_Container 320x150)
 //
-//  功能:
-//    - 完整 VT100/ANSI 终端仿真（移植自 src/vt100.c 状态机）
-//      支持: 光标移动, 擦除, SGR属性, 插入/删除行/字符,
-//            DEC 私有模式 (DECTCEM, DECAWM, DECSCNM等),
-//            SCP/RCP 光标保存恢复, 滚动区域, 设备属性等
-//    - PTY 子进程管理（fork + openpty）
-//    - 行级脏标记渲染，减少 LVGL 刷新开销
-//    - 光标闪烁（500ms 定时器）
-//    - 键盘输入转发至 PTY（evdev keycode + utf8 / LV_KEY_*）
+//  Features:
+//    - Full VT100/ANSI terminal emulation (ported from the src/vt100.c state machine)
+//      Supports cursor movement, erase, SGR attributes, insert/delete lines/characters,
+//            DEC private modes (DECTCEM, DECAWM, DECSCNMetc.),
+//            SCP/RCP cursor save/restore, scrolling region, device attributesetc.
+//    - PTY child-process management (fork + openpty)
+//    - line-level dirty rendering to reduce LVGL refresh overhead
+//    - cursor blink (500ms timer)
+//    - keyboard input forwarded to PTY (evdev keycode + utf8 / LV_KEY_*)
 //
-//  对外接口:
-//    exec(std::string cmd)  — 启动一条命令（支持带参数的命令字符串）
+//  Public API:
+//    exec(std::string cmd)  — start a command (supports command strings with arguments)
 // ============================================================
 class UIConsolePage : public app_base
 {
     /* ------------------------------------------------------------------ */
-    /*  终端规格                                                            */
+    /*  Terminal geometry                                                            */
     /* ------------------------------------------------------------------ */
     static constexpr int TERM_W = 320;
     static constexpr int TERM_H = 150;
@@ -45,22 +45,22 @@ class UIConsolePage : public app_base
     static constexpr int COLS = TERM_W / CHAR_W; /* 45 */
     static constexpr int ROWS = TERM_H / CHAR_H; /* 12 */
 
-    /* 绿字黑底 */
+    /* green text on black background */
     static constexpr uint32_t FIXED_FG = 0x00FF00u;
     static constexpr uint32_t FIXED_BG = 0x000000u;
 
     /* ------------------------------------------------------------------ */
-    /*  UI 对象                                                             */
+    /*  UI objects                                                             */
     /* ------------------------------------------------------------------ */
     lv_obj_t *terminal_container = nullptr;
     lv_obj_t *term_canvas = nullptr;
 
-    /* 整行渲染：ROWS 个 label 替代大量 cell label */
+    /* Full-row rendering: ROWS labels instead of many cell labels */
     lv_obj_t *row_labels[ROWS] = {};
-    /* 光标：独立一个反色 label，仅创建时设置一次样式 */
+    /* Cursor: a separate inverted label; style is set only once at creation */
     lv_obj_t *cursor_label = nullptr;
 
-    /* 行级 dirty 比对缓存（含末尾 '\0'） */
+    /* line-level dirty comparison cache (including trailing '\0') */
     char row_rendered[ROWS][COLS + 1] = {};
 
 public:
@@ -90,12 +90,12 @@ public:
         stop_pty();
     }
 
-    // ==================== 对外接口 ====================
+    // ==================== Public API ====================
 
     /**
-     * 启动一条命令。
-     * 命令字符串按空格拆分，首 token 为可执行文件路径，其余为参数。
-     * 若已有子进程运行，先终止再重新启动。
+     * Start a command.
+     * The command string is split on spaces; the first token is the executable path and the rest are arguments.
+     * If a child process is already running, terminate it before restarting.
      */
     void exec(std::string cmd)
     {
@@ -124,11 +124,11 @@ public:
         waiting_key_to_exit = false;
 
         vt100_screen_clear_all();
-        /* 强制首次全量渲染 */
+        /* Force the first full render */
         memset(row_rendered, 0, sizeof(row_rendered));
         vt100_render_all();
 
-        /* 按空格拆分命令字符串 */
+        /* Split the command string on spaces */
         std::vector<std::string> tokens;
         std::istringstream iss(cmd);
         std::string token;
@@ -165,47 +165,47 @@ public:
 
 private:
     /* ================================================================== */
-    /*  VT100 字符网格状态                                                  */
+    /*  VT100 character grid state                                                  */
     /* ================================================================== */
     char vt100_screen[ROWS][COLS] = {};
 
-    /* 光标 */
+    /* Cursor */
     int vt100_cur_row = 0;
     int vt100_cur_col = 0;
 
-    /* SGR 当前属性 (解析追踪，渲染仍为单色) */
+    /* Current SGR attributes (tracked by parser; rendering remains monochrome) */
     int vt100_cur_attr = 0;   /* ATTR_BOLD=1, ATTR_UNDERLINE=2, ATTR_BLINK=4, ATTR_REVERSE=8 */
-    int vt100_cur_fg = 7;     /* ANSI 8色: 0-7, COLOR_DEFAULT=9 */
+    int vt100_cur_fg = 7;     /* ANSI 8colors: 0-7, COLOR_DEFAULT=9 */
     int vt100_cur_bg = 0;
 
-    /* 光标保存/恢复 (SCP/RCP, DECSC/DECRC) */
+    /* Cursor save/restore (SCP/RCP, DECSC/DECRC) */
     int vt100_saved_row = 0, vt100_saved_col = 0;
     int vt100_saved_attr = 0, vt100_saved_fg = 7, vt100_saved_bg = 0;
 
-    /* DECAWM — 自动换行 */
+    /* DECAWM — automatic wrap */
     bool vt100_auto_wrap = true;
 
-    /* DECTCEM — 光标显隐 */
+    /* DECTCEM — cursor visibility */
     bool vt100_cursor_visible_flag = true;
 
-    /* DECCKM — 应用光标键模式 (affects what sequence keyboard sends) */
+    /* DECCKM — application cursor key mode (affects what sequence keyboard sends) */
     bool vt100_decckm = false;
 
-    /* ── 完整 VT100 状态机 ─────────────────────────────────── */
+    /* ── Full VT100 state machine ─────────────────────────────────── */
     enum vt_state {
-        VT100_ST_NORMAL,    /* 打印字符 */
-        VT100_ST_ESC,       /* 收到 ESC */
-        VT100_ST_CSI,       /* ESC [ — 收集参数 */
-        VT100_ST_CSI_QM,    /* ESC [? — DEC 私有模式 */
-        VT100_ST_CSI_GT,    /* ESC [> — Secondary DA / xterm 扩展 */
-        VT100_ST_OSC,       /* ESC ] — 操作系统命令 */
-        VT100_ST_DCS,       /* ESC P — 设备控制字符串 */
+        VT100_ST_NORMAL,    /* print characters */
+        VT100_ST_ESC,       /* received ESC */
+        VT100_ST_CSI,       /* ESC [ — collect parameters */
+        VT100_ST_CSI_QM,    /* ESC [? — DEC private modes */
+        VT100_ST_CSI_GT,    /* ESC [> — Secondary DA / xterm extension */
+        VT100_ST_OSC,       /* ESC ] — operating system command */
+        VT100_ST_DCS,       /* ESC P — device control string */
     };
     vt_state vt100_esc_state = VT100_ST_NORMAL;
     char vt100_esc_buf[64] = {};
     int vt100_esc_len = 0;
 
-    /* CSI 参数 */
+    /* CSI parameters */
     static constexpr int VT100_MAX_PARAMS = 16;
     int vt100_params[VT100_MAX_PARAMS] = {};
     int vt100_param_count = 0;
@@ -224,7 +224,7 @@ private:
     bool waiting_key_to_exit = false;
 
     /* ================================================================== */
-    /*  初始化                                                              */
+    /*  Initialize                                                              */
     /* ================================================================== */
     void console_data_init()
     {
@@ -236,7 +236,7 @@ private:
     }
 
     /* ================================================================== */
-    /*  UI 构建（终端区域，挂载到 ui_APP_Container）                        */
+    /*  UI construction(terminal area mounted under ui_APP_Container)                        */
     /* ================================================================== */
     void creat_console_UI()
     {
@@ -260,7 +260,7 @@ private:
         lv_obj_remove_flag(term_canvas,
                            (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
 
-        /* --------------------- 行级 label ------------------------ */
+        /* --------------------- line-level label ------------------------ */
         const lv_font_t *mono_font = g_font_mono_12 ? g_font_mono_12 : g_font_cn_12;
         for (int r = 0; r < ROWS; r++)
         {
@@ -279,7 +279,7 @@ private:
         }
         memset(row_rendered, 0, sizeof(row_rendered));
 
-        /* --------------------- 光标 label（反色块）---------------- */
+        /* --------------------- cursor label (inverted block)---------------- */
         cursor_label = lv_label_create(term_canvas);
         lv_obj_set_style_text_font(cursor_label, mono_font, 0);
         lv_obj_set_style_text_color(cursor_label, lv_color_hex(FIXED_BG), 0);
@@ -295,7 +295,7 @@ private:
     }
 
     /* ================================================================== */
-    /*  事件绑定                                                            */
+    /*  Event binding                                                            */
     /* ================================================================== */
     void event_handler_init()
     {
@@ -344,7 +344,7 @@ private:
     }
 
     /* ================================================================== */
-    /*  LVGL 定时器静态包装                                                 */
+    /*  LVGL timer static wrapper                                                 */
     /* ================================================================== */
     static void s_poll_cb(lv_timer_t *t)
     {
@@ -394,7 +394,7 @@ private:
     }
 
     /* ================================================================== */
-    /*  VT100 辅助函数                                                      */
+    /*  VT100 helper functions                                                      */
     /* ================================================================== */
 
     static int clamp(int v, int lo, int hi)
@@ -404,9 +404,9 @@ private:
         return v;
     }
 
-    /** defparam: 缺省参数或显式0均返回默认值。
-     *  idx >= param_count → 参数缺失 → dfl
-     *  params[idx] == 0 → 显式0或缺失 → dfl
+    /** defparam: Default parameters or explicit 0 both return the default value.
+     *  idx >= param_count -> parameter missing -> dfl
+     *  params[idx] == 0 -> explicit 0 or missing -> dfl
      */
     int defparam(int idx, int dfl)
     {
@@ -414,7 +414,7 @@ private:
     }
 
     /* ================================================================== */
-    /*  字符网格操作                                                        */
+    /*  Character grid operations                                                        */
     /* ================================================================== */
     void vt100_screen_clear_all()
     {
@@ -513,7 +513,7 @@ private:
     }
 
     /* ================================================================== */
-    /*  字符输出 (含 DECAWM 自动换行)                                       */
+    /*  Character output (including DECAWM automatic wrap)                                       */
     /* ================================================================== */
     void vt100_put_char(char ch)
     {
@@ -546,14 +546,14 @@ private:
                 vt100_put_char(' ');
             return;
         }
-        /* C0 controls (0x00-0x1F) — 忽略 */
+        /* C0 controls (0x00-0x1F) — ignore */
         if ((unsigned char)ch < 0x20)
             return;
         /* DEL (0x7F) */
         if ((unsigned char)ch == 0x7F)
             return;
 
-        /* ── DECAWM 自动换行检查 ── */
+        /* ── DECAWM automatic-wrap check ── */
         if (vt100_cur_col >= COLS)
         {
             if (vt100_auto_wrap)
@@ -567,25 +567,25 @@ private:
             }
             else
             {
-                vt100_cur_col = COLS - 1;  /* 覆盖最后一列 */
+                vt100_cur_col = COLS - 1;  /* overwrite the last column */
             }
         }
         vt100_screen[vt100_cur_row][vt100_cur_col++] = ch;
     }
 
     /* ================================================================== */
-    /*  ESC 序列处理 (非 CSI)                                               */
+    /*  ESC sequence handling (non-CSI)                                               */
     /* ================================================================== */
     void vt100_handle_esc(char c)
     {
         switch (c) {
-        case 'D':  /* IND — Index: 光标下移，必要时滚屏 */
+        case 'D':  /* IND — Index: move cursor down and scroll if needed */
             if (vt100_cur_row == ROWS - 1)
                 vt100_scroll_up(0, ROWS - 1, 1);
             else
                 vt100_cur_row++;
             break;
-        case 'M':  /* RI — Reverse Index: 光标上移 */
+        case 'M':  /* RI — Reverse Index: move cursor up */
             if (vt100_cur_row == 0)
                 vt100_scroll_down(0, ROWS - 1, 1);
             else
@@ -642,11 +642,11 @@ private:
     }
 
     /* ================================================================== */
-    /*  CSI 序列分发 (完整 VT100 指令集)                                    */
+    /*  CSI sequence dispatch (complete VT100 instruction set)                                    */
     /* ================================================================== */
     void vt100_handle_csi(char final)
     {
-        /* ── DEC 私有模式 (ESC [? ... h/l) ── */
+        /* ── DEC private modes (ESC [? ... h/l) ── */
         if (vt100_priv_mode) {
             switch (final) {
             case 'h': /* DECSET */
@@ -671,7 +671,7 @@ private:
             return;
         }
 
-        /* ── Secondary DA / xterm 查询 (ESC [> ... c) ── */
+        /* ── Secondary DA / xterm query (ESC [> ... c) ── */
         if (vt100_sec_mode) {
             fprintf(stderr, "[VT100-DBG] handle_csi SEC_MODE final='%c'(0x%02X) param[0]=%d\n",
                     final, (unsigned char)final, vt100_params[0]);
@@ -693,7 +693,7 @@ private:
         }
 
         switch (final) {
-        /* ── 光标移动 ───────────────────── */
+        /* ── Cursor movement ───────────────────── */
         case 'A': /* CUU */
             vt100_cur_row -= defparam(0, 1);
             if (vt100_cur_row < 0) vt100_cur_row = 0;
@@ -712,7 +712,7 @@ private:
             break;
         case 'H': /* CUP — Cursor Position */
         case 'f': /* HVP — Horizontal Vertical Position */
-            vt100_cur_row = defparam(0, 1) - 1;  /* 1-based → 0-based */
+            vt100_cur_row = defparam(0, 1) - 1;  /* 1-based -> 0-based */
             vt100_cur_col = defparam(1, 1) - 1;
             if (vt100_cur_row < 0) vt100_cur_row = 0;
             if (vt100_cur_row >= ROWS) vt100_cur_row = ROWS - 1;
@@ -744,7 +744,7 @@ private:
             vt100_cur_bg   = vt100_saved_bg;
             break;
 
-        /* ── 擦除 ───────────────────────── */
+        /* ── Erase ───────────────────────── */
         case 'J': /* ED — Erase Display */
             vt100_erase_display(defparam(0, 0));
             break;
@@ -752,7 +752,7 @@ private:
             vt100_erase_line(defparam(0, 0));
             break;
 
-        /* ── 插入 / 删除 ────────────────── */
+        /* ── Insert / delete ────────────────── */
         case 'L': /* IL — Insert Lines */
             vt100_insert_lines(defparam(0, 1));
             break;
@@ -802,13 +802,13 @@ private:
             }
             break;
 
-        /* ── 滚动区域 ────────────────────── */
+        /* ── scrolling region ────────────────────── */
         case 'r': /* DECSTBM — Set Top and Bottom Margins */
             /* acknowledged but not fully implemented */
             break;
 
-        /* ── 设备控制 ────────────────────── */
-        case 'c': /* DA — Device Attributes: 回复 \033[?1;0c (VT100) */
+        /* ── Device control ────────────────────── */
+        case 'c': /* DA — Device Attributes: reply with \033[?1;0c (VT100) */
             if (pty_handle != NULL) {
                 const char *reply = "\033[?1;0c";
                 hal_pty_write(pty_handle, reply, strlen(reply));
@@ -830,7 +830,7 @@ private:
             }
             break;
 
-        /* ── 模式设置 ────────────────────── */
+        /* ── Mode settings ────────────────────── */
         case 'h': /* SM — Set Mode (non-private) */
         case 'l': /* RM — Reset Mode (non-private) */
             break;
@@ -841,7 +841,7 @@ private:
     }
 
     /* ================================================================== */
-    /*  主字节流解析 (完整 VT100 状态机, 移植自 src/vt100.c)                  */
+    /*  Main byte-stream parser (full VT100 state machine, ported from src/vt100.c)                  */
     /* ================================================================== */
     void vt100_process_bytes(const char *data, int len)
     {
@@ -856,12 +856,12 @@ private:
         {
             unsigned char c = (unsigned char)data[i];
 
-            /* ── 字符串终止检测 ───────────── */
-            /* skip_until_st 期间 vt100_esc_state 保持不变。
-             * OSC: BEL(0x07), ST(0x9C), 或裸反斜杠均可终止。
-             * DCS: 仅 BEL 或 ST 终止; 反斜杠不是 DCS 终止符
-             *      (DCS 使用两字节 ESC \ 序列)。
-             * 因此 vt100_esc_state == VT100_ST_OSC 守卫是必要的。 */
+            /* ── string terminator detection ───────────── */
+            /* skip_until_st during vt100_esc_state remains unchanged.
+             * OSC: BEL(0x07), ST(0x9C), or a bare backslash can terminate.
+             * DCS: only BEL or ST terminates; backslash is not a DCS terminator
+             *      (DCS uses a two-byte ESC \ sequence).
+             * Therefore the vt100_esc_state == VT100_ST_OSC guard is required. */
             if (vt100_skip_until_st) {
                 if (c == 0x07 || c == 0x9C ||
                     (c == '\\' && vt100_esc_state == VT100_ST_OSC)) {
@@ -977,7 +977,7 @@ private:
     }
 
     /* ================================================================== */
-    /*  行级渲染：仅在该行内容变化时才调用 lv_label_set_text                */
+    /*  Line-level rendering: call lv_label_set_text only when that row changes                */
     /* ================================================================== */
     static inline char sanitize_ch(char ch)
     {
@@ -998,7 +998,7 @@ private:
         buf[COLS] = '\0';
 
         if (memcmp(buf, row_rendered[r], COLS + 1) == 0)
-            return; /* 行未变化，跳过 */
+            return; /* row unchanged, skip */
 
         memcpy(row_rendered[r], buf, COLS + 1);
         lv_label_set_text(row_labels[r], buf);
@@ -1011,7 +1011,7 @@ private:
         update_cursor_position_only();
     }
 
-    /** 仅更新光标 label 的位置与字符，不改变显示/隐藏状态 */
+    /** Only update the cursor label position and character; do not change show/hide state */
     void update_cursor_position_only()
     {
         if (!cursor_label)
@@ -1050,7 +1050,7 @@ private:
     }
 
     /* ================================================================== */
-    /*  PTY 管理                                                            */
+    /*  PTY management                                                            */
     /* ================================================================== */
     bool start_pty(const std::string &cmd, const std::vector<std::string> &args = {})
     {
@@ -1072,7 +1072,7 @@ private:
     }
 
     /* ================================================================== */
-    /*  定时器回调                                                          */
+    /*  Timer callback                                                          */
     /* ================================================================== */
     void vt100_poll_cb(lv_timer_t *t)
     {
@@ -1131,7 +1131,7 @@ private:
             return;
         }
 
-        /* 尊重 DECTCEM 光标可见性设置 */
+        /* Honor the DECTCEM cursor visibility setting */
         if (!vt100_cursor_visible_flag)
         {
             show_cursor(false);
@@ -1142,12 +1142,12 @@ private:
     }
 
     /* ================================================================== */
-    /*  按键处理                                                            */
+    /*  Key handling                                                            */
     /* ================================================================== */
 
     /**
-     * 将来自物理键盘（evdev keycode + utf8）转为终端字节序列写入 PTY。
-     * evdev keycode 参考（linux/input-event-codes.h）：
+     * Convert physical keyboard input (evdev keycode + utf8) to terminal byte sequences and write them to the PTY.
+     * evdev keycode reference (linux/input-event-codes.h):
      *   KEY_ESC=1  KEY_BACKSPACE=14  KEY_ENTER=28
      *   KEY_UP=103 KEY_LEFT=105 KEY_RIGHT=106 KEY_DOWN=108
      */
