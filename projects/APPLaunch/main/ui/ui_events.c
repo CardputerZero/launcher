@@ -6,6 +6,7 @@
 #include <stdint.h>
 
 #include "compat/input_keys.h"
+#include "Animation/ui_launcher_animation.h"
 
 
 typedef void (*switch_cb_t)(lv_event_t *);
@@ -242,19 +243,11 @@ void switch_right(lv_event_t *e)
 
     lv_obj_clear_flag(launch_circle[0], LV_OBJ_FLAG_HIDDEN);
 
-    leftOuterPanelToLeft_Animation(launch_circle[0], 0, NULL);
-    leftPanelToCenter_Animation(launch_circle[1], 0, NULL);
-    centerPanelToRight_Animation(launch_circle[2], 0, NULL);
-    rightPanelToRightOuter_Animation(launch_circle[3], 0, snap_all_panels);
+    launcher_home_animate_right(launch_circle, snap_all_panels);
 
     snap_panel_to_slot(launch_circle[4], 0);
 
     lv_obj_clear_flag(launch_circle[5], LV_OBJ_FLAG_HIDDEN);
-
-    leftOuterLabelToLeft_Animation(launch_circle[5], 0, NULL);
-    leftLabelToCenter_Animation(launch_circle[6], 0, NULL);
-    centerLabelToRight_Animation(launch_circle[7], 0, NULL);
-    rightLabelToRightOuter_Animation(launch_circle[8], 0, NULL);
 
     snap_label_to_slot(launch_circle[9], 5);
 
@@ -290,19 +283,11 @@ void switch_left(lv_event_t *e)
 
     lv_obj_clear_flag(launch_circle[4], LV_OBJ_FLAG_HIDDEN);
 
-    rightOuterPanelToRight_Animation(launch_circle[4], 0, NULL);
-    rightPanelToCenter_Animation(launch_circle[3], 0, NULL);
-    centerPanelToLeft_Animation(launch_circle[2], 0, NULL);
-    leftPanelToLeftOuter_Animation(launch_circle[1], 0, snap_all_panels);
+    launcher_home_animate_left(launch_circle, snap_all_panels);
 
     snap_panel_to_slot(launch_circle[0], 4);
 
     lv_obj_clear_flag(launch_circle[9], LV_OBJ_FLAG_HIDDEN);
-
-    rightOuterLabelToRight_Animation(launch_circle[9], 0, NULL);
-    rightLabelToCenter_Animation(launch_circle[8], 0, NULL);
-    centerLabelToLeft_Animation(launch_circle[7], 0, NULL);
-    leftLabelToLeftOuter_Animation(launch_circle[6], 0, NULL);
 
     snap_label_to_slot(launch_circle[5], 9);
 
