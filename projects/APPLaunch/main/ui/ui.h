@@ -64,6 +64,7 @@ void ui_info_bind();
 #define IS_KEY_RELEASED(e) ((lv_event_get_code(e) == LV_EVENT_KEYBOARD)&&(LV_EVENT_KEYBOARD_GET_KEY_STATE(e) == 0))
 
 extern volatile uint32_t LV_EVENT_BATTERY;
+extern volatile uint32_t LV_EVENT_DELL_CPP_DATA;
 
 typedef struct {
     hal_battery_info_t info;

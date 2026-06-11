@@ -1,6 +1,7 @@
 # component/SConscript
 Import("env")
 import os
+import subprocess
 
 with open(env["PROJECT_TOOL_S"]) as f:
     exec(f.read())
@@ -22,6 +23,13 @@ if "CONFIG_CP0_LVGL_COMPONENT_ENABLED" in os.environ or "CONFIG_SIGSLOT_COMPONEN
     else:
         SRCS += Glob('src/cp0/*.c*')
         REQUIREMENTS += ['input', 'xkbcommon', 'udev', 'pthread']
+        REQUIREMENTS += ['camera', 'camera-base', 'jpeg']
+        try:
+            DEFINITIONS += subprocess.check_output(
+                ['pkg-config', '--cflags', 'libcamera'], text=True).split()
+        except Exception:
+            _sr = os.environ.get('CONFIG_TOOLCHAIN_SYSROOT', '')
+            DEFINITIONS += [f'-I{_sr}/usr/include/libcamera']
 
     env["COMPONENTS"].append(
         {

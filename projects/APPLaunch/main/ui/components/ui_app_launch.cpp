@@ -196,6 +196,10 @@ public:
                               img_path("math_100.png"),
                               "/usr/share/APPLaunch/bin/M5CardputerZero-Calculator", false);
 
+        app_list.emplace_back("Compass",
+                              img_path("compass_needle_80.png"), page_v<UICompassPage>);
+                              
+
 #if defined(__linux__) && !defined(HAL_PLATFORM_SDL)
         if (APP_ENABLED("IP_Panel"))
         app_list.emplace_back("IP_PANEL",
@@ -224,8 +228,8 @@ public:
         app_list.emplace_back("REC",
                               img_path("rec_100.png"), page_v<UIRecPage>);
         if (APP_ENABLED("Camera"))
-        app_list.emplace_back("CAMERA",
-                              img_path("camera_100.png"), page_v<UICameraPage>);
+        // app_list.emplace_back("CAMERA",
+        //                       img_path("camera_100.png"), page_v<UICameraPage>);
         if (APP_ENABLED("UnitEnv"))
         app_list.emplace_back("UnitEnv",
                               img_path("unitenv_100.png"), page_v<UIUnitEnvPage>);

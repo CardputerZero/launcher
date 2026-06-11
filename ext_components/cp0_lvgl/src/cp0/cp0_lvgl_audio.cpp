@@ -17,7 +17,7 @@
 #include <string>
 #include <utility>
 
-// #define MINIAUDIO_IMPLEMENTATION
+#define MINIAUDIO_IMPLEMENTATION
 #include "miniaudio.h"
 
 

@@ -32,7 +32,7 @@ extern "C" {
 static const char* lock_file = NULL;
 volatile uint32_t LV_EVENT_BATTERY;
 volatile uint32_t LV_EVENT_WIFI_INFO;
-
+volatile uint32_t LV_EVENT_DELL_CPP_DATA;
 
 
 
@@ -69,10 +69,13 @@ int get_st7789v_fbdev(char *dev_path, size_t buf_size)
 
     if (fb_num < 0) {
         fprintf(stderr, "fb_st7789v not found in /proc/fb\n");
-        return -1;
     }
-
-    snprintf(dev_path, buf_size, "/dev/fb%d", fb_num);
+    if (access("/dev/fb_lcd", F_OK) == 0) {
+        snprintf(dev_path, buf_size, "/dev/fb_lcd");
+    } else {
+        fb_num = 0;
+        snprintf(dev_path, buf_size, "/dev/fb%d", fb_num);
+    }
     return 0;
 }
 
@@ -308,7 +311,8 @@ void APPLaunch_lock()
     }
 }
 
-
+extern "C" void init_audio(void);
+extern "C" void init_camera(void);
 int main(void)
 {
     setenv("XDG_RUNTIME_DIR", "/run/user/1000", 1);
@@ -331,6 +335,7 @@ int main(void)
 
     LV_EVENT_KEYBOARD = lv_event_register_id();
     LV_EVENT_BATTERY = lv_event_register_id();
+    LV_EVENT_DELL_CPP_DATA = lv_event_register_id();
     lv_timer_create(battery_timer_cb, 3000, NULL);
 
     // Restore saved brightness
@@ -346,7 +351,8 @@ int main(void)
         if (saved_vol >= 0)
             hal_volume_write(saved_vol);
     }
-
+    init_audio();
+    init_camera();
     ui_init();
 
     // Force full-screen refresh immediately after init
