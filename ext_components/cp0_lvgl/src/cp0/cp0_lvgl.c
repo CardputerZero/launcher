@@ -9,6 +9,7 @@ void cp0_lvgl_init(void)
     init_freambuffer_disp();
     init_input();
     init_audio();
+    init_lvgl_saved_settings();
     init_battery();
     init_camera();
 }

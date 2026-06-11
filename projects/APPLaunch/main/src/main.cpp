@@ -10,6 +10,7 @@
 #include "cp0_lvgl_file.hpp"
 #include "hal_lvgl_bsp.h"
 #include "global_config.h"
+#include "sample_log.h"
 #if CONFIG_BACKWARD_CPP_ENABLED
 #define BACKWARD_HAS_DW 1
 #include "backward.hpp"
@@ -58,38 +59,25 @@ int main(void)
     static const std::string default_lock_file = cp0_file_path("lock_file");
     lock_file = default_lock_file.c_str();
     lv_init();
-    printf("[BOOT] lv_init() done\n");
+    SLOGI("[BOOT] lv_init() done");
 
-    printf("[BOOT] cp0_lvgl_init() starting...\n");
+    SLOGI("[BOOT] cp0_lvgl_init() starting...");
     cp0_lvgl_init();
-    printf("[BOOT] cp0_lvgl_init() done\n");
+    SLOGI("[BOOT] cp0_lvgl_init() done");
 
     if (LV_EVENT_KEYBOARD == 0)
         LV_EVENT_KEYBOARD = lv_event_register_id();
 
-    // Restore saved brightness
-    {
-        int saved_bright = cp0_config_get_int("brightness", -1);
-        if (saved_bright > 0)
-            cp0_backlight_write(saved_bright);
-    }
-
-    // Restore saved volume
-    {
-        int saved_vol = cp0_config_get_int("volume", -1);
-        if (saved_vol >= 0)
-            cp0_volume_write(saved_vol);
-    }
     ui_init();
 
     // Force full-screen refresh immediately after init
-    printf("[BOOT] ui_init done, forcing full refresh...\n");
+    SLOGI("[BOOT] ui_init done, forcing full refresh...");
     lv_obj_invalidate(lv_scr_act());
     lv_refr_now(NULL);
-    printf("[BOOT] First frame flushed to fb0.\n");
+    SLOGI("[BOOT] First frame flushed to fb0.");
 
     /*Handle LVGL tasks*/
-    printf("Entering main loop (FULL render mode)...\n");
+    SLOGI("Entering main loop (FULL render mode)...");
     while(1) {
         APPLaunch_lock();
         lv_timer_handler();

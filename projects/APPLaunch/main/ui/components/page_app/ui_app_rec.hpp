@@ -1,4 +1,5 @@
 #pragma once
+#include "sample_log.h"
 
 #include "../ui_app_page.hpp"
 
@@ -293,7 +294,7 @@ private:
         // lvgl_add_call(but[0], [](lv_event_code_t c, void *d){
         //     if(c == LV_EVENT_CLICKED)
         //     {
-        //         printf("butt will be clicked\n");
+        //         SLOGI("butt will be clicked");
         //     }
         // }, NULL);
     }

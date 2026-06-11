@@ -1,4 +1,5 @@
 #pragma once
+#include "sample_log.h"
 #include "../ui_app_page.hpp"
 #include <stdio.h>
 #include <string.h>
@@ -314,7 +315,7 @@ private:
         if (lv_event_get_code(e) == LV_EVENT_KEYBOARD)
         {
             struct key_item *elm = (struct key_item *)lv_event_get_param(e);
-            printf("[CONSOLE] code=%u state=%s sym=%s utf8_len=%zu pty_active=%d waiting_exit=%d\n",
+            SLOGI("[CONSOLE] code=%u state=%s sym=%s utf8_len=%zu pty_active=%d waiting_exit=%d",
                    elm->key_code, kbd_state_name(elm->key_state), elm->sym_name,
                    strlen(elm->utf8), (int)terminal_active, (int)waiting_key_to_exit);
             if (waiting_key_to_exit && (elm->key_state == 0))
@@ -335,7 +336,7 @@ private:
                 if (pty_handle != NULL && terminal_active)
                 {
                     if (elm->key_state) {
-                        printf("[CONSOLE] -> PTY write (state=%s)\n", kbd_state_name(elm->key_state));
+                        SLOGI("[CONSOLE] -> PTY write (state=%s)", kbd_state_name(elm->key_state));
                         write_key_to_pty(elm->key_code, elm->utf8);
                     }
                 }
@@ -379,7 +380,7 @@ private:
                 if (std::chrono::duration_cast<std::chrono::seconds>(end_time - start_time).count() >= 5)
                 {
                     end_status = 0;
-                    printf("[CONSOLE] ESC held 5s -> kill PTY and go back home\n");
+                    SLOGI("[CONSOLE] ESC held 5s -> kill PTY and go back home");
                     self->stop_pty();
                     self->terminal_active = false;
                     if (self->go_back_home)

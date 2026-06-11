@@ -57,6 +57,7 @@ SRCS += append_srcs_dir(ADir('ui'))
 # add includes
 INCLUDE += [ADir('.'), ADir('include')]
 INCLUDE += [os.path.join(os.environ['EXT_COMPONENTS_PATH'], 'cp0_lvgl', 'include')]
+INCLUDE += [os.path.join(os.environ['SDK_PATH'], 'components', 'utilities', 'include')]
 
 # add requirements
 REQUIREMENTS += ['lvgl_component', 'pthread']

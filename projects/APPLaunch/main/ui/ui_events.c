@@ -1,4 +1,5 @@
 #include "ui.h"
+#include "sample_log.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -114,10 +115,10 @@ static ma_result audio_find_es8388_device(ma_context *context, ma_device_id *out
         return result;
     }
 
-    printf("[AUDIO] PulseAudio playback devices:\n");
+    SLOGI("[AUDIO] PulseAudio playback devices:");
 
     for (ma_uint32 i = 0; i < playbackCount; i++) {
-        printf("[AUDIO] [%u] %s%s\n",
+        SLOGI("[AUDIO] [%u] %s%s",
                i,
                pPlaybackInfos[i].name,
                pPlaybackInfos[i].isDefault ? " [default]" : "");
@@ -127,7 +128,7 @@ static ma_result audio_find_es8388_device(ma_context *context, ma_device_id *out
 
             *outDeviceID = pPlaybackInfos[i].id;
 
-            printf("[AUDIO] selected PulseAudio playback device: %s\n",
+            SLOGI("[AUDIO] selected PulseAudio playback device: %s",
                    pPlaybackInfos[i].name);
 
             return MA_SUCCESS;
@@ -221,7 +222,7 @@ int audio_system_init(void)
 
     g_audio_inited = 1;
 
-    printf("[AUDIO] audio system initialized with PulseAudio backend\n");
+    SLOGI("[AUDIO] audio system initialized with PulseAudio backend");
 
     pthread_mutex_unlock(&g_audio_mutex);
     return 0;
@@ -314,7 +315,7 @@ int audio_load_sounds(void)
 
     g_audio_sounds_loaded = 1;
 
-    printf("[AUDIO] sounds loaded\n");
+    SLOGI("[AUDIO] sounds loaded");
 
     pthread_mutex_unlock(&g_audio_mutex);
     return 0;
@@ -729,7 +730,7 @@ void main_key_switch(lv_event_t *e)
     struct key_item *elm = (struct key_item *)lv_event_get_param(e);
     uint32_t code = fzxc_to_arrow(elm->key_code);
 
-    printf("[LAUNCHER] main_key_switch raw=%u->code=%u state=%s sym=%s\n",
+    SLOGI("[LAUNCHER] main_key_switch raw=%u->code=%u state=%s sym=%s",
            elm->key_code,
            code,
            kbd_state_name(elm->key_state),

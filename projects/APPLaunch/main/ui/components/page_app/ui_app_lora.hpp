@@ -1,4 +1,5 @@
 #pragma once
+#include "sample_log.h"
 #if !defined(HAL_PLATFORM_SDL)
 #include "ui_app_lora.hpp"
 #include "lvgl/lvgl.h"
@@ -488,12 +489,12 @@ static int gpio_init_output_any(const char *chip_env_name, const char *offset_en
     if (chip_env && chip_env[0]) snprintf(chip_path, sizeof(chip_path), "%s", chip_env);
     if (offset_env && offset_env[0]) offset = atoi(offset_env);
     if (line_fd && gpio_open_output_line(chip_path, offset, value, line_fd)) {
-        printf("LoRa GPIO %s via cdev: %s[%d]=%d\n", line_name ? line_name : "out", chip_path, offset, value);
+        SLOGI("LoRa GPIO %s via cdev: %s[%d]=%d", line_name ? line_name : "out", chip_path, offset, value);
         return 0;
     }
 #endif
     if (gpio_init_output(gpio, value) == 0) return 0;
-    printf("LoRa GPIO %s init failed: gpio=%d errno=%d\n", line_name ? line_name : "out", gpio, errno);
+    SLOGI("LoRa GPIO %s init failed: gpio=%d errno=%d", line_name ? line_name : "out", gpio, errno);
     return -1;
 }
 
@@ -508,12 +509,12 @@ static int gpio_init_input_any(const char *chip_env_name, const char *offset_env
     if (chip_env && chip_env[0]) snprintf(chip_path, sizeof(chip_path), "%s", chip_env);
     if (offset_env && offset_env[0]) offset = atoi(offset_env);
     if (line_fd && gpio_open_input_line(chip_path, offset, line_fd)) {
-        printf("LoRa GPIO %s via cdev: %s[%d]\n", line_name ? line_name : "in", chip_path, offset);
+        SLOGI("LoRa GPIO %s via cdev: %s[%d]", line_name ? line_name : "in", chip_path, offset);
         return 0;
     }
 #endif
     if (gpio_init_input(gpio) == 0) return 0;
-    printf("LoRa GPIO %s input init failed: gpio=%d errno=%d\n", line_name ? line_name : "in", gpio, errno);
+    SLOGI("LoRa GPIO %s input init failed: gpio=%d errno=%d", line_name ? line_name : "in", gpio, errno);
     return -1;
 }
 
@@ -528,12 +529,12 @@ static int gpio_init_input_irq_any(const char *chip_env_name, const char *offset
     if (chip_env && chip_env[0]) snprintf(chip_path, sizeof(chip_path), "%s", chip_env);
     if (offset_env && offset_env[0]) offset = atoi(offset_env);
     if (line_fd && gpio_open_input_event_line(chip_path, offset, line_fd)) {
-        printf("LoRa GPIO %s irq-event via cdev: %s[%d]\n", line_name ? line_name : "irq", chip_path, offset);
+        SLOGI("LoRa GPIO %s irq-event via cdev: %s[%d]", line_name ? line_name : "irq", chip_path, offset);
         return 0;
     }
 #endif
     if (line_fd && gpio_init_input_irq_sysfs(gpio, line_fd) == 0) {
-        printf("LoRa GPIO %s irq-event via sysfs: gpio%d rising\n", line_name ? line_name : "irq", gpio);
+        SLOGI("LoRa GPIO %s irq-event via sysfs: gpio%d rising", line_name ? line_name : "irq", gpio);
         return 0;
     }
     return -1;
@@ -595,7 +596,7 @@ static void lora_update_power_debug(const char *stage, int sysfs_ret, int gpio_v
     const char *value_text = gpio_value < 0 ? "read_fail" : (gpio_value ? "HIGH" : "LOW");
     snprintf(text, sizeof(text), "5VDBG %s cdev=%s chip=%s[%d] sysfs_ret=%d gpio5=%s",
              stage ? stage : "?", cdev_ok ? "ok" : "fail", chip_text, g_hat_5vout_offset, sysfs_ret, value_text);
-    printf("%s\n", text);
+    SLOGI("%s", text);
 }
 
 static bool hat_5vout_prepare_line(void)
@@ -823,7 +824,7 @@ static bool probe_lora_spi_device(void)
         snprintf(g_lora_probe_display, sizeof(g_lora_probe_display), "SPI: no spidev found");
         return false;
     }
-    printf("LoRa SPI probe policy: prefer SPI0 only, CE1 then CE0\n");
+    SLOGI("LoRa SPI probe policy: prefer SPI0 only, CE1 then CE0");
     summary[0] = '\0';
     for (size_t i = 0; i < candidate_count; ++i) {
         const char *dev = candidates[i];
@@ -844,7 +845,7 @@ static bool probe_lora_spi_device(void)
         snprintf(g_spi_device, sizeof(g_spi_device), "%s", dev);
         g_lora_nss_manual = false;
         const char *cs_name = strstr(g_spi_device, "spidev0.1") ? "SPI0-CE1" : (strstr(g_spi_device, "spidev0.0") ? "SPI0-CE0" : "non-SPI0");
-        printf("LoRa probe: trying %s [%s] (cs=hw-auto)\n", g_spi_device, cs_name);
+        SLOGI("LoRa probe: trying %s [%s] (cs=hw-auto)", g_spi_device, cs_name);
         g_lora_initialized = false;
         if (g_spi_fd >= 0) { close(g_spi_fd); g_spi_fd = -1; }
         if (gpio_init_output_any("LORA_RST_CHIP", "LORA_RST_OFFSET", g_lora_rst_gpio, 1, &g_lora_rst_fd, "RST") < 0) {
@@ -876,7 +877,7 @@ static bool probe_lora_spi_device(void)
             snprintf(g_lora_last_diag, sizeof(g_lora_last_diag), "status read failed on %s", g_spi_device);
             return false;
         }
-        printf("LoRa probe: %s [%s] (cs=hw-auto) status=0x%02X\n", g_spi_device, cs_name, status);
+        SLOGI("LoRa probe: %s [%s] (cs=hw-auto) status=0x%02X", g_spi_device, cs_name, status);
         snprintf(g_lora_last_diag, sizeof(g_lora_last_diag), "probe ok on %s[%s] cs=hw-auto status=0x%02X", g_spi_device, cs_name, status);
         snprintf(g_lora_probe_display, sizeof(g_lora_probe_display), "FOUND: %s (%s)", g_spi_device, cs_name);
         return true;
@@ -993,7 +994,7 @@ static void lora_set_diag_step(const char *step, int code, const char *detail)
 {
     snprintf(g_lora_last_diag, sizeof(g_lora_last_diag), "%s%s%s | rc=%d",
              step ? step : "diag", (detail && detail[0]) ? " | " : "", (detail && detail[0]) ? detail : "", code);
-    printf("LoRa diag: %s\n", g_lora_last_diag);
+    SLOGI("LoRa diag: %s", g_lora_last_diag);
 }
 
 static const char *lora_radiolib_status_text(int16_t state)
@@ -1015,14 +1016,14 @@ static const char *lora_radiolib_status_text(int16_t state)
 static void lora_capture_device_errors(const char *stage, uint16_t irq_status)
 {
     if (!g_lora_initialized || g_lora_radio == NULL) return;
-    printf("LoRa error: %s irq=0x%04X\n", stage ? stage : "radio_err", irq_status);
+    SLOGI("LoRa error: %s irq=0x%04X", stage ? stage : "radio_err", irq_status);
     snprintf(g_lora_last_diag, sizeof(g_lora_last_diag), "%s irq=0x%04X", stage ? stage : "radio_err", irq_status);
 }
 
 static bool lora_send_text_packet(const char *payload)
 {
     if (!g_lora_initialized || g_lora_radio == NULL) {
-        printf("LoRa TX: not initialized\n");
+        SLOGI("LoRa TX: not initialized");
         return false;
     }
     if (payload == NULL || payload[0] == '\0') return false;
@@ -1039,12 +1040,12 @@ static bool lora_send_text_packet(const char *payload)
     if (state != RADIOLIB_ERR_NONE) {
         g_lora_tx_in_progress = false;
         g_lora_pending_rx_after_tx = false;
-        printf("LoRa TX: startTransmit failed rc=%d(%s)\n", (int)state, lora_radiolib_status_text(state));
+        SLOGI("LoRa TX: startTransmit failed rc=%d(%s)", (int)state, lora_radiolib_status_text(state));
         return false;
     }
     g_lora_tx_in_progress = true;
     g_lora_tx_start_ms = g_lora_last_auto_tx_ms = get_monotonic_ms();
-    printf("LoRa TX: sending '%s'\n", g_lora_last_tx);
+    SLOGI("LoRa TX: sending '%s'", g_lora_last_tx);
     return true;
 }
 
@@ -1060,32 +1061,32 @@ static void lora_send_demo_packet(void)
     int16_t state = g_lora_radio->startTransmit((uint8_t *)g_lora_last_tx, strlen(g_lora_last_tx));
     if (state != RADIOLIB_ERR_NONE) {
         g_lora_tx_in_progress = false;
-        printf("LoRa TX: demo startTransmit failed rc=%d(%s)\n", (int)state, lora_radiolib_status_text(state));
+        SLOGI("LoRa TX: demo startTransmit failed rc=%d(%s)", (int)state, lora_radiolib_status_text(state));
         return;
     }
     g_lora_tx_in_progress = true;
     g_lora_tx_start_ms = g_lora_last_auto_tx_ms = get_monotonic_ms();
-    printf("LoRa TX: demo sending '%s'\n", g_lora_last_tx);
+    SLOGI("LoRa TX: demo sending '%s'", g_lora_last_tx);
     ++g_lora_tx_counter;
 }
 
 static void lora_start_receive_mode(void)
 {
     if (!g_lora_initialized || g_lora_radio == NULL) {
-        printf("LoRa RX: startReceive skipped, not initialized\n");
+        SLOGI("LoRa RX: startReceive skipped, not initialized");
         return;
     }
     if (g_lora_tx_in_progress) {
-        printf("LoRa RX: startReceive skipped, TX in progress\n");
+        SLOGI("LoRa RX: startReceive skipped, TX in progress");
         g_lora_pending_rx_after_tx = true;
         return;
     }
     g_lora_tx_mode = false;
     g_lora_selected_tx_mode = false;
     g_lora_pending_rx_after_tx = false;
-    printf("LoRa RX: startReceive()\n");
+    SLOGI("LoRa RX: startReceive()");
     int16_t state = g_lora_radio->startReceive();
-    printf("LoRa RX: startReceive rc=%d(%s)\n", (int)state, lora_radiolib_status_text(state));
+    SLOGI("LoRa RX: startReceive rc=%d(%s)", (int)state, lora_radiolib_status_text(state));
     if (state != RADIOLIB_ERR_NONE) {
         snprintf(g_lora_last_diag, sizeof(g_lora_last_diag), "startReceive rc=%d(%s)", (int)state, lora_radiolib_status_text(state));
     }
@@ -1095,7 +1096,7 @@ static void lora_apply_mode(bool tx_mode)
 {
     g_lora_selected_tx_mode = tx_mode;
     if (!g_lora_initialized || g_lora_radio == NULL) {
-        printf("LoRa mode: not initialized\n");
+        SLOGI("LoRa mode: not initialized");
         return;
     }
     if (tx_mode) {
@@ -1103,19 +1104,19 @@ static void lora_apply_mode(bool tx_mode)
         g_lora_tx_mode = true;
         g_lora_last_auto_tx_ms = get_monotonic_ms();
         if (g_lora_tx_in_progress) {
-            printf("LoRa mode: TX already in progress\n");
+            SLOGI("LoRa mode: TX already in progress");
             return;
         }
         int16_t state = g_lora_radio->standby();
         if (state == RADIOLIB_ERR_NONE) {
-            printf("LoRa mode: TX ready\n");
+            SLOGI("LoRa mode: TX ready");
         } else {
-            printf("LoRa mode: set TX failed rc=%d(%s)\n", (int)state, lora_radiolib_status_text(state));
+            SLOGI("LoRa mode: set TX failed rc=%d(%s)", (int)state, lora_radiolib_status_text(state));
         }
     } else {
         if (g_lora_tx_in_progress) {
             g_lora_pending_rx_after_tx = true;
-            printf("LoRa mode: TX in progress, will RX after done\n");
+            SLOGI("LoRa mode: TX in progress, will RX after done");
             return;
         }
         g_lora_pending_rx_after_tx = false;
@@ -1150,7 +1151,7 @@ static void lora_service_irq_once(void)
 
     uint32_t irq_flags = g_lora_radio->getIrqFlags();
     if (irq_flags != RADIOLIB_SX126X_IRQ_NONE || irq_event) {
-        printf("LoRa IRQ: event=%d flags=0x%08lX tx_in_progress=%d tx_mode=%d\n",
+        SLOGI("LoRa IRQ: event=%d flags=0x%08lX tx_in_progress=%d tx_mode=%d",
                irq_event ? 1 : 0, (unsigned long)irq_flags, g_lora_tx_in_progress ? 1 : 0, g_lora_tx_mode ? 1 : 0);
     }
     if (!irq_event && irq_flags == RADIOLIB_SX126X_IRQ_NONE) return;
@@ -1162,7 +1163,7 @@ static void lora_service_irq_once(void)
                 g_lora_tx_done = true;
             } else {
                 g_lora_tx_in_progress = false;
-                printf("LoRa TX: finishTransmit failed rc=%d(%s)\n", (int)state, lora_radiolib_status_text(state));
+                SLOGI("LoRa TX: finishTransmit failed rc=%d(%s)", (int)state, lora_radiolib_status_text(state));
             }
         } else if (irq_flags & RADIOLIB_SX126X_IRQ_TIMEOUT) {
             g_lora_tx_in_progress = false;
@@ -1176,25 +1177,25 @@ static void lora_service_irq_once(void)
     if (irq_flags & RADIOLIB_SX126X_IRQ_RX_DONE) {
         uint8_t rx_buf[sizeof(g_lora_last_rx)] = {0};
         int16_t state = g_lora_radio->readData(rx_buf, sizeof(g_lora_last_rx) - 1);
-        printf("LoRa RX: readData rc=%d(%s)\n", (int)state, lora_radiolib_status_text(state));
+        SLOGI("LoRa RX: readData rc=%d(%s)", (int)state, lora_radiolib_status_text(state));
         if (state == RADIOLIB_ERR_NONE) {
             memcpy(g_lora_last_rx, rx_buf, sizeof(g_lora_last_rx));
             g_lora_last_rx[sizeof(g_lora_last_rx) - 1] = '\0';
             g_lora_last_rssi = g_lora_radio->getRSSI();
             g_lora_last_snr = g_lora_radio->getSNR();
             g_lora_rx_done = true;
-            printf("LoRa RX OK: '%s' RSSI=%.1f SNR=%.1f\n", g_lora_last_rx, g_lora_last_rssi, g_lora_last_snr);
+            SLOGI("LoRa RX OK: '%s' RSSI=%.1f SNR=%.1f", g_lora_last_rx, g_lora_last_rssi, g_lora_last_snr);
         } else if (state != RADIOLIB_ERR_CRC_MISMATCH) {
             snprintf(g_lora_last_diag, sizeof(g_lora_last_diag), "readData rc=%d(%s)", (int)state, lora_radiolib_status_text(state));
         }
         if (!g_lora_tx_mode) lora_start_receive_mode();
     } else if (irq_flags & (RADIOLIB_SX126X_IRQ_CRC_ERR | RADIOLIB_SX126X_IRQ_HEADER_ERR)) {
         snprintf(g_lora_last_diag, sizeof(g_lora_last_diag), "RX crc/header error irq=0x%04lX", (unsigned long)irq_flags);
-        printf("LoRa RX error: %s\n", g_lora_last_diag);
+        SLOGI("LoRa RX error: %s", g_lora_last_diag);
         if (!g_lora_tx_mode) lora_start_receive_mode();
     } else if (irq_flags & RADIOLIB_SX126X_IRQ_TIMEOUT) {
         snprintf(g_lora_last_diag, sizeof(g_lora_last_diag), "RX timeout irq=0x%04lX", (unsigned long)irq_flags);
-        printf("LoRa RX timeout: %s\n", g_lora_last_diag);
+        SLOGI("LoRa RX timeout: %s", g_lora_last_diag);
     }
 }
 
@@ -1269,7 +1270,7 @@ static void lora_init_hardware(void)
 
     lora_set_diag_step("power_enable", 0, "start");
     if (!hat_5vout_enable()) {
-        printf("Status: GPIO5 low set failed\n");
+        SLOGI("Status: GPIO5 low set failed");
         lora_set_diag_step("power_enable", 1, "GPIO5 low set failed");
     }
     usleep(100000);
@@ -1354,7 +1355,7 @@ static void lora_init_hardware(void)
     if (state != RADIOLIB_ERR_NONE) {
         g_lora_initialized = false; g_lora_hw_ready = false;
         snprintf(g_lora_last_diag, sizeof(g_lora_last_diag), "RadioLib begin rc=%d(%s)", (int)state, lora_radiolib_status_text(state));
-        printf("LoRa init failed: rc=%d (%s)\n", (int)state, lora_radiolib_status_text(state));
+        SLOGI("LoRa init failed: rc=%d (%s)", (int)state, lora_radiolib_status_text(state));
         lora_set_diag_step("radiolib_begin", state, g_lora_last_diag);
         return;
     }
@@ -1372,7 +1373,7 @@ static void lora_init_hardware(void)
     g_lora_last_auto_tx_ms = get_monotonic_ms();
 
     lora_set_diag_step("ready", 0, "LoRa init finished");
-    printf("LoRa: init done, auto enter RX\n");
+    SLOGI("LoRa: init done, auto enter RX");
     lora_start_receive_mode();
 }
 
@@ -1781,7 +1782,7 @@ static void lora_key_event_cb(lv_event_t *e)
     else if (key == KEY_BACKSPACE) key = LV_KEY_BACKSPACE;
     else if (key == KEY_DELETE) key = LV_KEY_DEL;
 
-    printf("[LoRa] raw=%u cp=%u key=0x%X view=%d\n", elm->key_code, cp, key, (int)g_lora_view);
+    SLOGI("[LoRa] raw=%u cp=%u key=0x%X view=%d", elm->key_code, cp, key, (int)g_lora_view);
     (void)handle_app_key(key);
 }
 
