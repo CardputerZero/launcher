@@ -2,7 +2,6 @@
 #include "lvgl/demos/lv_demos.h"
 #include <unistd.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <chrono>
 #include <string>
 #include "ui/ui.h"
@@ -18,27 +17,6 @@
 #endif
 
 static const char* lock_file = NULL;
-static const char *getenv_default(const char *name, const char *dflt)
-{
-    return getenv(name) ? : dflt;
-}
-
-
-#if LV_USE_EVDEV
-static void lv_linux_input_env_init(void)
-{
-    const std::string default_keyboard_device = cp0_file_path("keyboard_device");
-    const std::string default_keyboard_map = cp0_file_path("keyboard_map");
-    const char *keyboard_device = getenv_default("LV_LINUX_KEYBOARD_DEVICE", default_keyboard_device.c_str());
-    const char *keyboard_map = getenv_default("LV_LINUX_KEYBOARD_MAP", default_keyboard_map.c_str());
-    setenv("APPLAUNCH_LINUX_KEYBOARD_DEVICE", keyboard_device, 1);
-    setenv("APPLAUNCH_LINUX_KEYBOARD_MAP", keyboard_map, 1);
-}
-#else
-static void lv_linux_input_env_init(void)
-{
-}
-#endif
 
 void APPLaunch_lock()
 {
@@ -77,16 +55,10 @@ void APPLaunch_lock()
 
 int main(void)
 {
-    setenv("XDG_RUNTIME_DIR", "/run/user/1000", 1);
-    setenv("PIPEWIRE_RUNTIME_DIR", "/run/user/1000", 1);
-    setenv("PULSE_SERVER", "unix:/run/user/1000/pulse/native", 1);
-    
     static const std::string default_lock_file = cp0_file_path("lock_file");
     lock_file = default_lock_file.c_str();
     lv_init();
     printf("[BOOT] lv_init() done\n");
-
-    lv_linux_input_env_init();
 
     printf("[BOOT] cp0_lvgl_init() starting...\n");
     cp0_lvgl_init();

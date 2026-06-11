@@ -512,6 +512,20 @@ public:
         _cap_status_callback = callback;
     }
 
+    void VolumeRead(arg_t arg, callback_t callback)
+    {
+        (void)arg;
+        int val = read_system_volume();
+        report(callback, val >= 0 ? 0 : -1, std::to_string(val));
+    }
+
+    void VolumeWrite(arg_t arg, callback_t callback)
+    {
+        int val = parse_volume_arg(arg);
+        int ret = write_system_volume(val);
+        report(callback, ret >= 0 ? 0 : -1, std::to_string(ret));
+    }
+
     void api_call(arg_t arg, callback_t callback)
     {
         if(arg.empty())
@@ -532,7 +546,9 @@ public:
             map_fun(CapContinue),
             map_fun(CapEnd),
             map_fun(CapFileSave),
-            map_fun(SetCallback)
+            map_fun(SetCallback),
+            map_fun(VolumeRead),
+            map_fun(VolumeWrite)
         };
 
 #undef map_fun
@@ -546,6 +562,45 @@ public:
             }
         }
         report(callback, -1, "unknown audio api\n");
+    }
+
+    static int read_system_volume()
+    {
+        FILE *p = popen("amixer -c1 sget 'Headphone Playback Volume' 2>/dev/null", "r");
+        if (!p) return -1;
+        char buf[256];
+        int val = -1;
+        while (fgets(buf, sizeof(buf), p)) {
+            char *s = strstr(buf, ": values=");
+            if (s) {
+                val = atoi(s + 9);
+                break;
+            }
+        }
+        pclose(p);
+        return val;
+    }
+
+    static int write_system_volume(int val)
+    {
+        if (val < 0) val = 0;
+        if (val > 63) val = 63;
+
+        char cmd[128];
+        snprintf(cmd, sizeof(cmd), "amixer -c1 sset 'Headphone Playback Volume' %d 2>/dev/null", val);
+        FILE *p = popen(cmd, "r");
+        if (!p) return -1;
+        char buf[128];
+        while (fgets(buf, sizeof(buf), p)) {}
+        pclose(p);
+        return val;
+    }
+
+    static int parse_volume_arg(const arg_t& arg)
+    {
+        std::string value = first_arg_after_command(arg);
+        if (value.empty()) return 0;
+        return std::atoi(value.c_str());
     }
 };
 

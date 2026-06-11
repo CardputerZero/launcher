@@ -204,34 +204,6 @@ int cp0_backlight_write(int val)
     return val;
 }
 
-int cp0_volume_read(void)
-{
-    FILE *p = popen("amixer -c1 sget 'Headphone Playback Volume' 2>/dev/null", "r");
-    if (!p) return -1;
-    char buf[256];
-    int val = -1;
-    while (fgets(buf, sizeof(buf), p)) {
-        char *s = strstr(buf, ": values=");
-        if (s) { val = atoi(s + 9); break; }
-    }
-    pclose(p);
-    return val;
-}
-
-int cp0_volume_write(int val)
-{
-    if (val < 0) val = 0;
-    if (val > 63) val = 63;
-    char cmd[128];
-    snprintf(cmd, sizeof(cmd), "amixer -c1 sset 'Headphone Playback Volume' %d 2>/dev/null", val);
-    FILE *p = popen(cmd, "r");
-    if (!p) return -1;
-    char buf[128];
-    while (fgets(buf, sizeof(buf), p)) {}
-    pclose(p);
-    return val;
-}
-
 // ── Async WiFi status: background thread polls nmcli, main thread reads cache ──
 #include <pthread.h>
 

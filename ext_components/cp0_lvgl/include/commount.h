@@ -6,6 +6,7 @@ extern "C" {
 
 void init_lvgl_event();
 void init_lvgl_event_cpp();
+void init_lvgl_env();
 
 #ifdef __cplusplus
 }
