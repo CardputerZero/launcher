@@ -1,5 +1,5 @@
-#include "hal/hal_process.h"
-#include "hal/hal_config.h"
+#include "cp0_lvgl_app.h"
+#include "cp0_lvgl_app.h"
 #include <unistd.h>
 #include <sys/wait.h>
 #include <signal.h>
@@ -38,7 +38,7 @@ static bool is_nologin_shell(const char *shell)
 
 static const char *get_run_user()
 {
-    const char *cfg = hal_config_get_str("run_as_user", NULL);
+    const char *cfg = cp0_config_get_str("run_as_user", NULL);
     if (cfg && cfg[0]) return cfg;
 
     struct passwd *pwd;
@@ -84,7 +84,7 @@ static void exec_as_user(const char *exec_path)
  *  - keyboard_pause() still suspends libinput so APPLauncher's LVGL
  *    keyboard thread doesn't react while the app is in the foreground.
  * ------------------------------------------------------------------ */
-int hal_process_exec_blocking(const char *exec_path, volatile int *home_key_flag,
+int cp0_process_exec_blocking(const char *exec_path, volatile int *home_key_flag,
                               int keep_root)
 {
     (void)home_key_flag;
@@ -93,11 +93,11 @@ int hal_process_exec_blocking(const char *exec_path, volatile int *home_key_flag
 
     int evfd = open(get_kbd_device(), O_RDONLY | O_NONBLOCK);
     if (evfd < 0) {
-        perror("[hal] open evdev");
+        perror("[cp0] open evdev");
         keyboard_resume();
         return -1;
     }
-    printf("[hal] Opened evdev %s (no EVIOCGRAB; shared with child)\n", get_kbd_device());
+    printf("[cp0] Opened evdev %s (no EVIOCGRAB; shared with child)\n", get_kbd_device());
     fflush(stdout);
 
     pid_t pid = fork();
@@ -133,7 +133,7 @@ int hal_process_exec_blocking(const char *exec_path, volatile int *home_key_flag
                 const char *st = (ev.value == 1) ? "DOWN" :
                                  (ev.value == 0) ? "UP"   :
                                  (ev.value == 2) ? "REPEAT" : "???";
-                printf("[HAL-EXT] evdev code=%u value=%d(%s) (shared, child reads too)\n",
+                printf("[CP0-APP] evdev code=%u value=%d(%s) (shared, child reads too)\n",
                        ev.code, ev.value, st);
                 fflush(stdout);
             }
@@ -141,11 +141,11 @@ int hal_process_exec_blocking(const char *exec_path, volatile int *home_key_flag
                 if (ev.value == 1) {
                     esc_down = true;
                     esc_down_since = std::chrono::steady_clock::now();
-                    printf("[HAL-EXT] ESC DOWN\n");
+                    printf("[CP0-APP] ESC DOWN\n");
                     fflush(stdout);
                 } else if (ev.value == 0) {
                     esc_down = false;
-                    printf("[HAL-EXT] ESC UP\n");
+                    printf("[CP0-APP] ESC UP\n");
                     fflush(stdout);
                 }
             }
@@ -155,7 +155,7 @@ int hal_process_exec_blocking(const char *exec_path, volatile int *home_key_flag
             auto held_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::steady_clock::now() - esc_down_since).count();
             if (held_ms >= ESC_HOLD_SEC * 1000) {
-                printf("[hal] ESC held %ldms, SIGTERM pgid %d\n",
+                printf("[cp0] ESC held %ldms, SIGTERM pgid %d\n",
                        (long)held_ms, pid);
                 fflush(stdout);
                 /* Kill the whole process group, not just pid, because
@@ -167,7 +167,7 @@ int hal_process_exec_blocking(const char *exec_path, volatile int *home_key_flag
                 while (waitpid(pid, &status, WNOHANG) == 0) {
                     if (std::chrono::duration_cast<std::chrono::seconds>(
                             std::chrono::steady_clock::now() - t0).count() >= 3) {
-                        printf("[hal] SIGKILL pgid %d\n", pid);
+                        printf("[cp0] SIGKILL pgid %d\n", pid);
                         fflush(stdout);
                         killpg(pid, SIGKILL);
                         waitpid(pid, &status, 0);
@@ -186,13 +186,13 @@ int hal_process_exec_blocking(const char *exec_path, volatile int *home_key_flag
 
     keyboard_resume();
 
-    printf("[hal] Returned to launcher\n");
+    printf("[cp0] Returned to launcher\n");
     fflush(stdout);
     if (WIFEXITED(status)) return WEXITSTATUS(status);
     return -1;
 }
 
-int hal_process_check_lock(const char *lock_path, int *holder_pid)
+int cp0_process_check_lock(const char *lock_path, int *holder_pid)
 {
     *holder_pid = 0;
     int fd = open(lock_path, O_CREAT | O_RDWR, 0666);
@@ -210,10 +210,10 @@ int hal_process_check_lock(const char *lock_path, int *holder_pid)
     return 0;
 }
 
-void hal_process_kill(int pid, int grace_ms)
+void cp0_process_kill(int pid, int grace_ms)
 {
     if (pid <= 0) return;
-    /* killpg: hal_process_spawn puts the child in its own pgid, so
+    /* killpg: cp0_process_spawn puts the child in its own pgid, so
      * SIGINT/SIGKILL here reaches grandchildren too (sh + exec'd
      * binary are typically both inside). */
     killpg(pid, SIGINT);
@@ -231,7 +231,7 @@ void hal_process_kill(int pid, int grace_ms)
     }
 }
 
-hal_pid_t hal_process_spawn(const char *exec_path, int keep_root)
+cp0_pid_t cp0_process_spawn(const char *exec_path, int keep_root)
 {
     pid_t pid = fork();
     if (pid < 0) return -1;
@@ -244,10 +244,10 @@ hal_pid_t hal_process_spawn(const char *exec_path, int keep_root)
         _exit(127);
     }
     setpgid(pid, pid);
-    return (hal_pid_t)pid;
+    return (cp0_pid_t)pid;
 }
 
-void hal_process_stop(hal_pid_t pid)
+void cp0_process_stop(cp0_pid_t pid)
 {
     if (pid <= 0) return;
     killpg((pid_t)pid, SIGTERM);
@@ -255,15 +255,15 @@ void hal_process_stop(hal_pid_t pid)
     waitpid((pid_t)pid, &status, WNOHANG);
 }
 
-void hal_system_shutdown(void)
+void cp0_system_shutdown(void)
 {
-    printf("[HAL] shutdown\n");
+    printf("[CP0] shutdown\n");
     system("sudo shutdown -h now");
 }
 
-void hal_system_reboot(void)
+void cp0_system_reboot(void)
 {
-    printf("[HAL] reboot\n");
+    printf("[CP0] reboot\n");
     system("sudo reboot");
 }
 // rebuild trigger

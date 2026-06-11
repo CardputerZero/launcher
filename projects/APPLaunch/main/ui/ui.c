@@ -52,7 +52,6 @@ const char *ui_img_camera_png;
 static char _img_path_buf[16][256];
 static void ui_images_init(void)
 {
-    const char *d = cp0_path_images_dir();
     struct { const char **ptr; const char *name; } tbl[] = {
         { &ui_img_zero_png,       "zero.png" },
         { &ui_img_time_png,       "time_bg.png" },
@@ -69,7 +68,7 @@ static void ui_images_init(void)
     };
     int n = sizeof(tbl) / sizeof(tbl[0]);
     for (int i = 0; i < n && i < 16; i++) {
-        snprintf(_img_path_buf[i], sizeof(_img_path_buf[i]), "%s/%s", d, tbl[i].name);
+        snprintf(_img_path_buf[i], sizeof(_img_path_buf[i]), "%s", cp0_file_path(tbl[i].name));
         *tbl[i].ptr = _img_path_buf[i];
     }
 }
@@ -153,7 +152,7 @@ void font_manager_init(void)
 
     {
         static char bold_path[512];
-        snprintf(bold_path, sizeof(bold_path), "%s/Montserrat-Bold.ttf", cp0_path_font_dir());
+        snprintf(bold_path, sizeof(bold_path), "%s", cp0_file_path("Montserrat-Bold.ttf"));
         g_font_bold_20 = lv_freetype_font_create(
             bold_path, LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 18,
             LV_FREETYPE_FONT_STYLE_BOLD);
@@ -185,7 +184,7 @@ void home_screen_load()
     lv_indev_set_group(lv_indev_get_next(NULL), Screen1group);
 
     static char _startup_snd[256];
-    snprintf(_startup_snd, sizeof(_startup_snd), "%s/startup.mp3", cp0_path_images_dir());
+    snprintf(_startup_snd, sizeof(_startup_snd), "%s", cp0_file_path("startup.mp3"));
     cp0_audio_play(_startup_snd);
 }
 
@@ -221,7 +220,7 @@ void ui_event_logo_over(lv_event_t * e) {
 static char _gif_path[256];
 void start_startup_gif()
 {
-    snprintf(_gif_path, sizeof(_gif_path), "%s/logo_output.gif", cp0_path_images_dir());
+    snprintf(_gif_path, sizeof(_gif_path), "%s", cp0_file_path("logo_output.gif"));
     startup_gif = lv_gif_create(NULL);
     lv_gif_set_src(startup_gif, _gif_path);
     lv_obj_center(startup_gif);
@@ -233,8 +232,12 @@ void ui_init(void)
 {
     cp0_paths_init(NULL);
     ui_images_init();
-    font_path = cp0_path_font_regular();
-    mono_font_path = cp0_path_font_mono();
+    static char regular_font_path[512];
+    static char mono_font_path_buf[512];
+    snprintf(regular_font_path, sizeof(regular_font_path), "%s", cp0_file_path("AlibabaPuHuiTi-3-55-Regular.ttf"));
+    snprintf(mono_font_path_buf, sizeof(mono_font_path_buf), "%s", cp0_file_path("LiberationMono-Regular.ttf"));
+    font_path = regular_font_path;
+    mono_font_path = mono_font_path_buf;
     font_manager_init();
 
     LV_EVENT_GET_COMP_CHILD = lv_event_register_id();
@@ -263,7 +266,7 @@ void ui_init(void)
     #else
     {
         char gif_check[256];
-        snprintf(gif_check, sizeof(gif_check), "%s/logo_output.gif", cp0_path_images_dir());
+        snprintf(gif_check, sizeof(gif_check), "%s", cp0_file_path("logo_output.gif"));
         FILE *_gif_f = fopen(gif_check, "r");
         if (_gif_f) { fclose(_gif_f); start_startup_gif(); }
         else { home_screen_load(); }
@@ -277,20 +280,20 @@ void ui_init(void)
 char* cimg_path(const char *name)
 {
     static char path_buf[512];
-    snprintf(path_buf, sizeof(path_buf), "%s%s%s", cp0_path_images_dir(), PATH_SEP, name);
+    snprintf(path_buf, sizeof(path_buf), "%s", cp0_file_path(name));
     return path_buf;
 }
 
 char* caudio_path(const char *name)
 {
     static char path_buf[512];
-    snprintf(path_buf, sizeof(path_buf), "%s%s%s", cp0_path_audio_dir(), PATH_SEP, name);
+    snprintf(path_buf, sizeof(path_buf), "%s", cp0_file_path(name));
     return path_buf;
 }
 
 char* cfont_path(const char *name)
 {
     static char path_buf[512];
-    snprintf(path_buf, sizeof(path_buf), "%s%s%s", cp0_path_font_dir(), PATH_SEP, name);
+    snprintf(path_buf, sizeof(path_buf), "%s", cp0_file_path(name));
     return path_buf;
 }

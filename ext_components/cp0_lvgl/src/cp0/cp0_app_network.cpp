@@ -1,10 +1,10 @@
-#include "hal/hal_network.h"
+#include "cp0_lvgl_app.h"
 #include <string.h>
 #include <ifaddrs.h>
 #include <arpa/inet.h>
 #include <net/if.h>
 
-int hal_network_list(hal_netif_info_t *entries, int max_entries, int *out_count)
+int cp0_network_list(cp0_netif_info_t *entries, int max_entries, int *out_count)
 {
     *out_count = 0;
     struct ifaddrs *ifap = NULL;
@@ -15,7 +15,7 @@ int hal_network_list(hal_netif_info_t *entries, int max_entries, int *out_count)
         if (strcmp(ifa->ifa_name, "lo") == 0) continue;
         if (*out_count >= max_entries) break;
 
-        hal_netif_info_t *e = &entries[*out_count];
+        cp0_netif_info_t *e = &entries[*out_count];
         strncpy(e->iface, ifa->ifa_name, 31); e->iface[31] = '\0';
         struct sockaddr_in *sa = (struct sockaddr_in *)ifa->ifa_addr;
         inet_ntop(AF_INET, &sa->sin_addr, e->ipv4, sizeof(e->ipv4));

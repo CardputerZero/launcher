@@ -5,6 +5,7 @@
 #include <fcntl.h>
 #include <dirent.h>
 #include "cp0_lvgl_app.h"
+#include "cp0_lvgl_file.hpp"
 #include <unordered_map>
 #include <list>
 #include <memory>
@@ -362,7 +363,8 @@ public:
 
     void applications_load()
     {
-        const char *app_dir = cp0_path_applications_dir();
+        const std::string app_dir_path = cp0_file_path("applications");
+        const char *app_dir = app_dir_path.c_str();
         DIR *dir = opendir(app_dir);
         if (!dir)
         {
@@ -484,7 +486,8 @@ public:
     // ============================================================
     void inotify_init_watch()
     {
-        dir_watcher = cp0_dir_watch_start(cp0_path_applications_dir());
+        const std::string app_dir_path = cp0_file_path("applications");
+        dir_watcher = cp0_dir_watch_start(app_dir_path.c_str());
     }
 
     // ============================================================

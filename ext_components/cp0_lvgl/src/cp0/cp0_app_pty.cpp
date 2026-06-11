@@ -1,5 +1,4 @@
-#include "hal/hal_pty.h"
-#include "hal/hal_config.h"
+#include "cp0_lvgl_app.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -13,12 +12,12 @@
 #include <pwd.h>
 #include <grp.h>
 
-struct hal_pty {
+struct cp0_pty_handle {
     int   master_fd;
     pid_t child_pid;
 };
 
-hal_pty_t hal_pty_open(const char *cmd, const char *const *args,
+cp0_pty_t cp0_pty_open(const char *cmd, const char *const *args,
                        int cols, int rows)
 {
     int master_fd;
@@ -35,7 +34,7 @@ hal_pty_t hal_pty_open(const char *cmd, const char *const *args,
 
         // Drop to regular user if running as root
         if (getuid() == 0) {
-            const char *cfg_user = hal_config_get_str("run_as_user", NULL);
+            const char *cfg_user = cp0_config_get_str("run_as_user", NULL);
             const char *username = NULL;
             if (cfg_user && cfg_user[0]) {
                 username = cfg_user;
@@ -78,16 +77,17 @@ hal_pty_t hal_pty_open(const char *cmd, const char *const *args,
     int flags = fcntl(master_fd, F_GETFL);
     fcntl(master_fd, F_SETFL, flags | O_NONBLOCK);
 
-    struct hal_pty *pty = (struct hal_pty *)malloc(sizeof(struct hal_pty));
+    struct cp0_pty_handle *pty = (struct cp0_pty_handle *)malloc(sizeof(struct cp0_pty_handle));
     pty->master_fd = master_fd;
     pty->child_pid = pid;
     return pty;
 }
 
-int hal_pty_read(hal_pty_t pty, char *buf, size_t buf_size)
+int cp0_pty_read(cp0_pty_t pty, char *buf, size_t buf_size)
 {
     if (!pty) return -1;
-    ssize_t n = read(pty->master_fd, buf, buf_size);
+    struct cp0_pty_handle *h = (struct cp0_pty_handle *)pty;
+    ssize_t n = read(h->master_fd, buf, buf_size);
     if (n < 0) {
         if (errno == EAGAIN || errno == EWOULDBLOCK) return 0;
         return -1;
@@ -95,17 +95,19 @@ int hal_pty_read(hal_pty_t pty, char *buf, size_t buf_size)
     return (int)n;
 }
 
-int hal_pty_write(hal_pty_t pty, const char *buf, size_t len)
+int cp0_pty_write(cp0_pty_t pty, const char *buf, size_t len)
 {
     if (!pty) return -1;
-    return (int)write(pty->master_fd, buf, len);
+    struct cp0_pty_handle *h = (struct cp0_pty_handle *)pty;
+    return (int)write(h->master_fd, buf, len);
 }
 
-int hal_pty_check_child(hal_pty_t pty, int *exit_status)
+int cp0_pty_check_child(cp0_pty_t pty, int *exit_status)
 {
     if (!pty) return -1;
+    struct cp0_pty_handle *h = (struct cp0_pty_handle *)pty;
     int status;
-    pid_t r = waitpid(pty->child_pid, &status, WNOHANG);
+    pid_t r = waitpid(h->child_pid, &status, WNOHANG);
     if (r == 0) return 0;
     if (r > 0) {
         if (exit_status) *exit_status = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
@@ -114,11 +116,12 @@ int hal_pty_check_child(hal_pty_t pty, int *exit_status)
     return -1;
 }
 
-void hal_pty_close(hal_pty_t pty)
+void cp0_pty_close(cp0_pty_t pty)
 {
     if (!pty) return;
-    kill(pty->child_pid, SIGKILL);
-    waitpid(pty->child_pid, NULL, 0);
-    close(pty->master_fd);
-    free(pty);
+    struct cp0_pty_handle *h = (struct cp0_pty_handle *)pty;
+    kill(h->child_pid, SIGKILL);
+    waitpid(h->child_pid, NULL, 0);
+    close(h->master_fd);
+    free(h);
 }

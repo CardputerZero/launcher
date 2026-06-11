@@ -1,4 +1,4 @@
-#include "hal/hal_settings.h"
+#include "cp0_lvgl_app.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -117,9 +117,9 @@ static int bqmon_find_power_supply(char *out, size_t out_len)
     return 0;
 }
 
-hal_battery_info_t hal_battery_read(void)
+cp0_battery_info_t cp0_battery_read(void)
 {
-    hal_battery_info_t info;
+    cp0_battery_info_t info;
     memset(&info, 0, sizeof(info));
 
     char bq_path[256] = {0};
@@ -172,7 +172,7 @@ hal_battery_info_t hal_battery_read(void)
     return info;
 }
 
-int hal_backlight_read(void)
+int cp0_backlight_read(void)
 {
     FILE *f = fopen("/sys/class/backlight/backlight/brightness", "r");
     if (!f) return -1;
@@ -182,7 +182,7 @@ int hal_backlight_read(void)
     return val;
 }
 
-int hal_backlight_max(void)
+int cp0_backlight_max(void)
 {
     FILE *f = fopen("/sys/class/backlight/backlight/max_brightness", "r");
     if (!f) return 100;
@@ -192,10 +192,10 @@ int hal_backlight_max(void)
     return val;
 }
 
-int hal_backlight_write(int val)
+int cp0_backlight_write(int val)
 {
     if (val < 0) val = 0;
-    int mx = hal_backlight_max();
+    int mx = cp0_backlight_max();
     if (val > mx) val = mx;
     FILE *f = fopen("/sys/class/backlight/backlight/brightness", "w");
     if (!f) return -1;
@@ -204,7 +204,7 @@ int hal_backlight_write(int val)
     return val;
 }
 
-int hal_volume_read(void)
+int cp0_volume_read(void)
 {
     FILE *p = popen("amixer -c1 sget 'Headphone Playback Volume' 2>/dev/null", "r");
     if (!p) return -1;
@@ -218,7 +218,7 @@ int hal_volume_read(void)
     return val;
 }
 
-int hal_volume_write(int val)
+int cp0_volume_write(int val)
 {
     if (val < 0) val = 0;
     if (val > 63) val = 63;
@@ -235,14 +235,14 @@ int hal_volume_write(int val)
 // ── Async WiFi status: background thread polls nmcli, main thread reads cache ──
 #include <pthread.h>
 
-static hal_wifi_status_t s_wifi_cache;
+static cp0_wifi_status_t s_wifi_cache;
 static pthread_mutex_t s_wifi_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_t s_wifi_thread;
 static int s_wifi_thread_running = 0;
 
-static void wifi_poll_once(hal_wifi_status_t *out)
+static void wifi_poll_once(cp0_wifi_status_t *out)
 {
-    hal_wifi_status_t st;
+    cp0_wifi_status_t st;
     memset(&st, 0, sizeof(st));
     char line[256];
 
@@ -254,7 +254,7 @@ static void wifi_poll_once(hal_wifi_status_t *out)
             char *name = line + 5;
             if (name[0] && strcmp(name, "--") != 0) {
                 st.connected = 1;
-                strncpy(st.ssid, name, WIFI_SSID_MAX - 1);
+                strncpy(st.ssid, name, CP0_WIFI_SSID_MAX - 1);
             }
             break;
         }
@@ -297,7 +297,7 @@ static void *wifi_poll_thread(void *arg)
 {
     (void)arg;
     while (1) {
-        hal_wifi_status_t st;
+        cp0_wifi_status_t st;
         wifi_poll_once(&st);
         pthread_mutex_lock(&s_wifi_mutex);
         s_wifi_cache = st;
@@ -316,17 +316,17 @@ static void ensure_wifi_thread(void)
     }
 }
 
-hal_wifi_status_t hal_wifi_get_status(void)
+cp0_wifi_status_t cp0_wifi_get_status(void)
 {
     ensure_wifi_thread();
-    hal_wifi_status_t st;
+    cp0_wifi_status_t st;
     pthread_mutex_lock(&s_wifi_mutex);
     st = s_wifi_cache;
     pthread_mutex_unlock(&s_wifi_mutex);
     return st;
 }
 
-int hal_wifi_scan(hal_wifi_ap_t *out, int max_aps)
+int cp0_wifi_scan(cp0_wifi_ap_t *out, int max_aps)
 {
     system("nmcli dev wifi rescan 2>/dev/null");
     usleep(500000);
@@ -337,7 +337,7 @@ int hal_wifi_scan(hal_wifi_ap_t *out, int max_aps)
     while (fgets(line, sizeof(line), p) && count < max_aps) {
         line[strcspn(line, "\n")] = 0;
         if (line[0] == 0) continue;
-        hal_wifi_ap_t tmp;
+        cp0_wifi_ap_t tmp;
         memset(&tmp, 0, sizeof(tmp));
         char *ptr = line;
         char *last_colon = strrchr(ptr, ':');
@@ -353,7 +353,7 @@ int hal_wifi_scan(hal_wifi_ap_t *out, int max_aps)
         tmp.signal = atoi(sig_colon + 1);
         *sig_colon = 0;
         if (ptr[0] == 0) continue;
-        strncpy(tmp.ssid, ptr, WIFI_SSID_MAX - 1);
+        strncpy(tmp.ssid, ptr, CP0_WIFI_SSID_MAX - 1);
 
         /* Dedup: if same SSID already exists, keep the stronger signal,
          * but always preserve in_use flag (the connected AP might not be
@@ -381,7 +381,7 @@ int hal_wifi_scan(hal_wifi_ap_t *out, int max_aps)
     return count;
 }
 
-int hal_wifi_connect(const char *ssid, const char *password)
+int cp0_wifi_connect(const char *ssid, const char *password)
 {
     char cmd[512];
     if (password && password[0])
@@ -396,7 +396,7 @@ int hal_wifi_connect(const char *ssid, const char *password)
     return ok ? 0 : -1;
 }
 
-int hal_wifi_disconnect(void)
+int cp0_wifi_disconnect(void)
 {
     // Use "nmcli con down" (deactivate connection) rather than "nmcli dev
     // disconnect" (which marks the device unmanaged and prevents autoconnect
@@ -410,9 +410,9 @@ int hal_wifi_disconnect(void)
     return ok ? 0 : -1;
 }
 
-hal_bt_status_t hal_bt_get_status(void)
+cp0_bt_status_t cp0_bt_get_status(void)
 {
-    hal_bt_status_t st;
+    cp0_bt_status_t st;
     memset(&st, 0, sizeof(st));
     FILE *p = popen("bluetoothctl show 2>/dev/null", "r");
     if (!p) return st;
@@ -426,7 +426,7 @@ hal_bt_status_t hal_bt_get_status(void)
     return st;
 }
 
-int hal_bt_set_power(int on)
+int cp0_bt_set_power(int on)
 {
     FILE *p = popen(on ? "bluetoothctl power on 2>/dev/null" : "bluetoothctl power off 2>/dev/null", "r");
     if (!p) return -1;
@@ -436,7 +436,7 @@ int hal_bt_set_power(int on)
     return ok ? 0 : -1;
 }
 
-int hal_bt_scan(hal_bt_device_t *out, int max_devices)
+int cp0_bt_scan(cp0_bt_device_t *out, int max_devices)
 {
     system("bluetoothctl scan on 2>/dev/null &");
     usleep(4000000);
@@ -457,10 +457,10 @@ int hal_bt_scan(hal_bt_device_t *out, int max_devices)
         *sp = 0;
         char *name = sp + 1;
 
-        hal_bt_device_t *dev = &out[count];
+        cp0_bt_device_t *dev = &out[count];
         memset(dev, 0, sizeof(*dev));
         strncpy(dev->address, addr, sizeof(dev->address) - 1);
-        strncpy(dev->name, name[0] ? name : addr, BT_NAME_MAX - 1);
+        strncpy(dev->name, name[0] ? name : addr, CP0_BT_NAME_MAX - 1);
         dev->rssi = 0;
         dev->connected = 0;
         count++;
@@ -469,7 +469,7 @@ int hal_bt_scan(hal_bt_device_t *out, int max_devices)
     return count;
 }
 
-void hal_time_str(char *buf, int buf_size)
+void cp0_time_str(char *buf, int buf_size)
 {
     time_t now = time(NULL);
     struct tm *t = localtime(&now);

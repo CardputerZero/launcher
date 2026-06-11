@@ -8,12 +8,14 @@
 #include <string.h>
 #include <cstring>
 #include <chrono>
+#include <string>
 #include "ui/ui.h"
 #include "ui/ui_global_hint.h"
 #include "keyboard_input.h"
 #include "battery.h"
 #include "compat/input_keys.h"
 #include "cp0_lvgl_app.h"
+#include "cp0_lvgl_file.hpp"
 #include "global_config.h"
 #if CONFIG_BACKWARD_CPP_ENABLED
 #define BACKWARD_HAS_DW 1
@@ -169,8 +171,10 @@ static void keypad_read_cb(lv_indev_t *indev, lv_indev_data_t *data)
 static void lv_linux_indev_init(void)
 {
     const char *mouse_device = getenv_default("LV_LINUX_MOUSE_DEVICE", NULL);
-    const char *keyboard_device = getenv_default("LV_LINUX_KEYBOARD_DEVICE", cp0_path_keyboard_device());
-    const char *keyboard_map = getenv_default("LV_LINUX_KEYBOARD_MAP", cp0_path_keyboard_map());
+    const std::string default_keyboard_device = cp0_file_path("keyboard_device");
+    const std::string default_keyboard_map = cp0_file_path("keyboard_map");
+    const char *keyboard_device = getenv_default("LV_LINUX_KEYBOARD_DEVICE", default_keyboard_device.c_str());
+    const char *keyboard_map = getenv_default("LV_LINUX_KEYBOARD_MAP", default_keyboard_map.c_str());
     setenv("APPLAUNCH_LINUX_KEYBOARD_DEVICE", keyboard_device, 1);
     setenv("APPLAUNCH_LINUX_KEYBOARD_MAP", keyboard_map, 1);
  
@@ -305,7 +309,8 @@ int main(void)
     setenv("PIPEWIRE_RUNTIME_DIR", "/run/user/1000", 1);
     setenv("PULSE_SERVER", "unix:/run/user/1000/pulse/native", 1);
     
-    lock_file = cp0_path_lock_file();
+    static const std::string default_lock_file = cp0_file_path("lock_file");
+    lock_file = default_lock_file.c_str();
     g_launch_thread_pool = thpool_init(3);
     lv_init();
     printf("[BOOT] lv_init() done\n");

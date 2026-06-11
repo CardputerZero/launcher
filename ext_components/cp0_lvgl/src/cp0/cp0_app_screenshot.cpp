@@ -1,4 +1,4 @@
-#include "hal/hal_screenshot.h"
+#include "cp0_lvgl_app.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,7 +14,7 @@
 static void write_le16(FILE *f, uint16_t v) { fwrite(&v, 2, 1, f); }
 static void write_le32(FILE *f, uint32_t v) { fwrite(&v, 4, 1, f); }
 
-int hal_screenshot_save(const char *dir)
+int cp0_screenshot_save(const char *dir)
 {
     const char *fbdev = getenv("APPLAUNCH_LINUX_FBDEV_DEVICE");
     if (!fbdev) fbdev = "/dev/fb0";

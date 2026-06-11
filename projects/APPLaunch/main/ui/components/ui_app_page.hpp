@@ -15,16 +15,17 @@
 #include <keyboard_input.h>
 #include <functional>
 #include "cp0_lvgl_app.h"
+#include "cp0_lvgl_file.hpp"
 #define APP_CONSOLE_EXIT_EVENT (lv_event_code_t)(LV_EVENT_LAST + 1)
 
 
 static inline std::string img_path(const char *name)
 {
-    return std::string(cp0_path_images_dir()) + PATH_SEP + name;
+    return cp0_file_path(name);
 }
 static inline std::string audio_path(const char *name)
 {
-    return std::string(cp0_path_audio_dir()) + PATH_SEP + name;
+    return cp0_file_path(name);
 }
 
 class app_

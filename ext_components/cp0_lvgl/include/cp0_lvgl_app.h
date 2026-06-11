@@ -80,6 +80,7 @@ void cp0_config_set_str(const char *key, const char *val);
 void cp0_config_save(void);
 
 void cp0_paths_init(const char *exe_dir);
+const char *cp0_file_path_c(const char *file);
 const char *cp0_path_data_dir(void);
 const char *cp0_path_applications_dir(void);
 const char *cp0_path_store_cache_dir(void);
@@ -133,4 +134,6 @@ void cp0_time_str(char *buf, int buf_size);
 
 #ifdef __cplusplus
 }
+#else
+#define cp0_file_path(file) cp0_file_path_c(file)
 #endif

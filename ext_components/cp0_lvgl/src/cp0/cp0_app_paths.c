@@ -1,4 +1,4 @@
-#include "hal/hal_paths.h"
+#include "cp0_lvgl_app.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -23,20 +23,20 @@ static const char *KBD_DEVICE       = "/dev/input/by-path/platform-3f804000.i2c-
 static const char *KBD_MAP          = "/usr/share/keymaps/tca8418_keypad_m5stack_keymap.map";
 static char s_store_sync_cmd[512]   = "python " APP_PREFIX "/bin/store_cache_sync.py";
 
-void hal_paths_init(const char *exe_dir)
+void cp0_paths_init(const char *exe_dir)
 {
     (void)exe_dir;
 }
 
-const char *hal_path_data_dir(void)         { return s_data_dir; }
-const char *hal_path_applications_dir(void) { return s_applications_dir; }
-const char *hal_path_store_cache_dir(void)  { return s_store_cache_dir; }
-const char *hal_path_lock_file(void)        { return s_lock_file; }
-const char *hal_path_font_dir(void)         { return s_font_dir; }
-const char *hal_path_font_regular(void)     { return s_font_regular; }
-const char *hal_path_font_mono(void)        { return s_font_mono; }
-const char *hal_path_keyboard_device(void)  { return KBD_DEVICE; }
-const char *hal_path_keyboard_map(void)     { return KBD_MAP; }
-const char *hal_path_store_sync_cmd(void)   { return s_store_sync_cmd; }
-const char *hal_path_images_dir(void)       { return s_images_dir; }
-const char *hal_path_audio_dir(void)       { return s_audio_dir; }
+const char *cp0_path_data_dir(void)         { return s_data_dir; }
+const char *cp0_path_applications_dir(void) { return s_applications_dir; }
+const char *cp0_path_store_cache_dir(void)  { return s_store_cache_dir; }
+const char *cp0_path_lock_file(void)        { return s_lock_file; }
+const char *cp0_path_font_dir(void)         { return s_font_dir; }
+const char *cp0_path_font_regular(void)     { return s_font_regular; }
+const char *cp0_path_font_mono(void)        { return s_font_mono; }
+const char *cp0_path_keyboard_device(void)  { return KBD_DEVICE; }
+const char *cp0_path_keyboard_map(void)     { return KBD_MAP; }
+const char *cp0_path_store_sync_cmd(void)   { return s_store_sync_cmd; }
+const char *cp0_path_images_dir(void)       { return s_images_dir; }
+const char *cp0_path_audio_dir(void)       { return s_audio_dir; }

@@ -1,4 +1,4 @@
-#include "hal/hal_config.h"
+#include "cp0_lvgl_app.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -24,10 +24,10 @@ static void ensure_loaded(void)
 {
     if (s_loaded) return;
     s_loaded = 1;
-    hal_config_init();
+    cp0_config_init();
 }
 
-void hal_config_init(void)
+void cp0_config_init(void)
 {
     s_count = 0;
     FILE *fp = fopen(CONFIG_FILE, "r");
@@ -57,7 +57,7 @@ static int find_entry(const char *key)
     return -1;
 }
 
-int hal_config_get_int(const char *key, int default_val)
+int cp0_config_get_int(const char *key, int default_val)
 {
     ensure_loaded();
     int idx = find_entry(key);
@@ -65,7 +65,7 @@ int hal_config_get_int(const char *key, int default_val)
     return atoi(s_entries[idx].val);
 }
 
-void hal_config_set_int(const char *key, int val)
+void cp0_config_set_int(const char *key, int val)
 {
     ensure_loaded();
     int idx = find_entry(key);
@@ -77,7 +77,7 @@ void hal_config_set_int(const char *key, int val)
     snprintf(s_entries[idx].val, VAL_MAX, "%d", val);
 }
 
-const char *hal_config_get_str(const char *key, const char *default_val)
+const char *cp0_config_get_str(const char *key, const char *default_val)
 {
     ensure_loaded();
     int idx = find_entry(key);
@@ -85,7 +85,7 @@ const char *hal_config_get_str(const char *key, const char *default_val)
     return s_entries[idx].val;
 }
 
-void hal_config_set_str(const char *key, const char *val)
+void cp0_config_set_str(const char *key, const char *val)
 {
     ensure_loaded();
     int idx = find_entry(key);
@@ -97,7 +97,7 @@ void hal_config_set_str(const char *key, const char *val)
     strncpy(s_entries[idx].val, val, VAL_MAX - 1);
 }
 
-void hal_config_save(void)
+void cp0_config_save(void)
 {
     mkdir(CONFIG_DIR, 0755);
     FILE *fp = fopen(CONFIG_FILE, "w");
