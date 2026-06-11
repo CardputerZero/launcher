@@ -1,4 +1,5 @@
 #pragma once
+#include "sample_log.h"
 
 #include "../ui_app_page.hpp"
 #include "compat/input_keys.h"
@@ -137,7 +138,7 @@ public:
 
         if (!audio_ready_)
         {
-            printf("[Music] Cannot play: PulseAudio/miniaudio not ready\n");
+            SLOGI("[Music] Cannot play: PulseAudio/miniaudio not ready");
             play_state_ = PlayState::STOPPED;
             update_main_ui();
             return;
@@ -156,7 +157,7 @@ public:
             }
             else
             {
-                printf("[Music] resume failed, result=%d\n", static_cast<int>(r));
+                SLOGI("[Music] resume failed, result=%d", static_cast<int>(r));
                 stop_playback();
                 play_state_ = PlayState::STOPPED;
             }
@@ -423,7 +424,7 @@ private:
         {
             struct key_item *elm = static_cast<struct key_item *>(lv_event_get_param(e));
 
-            printf("[MUSIC][KEYBOARD] code=%u state=%s sym=%s view=%d\n",
+            SLOGI("[MUSIC][KEYBOARD] code=%u state=%s sym=%s view=%d",
                    elm->key_code,
                    kbd_state_name(elm->key_state),
                    elm->sym_name,
@@ -437,7 +438,7 @@ private:
         uint32_t raw = lv_event_get_key(e);
         uint32_t key = fzxc_to_lv_arrow(raw);
 
-        printf("[MUSIC][LV_KEY] raw=%u mapped=%u view=%d\n",
+        SLOGI("[MUSIC][LV_KEY] raw=%u mapped=%u view=%d",
                raw,
                key,
                static_cast<int>(view_state_));
@@ -492,7 +493,7 @@ private:
             break;
 
         case LV_KEY_ESC:
-            printf("[MUSIC] ESC -> go_back_home()\n");
+            SLOGI("[MUSIC] ESC -> go_back_home()");
             go_back_home();
             break;
 
@@ -746,7 +747,7 @@ private:
         }
         else
         {
-            printf("[Music] opendir failed: %s\n", browse_dir_.c_str());
+            SLOGI("[Music] opendir failed: %s", browse_dir_.c_str());
         }
 
         if (!browse_entries_.empty() && browse_entries_[0] == "..")
@@ -907,7 +908,7 @@ private:
 
         if (!dp)
         {
-            printf("[Music] Cannot open dir: %s\n", dir.c_str());
+            SLOGI("[Music] Cannot open dir: %s", dir.c_str());
             update_main_ui();
             return;
         }
@@ -943,7 +944,7 @@ private:
 
         std::sort(playlist_.begin(), playlist_.end());
 
-        printf("[Music] Loaded %d audio files from %s\n",
+        SLOGI("[Music] Loaded %d audio files from %s",
                static_cast<int>(playlist_.size()),
                dir.c_str());
 
@@ -965,7 +966,7 @@ private:
 
         if (r != MA_SUCCESS)
         {
-            printf("[Music] ma_context_init PulseAudio failed, result=%d\n", static_cast<int>(r));
+            SLOGI("[Music] ma_context_init PulseAudio failed, result=%d", static_cast<int>(r));
             audio_ready_ = false;
             return;
         }
@@ -977,7 +978,7 @@ private:
 
         if (r != MA_SUCCESS)
         {
-            printf("[Music] ma_engine_init failed, result=%d\n", static_cast<int>(r));
+            SLOGI("[Music] ma_engine_init failed, result=%d", static_cast<int>(r));
 
             ma_context_uninit(&audio_ctx_);
 
@@ -989,7 +990,7 @@ private:
 
         audio_timer_ = lv_timer_create(UIMusicPage::static_audio_timer_cb, 200, this);
 
-        printf("[Music] miniaudio initialized with PulseAudio backend\n");
+        SLOGI("[Music] miniaudio initialized with PulseAudio backend");
     }
 
     void uninit_audio()
@@ -1065,7 +1066,7 @@ private:
 
         if (!audio_ready_)
         {
-            printf("[Music] Audio not ready. PulseAudio backend unavailable.\n");
+            SLOGI("[Music] Audio not ready. PulseAudio backend unavailable.");
             return false;
         }
 
@@ -1077,7 +1078,7 @@ private:
 
         const std::string &file = playlist_[current_track_];
 
-        printf("[Music] Playing by miniaudio: %s\n", file.c_str());
+        SLOGI("[Music] Playing by miniaudio: %s", file.c_str());
 
         track_finished_.store(false);
 
@@ -1093,7 +1094,7 @@ private:
 
         if (r != MA_SUCCESS)
         {
-            printf("[Music] ma_sound_init_from_file failed, result=%d, file=%s\n",
+            SLOGI("[Music] ma_sound_init_from_file failed, result=%d, file=%s",
                    static_cast<int>(r),
                    file.c_str());
 
@@ -1114,7 +1115,7 @@ private:
 
         if (r != MA_SUCCESS)
         {
-            printf("[Music] ma_sound_start failed, result=%d\n", static_cast<int>(r));
+            SLOGI("[Music] ma_sound_start failed, result=%d", static_cast<int>(r));
             stop_playback();
             return false;
         }

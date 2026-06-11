@@ -1,4 +1,5 @@
 #pragma once
+#include "sample_log.h"
 
 #include "ui_app_page.hpp"
 #include <unordered_map>
@@ -561,14 +562,14 @@ private:
     // ==================== App launch helper ====================
     void launch_exec_in_terminal(lp_app_item *it)
     {
-        printf("Launching terminal app: %s\n", it->Exec.c_str());
+        SLOGI("Launching terminal app: %s", it->Exec.c_str());
         // Simple implementation: fork+exec directly without terminal UI
         launch_exec(it);
     }
 
     void launch_exec(lp_app_item *it)
     {
-        printf("Launching external app: %s\n", it->Exec.c_str());
+        SLOGI("Launching external app: %s", it->Exec.c_str());
         lv_disp_t *disp  = lv_disp_get_default();
         lv_indev_t *indev = lv_indev_get_next(NULL);
         if (indev) lv_indev_set_group(indev, NULL);
@@ -576,7 +577,7 @@ private:
         lv_refr_now(disp);
 
         int ret = cp0_process_exec_blocking(it->Exec.c_str(), &LVGL_HOME_KEY_FLAG, 0);
-        printf("App %s exited with code %d\n", it->Exec.c_str(), ret);
+        SLOGI("App %s exited with code %d", it->Exec.c_str(), ret);
         lv_timer_enable(true);
         if (indev) lv_indev_set_group(lv_indev_get_next(NULL), Screen1group);
         lv_disp_load_scr(ui_Screen1);

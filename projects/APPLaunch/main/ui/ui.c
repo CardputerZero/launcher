@@ -9,6 +9,7 @@
 #include <sys/stat.h>
 #include "lvgl/src/widgets/gif/lv_gif.h"
 #include "cp0_lvgl_app.h"
+#include "sample_log.h"
 ///////////////////// VARIABLES ////////////////////
 
 
@@ -178,7 +179,7 @@ void font_manager_init(void)
 
 void home_screen_load()
 {
-    printf("[HOME] home_screen_load() - loading launcher home screen\n");
+    SLOGI("[HOME] home_screen_load() - loading launcher home screen");
     ui____initial_actions0 = lv_obj_create(NULL);
     lv_disp_load_scr(ui_Screen1);
     lv_indev_set_group(lv_indev_get_next(NULL), Screen1group);
@@ -196,7 +197,7 @@ void ui_event_logo_over(lv_event_t * e) {
     lv_event_code_t event_code = lv_event_get_code(e);
     if(event_code == LV_EVENT_READY && !done) {
         done = 1;
-        printf("[GIF] first LV_EVENT_READY -> pause + home_screen_load()\n");
+        SLOGI("[GIF] first LV_EVENT_READY -> pause + home_screen_load()");
         if (startup_gif) lv_gif_pause(startup_gif);
 
 

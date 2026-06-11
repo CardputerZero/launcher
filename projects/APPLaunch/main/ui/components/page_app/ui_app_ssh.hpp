@@ -1,4 +1,5 @@
 #pragma once
+#include "sample_log.h"
 #include "../ui_app_page.hpp"
 #include "ui_app_console.hpp"
 #include "compat/input_keys.h"
@@ -220,7 +221,7 @@ private:
         if (!port.empty() && port != "22")
             cmd += " -p " + port;
 
-        printf("[SSH] Launching: %s\n", cmd.c_str());
+        SLOGI("[SSH] Launching: %s", cmd.c_str());
 
         // Create console page
         console_page_ = std::make_shared<UIConsolePage>();

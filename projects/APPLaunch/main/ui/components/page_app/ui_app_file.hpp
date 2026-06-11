@@ -1,4 +1,5 @@
 #pragma once
+#include "sample_log.h"
 #include "../ui_app_page.hpp"
 #include "compat/input_keys.h"
 #include <unordered_map>
@@ -90,7 +91,7 @@ private:
         DIR *dp = opendir(current_path_.c_str());
         if (!dp)
         {
-            printf("[File] opendir failed: %s\n", current_path_.c_str());
+            SLOGI("[File] opendir failed: %s", current_path_.c_str());
             return;
         }
 

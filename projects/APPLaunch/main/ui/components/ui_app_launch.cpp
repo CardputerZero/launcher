@@ -17,6 +17,7 @@
 #include "ui_launch_page.hpp"
 #include "../ui_loading.h"
 #include "page_app.h"
+#include "sample_log.h"
 
 /* img_path() now defined in ui_app_page.hpp */
 
@@ -272,26 +273,26 @@ public:
     static void lv_go_back_home(void *arg)
     {
         auto self = (app_launch_S *)arg;
-        printf("[HOME] lv_go_back_home executing (page=%p)\n", self->app_Page.get());
+        SLOGI("[HOME] lv_go_back_home executing (page=%p)", self->app_Page.get());
         lv_timer_enable(true);
         lv_indev_set_group(lv_indev_get_next(NULL), Screen1group);
         lv_disp_load_scr(ui_Screen1);
         lv_refr_now(NULL);
         if (self->app_Page)
             self->app_Page.reset();
-        printf("[HOME] lv_go_back_home done, on launcher home\n");
+        SLOGI("[HOME] lv_go_back_home done, on launcher home");
     }
 
     void go_back_home()
     {
-        printf("[HOME] go_back_home() requested, scheduling async call (page=%p)\n", app_Page.get());
+        SLOGI("[HOME] go_back_home() requested, scheduling async call (page=%p)", app_Page.get());
         lv_async_call(lv_go_back_home, this);
     }
 
     // Changed to accept std::string and no longer depend on app::Exec
     void launch_Exec_in_terminal(const std::string &exec, bool sysplause = true)
     {
-        printf("Launching terminal app: %s\n", exec.c_str());
+        SLOGI("Launching terminal app: %s", exec.c_str());
         /* Instant visual feedback; paint before the (potentially slow)
          * Console page construction so the user sees it right away. */
         ui_loading_show("Loading...");
@@ -311,7 +312,7 @@ public:
 
     void launch_Exec(const std::string &exec, bool keep_root = false)
     {
-        printf("Launching external app: %s (keep_root=%d)\n", exec.c_str(), keep_root);
+        SLOGI("Launching external app: %s (keep_root=%d)", exec.c_str(), keep_root);
         /* Show overlay BEFORE we tear down LVGL input/timers so the user
          * gets immediate feedback when ENTER was pressed. The overlay
          * stays drawn on the framebuffer right up until the child takes
@@ -326,7 +327,7 @@ public:
         lv_refr_now(disp);
 
         int ret = cp0_process_exec_blocking(exec.c_str(), &LVGL_HOME_KEY_FLAG, keep_root ? 1 : 0);
-        printf("App %s exited with code %d\n", exec.c_str(), ret);
+        SLOGI("App %s exited with code %d", exec.c_str(), ret);
         lv_timer_enable(true);
         if (indev)
             lv_indev_set_group(indev, Screen1group);
@@ -623,7 +624,7 @@ public:
 
         if (cp0_dir_watch_poll(self->dir_watcher) > 0)
         {
-            printf("app_dir_watch_cb: applications dir changed, reloading...\n");
+            SLOGI("app_dir_watch_cb: applications dir changed, reloading...");
             self->applications_reload();
         }
     }
