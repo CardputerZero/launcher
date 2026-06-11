@@ -15,17 +15,17 @@
  * ============================================================
  *  UIUnitEnvPage
  *
- *  全屏温湿度界面
+ *  Full-screen temperature/humidity screen
  *  Screen: 320 x 170
  *
- *  显示内容：
+ *  Displayed content:
  *    - Temperature
  *    - Humidity
- *    - 日期时间
- *    - 温湿度趋势曲线图
+ *    - date and time
+ *    - temperature/humidity trend chart
  *
- *  按键：
- *    ESC 返回主页
+ *  Keys:
+ *    ESC return to the home screen
  * ============================================================
  */
 class UIUnitEnvPage : public app_
@@ -50,7 +50,7 @@ public:
 
 public:
     /*
-     * 外部更新温湿度接口
+     * External temperature/humidity update API
      */
     void set_env_values(float temperature, int humidity)
     {
@@ -89,7 +89,7 @@ private:
 
 private:
     /*
-     * 修正图表数据点数量，保证 vector 长度等于 chart_points_num
+     * Fix chart data point count so vector length equals chart_points_num
      */
     void normalize_chart_points()
     {
@@ -123,13 +123,13 @@ private:
 private:
     /*
      * ============================================================
-     * UI 构建
+     * UI construction
      * ============================================================
      */
     void creat_UI()
     {
         /*
-         * 背景
+         * Background
          */
         lv_obj_t *bg = lv_obj_create(ui_root);
         lv_obj_set_size(bg, 320, 170);
@@ -150,7 +150,7 @@ private:
     void create_top_info(lv_obj_t *parent)
     {
         /*
-         * 左侧温度标题图标
+         * left temperature title icon
          */
         lv_obj_t *temp_icon = lv_obj_create(parent);
         lv_obj_set_size(temp_icon, 7, 14);
@@ -168,7 +168,7 @@ private:
         lv_obj_set_style_text_font(lbl_temp_title, &lv_font_montserrat_10, LV_PART_MAIN | LV_STATE_DEFAULT);
 
         /*
-         * 温度数值
+         * temperature value
          */
         lv_obj_t *lbl_temp_value = lv_label_create(parent);
         lv_label_set_text(lbl_temp_value, "26.5");
@@ -184,7 +184,7 @@ private:
         lv_obj_set_style_text_font(lbl_temp_unit, &lv_font_montserrat_12, LV_PART_MAIN | LV_STATE_DEFAULT);
 
         /*
-         * 湿度标题图标
+         * humidity title icon
          */
         lv_obj_t *hum_icon = lv_obj_create(parent);
         lv_obj_set_size(hum_icon, 10, 10);
@@ -202,7 +202,7 @@ private:
         lv_obj_set_style_text_font(lbl_hum_title, &lv_font_montserrat_10, LV_PART_MAIN | LV_STATE_DEFAULT);
 
         /*
-         * 湿度数值
+         * humidity value
          */
         lv_obj_t *lbl_hum_value = lv_label_create(parent);
         lv_label_set_text(lbl_hum_value, "60");
@@ -218,7 +218,7 @@ private:
         lv_obj_set_style_text_font(lbl_hum_unit, &lv_font_montserrat_12, LV_PART_MAIN | LV_STATE_DEFAULT);
 
         /*
-         * 右上角日期时间
+         * top-right date/time
          */
         lv_obj_t *lbl_date = lv_label_create(parent);
         lv_label_set_text(lbl_date, "Apr 25, 21:10");
@@ -228,7 +228,7 @@ private:
         ui_obj_["lbl_date"] = lbl_date;
 
         /*
-         * 右上角绿色小状态块
+         * top-right small green status block
          */
         lv_obj_t *status_box = lv_obj_create(parent);
         lv_obj_set_size(status_box, 14, 7);
@@ -243,12 +243,12 @@ private:
     void create_chart_panel(lv_obj_t *parent)
     {
         /*
-         * 保证图表数据点数量和 chart_points_num 一致
+         * Ensure chart data point count matches chart_points_num
          */
         normalize_chart_points();
 
         /*
-         * 曲线图外框
+         * chart outer frame
          */
         lv_obj_t *panel = lv_obj_create(parent);
         lv_obj_set_size(panel, 302, 100);
@@ -261,30 +261,6 @@ private:
         lv_obj_set_style_pad_all(panel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_clear_flag(panel, LV_OBJ_FLAG_SCROLLABLE);
         ui_obj_["panel"] = panel;
-
-        // /*
-        //  * 半透明绿色区域，模拟湿度曲线下方阴影
-        //  */
-        // lv_obj_t *green_area = lv_obj_create(panel);
-        // lv_obj_set_size(green_area, 260, 48);
-        // lv_obj_set_pos(green_area, 26, 32);
-        // lv_obj_set_style_radius(green_area, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-        // lv_obj_set_style_bg_color(green_area, lv_color_hex(0x008C5A), LV_PART_MAIN | LV_STATE_DEFAULT);
-        // lv_obj_set_style_bg_opa(green_area, 55, LV_PART_MAIN | LV_STATE_DEFAULT);
-        // lv_obj_set_style_border_width(green_area, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-        // lv_obj_clear_flag(green_area, LV_OBJ_FLAG_SCROLLABLE);
-
-        // /*
-        //  * 半透明蓝色区域，模拟温度曲线下方阴影
-        //  */
-        // lv_obj_t *blue_area = lv_obj_create(panel);
-        // lv_obj_set_size(blue_area, 260, 42);
-        // lv_obj_set_pos(blue_area, 26, 42);
-        // lv_obj_set_style_radius(blue_area, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-        // lv_obj_set_style_bg_color(blue_area, lv_color_hex(0x0077AA), LV_PART_MAIN | LV_STATE_DEFAULT);
-        // lv_obj_set_style_bg_opa(blue_area, 60, LV_PART_MAIN | LV_STATE_DEFAULT);
-        // lv_obj_set_style_border_width(blue_area, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-        // lv_obj_clear_flag(blue_area, LV_OBJ_FLAG_SCROLLABLE);
 
         /*
          * LVGL Chart
@@ -301,11 +277,9 @@ private:
 
         lv_chart_set_type(chart, LV_CHART_TYPE_LINE);
 
-        lv_obj_add_flag(chart, LV_OBJ_FLAG_SEND_DRAW_TASK_EVENTS);
-        lv_obj_add_event_cb(chart, chart_draw_event_cb, LV_EVENT_DRAW_TASK_ADDED, NULL);
 
         /*
-         * 图表点数使用 chart_points_num
+         * Use chart_points_num for chart point count
          */
         lv_chart_set_point_count(chart, chart_points_num);
 
@@ -313,7 +287,7 @@ private:
         lv_chart_set_div_line_count(chart, 5, 6);
 
         /*
-         * 隐藏点，只显示线
+         * Hide points and show only lines
          */
         lv_obj_set_style_size(chart, 0, 0, LV_PART_INDICATOR | LV_STATE_DEFAULT);
 
@@ -333,59 +307,10 @@ private:
         create_axis_labels(panel);
     }
 
-    static void chart_draw_event_cb(lv_event_t *e)
-    {
-        lv_event_code_t code = lv_event_get_code(e);
-
-        if (code == LV_EVENT_DRAW_TASK_ADDED)
-        {
-            lv_draw_task_t *task = lv_event_get_draw_task(e);
-            if (task == NULL)
-                return;
-
-            lv_draw_dsc_base_t *base_dsc =
-                (lv_draw_dsc_base_t *)lv_draw_task_get_draw_dsc(task);
-
-            if (base_dsc == NULL)
-                return;
-
-            /*
-             * Chart 的折线一般属于 LV_PART_ITEMS
-             */
-            if (base_dsc->part == LV_PART_ITEMS)
-            {
-
-                if (lv_draw_task_get_type(task) == LV_DRAW_TASK_TYPE_LINE)
-                {
-
-                    lv_draw_line_dsc_t *line_dsc =
-                        (lv_draw_line_dsc_t *)lv_draw_task_get_draw_dsc(task);
-
-                    // {
-                    //     lv_point_precise_t p1 = line_dsc->p1;
-                    //     lv_point_precise_t p2 = line_dsc->p2;
-                    // }
-
-                    // /*
-                    //  * 这里可以修改 LVGL 默认折线的样式
-                    //  */
-                    // // line_dsc->color = lv_color_hex(0xff0000);
-                    // line_dsc->width = 4;
-                    // line_dsc->opa = LV_OPA_80;
-
-                    // /*
-                    //  * 如果你想完全隐藏默认折线，可以：
-                    //  */
-                    // // line_dsc->opa = LV_OPA_TRANSP;
-                }
-            }
-        }
-    }
-
     void create_axis_labels(lv_obj_t *panel)
     {
         /*
-         * 左侧湿度百分比刻度
+         * left humidity percentage scale
          */
         const char *left_labels[] = {
             "80%", "70%", "60%", "50%", "40%", "30%", "20%", "10%", "0%"};
@@ -400,7 +325,7 @@ private:
         }
 
         /*
-         * 右侧温度刻度
+         * right temperature scale
          */
         const char *right_labels[] = {
             "30°", "25°", "20°", "15°", "10°", "5°", "0°", "-5°", "-10°"};
@@ -415,7 +340,7 @@ private:
         }
 
         /*
-         * 底部时间刻度
+         * bottom time scale
          */
         const char *time_labels[] = {
             "13 PM", "14 PM", "15 PM", "16 PM"};
@@ -435,7 +360,7 @@ private:
 private:
     /*
      * ============================================================
-     * 定时刷新
+     * Periodic refresh
      * ============================================================
      */
     void start_refresh_timer()
@@ -458,8 +383,8 @@ private:
     void on_refresh_timer()
     {
         /*
-         * 如果项目里有 hal_time_str，可以改成真实时间。
-         * 这里保持静态日期格式。
+         * If the project has hal_time_str, this can use real time.
+         * Keep a static date format here.
          */
         static int minute = 10;
         minute += 5;
@@ -471,8 +396,8 @@ private:
         lv_label_set_text(ui_obj_["lbl_date"], date_buf);
 
         /*
-         * 模拟温湿度轻微变化。
-         * 如果有真实传感器，在这里替换成真实数据即可。
+         * Simulate slight temperature/humidity changes.
+         * If a real sensor exists, replace this with real data here.
          */
         int temp_delta = (rand() % 3) - 1;
         int hum_delta = (rand() % 5) - 2;
@@ -497,8 +422,8 @@ private:
         lv_obj_t *chart = ui_obj_["chart"];
 
         /*
-         * 温度映射到 0~80 范围
-         * 简单映射：-10°C ~ 30°C -> 0 ~ 80
+         * Map temperature to the 0~80 range
+         * simple mapping: -10 deg C ~ 30 deg C -> 0 ~ 80
          */
         int temp_mapped = (int)((temperature_ + 10.0f) * 2.0f);
         if (temp_mapped < 0)
@@ -513,7 +438,7 @@ private:
             hum_mapped = 80;
 
         /*
-         * 追加新数据，并保持数据点数量为 chart_points_num
+         * Append new data while keeping the number of points at chart_points_num
          */
         temp_points_.push_back(temp_mapped);
         while ((int)temp_points_.size() > chart_points_num)
@@ -528,12 +453,12 @@ private:
         }
 
         /*
-         * 再次确保长度一致，防止 chart_points_num 被修改后越界
+         * Ensure length consistency again to avoid out-of-range access if chart_points_num changes
          */
         normalize_chart_points();
 
         /*
-         * 使用 chart_points_num 更新图表数据
+         * Update chart data using chart_points_num
          */
         for (int i = 0; i < chart_points_num; ++i)
         {
@@ -547,7 +472,7 @@ private:
 private:
     /*
      * ============================================================
-     * 按键事件
+     * Key events
      * ============================================================
      */
     void event_handler_init()

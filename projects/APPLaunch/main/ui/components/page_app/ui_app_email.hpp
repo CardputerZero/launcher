@@ -6,12 +6,12 @@
 #include "compat/input_keys.h"
 
 // ============================================================
-//  邮件客户端界面  UIEmailPage
-//  屏幕分辨率: 320 x 170  (顶栏20px, ui_APP_Container 320x150)
+//  Email client screen  UIEmailPage
+//  Screen resolution: 320 x 170  (top bar20px, ui_APP_Container 320x150)
 //
-//  视图状态:
-//    VIEW_INBOX   — 收件箱列表
-//    VIEW_DETAIL  — 邮件详情
+//  View state:
+//    VIEW_INBOX   — inbox list
+//    VIEW_DETAIL  — email detail
 // ============================================================
 
 class UIEmailPage : public app_base

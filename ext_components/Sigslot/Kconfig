@@ -1,0 +1,6 @@
+
+menuconfig SIGSLOT_COMPONENT_ENABLED
+    bool "Enable Sigslot"
+    default n
+
+

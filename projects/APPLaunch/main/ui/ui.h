@@ -27,24 +27,24 @@ extern "C" {
 // typedef void (*ui_anim_ready_cb_t)(lv_anim_t * a);
 typedef void (*ui_anim_ready_cb_t)(lv_anim_t *);
 
-void zuopanel2you_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb);
-void switchpanel2you_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb);
-void youpanel2you_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb);
-void zuopanelout2you_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb);
-void zuopanel2zuo_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb);
-void switchpanel2zuo_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb);
-void youpanel2zuo_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb);
-void zuopanelout2zuo_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb);
-// Label animations - 2you direction
-void zuolabelout2you_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb);
-void zuolabel2you_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb);
-void switchlabel2you_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb);
-void youlabel2you_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb);
-// Label animations - 2zuo direction
-void zuolabelout2zuo_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb);
-void youlabel2zuo_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb);
-void switchlabel2zuo_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb);
-void zuolabel2zuo_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb);
+void leftPanelToCenter_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb);
+void centerPanelToRight_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb);
+void rightPanelToRightOuter_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb);
+void leftOuterPanelToLeft_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb);
+void leftPanelToLeftOuter_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb);
+void centerPanelToLeft_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb);
+void rightPanelToCenter_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb);
+void rightOuterPanelToRight_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb);
+// Label animations - rightward direction
+void leftOuterLabelToLeft_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb);
+void leftLabelToCenter_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb);
+void centerLabelToRight_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb);
+void rightLabelToRightOuter_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb);
+// Label animations - leftward direction
+void rightOuterLabelToRight_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb);
+void rightLabelToCenter_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb);
+void centerLabelToLeft_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb);
+void leftLabelToLeftOuter_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb);
 // SCREEN: ui_Screen1
 
 void ui_Screen1_screen_init(void);
@@ -99,8 +99,8 @@ void ui_console_key(lv_event_t * e);
 extern const char *ui_img_zero_png;
 extern const char *ui_img_time_png;
 extern const char *ui_img_battery_bg_png;
-extern const char *ui_img_zuo_png;
-extern const char *ui_img_you_png;
+extern const char *ui_img_left_png;
+extern const char *ui_img_right_png;
 extern const char *ui_img_store_logo_png ;
 extern const char *ui_img_cli_logo_png   ;
 extern const char *ui_img_claw_logo_png  ;
@@ -112,8 +112,8 @@ extern const char *ui_img_python_logo_png ;
 
 
 extern const char *ui_img_zero_logo_w_png ;
-extern const char *ui_img_zuo_logo_png ;
-extern const char *ui_img_you_logo_png ;
+extern const char *ui_img_left_logo_png ;
+extern const char *ui_img_right_logo_png ;
 extern const char *ui_img_detail_info_png ;
 extern const char *ui_img_down_logo_png ;
 extern const char *ui_img_up_logo_png ;

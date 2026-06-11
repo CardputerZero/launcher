@@ -1,14 +1,12 @@
 #include "hal_lvgl_bsp.h"
 #include "commount.h"
 #include "lvgl/lvgl.h"
-uint32_t LV_C_EVENT_KEYBOARD;
-uint32_t LV_C_EVENT_BATTERY;
-uint32_t LV_C_EVENT_NETWORK;
-uint32_t LV_C_EVENT_DATATIME;
+
+uint32_t lv_c_event[(2*CP0_C_EVENT_END)];
+uint32_t cp0_event[(2*CP0_C_EVENT_END)];
+
 void init_lvgl_event()
 {
-    LV_C_EVENT_KEYBOARD = lv_event_register_id();
-    LV_C_EVENT_BATTERY = lv_event_register_id();
-    LV_C_EVENT_NETWORK = lv_event_register_id();
-    LV_C_EVENT_DATATIME = lv_event_register_id();
+    for (int i = 0; i < CP0_C_EVENT_END; i++)
+        lv_c_event[i] = lv_event_register_id();
 }

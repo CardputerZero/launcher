@@ -4,6 +4,14 @@
 extern "C" {
 #endif
 
+typedef enum {
+    CP0_C_EVENT_KEYBOARD = 0,
+    CP0_C_EVENT_BATTERY,
+    CP0_C_EVENT_NETWORK,
+    CP0_C_EVENT_DATATIME,
+    CP0_C_EVENT_END,
+} CP0_C_EVENT_t;
+
 typedef struct {
     uint32_t key_code;
     uint32_t keysym;
@@ -15,14 +23,11 @@ typedef struct {
     char flage;
     uint32_t lv_key;
 } cp0_key_event_t;
-
+extern uint32_t lv_c_event[(2*CP0_C_EVENT_END)];
 
 void cp0_lvgl_init(void);
 
-extern uint32_t LV_C_EVENT_KEYBOARD;
-extern uint32_t LV_C_EVENT_BATTERY;
-extern uint32_t LV_C_EVENT_NETWORK;
-extern uint32_t LV_C_EVENT_DATATIME;
+
 
 
 #ifdef __cplusplus

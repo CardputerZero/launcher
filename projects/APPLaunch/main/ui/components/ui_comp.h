@@ -31,9 +31,9 @@ extern "C" {
 
 
 typedef struct {
-    uint32_t keysym;      // X11/自定义键码，或 0
+    uint32_t keysym;      // X11/custom key code, or 0
     uint16_t mods;        // Ctrl/Alt/Shift...
-    uint8_t  utf8[8];     // 完整 UTF-8 字节序列
+    uint8_t  utf8[8];     // complete UTF-8 byte sequence
 } term_key_evt_t;
 
 void get_component_child_event_cb(lv_event_t * e);

@@ -18,8 +18,8 @@
  *  Account Overview Dashboard
  *  Screen: 320 x 170
  *
- *  按键：
- *    ESC 返回主页
+ *  Keys:
+ *    ESC return to the home screen
  * ============================================================
  */
 class UIStockPage : public app_
@@ -41,12 +41,11 @@ private:
     
     /*
      * ============================================================
-     * UI 构建
+     * UI construction
      * ============================================================
      */
     void creat_UI()
     {
-        // std::cout << "UIStockPage: app_name = " << app_name << std::endl;
         play_gif = lv_gif_create(ui_root);
         lv_gif_set_src(play_gif, app_name.c_str());
         lv_obj_center(play_gif);
@@ -55,7 +54,7 @@ private:
 private:
     /*
      * ============================================================
-     * 按键事件
+     * Key events
      * ============================================================
      */
     void event_handler_init()

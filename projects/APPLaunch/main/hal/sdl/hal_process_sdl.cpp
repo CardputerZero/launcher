@@ -123,7 +123,7 @@ int hal_process_exec_blocking(const char *exec_path, volatile int *home_key_flag
 
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
-    /* 清零 home_key_flag，避免返回后残留状态影响 LVGL */
+    /* Clear home_key_flag to prevent stale state from affecting LVGL after return */
     if (home_key_flag)
         *home_key_flag = 0;
     if (WIFEXITED(status)) return WEXITSTATUS(status);
