@@ -29,6 +29,15 @@
 
 static void panel_set_icon(lv_obj_t *panel, const char *src)
 {
+    const char *icon_src = src ? src : "";
+    if (icon_src[0] == '\0') {
+        SLOGW("[LAUNCHER] set panel icon with empty path");
+    } else if (access(icon_src, R_OK) == 0) {
+        SLOGI("[LAUNCHER] set panel icon: %s", icon_src);
+    } else {
+        SLOGW("[LAUNCHER] set panel icon missing/unreadable: %s", icon_src);
+    }
+
     lv_obj_set_style_pad_all(panel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
 
     lv_obj_t *img = lv_obj_get_child(panel, 0);
@@ -38,7 +47,7 @@ static void panel_set_icon(lv_obj_t *panel, const char *src)
         lv_obj_set_align(img, LV_ALIGN_CENTER);
         lv_image_set_inner_align(img, LV_IMAGE_ALIGN_STRETCH);
     }
-    lv_image_set_src(img, src);
+    lv_image_set_src(img, icon_src);
 }
 
 // ============================================================
