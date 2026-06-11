@@ -66,6 +66,7 @@ private:
     {
         key_group = lv_group_create();
         lv_group_add_obj(key_group, ui_root);
+        // lv_group_focus_obj(ui_root);
     }
 };
 

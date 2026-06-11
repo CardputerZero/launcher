@@ -1,961 +1,1084 @@
 #pragma once
-#if !defined(HAL_PLATFORM_SDL)
 
 #include "../ui_app_page.hpp"
 
-#include <unordered_map>
-#include <string>
-#include <vector>
-#include <memory>
-#include <mutex>
+#include <algorithm>
 #include <atomic>
+#include <chrono>
+#include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
-#include <algorithm>
-#include <cctype>
-
+#include <dirent.h>
+#include <functional>
+#include <iomanip>
+#include <initializer_list>
+#include <list>
+#include <memory>
+#include <mutex>
+#include <sstream>
+#include <string>
 #include <sys/stat.h>
-#include <sys/mman.h>
-#include <sys/ioctl.h>
 #include <unistd.h>
-
-#include <linux/dma-buf.h>
-
-#include <jpeglib.h>
-
-#include <libcamera/camera.h>
-#include <libcamera/camera_manager.h>
-#include <libcamera/framebuffer_allocator.h>
-#include <libcamera/formats.h>
-#include <libcamera/pixel_format.h>
-#include <libcamera/property_ids.h>
-#include <libcamera/request.h>
-#include <libcamera/stream.h>
+#include <utility>
+#include <vector>
 
 #include "compat/input_keys.h"
+#include "hal_lvgl_bsp.h"
 
-// ============================================================
-//  Raspberry Pi MIPI IMX219 Camera Page
-//
-//  - Direct libcamera C++ API video stream
-//  - LVGL fullscreen preview
-//  - ENTER: capture current stream frame
-//  - Save JPEG to /home/pi/Pictures
-//  - chmod 666 after save
-// ============================================================
+namespace camera_app
+{
+static constexpr int kScreenW = 320;
+static constexpr int kContentH = 150;
+static constexpr int kPreviewW = 226;
+static constexpr int kPreviewH = 150;
+static constexpr int kBottomH = 25;
+static constexpr uint32_t kBlack = 0x000000;
+static constexpr uint32_t kText = 0xFFFFFF;
+static constexpr uint32_t kMuted = 0xCAC4CF;
+static constexpr uint32_t kPanel = 0x1C1B1E;
+static constexpr uint32_t kPanelHigh = 0x2B292D;
+static constexpr uint32_t kOutline = 0x49454E;
+static constexpr uint32_t kPrimary = 0xCFBCFF;
+static constexpr uint32_t kDanger = 0xFFB4AB;
+
+static inline lv_color_t color(uint32_t hex)
+{
+    return lv_color_hex(hex);
+}
+
+static inline void clear_obj(lv_obj_t *obj)
+{
+    lv_obj_remove_style_all(obj);
+    lv_obj_clear_flag(obj, (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
+}
+
+static inline std::string trim_line(std::string value)
+{
+    while (!value.empty() && (value.back() == '\n' || value.back() == '\r'))
+        value.pop_back();
+    return value;
+}
+
+static inline std::string home_dir()
+{
+    const char *home = std::getenv("HOME");
+    return home && home[0] ? std::string(home) : std::string("/home/pi");
+}
+
+static inline void ensure_dir(const std::string &dir)
+{
+    std::string current;
+    if (!dir.empty() && dir[0] == '/')
+        current = "/";
+
+    size_t start = current == "/" ? 1 : 0;
+    while (start <= dir.size())
+    {
+        size_t slash = dir.find('/', start);
+        std::string part = dir.substr(start, slash == std::string::npos ? std::string::npos : slash - start);
+        if (!part.empty())
+        {
+            if (current.size() > 1)
+                current += "/";
+            current += part;
+            struct stat st;
+            if (stat(current.c_str(), &st) != 0)
+                mkdir(current.c_str(), 0777);
+            chmod(current.c_str(), 0777);
+        }
+        if (slash == std::string::npos)
+            break;
+        start = slash + 1;
+    }
+}
+
+static inline std::string pictures_dir()
+{
+    std::string dir = home_dir() + "/Pictures/DCIM/Camera";
+    ensure_dir(dir);
+    return dir;
+}
+
+static inline std::string filename_only(const std::string &path)
+{
+    size_t slash = path.find_last_of('/');
+    return slash == std::string::npos ? path : path.substr(slash + 1);
+}
+
+static inline bool is_image_name(std::string name)
+{
+    std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return (name.size() > 4 && name.substr(name.size() - 4) == ".jpg") ||
+           (name.size() > 5 && name.substr(name.size() - 5) == ".jpeg") ||
+           (name.size() > 4 && name.substr(name.size() - 4) == ".png");
+}
+
+static inline std::string make_photo_path()
+{
+    std::time_t now = std::time(nullptr);
+    std::tm tm_now{};
+    localtime_r(&now, &tm_now);
+    char time_buf[64];
+    std::strftime(time_buf, sizeof(time_buf), "%Y%m%d_%H%M%S", &tm_now);
+    return pictures_dir() + "/CAM_" + time_buf + ".jpg";
+}
+
+static inline std::string format_file_time(const std::string &path)
+{
+    struct stat st;
+    if (stat(path.c_str(), &st) != 0)
+        return "Unknown";
+    std::tm tm_now{};
+    localtime_r(&st.st_mtime, &tm_now);
+    char buf[32];
+    std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &tm_now);
+    return buf;
+}
+
+struct Frame
+{
+    int width = 0;
+    int height = 0;
+    std::vector<uint16_t> rgb565;
+};
+
+struct ZoomState
+{
+    int zoom = 100;
+    int view_x = 50;
+    int view_y = 50;
+};
+
+class HardwareCameraClient
+{
+public:
+    using Callback = std::function<void(int, std::string)>;
+
+    void set_status_callback(Callback cb)
+    {
+        request({"SetCallback"}, std::move(cb), false);
+    }
+
+    void set_frame_callback(Callback cb)
+    {
+        request({"SetFrameCallback"}, std::move(cb), false);
+    }
+
+    void start(int w, int h, Callback cb)
+    {
+        request({"Start", std::to_string(w), std::to_string(h)}, std::move(cb));
+    }
+
+    void stop()
+    {
+        request({"Stop"});
+    }
+
+    void capture(const std::string &path, int w, int h, Callback cb)
+    {
+        request({"Capture", path, std::to_string(w), std::to_string(h)}, std::move(cb));
+    }
+
+    void zoom_in(Callback cb)
+    {
+        request({"ZoomIn"}, std::move(cb));
+    }
+
+    void zoom_out(Callback cb)
+    {
+        request({"ZoomOut"}, std::move(cb));
+    }
+
+    void pan(int dx, int dy, Callback cb)
+    {
+        request({"Pan", std::to_string(dx), std::to_string(dy)}, std::move(cb));
+    }
+
+private:
+    void request(std::initializer_list<std::string> args, Callback cb = nullptr, bool swallow = true)
+    {
+        if (!cb && swallow)
+            cb = [](int, std::string) {};
+        cp0_signal_camera_api(std::list<std::string>(args), std::move(cb));
+    }
+};
+
+class GalleryStore
+{
+public:
+    void refresh()
+    {
+        items_.clear();
+        DIR *dir = opendir(pictures_dir().c_str());
+        if (!dir)
+            return;
+
+        struct dirent *entry = nullptr;
+        while ((entry = readdir(dir)) != nullptr)
+        {
+            if (entry->d_name[0] == '.')
+                continue;
+            std::string name = entry->d_name;
+            if (is_image_name(name))
+                items_.push_back(pictures_dir() + "/" + name);
+        }
+        closedir(dir);
+        std::sort(items_.begin(), items_.end());
+        if (index_ >= static_cast<int>(items_.size()))
+            index_ = items_.empty() ? 0 : static_cast<int>(items_.size()) - 1;
+    }
+
+    bool empty() const { return items_.empty(); }
+    int count() const { return static_cast<int>(items_.size()); }
+    int index() const { return items_.empty() ? 0 : index_ + 1; }
+    const std::string &current() const
+    {
+        static const std::string empty_path;
+        return items_.empty() ? empty_path : items_[index_];
+    }
+
+    void prev()
+    {
+        if (items_.empty())
+            return;
+        index_ = index_ > 0 ? index_ - 1 : static_cast<int>(items_.size()) - 1;
+    }
+
+    void next()
+    {
+        if (items_.empty())
+            return;
+        index_ = index_ < static_cast<int>(items_.size()) - 1 ? index_ + 1 : 0;
+    }
+
+    bool delete_current()
+    {
+        if (items_.empty())
+            return false;
+        std::string path = items_[index_];
+        if (std::remove(path.c_str()) != 0)
+            return false;
+        refresh();
+        return true;
+    }
+
+private:
+    std::vector<std::string> items_;
+    int index_ = 0;
+};
+} // namespace camera_app
 
 class UICameraPage : public app_base
 {
 public:
     UICameraPage() : app_base()
     {
-        set_page_title("CAMERA");
-
-        ensure_picture_dir();
-
-        create_UI();
-        event_handler_init();
-
-        open_imx219_camera();
-
-        frame_timer_ = lv_timer_create(frame_timer_cb, 33, this);
+        app_name = "CAMERA";
+        set_page_title(app_name);
+        build_ui();
+        bind_keyboard();
+        start_camera();
+        ui_timer_ = lv_timer_create(&UICameraPage::ui_timer_cb, 33, this);
     }
 
     ~UICameraPage()
     {
-        if (frame_timer_)
-        {
-            lv_timer_delete(frame_timer_);
-            frame_timer_ = nullptr;
-        }
-
-        close_camera();
+        alive_->store(false);
+        camera_.set_frame_callback(nullptr);
+        camera_.set_status_callback(nullptr);
+        camera_.stop();
+        if (ui_timer_)
+            lv_timer_delete(ui_timer_);
     }
 
 private:
-    // ==================== constants ====================
-
-    static constexpr int PREVIEW_W = 320;
-    static constexpr int PREVIEW_H = 150;
-
-    // ==================== LVGL ====================
-
-    std::unordered_map<std::string, lv_obj_t *> ui_obj_;
-
-    lv_image_dsc_t img_dsc_{};
-    lv_image_dsc_t snapshot_img_dsc_{};
-
-    std::vector<uint16_t> display_buf_;
-    std::vector<uint16_t> pending_lv_buf_;
-    std::vector<uint16_t> snapshot_lv_buf_;
-
-    std::vector<uint8_t> pending_rgb_buf_;
-    std::vector<uint8_t> snapshot_rgb_buf_;
-
-    std::mutex frame_mutex_;
-
-    bool new_frame_ = false;
-    bool snapshot_ready_ = false;
-    bool snapshot_review_active_ = false;
-    uint32_t snapshot_review_until_ = 0;
-
-    lv_timer_t *frame_timer_ = nullptr;
-
-    // ==================== camera ====================
-
-    std::unique_ptr<libcamera::CameraManager> cm_;
-    std::shared_ptr<libcamera::Camera> camera_;
-    std::unique_ptr<libcamera::CameraConfiguration> config_;
-    std::unique_ptr<libcamera::FrameBufferAllocator> allocator_;
-
-    libcamera::Stream *stream_ = nullptr;
-
-    std::vector<std::unique_ptr<libcamera::Request>> requests_;
-
-    struct MappedBuffer
+    enum class Page
     {
-        void  *addr = nullptr;
-        size_t size = 0;
-        int fd = -1;
+        Camera,
+        Gallery,
+        DeleteConfirm,
+        Info,
     };
 
-    std::unordered_map<const libcamera::FrameBuffer *, MappedBuffer> mapped_buffers_;
-
-    bool camera_found_ = false;
-    bool streaming_ = false;
-
-    int stream_w_ = PREVIEW_W;
-    int stream_h_ = PREVIEW_H;
-    int stream_stride_ = PREVIEW_W * 2;
-    libcamera::PixelFormat stream_format_ = libcamera::formats::RGB565;
-
-    std::atomic<bool> capture_requested_{false};
-
-    int capture_counter_ = 0;
-    std::string last_file_;
-
-private:
-    // ============================================================
-    //  UI
-    // ============================================================
-
-    void create_UI()
+    struct LvglCall
     {
-        lv_obj_t *bg = lv_obj_create(ui_APP_Container);
-        lv_obj_set_size(bg, 320, 150);
-        lv_obj_set_pos(bg, 0, 0);
-        lv_obj_set_style_radius(bg, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_color(bg, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_opa(bg, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_border_width(bg, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_pad_all(bg, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_clear_flag(bg, LV_OBJ_FLAG_SCROLLABLE);
-        ui_obj_["bg"] = bg;
+        void *data = nullptr;
+        std::function<void(lv_event_code_t, void *, void *)> cb;
+    };
 
-        init_image_buffer(PREVIEW_W, PREVIEW_H);
-
-        lv_obj_t *img = lv_img_create(bg);
-        lv_obj_set_pos(img, 0, 0);
-        lv_img_set_src(img, &img_dsc_);
-        ui_obj_["img"] = img;
-
-        lv_obj_t *photo_frame = lv_obj_create(bg);
-        lv_obj_set_size(photo_frame, 186, 118);
-        lv_obj_center(photo_frame);
-        lv_obj_set_style_radius(photo_frame, 4, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_color(photo_frame, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_opa(photo_frame, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_border_color(photo_frame, lv_color_hex(0xF7F7F7), LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_border_width(photo_frame, 3, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_shadow_width(photo_frame, 12, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_shadow_opa(photo_frame, 120, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_transform_rotation(photo_frame, -60, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_pad_all(photo_frame, 6, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_clear_flag(photo_frame, LV_OBJ_FLAG_SCROLLABLE);
-        lv_obj_add_flag(photo_frame, LV_OBJ_FLAG_HIDDEN);
-        ui_obj_["photo_frame"] = photo_frame;
-
-        lv_obj_t *photo_img = lv_img_create(photo_frame);
-        lv_obj_set_size(photo_img, 174, 78);
-        lv_obj_align(photo_img, LV_ALIGN_TOP_MID, 0, 0);
-        lv_image_set_inner_align(photo_img, LV_IMAGE_ALIGN_COVER);
-        lv_img_set_src(photo_img, &snapshot_img_dsc_);
-        ui_obj_["photo_img"] = photo_img;
-
-        lv_obj_t *lbl_save_info = lv_label_create(photo_frame);
-        lv_label_set_text(lbl_save_info, "");
-        lv_obj_set_width(lbl_save_info, 174);
-        lv_obj_align(lbl_save_info, LV_ALIGN_BOTTOM_MID, 0, 0);
-        lv_label_set_long_mode(lbl_save_info, LV_LABEL_LONG_WRAP);
-        lv_obj_set_style_text_color(lbl_save_info, lv_color_hex(0x333333), LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_text_font(lbl_save_info, &lv_font_montserrat_10, LV_PART_MAIN | LV_STATE_DEFAULT);
-        ui_obj_["lbl_info"] = lbl_save_info;
+    static void lvgl_event_handler(lv_event_t *e)
+    {
+        LvglCall *call = static_cast<LvglCall *>(lv_event_get_user_data(e));
+        if (!call)
+            return;
+        if (lv_event_get_code(e) == LV_EVENT_DELETE)
+        {
+            delete call;
+            return;
+        }
+        if (call->cb)
+            call->cb(lv_event_get_code(e), lv_event_get_param(e), call->data);
     }
 
-    void init_image_buffer(int w, int h)
+    static void ui_timer_cb(lv_timer_t *timer)
+    {
+        UICameraPage *self = static_cast<UICameraPage *>(lv_timer_get_user_data(timer));
+        if (self)
+            self->poll_ui();
+    }
+
+    void lvgl_add_call(lv_obj_t *obj, std::function<void(lv_event_code_t, void *, void *)> cb, void *data = nullptr)
+    {
+        if (!obj || !cb)
+            return;
+        LvglCall *call = new LvglCall;
+        call->data = data;
+        call->cb = std::move(cb);
+        lv_obj_add_event_cb(obj, &UICameraPage::lvgl_event_handler, LV_EVENT_ALL, call);
+    }
+
+    void build_ui()
+    {
+        lv_obj_clean(ui_APP_Container);
+        lv_obj_set_height(ui_APP_Container, camera_app::kContentH);
+        lv_obj_set_y(ui_APP_Container, 10);
+        lv_obj_clear_flag(ui_APP_Container, LV_OBJ_FLAG_SCROLLABLE);
+
+        page_camera_ = make_page();
+        page_gallery_ = make_page();
+        build_camera_page();
+        build_gallery_page();
+        build_bottom_bar();
+        build_delete_dialog();
+        build_info_panel();
+        show_page(Page::Camera);
+    }
+
+    lv_obj_t *make_page()
+    {
+        lv_obj_t *page = lv_obj_create(ui_APP_Container);
+        camera_app::clear_obj(page);
+        lv_obj_set_size(page, camera_app::kScreenW, camera_app::kContentH);
+        lv_obj_set_pos(page, 0, 0);
+        lv_obj_set_style_bg_color(page, camera_app::color(camera_app::kBlack), 0);
+        lv_obj_set_style_bg_opa(page, LV_OPA_COVER, 0);
+        lv_obj_add_flag(page, LV_OBJ_FLAG_HIDDEN);
+        return page;
+    }
+
+    void build_camera_page()
+    {
+        preview_box_ = lv_obj_create(page_camera_);
+        camera_app::clear_obj(preview_box_);
+        lv_obj_set_size(preview_box_, camera_app::kPreviewW, camera_app::kPreviewH);
+        lv_obj_set_pos(preview_box_, (camera_app::kScreenW - camera_app::kPreviewW) / 2, 0);
+        lv_obj_set_style_bg_color(preview_box_, camera_app::color(0x050505), 0);
+        lv_obj_set_style_bg_opa(preview_box_, LV_OPA_COVER, 0);
+
+        init_image_descriptor(camera_app::kPreviewW, camera_app::kPreviewH);
+        preview_img_ = lv_img_create(preview_box_);
+        lv_obj_set_size(preview_img_, camera_app::kPreviewW, camera_app::kPreviewH);
+        lv_img_set_src(preview_img_, &preview_dsc_);
+        lv_obj_center(preview_img_);
+
+        status_label_ = lv_label_create(preview_box_);
+        lv_obj_set_width(status_label_, camera_app::kPreviewW - 20);
+        lv_obj_align(status_label_, LV_ALIGN_TOP_MID, 0, 4);
+        lv_label_set_long_mode(status_label_, LV_LABEL_LONG_DOT);
+        lv_obj_set_style_text_font(status_label_, &lv_font_montserrat_10, 0);
+        lv_obj_set_style_text_color(status_label_, camera_app::color(camera_app::kText), 0);
+        lv_obj_set_style_bg_color(status_label_, camera_app::color(camera_app::kBlack), 0);
+        lv_obj_set_style_bg_opa(status_label_, LV_OPA_50, 0);
+        lv_obj_set_style_pad_hor(status_label_, 5, 0);
+        lv_label_set_text(status_label_, "Opening camera...");
+
+        zoom_map_ = lv_obj_create(page_camera_);
+        camera_app::clear_obj(zoom_map_);
+        lv_obj_set_size(zoom_map_, 64, 46);
+        lv_obj_align(zoom_map_, LV_ALIGN_TOP_RIGHT, -8, 8);
+        lv_obj_set_style_bg_color(zoom_map_, camera_app::color(camera_app::kBlack), 0);
+        lv_obj_set_style_bg_opa(zoom_map_, LV_OPA_40, 0);
+        lv_obj_set_style_border_color(zoom_map_, camera_app::color(camera_app::kText), 0);
+        lv_obj_set_style_border_width(zoom_map_, 1, 0);
+        zoom_view_ = lv_obj_create(zoom_map_);
+        camera_app::clear_obj(zoom_view_);
+        lv_obj_set_size(zoom_view_, 24, 18);
+        lv_obj_set_style_bg_color(zoom_view_, camera_app::color(camera_app::kText), 0);
+        lv_obj_set_style_bg_opa(zoom_view_, LV_OPA_20, 0);
+        lv_obj_set_style_border_color(zoom_view_, camera_app::color(camera_app::kText), 0);
+        lv_obj_set_style_border_width(zoom_view_, 1, 0);
+        zoom_label_ = lv_label_create(zoom_map_);
+        lv_obj_set_style_text_font(zoom_label_, &lv_font_montserrat_10, 0);
+        lv_obj_set_style_text_color(zoom_label_, camera_app::color(camera_app::kText), 0);
+        lv_obj_align(zoom_label_, LV_ALIGN_BOTTOM_RIGHT, -2, -2);
+        update_zoom_ui();
+
+        flash_ = lv_obj_create(page_camera_);
+        camera_app::clear_obj(flash_);
+        lv_obj_set_size(flash_, camera_app::kScreenW, camera_app::kContentH);
+        lv_obj_set_style_bg_color(flash_, camera_app::color(camera_app::kText), 0);
+        lv_obj_set_style_bg_opa(flash_, LV_OPA_TRANSP, 0);
+        lv_obj_add_flag(flash_, LV_OBJ_FLAG_HIDDEN);
+    }
+
+    void build_gallery_page()
+    {
+        gallery_img_ = lv_img_create(page_gallery_);
+        lv_obj_set_size(gallery_img_, camera_app::kScreenW, camera_app::kContentH);
+        lv_obj_center(gallery_img_);
+        lv_image_set_inner_align(gallery_img_, LV_IMAGE_ALIGN_CONTAIN);
+
+        gallery_empty_ = lv_label_create(page_gallery_);
+        lv_obj_set_width(gallery_empty_, camera_app::kScreenW);
+        lv_obj_set_style_text_align(gallery_empty_, LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_set_style_text_font(gallery_empty_, &lv_font_montserrat_16, 0);
+        lv_obj_set_style_text_color(gallery_empty_, camera_app::color(camera_app::kText), 0);
+        lv_label_set_text(gallery_empty_, "No photos");
+        lv_obj_center(gallery_empty_);
+
+        gallery_top_ = lv_obj_create(page_gallery_);
+        camera_app::clear_obj(gallery_top_);
+        lv_obj_set_size(gallery_top_, camera_app::kScreenW, 24);
+        lv_obj_set_pos(gallery_top_, 0, 0);
+        lv_obj_set_style_bg_color(gallery_top_, camera_app::color(camera_app::kBlack), 0);
+        lv_obj_set_style_bg_opa(gallery_top_, LV_OPA_50, 0);
+
+        gallery_counter_ = lv_label_create(gallery_top_);
+        lv_obj_set_pos(gallery_counter_, 8, 5);
+        lv_obj_set_width(gallery_counter_, 60);
+        lv_obj_set_style_text_font(gallery_counter_, &lv_font_montserrat_10, 0);
+        lv_obj_set_style_text_color(gallery_counter_, camera_app::color(camera_app::kText), 0);
+
+        gallery_title_ = lv_label_create(gallery_top_);
+        lv_obj_set_pos(gallery_title_, 72, 5);
+        lv_obj_set_width(gallery_title_, 240);
+        lv_label_set_long_mode(gallery_title_, LV_LABEL_LONG_DOT);
+        lv_obj_set_style_text_font(gallery_title_, &lv_font_montserrat_10, 0);
+        lv_obj_set_style_text_color(gallery_title_, camera_app::color(camera_app::kMuted), 0);
+    }
+
+    void build_bottom_bar()
+    {
+        bottom_bar_ = lv_obj_create(ui_root);
+        camera_app::clear_obj(bottom_bar_);
+        lv_obj_set_size(bottom_bar_, camera_app::kScreenW, camera_app::kBottomH);
+        lv_obj_set_pos(bottom_bar_, 0, 145);
+        lv_obj_set_style_bg_color(bottom_bar_, camera_app::color(camera_app::kBlack), 0);
+        lv_obj_set_style_bg_opa(bottom_bar_, LV_OPA_40, 0);
+
+        for (int i = 0; i < 5; ++i)
+        {
+            bottom_btn_[i] = lv_btn_create(bottom_bar_);
+            lv_obj_remove_style_all(bottom_btn_[i]);
+            lv_obj_set_size(bottom_btn_[i], 64, camera_app::kBottomH);
+            lv_obj_set_pos(bottom_btn_[i], i * 64, 0);
+            lv_obj_add_flag(bottom_btn_[i], LV_OBJ_FLAG_CLICKABLE);
+            bottom_label_[i] = lv_label_create(bottom_btn_[i]);
+            lv_obj_set_style_text_font(bottom_label_[i], &lv_font_montserrat_16, 0);
+            lv_obj_set_style_text_color(bottom_label_[i], camera_app::color(camera_app::kText), 0);
+            lv_obj_center(bottom_label_[i]);
+            lvgl_add_call(bottom_btn_[i], [this, i](lv_event_code_t c, void *, void *) {
+                if (c == LV_EVENT_CLICKED)
+                    dispatch_button(i);
+            });
+        }
+    }
+
+    void build_delete_dialog()
+    {
+        dialog_scrim_ = lv_obj_create(ui_root);
+        camera_app::clear_obj(dialog_scrim_);
+        lv_obj_set_size(dialog_scrim_, camera_app::kScreenW, 170);
+        lv_obj_set_pos(dialog_scrim_, 0, 0);
+        lv_obj_set_style_bg_color(dialog_scrim_, camera_app::color(camera_app::kBlack), 0);
+        lv_obj_set_style_bg_opa(dialog_scrim_, LV_OPA_70, 0);
+
+        lv_obj_t *panel = lv_obj_create(dialog_scrim_);
+        camera_app::clear_obj(panel);
+        lv_obj_set_size(panel, 236, 112);
+        lv_obj_center(panel);
+        lv_obj_set_style_bg_color(panel, camera_app::color(camera_app::kPanelHigh), 0);
+        lv_obj_set_style_bg_opa(panel, LV_OPA_COVER, 0);
+        lv_obj_set_style_border_color(panel, camera_app::color(camera_app::kOutline), 0);
+        lv_obj_set_style_border_width(panel, 1, 0);
+        lv_obj_set_style_radius(panel, 8, 0);
+        lv_obj_set_style_pad_all(panel, 10, 0);
+
+        lv_obj_t *title = lv_label_create(panel);
+        lv_obj_set_style_text_font(title, &lv_font_montserrat_14, 0);
+        lv_obj_set_style_text_color(title, camera_app::color(camera_app::kText), 0);
+        lv_label_set_text(title, "Delete photo?");
+        lv_obj_set_pos(title, 10, 9);
+
+        lv_obj_t *body = lv_label_create(panel);
+        lv_obj_set_style_text_font(body, &lv_font_montserrat_10, 0);
+        lv_obj_set_style_text_color(body, camera_app::color(camera_app::kMuted), 0);
+        lv_label_set_text(body, "This cannot be undone.");
+        lv_obj_set_pos(body, 10, 35);
+
+        dialog_cancel_ = make_dialog_button(panel, "Cancel", 28, false);
+        dialog_confirm_ = make_dialog_button(panel, "Confirm", 132, true);
+        lv_obj_add_flag(dialog_scrim_, LV_OBJ_FLAG_HIDDEN);
+    }
+
+    lv_obj_t *make_dialog_button(lv_obj_t *parent, const char *text, int x, bool danger)
+    {
+        lv_obj_t *btn = lv_obj_create(parent);
+        camera_app::clear_obj(btn);
+        lv_obj_set_size(btn, 76, 30);
+        lv_obj_set_pos(btn, x, 72);
+        lv_obj_set_style_radius(btn, 6, 0);
+        lv_obj_set_style_border_width(btn, 1, 0);
+        lv_obj_t *label = lv_label_create(btn);
+        lv_obj_set_style_text_font(label, &lv_font_montserrat_10, 0);
+        lv_label_set_text(label, text);
+        lv_obj_center(label);
+        (void)danger;
+        return btn;
+    }
+
+    void build_info_panel()
+    {
+        info_scrim_ = lv_obj_create(ui_root);
+        camera_app::clear_obj(info_scrim_);
+        lv_obj_set_size(info_scrim_, camera_app::kScreenW, 170);
+        lv_obj_set_pos(info_scrim_, 0, 0);
+        lv_obj_set_style_bg_color(info_scrim_, camera_app::color(camera_app::kBlack), 0);
+        lv_obj_set_style_bg_opa(info_scrim_, LV_OPA_70, 0);
+
+        lv_obj_t *panel = lv_obj_create(info_scrim_);
+        camera_app::clear_obj(panel);
+        lv_obj_set_size(panel, 244, 160);
+        lv_obj_align(panel, LV_ALIGN_TOP_MID, 0, 5);
+        lv_obj_set_style_bg_color(panel, camera_app::color(camera_app::kPanelHigh), 0);
+        lv_obj_set_style_bg_opa(panel, LV_OPA_COVER, 0);
+        lv_obj_set_style_border_color(panel, camera_app::color(camera_app::kOutline), 0);
+        lv_obj_set_style_border_width(panel, 1, 0);
+        lv_obj_set_style_radius(panel, 8, 0);
+        lv_obj_set_style_pad_all(panel, 10, 0);
+
+        lv_obj_t *title = lv_label_create(panel);
+        lv_obj_set_style_text_font(title, &lv_font_montserrat_14, 0);
+        lv_obj_set_style_text_color(title, camera_app::color(camera_app::kText), 0);
+        lv_label_set_text(title, "Photo info");
+        lv_obj_set_pos(title, 10, 8);
+
+        info_body_ = lv_label_create(panel);
+        lv_obj_set_pos(info_body_, 10, 32);
+        lv_obj_set_width(info_body_, 224);
+        lv_label_set_long_mode(info_body_, LV_LABEL_LONG_WRAP);
+        lv_obj_set_style_text_font(info_body_, &lv_font_montserrat_10, 0);
+        lv_obj_set_style_text_color(info_body_, camera_app::color(camera_app::kMuted), 0);
+        lv_obj_add_flag(info_scrim_, LV_OBJ_FLAG_HIDDEN);
+    }
+
+    void init_image_descriptor(int w, int h)
     {
         std::lock_guard<std::mutex> lock(frame_mutex_);
-
-        stream_w_ = w;
-        stream_h_ = h;
-
         display_buf_.assign(w * h, 0);
-        pending_lv_buf_.assign(w * h, 0);
-        snapshot_lv_buf_.assign(w * h, 0);
-        pending_rgb_buf_.assign(w * h * 3, 0);
-
-        memset(&img_dsc_, 0, sizeof(img_dsc_));
-
-        // LVGL 9.x image descriptor
-        img_dsc_.header.magic = LV_IMAGE_HEADER_MAGIC;
-        img_dsc_.header.cf = LV_COLOR_FORMAT_RGB565;
-        img_dsc_.header.flags = 0;
-        img_dsc_.header.w = w;
-        img_dsc_.header.h = h;
-        img_dsc_.header.stride = w * sizeof(uint16_t);
-
-        img_dsc_.data_size = display_buf_.size() * sizeof(uint16_t);
-        img_dsc_.data = reinterpret_cast<const uint8_t *>(display_buf_.data());
-
-        snapshot_img_dsc_ = img_dsc_;
-        snapshot_img_dsc_.data_size = snapshot_lv_buf_.size() * sizeof(uint16_t);
-        snapshot_img_dsc_.data = reinterpret_cast<const uint8_t *>(snapshot_lv_buf_.data());
+        std::memset(&preview_dsc_, 0, sizeof(preview_dsc_));
+        preview_dsc_.header.magic = LV_IMAGE_HEADER_MAGIC;
+        preview_dsc_.header.cf = LV_COLOR_FORMAT_RGB565;
+        preview_dsc_.header.w = w;
+        preview_dsc_.header.h = h;
+        preview_dsc_.header.stride = w * sizeof(uint16_t);
+        preview_dsc_.data_size = display_buf_.size() * sizeof(uint16_t);
+        preview_dsc_.data = reinterpret_cast<const uint8_t *>(display_buf_.data());
     }
 
-    // ============================================================
-    //  directory / filename / jpeg
-    // ============================================================
-
-    void ensure_picture_dir()
+    void bind_keyboard()
     {
-        const char *dir = "/home/pi/Pictures";
-
-        struct stat st;
-        if (stat(dir, &st) != 0)
-        {
-            mkdir(dir, 0777);
-        }
-
-        chmod(dir, 0777);
+        lvgl_add_call(ui_root, [this](lv_event_code_t c, void *event_param, void *) {
+            if (c != static_cast<lv_event_code_t>(LV_EVENT_KEYBOARD))
+                return;
+            struct key_item *key = static_cast<struct key_item *>(event_param);
+            if (!key || key->key_state != 0)
+                return;
+            handle_key(key->key_code);
+        });
     }
 
-    std::string make_photo_path()
+    void start_camera()
     {
-        ensure_picture_dir();
-
-        time_t now = time(nullptr);
-
-        struct tm tm_now;
-        localtime_r(&now, &tm_now);
-
-        char time_buf[64];
-        strftime(time_buf, sizeof(time_buf), "%Y%m%d_%H%M%S", &tm_now);
-
-        char path[256];
-        snprintf(path,
-                 sizeof(path),
-                 "/home/pi/Pictures/IMX219_%s_%03d.jpg",
-                 time_buf,
-                 ++capture_counter_);
-
-        return std::string(path);
+        camera_.set_frame_callback(make_callback([this](int code, std::string data) {
+            if (code == 0)
+                on_frame_payload(std::move(data));
+        }));
+        camera_.set_status_callback(make_callback([this](int code, std::string data) {
+            set_async_status(code == 0 ? camera_app::trim_line(data) : "Camera unavailable");
+        }));
+        camera_.start(camera_app::kPreviewW, camera_app::kPreviewH, make_callback([this](int code, std::string data) {
+            set_async_status(code == 0 ? "Camera ready" : camera_app::trim_line(data));
+        }));
     }
 
-    bool save_jpeg_rgb888(const std::string &path,
-                          const uint8_t *rgb,
-                          int width,
-                          int height,
-                          int quality = 90)
+    camera_app::HardwareCameraClient::Callback make_callback(camera_app::HardwareCameraClient::Callback cb)
     {
-        FILE *fp = fopen(path.c_str(), "wb");
-        if (!fp)
-        {
-            printf("[Camera] Failed to open jpeg file: %s\n", path.c_str());
-            return false;
-        }
-
-        jpeg_compress_struct cinfo;
-        jpeg_error_mgr jerr;
-
-        cinfo.err = jpeg_std_error(&jerr);
-
-        jpeg_create_compress(&cinfo);
-        jpeg_stdio_dest(&cinfo, fp);
-
-        cinfo.image_width = width;
-        cinfo.image_height = height;
-        cinfo.input_components = 3;
-        cinfo.in_color_space = JCS_RGB;
-
-        jpeg_set_defaults(&cinfo);
-        jpeg_set_quality(&cinfo, quality, TRUE);
-
-        jpeg_start_compress(&cinfo, TRUE);
-
-        while (cinfo.next_scanline < cinfo.image_height)
-        {
-            JSAMPROW row_pointer[1];
-            row_pointer[0] = const_cast<JSAMPROW>(
-                &rgb[cinfo.next_scanline * width * 3]);
-
-            jpeg_write_scanlines(&cinfo, row_pointer, 1);
-        }
-
-        jpeg_finish_compress(&cinfo);
-        jpeg_destroy_compress(&cinfo);
-
-        fclose(fp);
-
-        chmod(path.c_str(), 0666);
-
-        return true;
-    }
-
-    // ============================================================
-    //  libcamera open / close
-    // ============================================================
-
-    static std::string lower_string(std::string s)
-    {
-        std::transform(s.begin(), s.end(), s.begin(),
-                       [](unsigned char c) { return std::tolower(c); });
-        return s;
-    }
-
-    void open_imx219_camera()
-    {
-        cm_ = std::make_unique<libcamera::CameraManager>();
-
-        if (cm_->start())
-        {
-            set_status("CM failed", false);
-            printf("[Camera] CameraManager start failed\n");
-            return;
-        }
-
-        std::shared_ptr<libcamera::Camera> selected;
-
-        for (const std::shared_ptr<libcamera::Camera> &cam : cm_->cameras())
-        {
-            std::string model_text;
-
-            const auto &props = cam->properties();
-            auto model = props.get(libcamera::properties::Model);
-
-            if (model)
-                model_text = *model;
-            else
-                model_text = cam->id();
-
-            std::string lower = lower_string(model_text);
-
-            printf("[Camera] Found camera: %s\n", model_text.c_str());
-
-            if (lower.find("imx219") != std::string::npos)
-            {
-                selected = cam;
-                break;
-            }
-        }
-
-        if (!selected)
-        {
-            camera_found_ = false;
-            set_status("No IMX219", false);
-            printf("[Camera] IMX219 not found\n");
-            return;
-        }
-
-        camera_ = selected;
-        camera_found_ = true;
-
-        if (camera_->acquire())
-        {
-            set_status("Acquire fail", false);
-            printf("[Camera] Camera acquire failed\n");
-            camera_.reset();
-            return;
-        }
-
-        config_ = camera_->generateConfiguration({ libcamera::StreamRole::Viewfinder });
-
-        if (!config_ || config_->empty())
-        {
-            set_status("Config fail", false);
-            printf("[Camera] generateConfiguration failed\n");
-            camera_->release();
-            camera_.reset();
-            return;
-        }
-
-        libcamera::StreamConfiguration &cfg = config_->at(0);
-
-        cfg.size.width = PREVIEW_W;
-        cfg.size.height = PREVIEW_H;
-        cfg.pixelFormat = libcamera::formats::RGB565;
-        cfg.bufferCount = 4;
-
-        libcamera::CameraConfiguration::Status validation = config_->validate();
-
-        if (validation == libcamera::CameraConfiguration::Invalid)
-        {
-            set_status("Invalid cfg", false);
-            printf("[Camera] Invalid camera configuration\n");
-            camera_->release();
-            camera_.reset();
-            return;
-        }
-
-        if (camera_->configure(config_.get()))
-        {
-            set_status("Cfg failed", false);
-            printf("[Camera] camera configure failed\n");
-            camera_->release();
-            camera_.reset();
-            return;
-        }
-
-        cfg = config_->at(0);
-
-        if (!is_supported_preview_format(cfg.pixelFormat))
-        {
-            set_status("Fmt fail", false);
-            printf("[Camera] Unsupported preview format=%s\n",
-                   cfg.pixelFormat.toString().c_str());
-
-            camera_->release();
-            camera_.reset();
-            return;
-        }
-
-        stream_ = cfg.stream();
-
-        stream_w_ = cfg.size.width;
-        stream_h_ = cfg.size.height;
-        stream_stride_ = cfg.stride;
-        stream_format_ = cfg.pixelFormat;
-
-        printf("[Camera] Stream: %dx%d stride=%d format=%s\n",
-               stream_w_,
-               stream_h_,
-               stream_stride_,
-               cfg.pixelFormat.toString().c_str());
-
-        init_image_buffer(stream_w_, stream_h_);
-
-        if (ui_obj_.count("img"))
-            lv_img_set_src(ui_obj_["img"], &img_dsc_);
-
-        allocator_ = std::make_unique<libcamera::FrameBufferAllocator>(camera_);
-
-        if (allocator_->allocate(stream_) < 0)
-        {
-            set_status("Alloc fail", false);
-            printf("[Camera] FrameBuffer allocation failed\n");
-            camera_->release();
-            camera_.reset();
-            return;
-        }
-
-        const std::vector<std::unique_ptr<libcamera::FrameBuffer>> &buffers =
-            allocator_->buffers(stream_);
-
-        for (const std::unique_ptr<libcamera::FrameBuffer> &buffer : buffers)
-        {
-            auto planes = buffer->planes();
-
-            if (planes.empty())
-                continue;
-
-            const libcamera::FrameBuffer::Plane &plane = planes[0];
-
-            void *memory = mmap(nullptr,
-                                plane.length,
-                                PROT_READ | PROT_WRITE,
-                                MAP_SHARED,
-                                plane.fd.get(),
-                                plane.offset);
-
-            if (memory == MAP_FAILED)
-            {
-                printf("[Camera] mmap failed\n");
-                continue;
-            }
-
-            mapped_buffers_[buffer.get()] = { memory, plane.length, plane.fd.get() };
-
-            std::unique_ptr<libcamera::Request> request =
-                camera_->createRequest();
-
-            if (!request)
-            {
-                printf("[Camera] createRequest failed\n");
-                continue;
-            }
-
-            if (request->addBuffer(stream_, buffer.get()) < 0)
-            {
-                printf("[Camera] addBuffer failed\n");
-                continue;
-            }
-
-            requests_.push_back(std::move(request));
-        }
-
-        if (requests_.empty())
-        {
-            set_status("Req fail", false);
-            printf("[Camera] No camera request created\n");
-            close_camera();
-            return;
-        }
-
-        camera_->requestCompleted.connect(this, &UICameraPage::request_complete);
-
-        if (camera_->start())
-        {
-            set_status("Start fail", false);
-            printf("[Camera] camera start failed\n");
-            close_camera();
-            return;
-        }
-
-        for (std::unique_ptr<libcamera::Request> &request : requests_)
-        {
-            camera_->queueRequest(request.get());
-        }
-
-        streaming_ = true;
-
-        set_status("STREAMING", true);
-
-        printf("[Camera] IMX219 stream started\n");
-    }
-
-    void close_camera()
-    {
-        streaming_ = false;
-
-        if (camera_)
-        {
-            camera_->requestCompleted.disconnect(this);
-
-            camera_->stop();
-
-            requests_.clear();
-
-            for (auto &it : mapped_buffers_)
-            {
-                if (it.second.addr && it.second.addr != MAP_FAILED)
-                    munmap(it.second.addr, it.second.size);
-            }
-
-            mapped_buffers_.clear();
-
-            allocator_.reset();
-
-            camera_->release();
-            camera_.reset();
-        }
-
-        if (cm_)
-        {
-            cm_->stop();
-            cm_.reset();
-        }
-    }
-
-    void set_status(const char *text, bool ok)
-    {
-        if (!ui_obj_.count("lbl_status"))
-            return;
-
-        lv_label_set_text(ui_obj_["lbl_status"], text);
-
-        lv_obj_set_style_text_color(ui_obj_["lbl_status"],
-                                    ok ? lv_color_hex(0x2ECC71)
-                                       : lv_color_hex(0xE74C3C),
-                                    LV_PART_MAIN | LV_STATE_DEFAULT);
-    }
-
-    // ============================================================
-    //  frame callback
-    // ============================================================
-
-    void request_complete(libcamera::Request *request)
-    {
-        if (request->status() == libcamera::Request::RequestCancelled)
-            return;
-
-        auto it = request->buffers().find(stream_);
-        if (it == request->buffers().end())
-            return;
-
-        libcamera::FrameBuffer *buffer = it->second;
-
-        auto map_it = mapped_buffers_.find(buffer);
-        if (map_it == mapped_buffers_.end())
-            return;
-
-        const uint8_t *src =
-            reinterpret_cast<const uint8_t *>(map_it->second.addr);
-
-        size_t bytes_used = map_it->second.size;
-        const auto &metadata = buffer->metadata();
-        if (!metadata.planes().empty() && metadata.planes()[0].bytesused > 0)
-            bytes_used = std::min(bytes_used,
-                                  static_cast<size_t>(metadata.planes()[0].bytesused));
-
-        dma_buf_sync(map_it->second.fd, DMA_BUF_SYNC_START | DMA_BUF_SYNC_READ);
-        convert_preview_frame(src, bytes_used);
-        dma_buf_sync(map_it->second.fd, DMA_BUF_SYNC_END | DMA_BUF_SYNC_READ);
-
-        request->reuse(libcamera::Request::ReuseBuffers);
-        camera_->queueRequest(request);
-    }
-
-    static bool is_supported_preview_format(const libcamera::PixelFormat &format)
-    {
-        return format == libcamera::formats::RGB888 ||
-               format == libcamera::formats::BGR888 ||
-               format == libcamera::formats::XRGB8888 ||
-               format == libcamera::formats::XBGR8888 ||
-               format == libcamera::formats::RGB565;
-    }
-
-    static void dma_buf_sync(int fd, uint64_t flags)
-    {
-        if (fd < 0)
-            return;
-
-        struct dma_buf_sync sync = { flags };
-        ioctl(fd, DMA_BUF_IOCTL_SYNC, &sync);
-    }
-
-    static void rgb565_to_rgb888(uint16_t p,
-                                 uint8_t &r,
-                                 uint8_t &g,
-                                 uint8_t &b)
-    {
-        r = ((p >> 11) & 0x1F) << 3;
-        g = ((p >> 5) & 0x3F) << 2;
-        b = (p & 0x1F) << 3;
-        r |= r >> 5;
-        g |= g >> 6;
-        b |= b >> 5;
-    }
-
-    static uint16_t rgb888_to_rgb565(uint8_t r, uint8_t g, uint8_t b)
-    {
-        return static_cast<uint16_t>(((r & 0xF8) << 8) |
-                                     ((g & 0xFC) << 3) |
-                                     (b >> 3));
-    }
-
-    void store_preview_pixel(int idx, uint8_t r, uint8_t g, uint8_t b)
-    {
-        pending_lv_buf_[idx] = rgb888_to_rgb565(r, g, b);
-
-        int rgb_idx = idx * 3;
-        pending_rgb_buf_[rgb_idx + 0] = r;
-        pending_rgb_buf_[rgb_idx + 1] = g;
-        pending_rgb_buf_[rgb_idx + 2] = b;
-    }
-
-    void store_preview_pixel_rgb565(int idx, uint16_t rgb565)
-    {
-        uint8_t r = 0;
-        uint8_t g = 0;
-        uint8_t b = 0;
-
-        pending_lv_buf_[idx] = rgb565;
-        rgb565_to_rgb888(rgb565, r, g, b);
-
-        int rgb_idx = idx * 3;
-        pending_rgb_buf_[rgb_idx + 0] = r;
-        pending_rgb_buf_[rgb_idx + 1] = g;
-        pending_rgb_buf_[rgb_idx + 2] = b;
-    }
-
-    void convert_preview_frame(const uint8_t *src, size_t bytes_used)
-    {
-        std::lock_guard<std::mutex> lock(frame_mutex_);
-
-        if ((int)pending_lv_buf_.size() != stream_w_ * stream_h_)
-            return;
-
-        if ((int)pending_rgb_buf_.size() != stream_w_ * stream_h_ * 3)
-            return;
-
-        if ((int)snapshot_lv_buf_.size() != stream_w_ * stream_h_)
-            return;
-
-        const bool is_rgb888 = stream_format_ == libcamera::formats::RGB888;
-        const bool is_bgr888 = stream_format_ == libcamera::formats::BGR888;
-        const bool is_xrgb8888 = stream_format_ == libcamera::formats::XRGB8888;
-        const bool is_xbgr8888 = stream_format_ == libcamera::formats::XBGR8888;
-        const bool is_rgb565 = stream_format_ == libcamera::formats::RGB565;
-
-        const int bytes_per_pixel = is_rgb888 || is_bgr888 ? 3 :
-                                    is_rgb565 ? 2 : 4;
-        const int min_stride = stream_w_ * bytes_per_pixel;
-        const int row_stride = stream_stride_ > 0 ? stream_stride_ : min_stride;
-
-        if (row_stride < min_stride)
-            return;
-
-        for (int y = 0; y < stream_h_; ++y)
-        {
-            const size_t row_offset = static_cast<size_t>(y) * row_stride;
-            if (row_offset + min_stride > bytes_used)
-                break;
-
-            const uint8_t *line = src + row_offset;
-            const int dst_y = stream_h_ - 1 - y;
-
-            for (int x = 0; x < stream_w_; ++x)
-            {
-                const int dst_x = stream_w_ - 1 - x;
-                uint8_t r = 0;
-                uint8_t g = 0;
-                uint8_t b = 0;
-
-                if (is_rgb888)
-                {
-                    const uint8_t *p = line + x * 3;
-                    r = p[0];
-                    g = p[1];
-                    b = p[2];
-                }
-                else if (is_bgr888)
-                {
-                    const uint8_t *p = line + x * 3;
-                    b = p[0];
-                    g = p[1];
-                    r = p[2];
-                }
-                else if (is_xrgb8888)
-                {
-                    const uint8_t *p = line + x * 4;
-                    b = p[0];
-                    g = p[1];
-                    r = p[2];
-                }
-                else if (is_xbgr8888)
-                {
-                    const uint8_t *p = line + x * 4;
-                    r = p[0];
-                    g = p[1];
-                    b = p[2];
-                }
-                else if (is_rgb565)
-                {
-                    const uint8_t *p = line + x * 2;
-                    int idx = dst_y * stream_w_ + dst_x;
-                    store_preview_pixel_rgb565(idx,
-                                               static_cast<uint16_t>(p[0] | (p[1] << 8)));
-                    continue;
-                }
-
-                int idx = dst_y * stream_w_ + dst_x;
-                store_preview_pixel(idx, r, g, b);
-            }
-        }
-
-        if (capture_requested_.exchange(false))
-        {
-            snapshot_rgb_buf_ = pending_rgb_buf_;
-            snapshot_lv_buf_ = pending_lv_buf_;
-            snapshot_ready_ = true;
-        }
-
-        new_frame_ = true;
-    }
-
-    // ============================================================
-    //  LVGL timer: update display and save snapshot
-    // ============================================================
-
-    static void frame_timer_cb(lv_timer_t *t)
-    {
-        UICameraPage *self =
-            static_cast<UICameraPage *>(lv_timer_get_user_data(t));
-
-        if (self)
-            self->on_frame_timer();
-    }
-
-    void on_frame_timer()
-    {
-        bool need_update = false;
-
-        bool need_save = false;
-        std::vector<uint8_t> save_rgb;
-        int save_w = 0;
-        int save_h = 0;
-        std::string save_path;
-
-        {
-            std::lock_guard<std::mutex> lock(frame_mutex_);
-
-            if (new_frame_)
-            {
-                std::swap(display_buf_, pending_lv_buf_);
-
-                img_dsc_.data =
-                    reinterpret_cast<const uint8_t *>(display_buf_.data());
-
-                new_frame_ = false;
-                need_update = true;
-            }
-
-            if (snapshot_ready_)
-            {
-                save_rgb = snapshot_rgb_buf_;
-                save_w = stream_w_;
-                save_h = stream_h_;
-                save_path = last_file_;
-
-                snapshot_ready_ = false;
-                need_save = true;
-            }
-        }
-
-        if (need_update)
-        {
-            lv_img_set_src(ui_obj_["img"], &img_dsc_);
-            lv_obj_invalidate(ui_obj_["img"]);
-        }
-
-        if (need_save)
-        {
-            show_snapshot_review();
-
-            if (save_jpeg_rgb888(save_path,
-                                 save_rgb.data(),
-                                 save_w,
-                                 save_h,
-                                 90))
-            {
-                char buf[256];
-
-                snprintf(buf,
-                         sizeof(buf),
-                         "Saved: %s  chmod 666",
-                         save_path.c_str());
-
-                lv_label_set_text(ui_obj_["lbl_info"], buf);
-
-                printf("[Camera] Saved frame: %s\n", save_path.c_str());
-            }
-            else
-            {
-                lv_label_set_text(ui_obj_["lbl_info"], "Save failed");
-            }
-        }
-
-        update_snapshot_review_timeout();
-    }
-
-    void show_snapshot_review()
-    {
-        if (!ui_obj_.count("photo_frame") || !ui_obj_.count("photo_img"))
-            return;
-
-        snapshot_img_dsc_.data = reinterpret_cast<const uint8_t *>(snapshot_lv_buf_.data());
-        lv_img_set_src(ui_obj_["photo_img"], &snapshot_img_dsc_);
-        lv_obj_invalidate(ui_obj_["photo_img"]);
-
-        lv_obj_remove_flag(ui_obj_["photo_frame"], LV_OBJ_FLAG_HIDDEN);
-        lv_obj_move_foreground(ui_obj_["photo_frame"]);
-
-        snapshot_review_active_ = true;
-        snapshot_review_until_ = lv_tick_get() + 3000;
-    }
-
-    void update_snapshot_review_timeout()
-    {
-        if (!snapshot_review_active_)
-            return;
-
-        if (static_cast<int32_t>(lv_tick_get() - snapshot_review_until_) < 0)
-            return;
-
-        if (ui_obj_.count("photo_frame"))
-            lv_obj_add_flag(ui_obj_["photo_frame"], LV_OBJ_FLAG_HIDDEN);
-
-        snapshot_review_active_ = false;
-    }
-
-    // ============================================================
-    //  capture
-    // ============================================================
-
-    void capture_from_stream()
-    {
-        if (!camera_found_ || !streaming_)
-        {
-            set_status("Not ready", false);
-            return;
-        }
-
-        last_file_ = make_photo_path();
-
-        capture_requested_ = true;
-    }
-
-    // ============================================================
-    //  event
-    // ============================================================
-
-    void event_handler_init()
-    {
-        lv_obj_add_event_cb(ui_root,
-                            UICameraPage::static_lvgl_handler,
-                            LV_EVENT_ALL,
-                            this);
-    }
-
-    static void static_lvgl_handler(lv_event_t *e)
-    {
-        UICameraPage *self =
-            static_cast<UICameraPage *>(lv_event_get_user_data(e));
-
-        if (self)
-            self->event_handler(e);
-    }
-
-    void event_handler(lv_event_t *e)
-    {
-        if (IS_KEY_RELEASED(e))
-        {
-            uint32_t key = LV_EVENT_KEYBOARD_GET_KEY(e);
-            handle_key(key);
-        }
+        auto alive = alive_;
+        return [alive, cb = std::move(cb)](int code, std::string data) mutable {
+            if (!alive->load() || !cb)
+                return;
+            cb(code, std::move(data));
+        };
     }
 
     void handle_key(uint32_t key)
     {
+        if (key == KEY_ESC)
+        {
+            handle_exit();
+            return;
+        }
+        if (key == KEY_ENTER)
+        {
+            if (current_page_ == Page::DeleteConfirm)
+                confirm_delete();
+            else if (current_page_ == Page::Camera)
+                capture_photo();
+            return;
+        }
+        if (key == KEY_UP)
+        {
+            if (current_page_ == Page::Camera)
+                pan(0, -1);
+            return;
+        }
+        if (key == KEY_DOWN)
+        {
+            if (current_page_ == Page::Camera)
+                pan(0, 1);
+            return;
+        }
+        if (key == KEY_LEFT)
+        {
+            if (current_page_ == Page::Gallery)
+                gallery_prev();
+            else if (current_page_ == Page::DeleteConfirm)
+                delete_choice_ = 0, update_delete_choice_ui();
+            else if (current_page_ == Page::Camera)
+                pan(-1, 0);
+            return;
+        }
+        if (key == KEY_RIGHT)
+        {
+            if (current_page_ == Page::Gallery)
+                gallery_next();
+            else if (current_page_ == Page::DeleteConfirm)
+                delete_choice_ = 1, update_delete_choice_ui();
+            else if (current_page_ == Page::Camera)
+                pan(1, 0);
+            return;
+        }
+
+        int button = -1;
         switch (key)
         {
-        case KEY_ENTER:
-            capture_from_stream();
+        case KEY_1: button = 0; break;
+        case KEY_2: button = 1; break;
+        case KEY_3: button = 2; break;
+        case KEY_4: button = 3; break;
+        case KEY_5: button = 4; break;
+        default: break;
+        }
+        if (button >= 0)
+            dispatch_button(button);
+    }
+
+    void dispatch_button(int idx)
+    {
+        switch (current_page_)
+        {
+        case Page::Camera:
+            if (idx == 0) handle_exit();
+            else if (idx == 1) zoom_out();
+            else if (idx == 2) capture_photo();
+            else if (idx == 3) zoom_in();
+            else if (idx == 4) open_gallery();
             break;
-
-        case KEY_ESC:
-            close_camera();
-
-            if (go_back_home)
-                go_back_home();
-
+        case Page::Gallery:
+            if (idx == 0) show_page(Page::Camera);
+            else if (idx == 1) gallery_prev();
+            else if (idx == 2) show_info();
+            else if (idx == 3) gallery_next();
+            else if (idx == 4) open_delete_confirm();
             break;
-
-        default:
+        case Page::DeleteConfirm:
+            if (idx == 0) close_delete_confirm();
+            else if (idx == 1) delete_choice_ = 0, update_delete_choice_ui();
+            else if (idx == 3) delete_choice_ = 1, update_delete_choice_ui();
+            else if (idx == 2 || idx == 4) confirm_delete();
+            break;
+        case Page::Info:
+            if (idx == 0 || idx == 2) close_info();
             break;
         }
     }
-};
 
-#endif // !HAL_PLATFORM_SDL
+    void handle_exit()
+    {
+        if (current_page_ == Page::Info)
+        {
+            close_info();
+            return;
+        }
+        if (current_page_ == Page::DeleteConfirm)
+        {
+            close_delete_confirm();
+            return;
+        }
+        if (current_page_ == Page::Gallery)
+        {
+            show_page(Page::Camera);
+            return;
+        }
+        if (go_back_home)
+            go_back_home();
+    }
+
+    void show_page(Page page)
+    {
+        current_page_ = page;
+        if (page == Page::Camera)
+        {
+            lv_obj_clear_flag(page_camera_, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(page_gallery_, LV_OBJ_FLAG_HIDDEN);
+            set_buttons({"<", "-", "O", "+", "G"});
+        }
+        else if (page == Page::Gallery)
+        {
+            lv_obj_add_flag(page_camera_, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_clear_flag(page_gallery_, LV_OBJ_FLAG_HIDDEN);
+            set_buttons({"<", "<", "i", ">", "X"});
+            refresh_gallery_ui();
+        }
+    }
+
+    void set_buttons(std::initializer_list<const char *> labels)
+    {
+        int i = 0;
+        for (const char *label : labels)
+        {
+            if (i < 5 && bottom_label_[i])
+                lv_label_set_text(bottom_label_[i], label);
+            ++i;
+        }
+    }
+
+    void capture_photo()
+    {
+        if (capture_pending_)
+            return;
+        capture_pending_ = true;
+        std::string path = camera_app::make_photo_path();
+        play_flash();
+        set_async_status("Capturing...");
+        camera_.capture(path, camera_app::kPreviewW, camera_app::kPreviewH, make_callback([this](int code, std::string data) {
+            capture_pending_ = false;
+            if (code == 0)
+                set_async_status("Saved " + camera_app::trim_line(data));
+            else
+                set_async_status("Capture failed");
+            status_hide_at_ = lv_tick_get() + 2800;
+        }));
+    }
+
+    void zoom_in()
+    {
+        zoom_.zoom = zoom_.zoom < 250 ? 250 : 500;
+        update_zoom_ui();
+        camera_.zoom_in(make_callback([this](int, std::string data) { parse_zoom(data); }));
+    }
+
+    void zoom_out()
+    {
+        zoom_.zoom = zoom_.zoom > 250 ? 250 : 100;
+        if (zoom_.zoom == 100)
+            zoom_.view_x = zoom_.view_y = 50;
+        update_zoom_ui();
+        camera_.zoom_out(make_callback([this](int, std::string data) { parse_zoom(data); }));
+    }
+
+    void pan(int dx, int dy)
+    {
+        if (zoom_.zoom <= 100)
+            return;
+        zoom_.view_x = std::max(0, std::min(100, zoom_.view_x + dx * 8));
+        zoom_.view_y = std::max(0, std::min(100, zoom_.view_y + dy * 8));
+        update_zoom_ui();
+        camera_.pan(dx, dy, make_callback([this](int, std::string data) { parse_zoom(data); }));
+    }
+
+    void parse_zoom(const std::string &data)
+    {
+        int z = 0, x = 0, y = 0;
+        if (std::sscanf(data.c_str(), "ZOOM %d %d %d", &z, &x, &y) == 3)
+        {
+            zoom_.zoom = z;
+            zoom_.view_x = x;
+            zoom_.view_y = y;
+            zoom_dirty_.store(true);
+        }
+    }
+
+    void update_zoom_ui()
+    {
+        if (!zoom_map_ || !zoom_view_)
+            return;
+        if (zoom_.zoom <= 100)
+        {
+            lv_obj_add_flag(zoom_map_, LV_OBJ_FLAG_HIDDEN);
+            return;
+        }
+        lv_obj_clear_flag(zoom_map_, LV_OBJ_FLAG_HIDDEN);
+        int inner_w = 56;
+        int inner_h = 38;
+        int view_w = std::max(8, inner_w * 100 / zoom_.zoom);
+        int view_h = std::max(6, inner_h * 100 / zoom_.zoom);
+        int max_x = std::max(0, inner_w - view_w);
+        int max_y = std::max(0, inner_h - view_h);
+        lv_obj_set_size(zoom_view_, view_w, view_h);
+        lv_obj_set_pos(zoom_view_, 4 + max_x * zoom_.view_x / 100, 4 + max_y * zoom_.view_y / 100);
+        lv_label_set_text(zoom_label_, zoom_.zoom >= 500 ? "x5" : "x2.5");
+    }
+
+    void open_gallery()
+    {
+        gallery_.refresh();
+        show_page(Page::Gallery);
+    }
+
+    void gallery_prev()
+    {
+        gallery_.prev();
+        refresh_gallery_ui();
+    }
+
+    void gallery_next()
+    {
+        gallery_.next();
+        refresh_gallery_ui();
+    }
+
+    void refresh_gallery_ui()
+    {
+        gallery_.refresh();
+        bool empty = gallery_.empty();
+        if (empty)
+        {
+            lv_obj_clear_flag(gallery_empty_, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(gallery_img_, LV_OBJ_FLAG_HIDDEN);
+            lv_label_set_text(gallery_counter_, "0 / 0");
+            lv_label_set_text(gallery_title_, "No photos");
+            return;
+        }
+        lv_obj_add_flag(gallery_empty_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(gallery_img_, LV_OBJ_FLAG_HIDDEN);
+        lv_img_set_src(gallery_img_, gallery_.current().c_str());
+        char counter[32];
+        std::snprintf(counter, sizeof(counter), "%d / %d", gallery_.index(), gallery_.count());
+        lv_label_set_text(gallery_counter_, counter);
+        lv_label_set_text(gallery_title_, camera_app::filename_only(gallery_.current()).c_str());
+    }
+
+    void open_delete_confirm()
+    {
+        if (gallery_.empty())
+            return;
+        current_page_ = Page::DeleteConfirm;
+        delete_choice_ = 0;
+        update_delete_choice_ui();
+        lv_obj_clear_flag(dialog_scrim_, LV_OBJ_FLAG_HIDDEN);
+        set_buttons({"<", "<", "OK", ">", "OK"});
+    }
+
+    void close_delete_confirm()
+    {
+        lv_obj_add_flag(dialog_scrim_, LV_OBJ_FLAG_HIDDEN);
+        show_page(Page::Gallery);
+    }
+
+    void update_delete_choice_ui()
+    {
+        style_dialog_button(dialog_cancel_, delete_choice_ == 0, false);
+        style_dialog_button(dialog_confirm_, delete_choice_ == 1, true);
+    }
+
+    void style_dialog_button(lv_obj_t *obj, bool selected, bool danger)
+    {
+        lv_obj_set_style_bg_color(obj, camera_app::color(selected ? (danger ? 0x93000A : 0x4F378A) : camera_app::kPanel), 0);
+        lv_obj_set_style_bg_opa(obj, selected ? LV_OPA_COVER : LV_OPA_60, 0);
+        lv_obj_set_style_border_color(obj, camera_app::color(selected ? (danger ? camera_app::kDanger : camera_app::kPrimary) : camera_app::kOutline), 0);
+        lv_obj_set_style_text_color(obj, camera_app::color(selected ? camera_app::kText : camera_app::kMuted), 0);
+    }
+
+    void confirm_delete()
+    {
+        if (delete_choice_ == 1)
+            gallery_.delete_current();
+        close_delete_confirm();
+        refresh_gallery_ui();
+    }
+
+    void show_info()
+    {
+        if (gallery_.empty())
+            return;
+        current_page_ = Page::Info;
+        const std::string &path = gallery_.current();
+        std::ostringstream out;
+        out << "File\n" << camera_app::filename_only(path) << "\n\n"
+            << "Path\n" << path << "\n\n"
+            << "Created\n" << camera_app::format_file_time(path);
+        lv_label_set_text(info_body_, out.str().c_str());
+        lv_obj_clear_flag(info_scrim_, LV_OBJ_FLAG_HIDDEN);
+        set_buttons({"<", "", "i", "", ""});
+    }
+
+    void close_info()
+    {
+        lv_obj_add_flag(info_scrim_, LV_OBJ_FLAG_HIDDEN);
+        show_page(Page::Gallery);
+    }
+
+    void on_frame_payload(std::string payload)
+    {
+        int w = 0, h = 0;
+        char fmt[16]{};
+        int header_len = 0;
+        if (std::sscanf(payload.c_str(), "FRAME %d %d %15s\n%n", &w, &h, fmt, &header_len) != 3)
+            return;
+        if (w <= 0 || h <= 0 || std::strcmp(fmt, "RGB565") != 0)
+            return;
+        size_t bytes = static_cast<size_t>(w) * h * sizeof(uint16_t);
+        if (payload.size() < static_cast<size_t>(header_len) + bytes)
+            return;
+        std::vector<uint16_t> pixels(static_cast<size_t>(w) * h);
+        std::memcpy(pixels.data(), payload.data() + header_len, bytes);
+        std::lock_guard<std::mutex> lock(frame_mutex_);
+        pending_frame_.width = w;
+        pending_frame_.height = h;
+        pending_frame_.rgb565 = std::move(pixels);
+        new_frame_.store(true);
+    }
+
+    void poll_ui()
+    {
+        if (new_frame_.exchange(false))
+        {
+            camera_app::Frame frame;
+            {
+                std::lock_guard<std::mutex> lock(frame_mutex_);
+                frame = pending_frame_;
+            }
+            if (frame.width > 0 && frame.height > 0 && !frame.rgb565.empty())
+            {
+                if (frame.width != static_cast<int>(preview_dsc_.header.w) ||
+                    frame.height != static_cast<int>(preview_dsc_.header.h))
+                {
+                    init_image_descriptor(frame.width, frame.height);
+                    lv_obj_set_size(preview_box_, frame.width, frame.height);
+                    lv_img_set_src(preview_img_, &preview_dsc_);
+                }
+                display_buf_ = std::move(frame.rgb565);
+                preview_dsc_.data = reinterpret_cast<const uint8_t *>(display_buf_.data());
+                preview_dsc_.data_size = display_buf_.size() * sizeof(uint16_t);
+                lv_img_set_src(preview_img_, &preview_dsc_);
+                lv_obj_invalidate(preview_img_);
+            }
+        }
+        if (status_dirty_.exchange(false))
+        {
+            std::lock_guard<std::mutex> lock(status_mutex_);
+            lv_label_set_text(status_label_, status_text_.c_str());
+            lv_obj_clear_flag(status_label_, LV_OBJ_FLAG_HIDDEN);
+        }
+        if (zoom_dirty_.exchange(false))
+            update_zoom_ui();
+        if (status_hide_at_ && static_cast<int32_t>(lv_tick_get() - status_hide_at_) >= 0)
+        {
+            status_hide_at_ = 0;
+            lv_obj_add_flag(status_label_, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+
+    void set_async_status(std::string text)
+    {
+        std::lock_guard<std::mutex> lock(status_mutex_);
+        status_text_ = std::move(text);
+        status_dirty_.store(true);
+    }
+
+    static void flash_opa_anim_cb(void *obj, int32_t value)
+    {
+        lv_obj_set_style_bg_opa(static_cast<lv_obj_t *>(obj), static_cast<lv_opa_t>(value), 0);
+    }
+
+    static void flash_done_cb(lv_anim_t *anim)
+    {
+        lv_obj_t *obj = static_cast<lv_obj_t *>(lv_anim_get_user_data(anim));
+        if (obj)
+            lv_obj_add_flag(obj, LV_OBJ_FLAG_HIDDEN);
+    }
+
+    void play_flash()
+    {
+        if (!flash_)
+            return;
+        lv_obj_clear_flag(flash_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_move_foreground(flash_);
+        lv_anim_t a;
+        lv_anim_init(&a);
+        lv_anim_set_var(&a, flash_);
+        lv_anim_set_values(&a, LV_OPA_80, LV_OPA_TRANSP);
+        lv_anim_set_time(&a, 320);
+        lv_anim_set_exec_cb(&a, flash_opa_anim_cb);
+        lv_anim_set_user_data(&a, flash_);
+        lv_anim_set_ready_cb(&a, flash_done_cb);
+        lv_anim_start(&a);
+    }
+
+    std::shared_ptr<std::atomic<bool>> alive_ = std::make_shared<std::atomic<bool>>(true);
+    camera_app::HardwareCameraClient camera_;
+    camera_app::GalleryStore gallery_;
+    Page current_page_ = Page::Camera;
+    camera_app::ZoomState zoom_;
+
+    lv_obj_t *page_camera_ = nullptr;
+    lv_obj_t *page_gallery_ = nullptr;
+    lv_obj_t *preview_box_ = nullptr;
+    lv_obj_t *preview_img_ = nullptr;
+    lv_obj_t *status_label_ = nullptr;
+    lv_obj_t *zoom_map_ = nullptr;
+    lv_obj_t *zoom_view_ = nullptr;
+    lv_obj_t *zoom_label_ = nullptr;
+    lv_obj_t *flash_ = nullptr;
+    lv_obj_t *gallery_img_ = nullptr;
+    lv_obj_t *gallery_empty_ = nullptr;
+    lv_obj_t *gallery_top_ = nullptr;
+    lv_obj_t *gallery_counter_ = nullptr;
+    lv_obj_t *gallery_title_ = nullptr;
+    lv_obj_t *bottom_bar_ = nullptr;
+    lv_obj_t *bottom_btn_[5]{};
+    lv_obj_t *bottom_label_[5]{};
+    lv_obj_t *dialog_scrim_ = nullptr;
+    lv_obj_t *dialog_cancel_ = nullptr;
+    lv_obj_t *dialog_confirm_ = nullptr;
+    lv_obj_t *info_scrim_ = nullptr;
+    lv_obj_t *info_body_ = nullptr;
+    lv_timer_t *ui_timer_ = nullptr;
+
+    lv_image_dsc_t preview_dsc_{};
+    std::vector<uint16_t> display_buf_;
+    camera_app::Frame pending_frame_;
+    std::mutex frame_mutex_;
+    std::atomic<bool> new_frame_{false};
+    std::atomic<bool> status_dirty_{false};
+    std::atomic<bool> zoom_dirty_{false};
+    std::mutex status_mutex_;
+    std::string status_text_;
+    uint32_t status_hide_at_ = 0;
+    bool capture_pending_ = false;
+    int delete_choice_ = 0;
+};
