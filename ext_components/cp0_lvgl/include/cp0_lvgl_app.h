@@ -66,11 +66,7 @@ typedef void *cp0_watcher_t;
 typedef void *cp0_pty_t;
 typedef int cp0_pid_t;
 
-void cp0_audio_init(void);
-void cp0_audio_play(const char *path);
-void cp0_audio_play_sync(const char *path);
-void cp0_audio_stop(void);
-void cp0_audio_deinit(void);
+void cp0_signal_audio_api_play_file(const char *path);
 
 void cp0_config_init(void);
 int cp0_config_get_int(const char *key, int default_val);
@@ -79,20 +75,7 @@ const char *cp0_config_get_str(const char *key, const char *default_val);
 void cp0_config_set_str(const char *key, const char *val);
 void cp0_config_save(void);
 
-void cp0_paths_init(const char *exe_dir);
 const char *cp0_file_path_c(const char *file);
-const char *cp0_path_data_dir(void);
-const char *cp0_path_applications_dir(void);
-const char *cp0_path_store_cache_dir(void);
-const char *cp0_path_lock_file(void);
-const char *cp0_path_font_dir(void);
-const char *cp0_path_font_regular(void);
-const char *cp0_path_font_mono(void);
-const char *cp0_path_keyboard_device(void);
-const char *cp0_path_keyboard_map(void);
-const char *cp0_path_store_sync_cmd(void);
-const char *cp0_path_images_dir(void);
-const char *cp0_path_audio_dir(void);
 
 int cp0_dir_list(const char *path, cp0_dirent_t *entries, int max_entries, int *out_count);
 cp0_watcher_t cp0_dir_watch_start(const char *path);

@@ -185,7 +185,7 @@ void home_screen_load()
 
     static char _startup_snd[256];
     snprintf(_startup_snd, sizeof(_startup_snd), "%s", cp0_file_path("startup.mp3"));
-    cp0_audio_play(_startup_snd);
+    cp0_signal_audio_api_play_file(_startup_snd);
 }
 
 void audio_system_init();
@@ -230,7 +230,6 @@ void start_startup_gif()
 
 void ui_init(void)
 {
-    cp0_paths_init(NULL);
     ui_images_init();
     static char regular_font_path[512];
     static char mono_font_path_buf[512];
