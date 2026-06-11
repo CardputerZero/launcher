@@ -1,7 +1,6 @@
 #pragma once
 #if !defined(HAL_PLATFORM_SDL)
 #include "../ui_app_page.hpp"
-#include "TinyGPS++.h"
 #include <fcntl.h>
 #include <termios.h>
 #include <unistd.h>
