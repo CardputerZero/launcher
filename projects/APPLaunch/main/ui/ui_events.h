@@ -19,8 +19,8 @@ extern "C" {
 void app_card_click(lv_event_t * e);
 
 
-void cpp_app_zuo(lv_obj_t *panel, lv_obj_t *label);
-void cpp_app_you(lv_obj_t *panel, lv_obj_t *label);
+void cpp_app_left(lv_obj_t *panel, lv_obj_t *label);
+void cpp_app_right(lv_obj_t *panel, lv_obj_t *label);
 void cpp_app_launch();
 #ifdef __cplusplus
 } /*extern "C"*/

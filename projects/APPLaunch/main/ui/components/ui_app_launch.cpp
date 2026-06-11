@@ -145,14 +145,14 @@ public:
 
         {
             auto it = std::next(app_list.begin(), 0);
-            lv_label_set_text(ui_zuoLabelout, it->Name.c_str());
-            panel_set_icon(ui_outPanelzuo, it->Icon.c_str());
+            lv_label_set_text(ui_leftOuterLabel, it->Name.c_str());
+            panel_set_icon(ui_leftOuterPanel, it->Icon.c_str());
         }
 
         {
             auto it = std::next(app_list.begin(), 1);
-            lv_label_set_text(ui_zuoLabel, it->Name.c_str());
-            panel_set_icon(ui_zuoPanel, it->Icon.c_str());
+            lv_label_set_text(ui_leftLabel, it->Name.c_str());
+            panel_set_icon(ui_leftPanel, it->Icon.c_str());
         }
 
         {
@@ -163,14 +163,14 @@ public:
 
         {
             auto it = std::next(app_list.begin(), 3);
-            lv_label_set_text(ui_youLabel, it->Name.c_str());
-            panel_set_icon(ui_youPanel, it->Icon.c_str());
+            lv_label_set_text(ui_rightLabel, it->Name.c_str());
+            panel_set_icon(ui_rightPanel, it->Icon.c_str());
         }
 
         {
             auto it = std::next(app_list.begin(), 4);
-            lv_label_set_text(ui_youLabelout, it->Name.c_str());
-            panel_set_icon(ui_outPanelyou, it->Icon.c_str());
+            lv_label_set_text(ui_rightOuterLabel, it->Name.c_str());
+            panel_set_icon(ui_rightOuterPanel, it->Icon.c_str());
         }
 
         // Dynamic icons filtered by Settings configuration
@@ -339,7 +339,7 @@ public:
         LVGL_RUN_FLAGE = 1;
     }
 
-    void zuo(lv_obj_t *panel, lv_obj_t *label)
+    void update_left_slot(lv_obj_t *panel, lv_obj_t *label)
     {
         current_app = current_app == (int)app_list.size() - 1 ? 0 : current_app + 1;
         int next_app = current_app;
@@ -350,7 +350,7 @@ public:
         panel_set_icon(panel, it->Icon.c_str());
     }
 
-    void you(lv_obj_t *panel, lv_obj_t *label)
+    void update_right_slot(lv_obj_t *panel, lv_obj_t *label)
     {
         current_app = current_app == 0 ? (int)app_list.size() - 1 : current_app - 1;
         int next_app = current_app;
@@ -510,14 +510,14 @@ public:
         // far left outside (hidden)
         {
             auto &a = app_at(current_app - 2);
-            lv_label_set_text(ui_zuoLabelout, a.Name.c_str());
-            panel_set_icon(ui_outPanelzuo, a.Icon.c_str());
+            lv_label_set_text(ui_leftOuterLabel, a.Name.c_str());
+            panel_set_icon(ui_leftOuterPanel, a.Icon.c_str());
         }
         // left
         {
             auto &a = app_at(current_app - 1);
-            lv_label_set_text(ui_zuoLabel, a.Name.c_str());
-            panel_set_icon(ui_zuoPanel, a.Icon.c_str());
+            lv_label_set_text(ui_leftLabel, a.Name.c_str());
+            panel_set_icon(ui_leftPanel, a.Icon.c_str());
         }
         // center
         {
@@ -528,14 +528,14 @@ public:
         // right
         {
             auto &a = app_at(current_app + 1);
-            lv_label_set_text(ui_youLabel, a.Name.c_str());
-            panel_set_icon(ui_youPanel, a.Icon.c_str());
+            lv_label_set_text(ui_rightLabel, a.Name.c_str());
+            panel_set_icon(ui_rightPanel, a.Icon.c_str());
         }
         // far right outside (hidden)
         {
             auto &a = app_at(current_app + 2);
-            lv_label_set_text(ui_youLabelout, a.Name.c_str());
-            panel_set_icon(ui_outPanelyou, a.Icon.c_str());
+            lv_label_set_text(ui_rightOuterLabel, a.Name.c_str());
+            panel_set_icon(ui_rightOuterPanel, a.Icon.c_str());
         }
 
     }
@@ -736,13 +736,13 @@ extern "C"
     {
         app_launch_Ser = std::make_unique<app_launch_S>();
     }
-    void cpp_app_zuo(lv_obj_t *panel, lv_obj_t *label)
+    void cpp_app_left(lv_obj_t *panel, lv_obj_t *label)
     {
-        app_launch_Ser->zuo(panel, label);
+        app_launch_Ser->update_left_slot(panel, label);
     }
-    void cpp_app_you(lv_obj_t *panel, lv_obj_t *label)
+    void cpp_app_right(lv_obj_t *panel, lv_obj_t *label)
     {
-        app_launch_Ser->you(panel, label);
+        app_launch_Ser->update_right_slot(panel, label);
     }
     void cpp_app_launch()
     {

@@ -421,17 +421,17 @@ void audio_system_uninit(void)
 
 void launch_circle_init()
 {
-    launch_circle[0] = ui_outPanelzuo;
-    launch_circle[1] = ui_zuoPanel;
+    launch_circle[0] = ui_leftOuterPanel;
+    launch_circle[1] = ui_leftPanel;
     launch_circle[2] = ui_switchPanel;
-    launch_circle[3] = ui_youPanel;
-    launch_circle[4] = ui_outPanelyou;
+    launch_circle[3] = ui_rightPanel;
+    launch_circle[4] = ui_rightOuterPanel;
 
-    launch_circle[5] = ui_zuoLabelout;
-    launch_circle[6] = ui_zuoLabel;
+    launch_circle[5] = ui_leftOuterLabel;
+    launch_circle[6] = ui_leftLabel;
     launch_circle[7] = ui_switchLabel;
-    launch_circle[8] = ui_youLabel;
-    launch_circle[9] = ui_youLabelout;
+    launch_circle[8] = ui_rightLabel;
+    launch_circle[9] = ui_rightOuterLabel;
 
     launch_circle[10] = ui_Panel4;
     launch_circle[11] = ui_Panel3;
@@ -581,11 +581,11 @@ static void snap_all_panels(lv_anim_t *a)
 // Switch right; called when the right arrow is clicked
 // ============================================================
 
-void switchyou(lv_event_t *e)
+void switch_right(lv_event_t *e)
 {
     if (is_animating)
     {
-        pending_switch = &switchyou;
+        pending_switch = &switch_right;
         return;
     }
 
@@ -593,23 +593,23 @@ void switchyou(lv_event_t *e)
 
     lv_obj_clear_flag(launch_circle[0], LV_OBJ_FLAG_HIDDEN);
 
-    zuopanelout2you_Animation(launch_circle[0], 0, NULL);
-    zuopanel2you_Animation(launch_circle[1], 0, NULL);
-    switchpanel2you_Animation(launch_circle[2], 0, NULL);
-    youpanel2you_Animation(launch_circle[3], 0, snap_all_panels);
+    leftOuterPanelToLeft_Animation(launch_circle[0], 0, NULL);
+    leftPanelToCenter_Animation(launch_circle[1], 0, NULL);
+    centerPanelToRight_Animation(launch_circle[2], 0, NULL);
+    rightPanelToRightOuter_Animation(launch_circle[3], 0, snap_all_panels);
 
     snap_panel_to_slot(launch_circle[4], 0);
 
     lv_obj_clear_flag(launch_circle[5], LV_OBJ_FLAG_HIDDEN);
 
-    zuolabelout2you_Animation(launch_circle[5], 0, NULL);
-    zuolabel2you_Animation(launch_circle[6], 0, NULL);
-    switchlabel2you_Animation(launch_circle[7], 0, NULL);
-    youlabel2you_Animation(launch_circle[8], 0, NULL);
+    leftOuterLabelToLeft_Animation(launch_circle[5], 0, NULL);
+    leftLabelToCenter_Animation(launch_circle[6], 0, NULL);
+    centerLabelToRight_Animation(launch_circle[7], 0, NULL);
+    rightLabelToRightOuter_Animation(launch_circle[8], 0, NULL);
 
     snap_label_to_slot(launch_circle[9], 5);
 
-    cpp_app_you(launch_circle[4], launch_circle[9]);
+    cpp_app_right(launch_circle[4], launch_circle[9]);
 
     switchpanleEnableClick(2, 0);
     ROTATE_RIGHT(launch_circle, 0, 4);
@@ -629,11 +629,11 @@ void switchyou(lv_event_t *e)
 // Switch left; called when the left arrow is clicked
 // ============================================================
 
-void switchzuo(lv_event_t *e)
+void switch_left(lv_event_t *e)
 {
     if (is_animating)
     {
-        pending_switch = &switchzuo;
+        pending_switch = &switch_left;
         return;
     }
 
@@ -641,23 +641,23 @@ void switchzuo(lv_event_t *e)
 
     lv_obj_clear_flag(launch_circle[4], LV_OBJ_FLAG_HIDDEN);
 
-    zuopanelout2zuo_Animation(launch_circle[4], 0, NULL);
-    youpanel2zuo_Animation(launch_circle[3], 0, NULL);
-    switchpanel2zuo_Animation(launch_circle[2], 0, NULL);
-    zuopanel2zuo_Animation(launch_circle[1], 0, snap_all_panels);
+    rightOuterPanelToRight_Animation(launch_circle[4], 0, NULL);
+    rightPanelToCenter_Animation(launch_circle[3], 0, NULL);
+    centerPanelToLeft_Animation(launch_circle[2], 0, NULL);
+    leftPanelToLeftOuter_Animation(launch_circle[1], 0, snap_all_panels);
 
     snap_panel_to_slot(launch_circle[0], 4);
 
     lv_obj_clear_flag(launch_circle[9], LV_OBJ_FLAG_HIDDEN);
 
-    zuolabelout2zuo_Animation(launch_circle[9], 0, NULL);
-    youlabel2zuo_Animation(launch_circle[8], 0, NULL);
-    switchlabel2zuo_Animation(launch_circle[7], 0, NULL);
-    zuolabel2zuo_Animation(launch_circle[6], 0, NULL);
+    rightOuterLabelToRight_Animation(launch_circle[9], 0, NULL);
+    rightLabelToCenter_Animation(launch_circle[8], 0, NULL);
+    centerLabelToLeft_Animation(launch_circle[7], 0, NULL);
+    leftLabelToLeftOuter_Animation(launch_circle[6], 0, NULL);
 
     snap_label_to_slot(launch_circle[5], 9);
 
-    cpp_app_zuo(launch_circle[0], launch_circle[5]);
+    cpp_app_left(launch_circle[0], launch_circle[5]);
 
     switchpanleEnableClick(2, 0);
     ROTATE_LEFT(launch_circle, 0, 4);
@@ -759,7 +759,7 @@ void main_key_switch(lv_event_t *e)
             if (!lvping_lock)
             {
                 audio_play_switch();
-                switchyou(NULL);
+                switch_right(NULL);
             }
         }
         break;
@@ -769,7 +769,7 @@ void main_key_switch(lv_event_t *e)
             if (!lvping_lock)
             {
                 audio_play_switch();
-                switchzuo(NULL);
+                switch_left(NULL);
             }
         }
         break;

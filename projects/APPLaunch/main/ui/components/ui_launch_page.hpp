@@ -45,10 +45,10 @@ public:
     // ==================== Public API ====================
 
     // Switch right (content moves left, i.e. page right)
-    void switch_you()
+    void switch_right()
     {
         if (is_animating_) {
-            delay_switch(&snap_timer_you_, [this](){ this->switch_you(); });
+            delay_switch(&snap_timer_right_, [this](){ this->switch_right(); });
             return;
         }
         is_animating_ = true;
@@ -57,19 +57,19 @@ public:
         lv_obj_clear_flag(circle_[0], LV_OBJ_FLAG_HIDDEN);
 
         // 2. Move four panels one slot to the right at the same time
-        zuopanelout2you_Animation(circle_[0], 0, NULL);
-        zuopanel2you_Animation   (circle_[1], 0, NULL);
-        switchpanel2you_Animation(circle_[2], 0, NULL);
-        youpanel2you_Animation   (circle_[3], 0, [](lv_anim_t *a){
+        leftOuterPanelToLeft_Animation(circle_[0], 0, NULL);
+        leftPanelToCenter_Animation   (circle_[1], 0, NULL);
+        centerPanelToRight_Animation(circle_[2], 0, NULL);
+        rightPanelToRightOuter_Animation   (circle_[3], 0, [](lv_anim_t *a){
             // Use user data to call back into the object
             UILaunchPage *self = (UILaunchPage *)lv_anim_get_user_data(a);
             if (self) self->snap_all_panels();
         });
         // The last animation frame needs to carry the this pointer
-        // Because youpanel2you_Animation ready_cb does not support user data,
+        // Because rightPanelToRightOuter_Animation ready_cb does not support user data,
         // use a member timer instead (consistent with the original ui_events.c).
         // -- Reuse a 50ms timer to correct positions --
-        // Note: the third argument to youpanel2you_Animation is NULL; correction is done by the timer
+        // Note: the third argument to rightPanelToRightOuter_Animation is NULL; correction is done by the timer
         start_snap_timer();
 
         // 3. Move the pos4 panel instantly to pos0
@@ -79,14 +79,14 @@ public:
         lv_obj_clear_flag(label_[0], LV_OBJ_FLAG_HIDDEN);
 
         // 5. Move four labels one slot to the right at the same time
-        zuolabelout2you_Animation(label_[0], 0, NULL);
-        zuolabel2you_Animation   (label_[1], 0, NULL);
-        switchlabel2you_Animation(label_[2], 0, NULL);
-        youlabel2you_Animation   (label_[3], 0, NULL);
+        leftOuterLabelToLeft_Animation(label_[0], 0, NULL);
+        leftLabelToCenter_Animation   (label_[1], 0, NULL);
+        centerLabelToRight_Animation(label_[2], 0, NULL);
+        rightLabelToRightOuter_Animation   (label_[3], 0, NULL);
 
         // 6. Move the label at pos4 instantly to label pos0
         snap_label_to_slot(label_[4], 5);
-        update_you(circle_[4], label_[4]);
+        update_right(circle_[4], label_[4]);
 
         // 7. Rotate the arrays (circular)
         disable_center_click();
@@ -99,10 +99,10 @@ public:
     }
 
     // Switch left
-    void switch_zuo()
+    void switch_left()
     {
         if (is_animating_) {
-            delay_switch(&snap_timer_zuo_, [this](){ this->switch_zuo(); });
+            delay_switch(&snap_timer_left_, [this](){ this->switch_left(); });
             return;
         }
         is_animating_ = true;
@@ -111,10 +111,10 @@ public:
         lv_obj_clear_flag(circle_[4], LV_OBJ_FLAG_HIDDEN);
 
         // 2. Move four panels one slot to the left at the same time
-        zuopanelout2zuo_Animation(circle_[4], 0, NULL);
-        youpanel2zuo_Animation   (circle_[3], 0, NULL);
-        switchpanel2zuo_Animation(circle_[2], 0, NULL);
-        zuopanel2zuo_Animation   (circle_[1], 0, NULL);
+        rightOuterPanelToRight_Animation(circle_[4], 0, NULL);
+        rightPanelToCenter_Animation   (circle_[3], 0, NULL);
+        centerPanelToLeft_Animation(circle_[2], 0, NULL);
+        leftPanelToLeftOuter_Animation   (circle_[1], 0, NULL);
 
         start_snap_timer();
 
@@ -125,14 +125,14 @@ public:
         lv_obj_clear_flag(label_[4], LV_OBJ_FLAG_HIDDEN);
 
         // 5. Move four labels one slot to the left at the same time
-        zuolabelout2zuo_Animation(label_[4], 0, NULL);
-        youlabel2zuo_Animation   (label_[3], 0, NULL);
-        switchlabel2zuo_Animation(label_[2], 0, NULL);
-        zuolabel2zuo_Animation   (label_[1], 0, NULL);
+        rightOuterLabelToRight_Animation(label_[4], 0, NULL);
+        rightLabelToCenter_Animation   (label_[3], 0, NULL);
+        centerLabelToLeft_Animation(label_[2], 0, NULL);
+        leftLabelToLeftOuter_Animation   (label_[1], 0, NULL);
 
         // 6. Move the label at pos0 instantly to label pos4
         snap_label_to_slot(label_[0], 9);
-        update_zuo(circle_[0], label_[0]);
+        update_left(circle_[0], label_[0]);
 
         // 7. Rotate arrays
         disable_center_click();
@@ -164,8 +164,8 @@ private:
     int  indicator_current_ = 0; // currently active dot (relative position for current_app_)
 
     bool is_animating_ = false;
-    lv_timer_t *snap_timer_you_ = NULL;
-    lv_timer_t *snap_timer_zuo_ = NULL;
+    lv_timer_t *snap_timer_right_ = NULL;
+    lv_timer_t *snap_timer_left_ = NULL;
     lv_timer_t *snap_timer_     = NULL; // generic position correction timer
 
     std::unordered_map<std::string, lv_obj_t *> ui_obj_;
@@ -308,42 +308,42 @@ private:
         lv_obj_set_style_text_opa(label_[4], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
         // ---- left/right arrow buttons ----
-        ui_obj_["ui_youbut"] = lv_btn_create(ui_APP_Container);
-        lv_obj_set_width(ui_obj_["ui_youbut"], 17);
-        lv_obj_set_height(ui_obj_["ui_youbut"], 23);
-        lv_obj_set_x(ui_obj_["ui_youbut"], 150);
-        lv_obj_set_y(ui_obj_["ui_youbut"], -14);
-        lv_obj_set_align(ui_obj_["ui_youbut"], LV_ALIGN_CENTER);
-        lv_obj_add_flag(ui_obj_["ui_youbut"], LV_OBJ_FLAG_SCROLL_ON_FOCUS);
-        lv_obj_clear_flag(ui_obj_["ui_youbut"], LV_OBJ_FLAG_SCROLLABLE);
-        lv_obj_set_style_radius(ui_obj_["ui_youbut"], 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_color(ui_obj_["ui_youbut"], lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_opa(ui_obj_["ui_youbut"], 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_img_src(ui_obj_["ui_youbut"], ui_img_you_png, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_shadow_color(ui_obj_["ui_youbut"], lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_shadow_opa(ui_obj_["ui_youbut"], 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_add_event_cb(ui_obj_["ui_youbut"], [](lv_event_t *e){
+        ui_obj_["ui_rightButton"] = lv_btn_create(ui_APP_Container);
+        lv_obj_set_width(ui_obj_["ui_rightButton"], 17);
+        lv_obj_set_height(ui_obj_["ui_rightButton"], 23);
+        lv_obj_set_x(ui_obj_["ui_rightButton"], 150);
+        lv_obj_set_y(ui_obj_["ui_rightButton"], -14);
+        lv_obj_set_align(ui_obj_["ui_rightButton"], LV_ALIGN_CENTER);
+        lv_obj_add_flag(ui_obj_["ui_rightButton"], LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+        lv_obj_clear_flag(ui_obj_["ui_rightButton"], LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_style_radius(ui_obj_["ui_rightButton"], 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_color(ui_obj_["ui_rightButton"], lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_opa(ui_obj_["ui_rightButton"], 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_img_src(ui_obj_["ui_rightButton"], ui_img_right_png, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_shadow_color(ui_obj_["ui_rightButton"], lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_shadow_opa(ui_obj_["ui_rightButton"], 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_add_event_cb(ui_obj_["ui_rightButton"], [](lv_event_t *e){
             UILaunchPage *self = (UILaunchPage *)lv_event_get_user_data(e);
-            if (self) self->switch_you();
+            if (self) self->switch_right();
         }, LV_EVENT_CLICKED, this);
 
-        ui_obj_["ui_zuobut"] = lv_btn_create(ui_APP_Container);
-        lv_obj_set_width(ui_obj_["ui_zuobut"], 17);
-        lv_obj_set_height(ui_obj_["ui_zuobut"], 23);
-        lv_obj_set_x(ui_obj_["ui_zuobut"], -151);
-        lv_obj_set_y(ui_obj_["ui_zuobut"], -14);
-        lv_obj_set_align(ui_obj_["ui_zuobut"], LV_ALIGN_CENTER);
-        lv_obj_add_flag(ui_obj_["ui_zuobut"], LV_OBJ_FLAG_SCROLL_ON_FOCUS);
-        lv_obj_clear_flag(ui_obj_["ui_zuobut"], LV_OBJ_FLAG_SCROLLABLE);
-        lv_obj_set_style_radius(ui_obj_["ui_zuobut"], 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_color(ui_obj_["ui_zuobut"], lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_opa(ui_obj_["ui_zuobut"], 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_img_src(ui_obj_["ui_zuobut"], ui_img_zuo_png, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_shadow_color(ui_obj_["ui_zuobut"], lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_shadow_opa(ui_obj_["ui_zuobut"], 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_add_event_cb(ui_obj_["ui_zuobut"], [](lv_event_t *e){
+        ui_obj_["ui_leftButton"] = lv_btn_create(ui_APP_Container);
+        lv_obj_set_width(ui_obj_["ui_leftButton"], 17);
+        lv_obj_set_height(ui_obj_["ui_leftButton"], 23);
+        lv_obj_set_x(ui_obj_["ui_leftButton"], -151);
+        lv_obj_set_y(ui_obj_["ui_leftButton"], -14);
+        lv_obj_set_align(ui_obj_["ui_leftButton"], LV_ALIGN_CENTER);
+        lv_obj_add_flag(ui_obj_["ui_leftButton"], LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+        lv_obj_clear_flag(ui_obj_["ui_leftButton"], LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_style_radius(ui_obj_["ui_leftButton"], 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_color(ui_obj_["ui_leftButton"], lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_opa(ui_obj_["ui_leftButton"], 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_img_src(ui_obj_["ui_leftButton"], ui_img_left_png, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_shadow_color(ui_obj_["ui_leftButton"], lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_shadow_opa(ui_obj_["ui_leftButton"], 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_add_event_cb(ui_obj_["ui_leftButton"], [](lv_event_t *e){
             UILaunchPage *self = (UILaunchPage *)lv_event_get_user_data(e);
-            if (self) self->switch_zuo();
+            if (self) self->switch_left();
         }, LV_EVENT_CLICKED, this);
 
         // ---- indicator container ----
@@ -435,18 +435,18 @@ private:
     struct DelayData {
         UILaunchPage *self;
         lv_timer_t  **timer_ptr;
-        bool          is_you; // true=switch_you, false=switch_zuo
+        bool          is_right_switch;
     };
 
     static void delay_timer_cb_(lv_timer_t *timer)
     {
         DelayData *d = (DelayData *)lv_timer_get_user_data(timer);
         UILaunchPage *self = d->self;
-        bool is_you = d->is_you;
+        bool is_right_switch = d->is_right_switch;
         *(d->timer_ptr) = NULL;
         lv_free(d);
-        if (is_you) self->switch_you();
-        else        self->switch_zuo();
+        if (is_right_switch) self->switch_right();
+        else        self->switch_left();
     }
 
     template<typename Fn>
@@ -454,11 +454,11 @@ private:
     {
         // Do not create another wait timer if one already exists
         if (*timer_ptr) return;
-        bool is_you = (timer_ptr == &snap_timer_you_);
+        bool is_right_switch = (timer_ptr == &snap_timer_right_);
         DelayData *d = (DelayData *)lv_malloc(sizeof(DelayData));
         d->self      = this;
         d->timer_ptr = timer_ptr;
-        d->is_you    = is_you;
+        d->is_right_switch    = is_right_switch;
         *timer_ptr = lv_timer_create(delay_timer_cb_, 50, d);
         lv_timer_set_repeat_count(*timer_ptr, 1);
     }
@@ -534,7 +534,7 @@ private:
     }
 
     // ==================== Update hidden panel icons/labels (fill new content after switching) ====================
-    void update_you(lv_obj_t *panel, lv_obj_t *label)
+    void update_right(lv_obj_t *panel, lv_obj_t *label)
     {
         // When switching right, panel/label come from old pos4 and move to pos0 (circular right direction)
         // current_app_ is already updated before rotate (right direction decrements current_app_)
@@ -547,7 +547,7 @@ private:
         lv_obj_set_style_bg_img_src(panel, it->Icon.c_str(), LV_PART_MAIN | LV_STATE_DEFAULT);
     }
 
-    void update_zuo(lv_obj_t *panel, lv_obj_t *label)
+    void update_left(lv_obj_t *panel, lv_obj_t *label)
     {
         // When switching left, panel/label come from old pos0 and move to pos4 (circular left direction)
         current_app_ = current_app_ == (int)app_list_.size() - 1 ? 0 : current_app_ + 1;

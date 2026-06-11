@@ -1,5 +1,5 @@
-// zuolabelout2you: pos5(-177,57) → pos6(-99,57)  delta x=+78, y=0
-void zuolabelout2you_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb)
+// leftOuterLabelToLeft: pos5(-177,57) → pos6(-99,57)  delta x=+78, y=0
+void leftOuterLabelToLeft_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb)
 {
     ui_anim_user_data_t * PropertyAnimation_0_user_data = lv_mem_alloc(sizeof(ui_anim_user_data_t));
     PropertyAnimation_0_user_data->target = TargetObject;
@@ -42,8 +42,8 @@ void zuolabelout2you_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready
     lv_anim_start(&PropertyAnimation_1);
 }
 
-// zuolabel2you: pos6(-99,57) → pos7(0,50)  delta x=+99, y=-7
-void zuolabel2you_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb)
+// leftLabelToCenter: pos6(-99,57) → pos7(0,50)  delta x=+99, y=-7
+void leftLabelToCenter_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb)
 {
     ui_anim_user_data_t * PropertyAnimation_0_user_data = lv_mem_alloc(sizeof(ui_anim_user_data_t));
     PropertyAnimation_0_user_data->target = TargetObject;
@@ -86,8 +86,8 @@ void zuolabel2you_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb
     lv_anim_start(&PropertyAnimation_1);
 }
 
-// switchlabel2you: pos7(0,50) → pos8(99,57)  delta x=+99, y=+7
-void switchlabel2you_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb)
+// centerLabelToRight: pos7(0,50) → pos8(99,57)  delta x=+99, y=+7
+void centerLabelToRight_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb)
 {
     ui_anim_user_data_t * PropertyAnimation_0_user_data = lv_mem_alloc(sizeof(ui_anim_user_data_t));
     PropertyAnimation_0_user_data->target = TargetObject;
@@ -130,8 +130,8 @@ void switchlabel2you_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready
     lv_anim_start(&PropertyAnimation_1);
 }
 
-// youlabel2you: pos8(99,57) → pos9(177,57)  delta x=+78, y=0
-void youlabel2you_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb)
+// rightLabelToRightOuter: pos8(99,57) → pos9(177,57)  delta x=+78, y=0
+void rightLabelToRightOuter_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb)
 {
     ui_anim_user_data_t * PropertyAnimation_0_user_data = lv_mem_alloc(sizeof(ui_anim_user_data_t));
     PropertyAnimation_0_user_data->target = TargetObject;
@@ -174,10 +174,10 @@ void youlabel2you_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb
     lv_anim_start(&PropertyAnimation_1);
 }
 
-// 2zuo direction: labels slide left (pos9→8→7→6→5)
+// leftward direction: labels slide left (pos9→8→7→6→5)
 
-// zuolabelout2zuo: pos9(177,57) → pos8(99,57)  delta x=-78, y=0
-void zuolabelout2zuo_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb)
+// rightOuterLabelToRight: pos9(177,57) → pos8(99,57)  delta x=-78, y=0
+void rightOuterLabelToRight_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb)
 {
     ui_anim_user_data_t * PropertyAnimation_0_user_data = lv_mem_alloc(sizeof(ui_anim_user_data_t));
     PropertyAnimation_0_user_data->target = TargetObject;
@@ -220,8 +220,8 @@ void zuolabelout2zuo_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready
     lv_anim_start(&PropertyAnimation_1);
 }
 
-// youlabel2zuo: pos8(99,57) → pos7(0,50)  delta x=-99, y=-7
-void youlabel2zuo_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb)
+// rightLabelToCenter: pos8(99,57) → pos7(0,50)  delta x=-99, y=-7
+void rightLabelToCenter_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb)
 {
     ui_anim_user_data_t * PropertyAnimation_0_user_data = lv_mem_alloc(sizeof(ui_anim_user_data_t));
     PropertyAnimation_0_user_data->target = TargetObject;
@@ -264,8 +264,8 @@ void youlabel2zuo_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb
     lv_anim_start(&PropertyAnimation_1);
 }
 
-// switchlabel2zuo: pos7(0,50) → pos6(-99,57)  delta x=-99, y=+7
-void switchlabel2zuo_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb)
+// centerLabelToLeft: pos7(0,50) → pos6(-99,57)  delta x=-99, y=+7
+void centerLabelToLeft_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb)
 {
     ui_anim_user_data_t * PropertyAnimation_0_user_data = lv_mem_alloc(sizeof(ui_anim_user_data_t));
     PropertyAnimation_0_user_data->target = TargetObject;
@@ -308,8 +308,8 @@ void switchlabel2zuo_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready
     lv_anim_start(&PropertyAnimation_1);
 }
 
-// zuolabel2zuo: pos6(-99,57) → pos5(-177,57)  delta x=-78, y=0
-void zuolabel2zuo_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb)
+// leftLabelToLeftOuter: pos6(-99,57) → pos5(-177,57)  delta x=-78, y=0
+void leftLabelToLeftOuter_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb)
 {
     ui_anim_user_data_t * PropertyAnimation_0_user_data = lv_mem_alloc(sizeof(ui_anim_user_data_t));
     PropertyAnimation_0_user_data->target = TargetObject;

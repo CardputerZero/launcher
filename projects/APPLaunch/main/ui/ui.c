@@ -33,8 +33,8 @@ int Animation_time = 200;
 const char *ui_img_zero_png;
 const char *ui_img_time_png;
 const char *ui_img_battery_bg_png;
-const char *ui_img_zuo_png;
-const char *ui_img_you_png;
+const char *ui_img_left_png;
+const char *ui_img_right_png;
 
 const char *ui_img_store_logo_png;
 const char *ui_img_cli_logo_png;
@@ -43,8 +43,8 @@ const char *ui_img_setting_logo_png;
 const char *ui_img_python_logo_png;
 
 const char *ui_img_zero_logo_w_png;
-const char *ui_img_zuo_logo_png;
-const char *ui_img_you_logo_png;
+const char *ui_img_left_logo_png;
+const char *ui_img_right_logo_png;
 const char *ui_img_detail_info_png;
 const char *ui_img_down_logo_png;
 const char *ui_img_up_logo_png;
@@ -58,11 +58,11 @@ static void ui_images_init(void)
         { &ui_img_zero_png,       "zero.png" },
         { &ui_img_time_png,       "time_bg.png" },
         { &ui_img_battery_bg_png, "battery_bg.png" },
-        { &ui_img_zuo_png,        "zuo.png" },
-        { &ui_img_you_png,        "you.png" },
+        { &ui_img_left_png,        "left.png" },
+        { &ui_img_right_png,        "right.png" },
         { &ui_img_zero_logo_w_png,"zero_logo_w.png" },
-        { &ui_img_zuo_logo_png,   "zuo_logo.png" },
-        { &ui_img_you_logo_png,   "you_logo.png" },
+        { &ui_img_left_logo_png,   "left_logo.png" },
+        { &ui_img_right_logo_png,   "right_logo.png" },
         { &ui_img_detail_info_png,"detail_info.png" },
         { &ui_img_down_logo_png,  "down_logo.png" },
         { &ui_img_up_logo_png,    "up_logo.png" },
@@ -113,7 +113,7 @@ lv_font_t *g_font_bold_12 = NULL;   /* bold app-name font - side */
 
 // ==================== Label Animations ====================
 // Labels only animate x and y (no width/height change)
-// 2you direction: labels slide right (pos5→6→7→8→9)
+// rightward direction: labels slide right (pos5→6→7→8→9)
 
 #include "Animation/Animation_lable.h"
 

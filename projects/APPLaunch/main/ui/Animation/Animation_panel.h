@@ -1,4 +1,4 @@
-void zuopanel2you_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb)
+void leftPanelToCenter_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb)
 {
     ui_anim_user_data_t * PropertyAnimation_0_user_data = lv_mem_alloc(sizeof(ui_anim_user_data_t));
     PropertyAnimation_0_user_data->target = TargetObject;
@@ -79,7 +79,7 @@ void zuopanel2you_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb
     lv_anim_start(&PropertyAnimation_3);
 
 }
-void switchpanel2you_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb)
+void centerPanelToRight_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb)
 {
     ui_anim_user_data_t * PropertyAnimation_0_user_data = lv_mem_alloc(sizeof(ui_anim_user_data_t));
     PropertyAnimation_0_user_data->target = TargetObject;
@@ -160,7 +160,7 @@ void switchpanel2you_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready
     lv_anim_start(&PropertyAnimation_3);
 
 }
-void youpanel2you_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb)
+void rightPanelToRightOuter_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb)
 {
     ui_anim_user_data_t * PropertyAnimation_0_user_data = lv_mem_alloc(sizeof(ui_anim_user_data_t));
     PropertyAnimation_0_user_data->target = TargetObject;
@@ -241,7 +241,7 @@ void youpanel2you_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb
     lv_anim_start(&PropertyAnimation_3);
 
 }
-void zuopanelout2you_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb)
+void leftOuterPanelToLeft_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb)
 {
     ui_anim_user_data_t * PropertyAnimation_0_user_data = lv_mem_alloc(sizeof(ui_anim_user_data_t));
     PropertyAnimation_0_user_data->target = TargetObject;
@@ -322,7 +322,7 @@ void zuopanelout2you_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready
     lv_anim_start(&PropertyAnimation_3);
 
 }
-void zuopanel2zuo_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb)
+void leftPanelToLeftOuter_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb)
 {
     ui_anim_user_data_t * PropertyAnimation_0_user_data = lv_mem_alloc(sizeof(ui_anim_user_data_t));
     PropertyAnimation_0_user_data->target = TargetObject;
@@ -403,7 +403,7 @@ void zuopanel2zuo_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb
     lv_anim_start(&PropertyAnimation_3);
 
 }
-void switchpanel2zuo_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb)
+void centerPanelToLeft_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb)
 {
     ui_anim_user_data_t * PropertyAnimation_0_user_data = lv_mem_alloc(sizeof(ui_anim_user_data_t));
     PropertyAnimation_0_user_data->target = TargetObject;
@@ -484,7 +484,7 @@ void switchpanel2zuo_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready
     lv_anim_start(&PropertyAnimation_3);
 
 }
-void youpanel2zuo_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb)
+void rightPanelToCenter_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb)
 {
     ui_anim_user_data_t * PropertyAnimation_0_user_data = lv_mem_alloc(sizeof(ui_anim_user_data_t));
     PropertyAnimation_0_user_data->target = TargetObject;
@@ -565,7 +565,7 @@ void youpanel2zuo_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb
     lv_anim_start(&PropertyAnimation_3);
 
 }
-void zuopanelout2zuo_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb)
+void rightOuterPanelToRight_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb)
 {
     ui_anim_user_data_t * PropertyAnimation_0_user_data = lv_mem_alloc(sizeof(ui_anim_user_data_t));
     PropertyAnimation_0_user_data->target = TargetObject;
