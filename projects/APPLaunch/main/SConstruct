@@ -11,35 +11,12 @@ with open(env['PROJECT_TOOL_S']) as f:
 
 rootfs_path=os.environ.get("CONFIG_TOOLCHAIN_SYSROOT", "")
 
-def wget_github(url):
-    repo = _parse.parse("{}://{}/{}/{}.git", url)
-    repo_name = repo[3]
-    local_path = os.path.join(os.environ['GIT_REPO_PATH'], repo_name)
-    if not os.path.exists(local_path):
-        github_url = url[:-4] if url.endswith('.git') else url
-        down_url = github_url + "/archive/refs/heads/master.zip"
-        zip_file_name = '{}-master.zip'.format(repo_name)
-        file_path = wget_zip(down_url, zip_file_name)
-        extracted_dir = os.path.join(file_path, '{}-master'.format(repo_name))
-        if os.path.exists(extracted_dir):
-            shutil.move(extracted_dir, local_path)
-            shutil.rmtree(file_path)
-        else:
-            shutil.rmtree(file_path, ignore_errors=True)
-            down_url = github_url + "/archive/refs/heads/main.zip"
-            zip_file_name = '{}-main.zip'.format(repo_name)
-            file_path = wget_zip(down_url, zip_file_name)
-            extracted_dir = os.path.join(file_path, '{}-main'.format(repo_name))
-            if os.path.exists(extracted_dir):
-                shutil.move(extracted_dir, local_path)
-                shutil.rmtree(file_path)
-    return local_path
-
 # define the project's environment
 SRCS = []
 INCLUDE = []
 PRIVATE_INCLUDE = []
-REQUIREMENTS = []
+REQUIREMENTS = ['cp0_lvgl', 'eventpp']
+# REQUIREMENTS = []
 STATIC_LIB = []
 DYNAMIC_LIB = []
 DEFINITIONS = []
@@ -105,7 +82,7 @@ lvgl_component['SRCS'] = list(filter(
 ))
 
 SRCS += Glob('hal/*.c*')
-# x86
+# # x86
 if 'linux_x86_sdl2_config_defaults.mk' in os.environ.get("CONFIG_DEFAULT_FILE", ''):
     lvgl_component['DEFINITIONS'] += pkg_config_cflags("freetype2")
     lvgl_component['REQUIREMENTS'] += pkg_config_ldflags("freetype2")
@@ -148,25 +125,25 @@ if 'mac_cross_cp0_config_defaults.mk' in os.environ.get("CONFIG_DEFAULT_FILE", '
 
     LDFLAGS += [f'{os.environ.get("CONFIG_TOOLCHAIN_SYSROOT", "")}/usr/lib/aarch64-linux-gnu/libstdc++.so.6',f'-Wl,-rpath-link,{os.environ.get("CONFIG_TOOLCHAIN_SYSROOT", "")}/usr/lib/aarch64-linux-gnu',f'-B{os.environ.get("CONFIG_TOOLCHAIN_SYSROOT", "")}/usr/lib/aarch64-linux-gnu']
     DEFINITIONS += ['-Wno-format-truncation']
-# macOS
-if 'darwin_config_defaults.mk' in os.environ.get("CONFIG_DEFAULT_FILE", ''):
-    # macOS 使用 SDL 后端
-    SRCS += Glob('hal/sdl/*.c*')
+# # macOS
+# if 'darwin_config_defaults.mk' in os.environ.get("CONFIG_DEFAULT_FILE", ''):
+#     # macOS 使用 SDL 后端
+#     SRCS += Glob('hal/sdl/*.c*')
 
-    # nlohmann_json
-    DEFINITIONS += pkg_config_cflags("nlohmann_json")
+#     # nlohmann_json
+#     DEFINITIONS += pkg_config_cflags("nlohmann_json")
 
-    # SDL2
-    DEFINITIONS += pkg_config_cflags("sdl2")
-    REQUIREMENTS += pkg_config_ldflags("sdl2")
+#     # SDL2
+#     DEFINITIONS += pkg_config_cflags("sdl2")
+#     REQUIREMENTS += pkg_config_ldflags("sdl2")
 
-    # LVGL SDL driver 也需要 SDL2 头文件/定义
-    lvgl_component['DEFINITIONS'] += pkg_config_cflags("sdl2")
-    lvgl_component['DEFINITIONS'] += ['-D_REENTRANT']
+#     # LVGL SDL driver 也需要 SDL2 头文件/定义
+#     lvgl_component['DEFINITIONS'] += pkg_config_cflags("sdl2")
+#     lvgl_component['DEFINITIONS'] += ['-D_REENTRANT']
 
-    # FreeType
-    lvgl_component['DEFINITIONS'] += pkg_config_cflags("freetype2")
-    REQUIREMENTS += pkg_config_ldflags("freetype2")
+#     # FreeType
+#     lvgl_component['DEFINITIONS'] += pkg_config_cflags("freetype2")
+#     REQUIREMENTS += pkg_config_ldflags("freetype2")
 
 
 # add RadioLib

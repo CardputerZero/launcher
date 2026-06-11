@@ -10,3 +10,8 @@ tools
 setup.ini
 pi
 projects/APPLaunch/main/ui/components/page_app.h
+dist.bak
+.agents
+data
+skills-lock.json
+docs/ui_app_rec_flow.html
