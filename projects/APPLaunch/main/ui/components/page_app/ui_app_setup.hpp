@@ -32,6 +32,7 @@
 #include <linux/i2c-dev.h>
 #endif
 #include "cp0_lvgl_app.h"
+#include "hal_lvgl_bsp.h"
 
 // ============================================================
 //  System settings screen  UISetupPage  (Carousel Design)
@@ -117,8 +118,13 @@ private:
     std::string snd_enter_;
     std::string snd_back_;
 
-    void play_enter() { if (!snd_enter_.empty()) cp0_audio_play(snd_enter_.c_str()); }
-    void play_back()  { if (!snd_back_.empty()) cp0_audio_play(snd_back_.c_str()); }
+    void play_enter() { play_audio_file(snd_enter_); }
+    void play_back()  { play_audio_file(snd_back_); }
+
+    void play_audio_file(const std::string &path)
+    {
+        if (!path.empty()) cp0_signal_audio_api({"PlayFile", path}, nullptr);
+    }
 
     void cache_image_paths()
     {
