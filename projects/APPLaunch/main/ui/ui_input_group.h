@@ -11,9 +11,6 @@ extern "C" {
 #endif
 
 extern lv_group_t *Screen1group;
-extern lv_group_t *AppStoregroup;
-extern lv_group_t *APPNotegroup;
-extern lv_group_t *AppPythongroup;
 
 void input_group_init(void);
 
