@@ -16,7 +16,6 @@
 #include "hal/hal_process.h"
 #include "hal/hal_settings.h"
 #include "hal/hal_config.h"
-// #include "ui/inter_process_comms.h"
 #include "global_config.h"
 #if CONFIG_BACKWARD_CPP_ENABLED
 #define BACKWARD_HAS_DW 1
@@ -118,7 +117,6 @@ static void keypad_read_cb(lv_indev_t *indev, lv_indev_data_t *data)
     (void)indev;
 
     /* Output one queued event for each LVGL call */
-    // kp_evt_t e;
     data->state = LV_INDEV_STATE_RELEASED;
     data->continue_reading = false;
     // Dequeue
@@ -148,7 +146,6 @@ static void keypad_read_cb(lv_indev_t *indev, lv_indev_data_t *data)
             if (root) {
                 lv_obj_send_event(root, (lv_event_code_t)LV_EVENT_KEYBOARD, elm);
             }
-            // printf("lv_obj_send_event event to root object over\n");
 
             /* Global on-screen hint overlay (ESC / Shift / SYM).
              * Called after the page has had a chance to react, and only
@@ -174,7 +171,6 @@ static void lv_linux_indev_init(void)
     const char *mouse_device = getenv_default("LV_LINUX_MOUSE_DEVICE", NULL);
     const char *keyboard_device = getenv_default("LV_LINUX_KEYBOARD_DEVICE", hal_path_keyboard_device());
     const char *keyboard_map = getenv_default("LV_LINUX_KEYBOARD_MAP", hal_path_keyboard_map());
-    // /home/nihao/w2T/github/m5stack-linux-dtoverlays/modules/tca8418-1.0/tca8418_keypad_m5stack_keymap.map
     setenv("APPLAUNCH_LINUX_KEYBOARD_DEVICE", keyboard_device, 1);
     setenv("APPLAUNCH_LINUX_KEYBOARD_MAP", keyboard_map, 1);
  
@@ -189,15 +185,9 @@ static void lv_linux_indev_init(void)
  
  
  
-    lv_indev_t * touch = NULL;
     if (mouse_device)
-        touch = lv_evdev_create(LV_INDEV_TYPE_POINTER, mouse_device);
+        lv_evdev_create(LV_INDEV_TYPE_POINTER, mouse_device);
 
-    lv_indev_t * keyboard = NULL;
-    // if (keyboard_device)
-    //     keyboard = tca8418_keypad_init(keyboard_device, keyboard_map);
-    // if (keyboard_device)
-    //     keyboard = lv_evdev_create(LV_INDEV_TYPE_KEYPAD, keyboard_device);
     lv_indev_t *indev = lv_indev_create();
     lv_indev_set_type(indev, LV_INDEV_TYPE_KEYPAD);
     lv_indev_set_read_cb(indev, keypad_read_cb);
@@ -208,7 +198,6 @@ static void lv_linux_indev_init(void)
 #if LV_USE_LINUX_FBDEV
 static void lv_linux_disp_init(void)
 {
-    // export LV_LINUX_FBDEV_DEVICE="/dev/fb$(grep 'fb_st7789v' /proc/fb | awk '{print $1}')"
     const char *device = NULL;
     char fbdev[64] = {0};
     device = getenv_default("LV_LINUX_FBDEV_DEVICE", NULL);
@@ -365,4 +354,3 @@ int main(void)
 
     return 0;
 }
-

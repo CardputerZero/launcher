@@ -196,19 +196,6 @@ private:
 
     void apply_blink_gpio(bool on)
     {
-        // =====================================================
-        // Connect real GPIO output logic here.
-        //
-        // Example ESP-IDF pseudocode:
-        //
-        // gpio_set_level(GPIO_NUM_26, on ? 1 : 0);
-        // gpio_set_level(GPIO_NUM_23, on ? 1 : 0);
-        // gpio_set_level(GPIO_NUM_22, on ? 1 : 0);
-        //
-        // Note:
-        // Real GPIO must be configured as output in advance.
-        // =====================================================
-
         (void)on;
     }
 

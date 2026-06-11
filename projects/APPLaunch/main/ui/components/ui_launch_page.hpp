@@ -147,25 +147,6 @@ public:
     // Launch the currently centered app
     void launch_app()
     {
-        // auto it = std::next(app_list_.begin(), current_app_);
-        // if (it->Exec == "launch_store") {
-        //     lv_disp_load_scr(ui_AppStore);
-        //     lv_indev_set_group(lv_indev_get_next(NULL), AppStoregroup);
-        // } else if (it->Exec == "launch_store1") {
-        //     lv_disp_load_scr(ui_AppStore1);
-        // } else if (it->Exec == "launch_setting") {
-        //     printf("Launching SETTING...\n");
-        // } else if (it->Exec == "launch_claw") {
-        //     printf("Launching CLAW...\n");
-        // } else if (it->Exec == "launch_music") {
-        //     printf("Launching MUSIC...\n");
-        // } else {
-        //     if (it->terminal) {
-        //         launch_exec_in_terminal(&(*it));
-        //     } else {
-        //         launch_exec(&(*it));
-        //     }
-        // }
     }
 
 private:

@@ -67,21 +67,6 @@ private:
         key_group = lv_group_create();
         lv_group_add_obj(key_group, ui_root);
     }
-
-    // static void static_event_handler(lv_event_t * e)
-    // {
-    //     app_base *instance = static_cast<app_base *>(lv_event_get_user_data(e));
-    //     if (instance)
-    //     {
-    //         instance->event_handler(e);
-    //     }
-    // }
-
-    // virtual void event_handler(lv_event_t * e)
-    // {
-
-    // }
-
 };
 
 

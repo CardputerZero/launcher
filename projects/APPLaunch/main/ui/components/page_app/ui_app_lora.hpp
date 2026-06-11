@@ -17,8 +17,6 @@
 #include <functional>
 #include <linux/input.h>
 #include "keyboard_input.h"
-// #include "ui_comp.h"
-
 #if __has_include(<linux/gpio.h>)
 #include <linux/gpio.h>
 #define HAS_LINUX_GPIO_CDEV 1

@@ -607,15 +607,6 @@ public:
                 lv_obj_set_style_text_font(ui_powerLabel, &lv_font_montserrat_10, LV_PART_MAIN | LV_STATE_DEFAULT);
             else
                 lv_obj_set_style_text_font(ui_powerLabel, LV_FONT_DEFAULT, LV_PART_MAIN | LV_STATE_DEFAULT);
-
-        //     uint32_t color = 0x66CC33;
-        //     if (soc <= 20)
-        //         color = 0xE74C3C;
-        //     else if (soc <= 50)
-        //         color = 0xF39C12;
-        //     lv_obj_set_style_bg_color(ui_Bar1, lv_color_hex(color),
-        //                               LV_PART_INDICATOR | LV_STATE_DEFAULT);
-        // }
         }
     }
 
