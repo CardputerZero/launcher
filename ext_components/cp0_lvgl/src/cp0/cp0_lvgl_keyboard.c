@@ -102,8 +102,106 @@ void kbd_dump_keymap_table(void)
 void kbd_dump_keymap_table(void) {}
 #endif
 
+__attribute__((weak)) void ui_global_hint_on_key(const struct key_item *elm)
+{
+    (void)elm;
+}
 
-#if !LV_USE_SDL
+static const char *getenv_default(const char *name, const char *dflt)
+{
+    const char *value = getenv(name);
+    return (value && value[0] != '\0') ? value : dflt;
+}
+
+static int cp0_evdev_process_key(uint16_t code)
+{
+    switch (code) {
+    case KEY_UP:
+        return LV_KEY_UP;
+    case KEY_DOWN:
+        return LV_KEY_DOWN;
+    case KEY_RIGHT:
+        return LV_KEY_RIGHT;
+    case KEY_LEFT:
+        return LV_KEY_LEFT;
+    case KEY_ESC:
+        return LV_KEY_ESC;
+    case KEY_DELETE:
+        return LV_KEY_DEL;
+    case KEY_BACKSPACE:
+        return LV_KEY_BACKSPACE;
+    case KEY_ENTER:
+        return LV_KEY_ENTER;
+    case KEY_NEXT:
+        return LV_KEY_NEXT;
+    case KEY_TAB:
+        return KEY_TAB;
+    case KEY_PREVIOUS:
+        return LV_KEY_PREV;
+    case KEY_HOME:
+        return LV_KEY_HOME;
+    case KEY_END:
+        return LV_KEY_END;
+    default:
+        return code;
+    }
+}
+
+static void cp0_keypad_read_cb(lv_indev_t *indev, lv_indev_data_t *data)
+{
+    (void)indev;
+
+    data->state = LV_INDEV_STATE_RELEASED;
+    data->continue_reading = false;
+
+    pthread_mutex_lock(&keyboard_mutex);
+    if (!STAILQ_EMPTY(&keyboard_queue)) {
+        struct key_item *elm = STAILQ_FIRST(&keyboard_queue);
+        STAILQ_REMOVE_HEAD(&keyboard_queue, entries);
+
+        char utf8_dbg[64] = "";
+        int di = 0;
+        for (int i = 0; i < (int)sizeof(elm->utf8) && elm->utf8[i] && di < 60; i++) {
+            unsigned char c = (unsigned char)elm->utf8[i];
+            if (c >= 0x20 && c < 0x7f)
+                utf8_dbg[di++] = (char)c;
+            else
+                di += snprintf(utf8_dbg + di, 64 - di, "\\x%02x", c);
+        }
+        utf8_dbg[di] = '\0';
+        printf("[INDEV] dequeue code=%u state=%s sym=%s utf8='%s' cp=0x%x active_screen=%p\n",
+               elm->key_code, kbd_state_name(elm->key_state), elm->sym_name,
+               utf8_dbg, elm->codepoint, (void *)lv_screen_active());
+
+        lv_obj_t *root = lv_screen_active();
+        if (root)
+            lv_obj_send_event(root, (lv_event_code_t)LV_EVENT_KEYBOARD, elm);
+
+        ui_global_hint_on_key(elm);
+
+        data->key = cp0_evdev_process_key(elm->key_code);
+        if (data->key) {
+            data->state = (lv_indev_state_t)elm->key_state;
+            data->continue_reading = !STAILQ_EMPTY(&keyboard_queue);
+        }
+        free(elm);
+    }
+    pthread_mutex_unlock(&keyboard_mutex);
+}
+
+static void cp0_create_lvgl_input_devices(void)
+{
+    const char *mouse_device = getenv_default("LV_LINUX_MOUSE_DEVICE", NULL);
+    if (mouse_device)
+        lv_evdev_create(LV_INDEV_TYPE_POINTER, mouse_device);
+
+    lv_indev_t *indev = lv_indev_create();
+    if (indev != NULL) {
+        lv_indev_set_type(indev, LV_INDEV_TYPE_KEYPAD);
+        lv_indev_set_read_cb(indev, cp0_keypad_read_cb);
+    }
+}
+
 /* ============================================================
  *  Parameters
  * ============================================================ */
@@ -704,8 +802,23 @@ out:
     return NULL;
 }
 
-/* APPLaunch still installs its own LVGL keypad read callback, so this
- * compatibility symbol intentionally does not create another input device. */
-void init_input(void) {}
+void init_input(void)
+{
+    static int input_initialized = 0;
+    if (input_initialized)
+        return;
 
-#endif
+    if (LV_EVENT_KEYBOARD == 0)
+        LV_EVENT_KEYBOARD = lv_event_register_id();
+
+    pthread_t keyboard_read_thread_id;
+    const char *keyboard_device = getenv("APPLAUNCH_LINUX_KEYBOARD_DEVICE");
+    if (pthread_create(&keyboard_read_thread_id, NULL, keyboard_read_thread, (void *)keyboard_device) != 0) {
+        perror("pthread_create keyboard_read_thread");
+        return;
+    }
+
+    pthread_detach(keyboard_read_thread_id);
+    cp0_create_lvgl_input_devices();
+    input_initialized = 1;
+}

@@ -6,6 +6,8 @@
 #ifndef _ZERO_UI_H
 #define _ZERO_UI_H
 
+#include "hal_lvgl_bsp.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -63,14 +65,10 @@ void ui_info_bind();
 #define IS_KEY_PRESSED(e) ((lv_event_get_code(e) == LV_EVENT_KEYBOARD)&&(LV_EVENT_KEYBOARD_GET_KEY_STATE(e) > 0))
 #define IS_KEY_RELEASED(e) ((lv_event_get_code(e) == LV_EVENT_KEYBOARD)&&(LV_EVENT_KEYBOARD_GET_KEY_STATE(e) == 0))
 
-extern volatile uint32_t LV_EVENT_BATTERY;
-extern volatile uint32_t LV_EVENT_DELL_CPP_DATA;
+#define LV_EVENT_BATTERY lv_c_event[CP0_C_EVENT_BATTERY]
+#define LV_EVENT_DELL_CPP_DATA lv_c_event[CP0_C_EVENT_DELL_CPP_DATA]
 
-typedef struct {
-    cp0_battery_info_t info;
-} lv_battery_event_data_t;
-
-#define LV_EVENT_BATTERY_GET_INFO(e) (&((lv_battery_event_data_t *)lv_event_get_param(e))->info)
+#define LV_EVENT_BATTERY_GET_INFO(e) ((cp0_battery_info_t *)lv_event_get_param(e))
 
 
 #undef UI_DEFINE_OBJECT

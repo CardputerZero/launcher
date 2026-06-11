@@ -1,21 +1,16 @@
 #include "lvgl/lvgl.h"
 #include "lvgl/demos/lv_demos.h"
 #include <unistd.h>
-#include <pthread.h>
-#include <time.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <cstring>
 #include <chrono>
 #include <string>
 #include "ui/ui.h"
-#include "ui/ui_global_hint.h"
 #include "keyboard_input.h"
 #include "battery.h"
-#include "compat/input_keys.h"
 #include "cp0_lvgl_app.h"
 #include "cp0_lvgl_file.hpp"
+#include "hal_lvgl_bsp.h"
 #include "global_config.h"
 #if CONFIG_BACKWARD_CPP_ENABLED
 #define BACKWARD_HAS_DW 1
@@ -28,243 +23,27 @@ extern "C" {
     threadpool g_launch_thread_pool;
 }
 static const char* lock_file = NULL;
-volatile uint32_t LV_EVENT_BATTERY;
-volatile uint32_t LV_EVENT_WIFI_INFO;
-volatile uint32_t LV_EVENT_DELL_CPP_DATA;
-
-
-
 static const char *getenv_default(const char *name, const char *dflt)
 {
     return getenv(name) ? : dflt;
 }
 
-int get_st7789v_fbdev(char *dev_path, size_t buf_size)
-{
-    if (dev_path == NULL || buf_size == 0) {
-        return -1;
-    }
-
-    FILE *fp = fopen("/proc/fb", "r");
-    if (fp == NULL) {
-        perror("Failed to open /proc/fb");
-        return -1;
-    }
-
-    char line[256];
-    int  fb_num = -1;
-
-    /* Read line by line and find the line containing fb_st7789v, e.g. 0 fb_st7789v */
-    while (fgets(line, sizeof(line), fp) != NULL) {
-        if (strstr(line, "fb_st7789v") != NULL) {
-            if (sscanf(line, "%d", &fb_num) == 1) {
-                break;
-            }
-        }
-    }
-
-    fclose(fp);
-
-    if (fb_num < 0) {
-        fprintf(stderr, "fb_st7789v not found in /proc/fb\n");
-    }
-    if (access("/dev/fb_lcd", F_OK) == 0) {
-        snprintf(dev_path, buf_size, "/dev/fb_lcd");
-    } else {
-        fb_num = 0;
-        snprintf(dev_path, buf_size, "/dev/fb%d", fb_num);
-    }
-    return 0;
-}
-
-
-static int _evdev_process_key(uint16_t code)
-{
-    switch(code) {
-        case KEY_UP:
-            return LV_KEY_UP;
-        case KEY_DOWN:
-            return LV_KEY_DOWN;
-        case KEY_RIGHT:
-            return LV_KEY_RIGHT;
-        case KEY_LEFT:
-            return LV_KEY_LEFT;
-        case KEY_ESC:
-            return LV_KEY_ESC;
-        case KEY_DELETE:
-            return LV_KEY_DEL;
-        case KEY_BACKSPACE:
-            return LV_KEY_BACKSPACE;
-        case KEY_ENTER:
-            return LV_KEY_ENTER;
-        case KEY_NEXT:
-            return LV_KEY_NEXT;
-        case KEY_TAB:
-            return KEY_TAB;
-        case KEY_PREVIOUS:
-            return LV_KEY_PREV;
-        case KEY_HOME:
-            return LV_KEY_HOME;
-        case KEY_END:
-            return LV_KEY_END;
-        default:
-            return code;
-    }
-}
-
-
-/* ----------------- LVGL read callback ----------------- */
-static void keypad_read_cb(lv_indev_t *indev, lv_indev_data_t *data)
-{
-    (void)indev;
-
-    /* Output one queued event for each LVGL call */
-    data->state = LV_INDEV_STATE_RELEASED;
-    data->continue_reading = false;
-    // Dequeue
-    {
-        pthread_mutex_lock(&keyboard_mutex);
-        if (!STAILQ_EMPTY(&keyboard_queue))
-        {
-            struct key_item *elm = NULL;
-            elm = STAILQ_FIRST(&keyboard_queue);
-            STAILQ_REMOVE_HEAD(&keyboard_queue, entries);
-
-            {
-                char utf8_dbg[64] = "";
-                int di = 0;
-                for (int i = 0; i < (int)sizeof(elm->utf8) && elm->utf8[i] && di < 60; i++) {
-                    unsigned char c = (unsigned char)elm->utf8[i];
-                    if (c >= 0x20 && c < 0x7f) utf8_dbg[di++] = (char)c;
-                    else di += snprintf(utf8_dbg+di, 64-di, "\\x%02x", c);
-                }
-                utf8_dbg[di] = '\0';
-                printf("[INDEV] dequeue code=%u state=%s sym=%s utf8='%s' cp=0x%x active_screen=%p\n",
-                       elm->key_code, kbd_state_name(elm->key_state),
-                       elm->sym_name, utf8_dbg, elm->codepoint,
-                       (void*)lv_screen_active());
-            }
-            lv_obj_t *root = lv_screen_active();
-            if (root) {
-                lv_obj_send_event(root, (lv_event_code_t)LV_EVENT_KEYBOARD, elm);
-            }
-
-            /* Global on-screen hint overlay (ESC / Shift / SYM).
-             * Called after the page has had a chance to react, and only
-             * READS elm — never frees it. */
-            ui_global_hint_on_key(elm);
-
-            data->key = _evdev_process_key(elm->key_code);
-            if(data->key)
-            {
-                data->state = (lv_indev_state_t)elm->key_state;
-                data->continue_reading = !STAILQ_EMPTY(&keyboard_queue);
-            }
-            free(elm);
-        }
-        pthread_mutex_unlock(&keyboard_mutex);
-    }
-}
 
 #if LV_USE_EVDEV
-
-static void lv_linux_indev_init(void)
+static void lv_linux_input_env_init(void)
 {
-    const char *mouse_device = getenv_default("LV_LINUX_MOUSE_DEVICE", NULL);
     const std::string default_keyboard_device = cp0_file_path("keyboard_device");
     const std::string default_keyboard_map = cp0_file_path("keyboard_map");
     const char *keyboard_device = getenv_default("LV_LINUX_KEYBOARD_DEVICE", default_keyboard_device.c_str());
     const char *keyboard_map = getenv_default("LV_LINUX_KEYBOARD_MAP", default_keyboard_map.c_str());
     setenv("APPLAUNCH_LINUX_KEYBOARD_DEVICE", keyboard_device, 1);
     setenv("APPLAUNCH_LINUX_KEYBOARD_MAP", keyboard_map, 1);
- 
-    {
-        pthread_t keyboard_read_thread_id;
-        pthread_create(&keyboard_read_thread_id,       // thread ID (output)
-                                    NULL,       // thread attributes (NULL=default)
-                                    keyboard_read_thread,// thread function
-                                    NULL);      // argument passed to the thread function
-        pthread_detach(keyboard_read_thread_id);
-    }
- 
- 
- 
-    if (mouse_device)
-        lv_evdev_create(LV_INDEV_TYPE_POINTER, mouse_device);
-
-    lv_indev_t *indev = lv_indev_create();
-    lv_indev_set_type(indev, LV_INDEV_TYPE_KEYPAD);
-    lv_indev_set_read_cb(indev, keypad_read_cb);
 }
-#endif
-
-
-#if LV_USE_LINUX_FBDEV
-static void lv_linux_disp_init(void)
-{
-    const char *device = NULL;
-    char fbdev[64] = {0};
-    device = getenv_default("LV_LINUX_FBDEV_DEVICE", NULL);
-    if ((device == NULL) && (get_st7789v_fbdev(fbdev, sizeof(fbdev)) == 0)) {
-        device = fbdev;
-    }
-    setenv("APPLAUNCH_LINUX_FBDEV_DEVICE", device, 1);
-    printf("Using framebuffer device: %s\n", device);
-    lv_display_t * disp = lv_linux_fbdev_create();
-    if(disp == NULL) {
-        printf("Failed to create fbdev display!\n");
-        return;
-    }
-
-    lv_linux_fbdev_set_file(disp, device);
-
-    // Force the fbdev driver to ioctl(FBIOPUT_VSCREENINFO) after every flush,
-    // which makes fbtft push the buffer to the SPI LCD immediately. Without
-    // this, fbtft may batch/delay updates causing tearing.
-    lv_linux_fbdev_set_force_refresh(disp, true);
-
-    // Print the detected resolution
-    lv_coord_t w = lv_display_get_horizontal_resolution(disp);
-    lv_coord_t h = lv_display_get_vertical_resolution(disp);
-    printf("Framebuffer resolution: %dx%d\n", w, h);
-}
-#if ! LV_USE_EVDEV && ! LV_USE_LIBINPUT
-static void lv_linux_indev_init(void)
-{
-}
-#endif
-
-#elif LV_USE_LINUX_DRM
-static void lv_linux_disp_init(void)
-{
-    const char *device = getenv_default("LV_LINUX_DRM_CARD", "/dev/dri/card0");
-    lv_display_t * disp = lv_linux_drm_create();
-
-    lv_linux_drm_set_file(disp, device, -1);
-}
-#elif LV_USE_SDL
-static void lv_linux_disp_init(void)
-{
-    const int width = atoi(getenv("LV_SDL_VIDEO_WIDTH") ? : "320");
-    const int height = atoi(getenv("LV_SDL_VIDEO_HEIGHT") ? : "170");
-
-    lv_sdl_window_create(width, height);
-}
-
-static void lv_linux_indev_init(void)
-{
-    lv_sdl_mouse_create();
-    lv_sdl_keyboard_create();
-}
-
 #else
-#error Unsupported configuration
+static void lv_linux_input_env_init(void)
+{
+}
 #endif
-#include <fcntl.h>
-#include <unistd.h>
-#include <cstdio>
-#include <cstring>
-#include <cerrno>
 
 void APPLaunch_lock()
 {
@@ -301,8 +80,6 @@ void APPLaunch_lock()
     }
 }
 
-extern "C" void init_audio(void);
-extern "C" void init_camera(void);
 int main(void)
 {
     setenv("XDG_RUNTIME_DIR", "/run/user/1000", 1);
@@ -315,18 +92,14 @@ int main(void)
     lv_init();
     printf("[BOOT] lv_init() done\n");
 
-    /*Linux display device init*/
-    printf("[BOOT] lv_linux_disp_init() starting...\n");
-    lv_linux_disp_init();
-    printf("[BOOT] lv_linux_disp_init() done\n");
+    lv_linux_input_env_init();
 
-    printf("[BOOT] lv_linux_indev_init() starting...\n");
-    lv_linux_indev_init();
-    printf("[BOOT] lv_linux_indev_init() done\n");
+    printf("[BOOT] cp0_lvgl_init() starting...\n");
+    cp0_lvgl_init();
+    printf("[BOOT] cp0_lvgl_init() done\n");
 
-    LV_EVENT_KEYBOARD = lv_event_register_id();
-    LV_EVENT_BATTERY = lv_event_register_id();
-    LV_EVENT_DELL_CPP_DATA = lv_event_register_id();
+    if (LV_EVENT_KEYBOARD == 0)
+        LV_EVENT_KEYBOARD = lv_event_register_id();
     lv_timer_create(battery_timer_cb, 3000, NULL);
 
     // Restore saved brightness
@@ -342,8 +115,6 @@ int main(void)
         if (saved_vol >= 0)
             cp0_volume_write(saved_vol);
     }
-    init_audio();
-    init_camera();
     ui_init();
 
     // Force full-screen refresh immediately after init

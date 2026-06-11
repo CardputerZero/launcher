@@ -1,6 +1,7 @@
 #include "hal_lvgl_bsp.h"
 #include "lvgl/lvgl.h"
 #include "cp0_lvgl.h"
+#include "cp0_lvgl_app.h"
 #include <cstdio>
 #include <memory>
 #include <mutex>
@@ -18,13 +19,13 @@ public:
     {
         if (lv_c_event[CP0_C_EVENT_BATTERY] != 0)
         {
-            int capacity = get_battery_value();
-            if (capacity >= 0)
+            cp0_battery_info_t info = cp0_battery_read();
+            if (info.valid)
             {
                 // lv_lock();
                 lv_obj_t *root = lv_display_get_screen_active(NULL);
                 if (root != NULL)
-                    lv_obj_send_event(root, (lv_event_code_t)lv_c_event[CP0_C_EVENT_BATTERY], (void *)&capacity);
+                    lv_obj_send_event(root, (lv_event_code_t)lv_c_event[CP0_C_EVENT_BATTERY], (void *)&info);
                 // lv_unlock();
             }
         }
