@@ -7,7 +7,6 @@
 #include <string>
 #include "ui/ui.h"
 #include "keyboard_input.h"
-#include "battery.h"
 #include "cp0_lvgl_app.h"
 #include "cp0_lvgl_file.hpp"
 #include "hal_lvgl_bsp.h"
@@ -100,7 +99,6 @@ int main(void)
 
     if (LV_EVENT_KEYBOARD == 0)
         LV_EVENT_KEYBOARD = lv_event_register_id();
-    lv_timer_create(battery_timer_cb, 3000, NULL);
 
     // Restore saved brightness
     {

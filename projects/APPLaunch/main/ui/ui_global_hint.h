@@ -5,8 +5,8 @@
  * page. Shows a short, transient banner near the top of the active
  * screen when specific keys are pressed.
  *
- * Hooked from the global key dispatch in main.cpp (keypad_read_cb),
- * right after LV_EVENT_KEYBOARD has been sent to the active screen.
+ * Hooked from the cp0_lvgl keyboard dispatch after LV_EVENT_KEYBOARD
+ * has been sent to the active screen.
  * The helper only READS elm — it never frees it.
  */
 #ifndef UI_GLOBAL_HINT_H
