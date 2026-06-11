@@ -1,4 +1,4 @@
-#include "../hal_settings.h"
+#include "hal/hal_settings.h"
 #include <stdio.h>
 #include <string.h>
 #include <time.h>

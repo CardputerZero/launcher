@@ -1,4 +1,4 @@
-#include "../hal_screenshot.h"
+#include "hal/hal_screenshot.h"
 #include <stdio.h>
 
 int hal_screenshot_save(const char *dir)

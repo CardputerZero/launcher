@@ -79,6 +79,7 @@ SRCS += Glob('src/*.c*')
 SRCS += append_srcs_dir(ADir('ui'))
 # add includes
 INCLUDE += [ADir('.'), ADir('include')]
+INCLUDE += [os.path.join(os.environ['EXT_COMPONENTS_PATH'], 'cp0_lvgl', 'include')]
 
 # add requirements
 REQUIREMENTS += ['lvgl_component', 'pthread']
@@ -104,13 +105,12 @@ lvgl_component['SRCS'] = list(filter(
     lvgl_component['SRCS']
 ))
 
-SRCS += Glob('hal/*.c*')
 # x86
 if 'linux_x86_sdl2_config_defaults.mk' in os.environ.get("CONFIG_DEFAULT_FILE", ''):
     lvgl_component['DEFINITIONS'] += pkg_config_cflags("freetype2")
     lvgl_component['REQUIREMENTS'] += pkg_config_ldflags("freetype2")
 
-    SRCS += Glob('hal/sdl/*.c*')
+    REQUIREMENTS += ['cp0_lvgl']
     DEFINITIONS += pkg_config_cflags("sdl2")
     REQUIREMENTS += pkg_config_ldflags("sdl2")
     REQUIREMENTS += ['input', 'xkbcommon', 'udev']
@@ -123,16 +123,21 @@ if 'linux_x86_cross_cp0_config_defaults.mk' in os.environ.get("CONFIG_DEFAULT_FI
                                   f'{rootfs_path}/usr/include/libcamera',
                                   ]
 
-    SRCS += Glob('hal/linux/*.c*')
+    REQUIREMENTS += ['cp0_lvgl']
     REQUIREMENTS += ['input', 'xkbcommon', 'udev', 'freetype']
     REQUIREMENTS += ['camera', 'camera-base', 'jpeg']
     LDFLAGS += [f'{rootfs_path}/usr/lib/aarch64-linux-gnu/libstdc++.so.6']
     DEFINITIONS += ['-Wno-format-truncation']
+
+if os.environ.get("CONFIG_DEFAULT_FILE", '') == 'config_defaults.mk':
+    REQUIREMENTS += ['cp0_lvgl']
+    REQUIREMENTS += ['input', 'xkbcommon', 'udev', 'freetype']
+
 if 'mac_cross_cp0_config_defaults.mk' in os.environ.get("CONFIG_DEFAULT_FILE", ''):
     lvgl_component['DEFINITIONS'] += ['-D_REENTRANT']
     lvgl_component['INCLUDE'] += [f'{os.environ.get("CONFIG_TOOLCHAIN_SYSROOT", "")}/usr/include/freetype2', f'{os.environ.get("CONFIG_TOOLCHAIN_SYSROOT", "")}/usr/include/libpng16']
 
-    SRCS += Glob('hal/linux/*.c*')
+    REQUIREMENTS += ['cp0_lvgl']
     REQUIREMENTS += ['input', 'xkbcommon', 'udev', 'freetype']
     # add libcamera — note: pkg-config name is 'libcamera', not 'camera'.
     # Linker still wants -lcamera but we need explicit cflags for the headers.
@@ -151,7 +156,7 @@ if 'mac_cross_cp0_config_defaults.mk' in os.environ.get("CONFIG_DEFAULT_FILE", '
 # macOS
 if 'darwin_config_defaults.mk' in os.environ.get("CONFIG_DEFAULT_FILE", ''):
     # macOS Use the SDL backend
-    SRCS += Glob('hal/sdl/*.c*')
+    REQUIREMENTS += ['cp0_lvgl']
 
     # nlohmann_json
     DEFINITIONS += pkg_config_cflags("nlohmann_json")

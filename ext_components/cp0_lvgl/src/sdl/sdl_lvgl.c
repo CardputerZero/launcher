@@ -1,4 +1,5 @@
 #include "hal_lvgl_bsp.h"
+#include "commount.h"
 #include "lvgl/lvgl.h"
 
 #if LV_USE_SDL
@@ -22,11 +23,6 @@
 #define CP0_KBD_MOD_ALT   (1u << 2)
 #define CP0_KBD_MOD_LOGO  (1u << 3)
 
-uint32_t LV_C_EVENT_KEYBOARD;
-uint32_t LV_C_EVENT_BATTERY;
-uint32_t LV_C_EVENT_NETWORK;
-uint32_t LV_C_EVENT_DATATIME;
-
 typedef struct {
     char buf[KEYBOARD_BUFFER_SIZE];
     bool dummy_read;
@@ -39,14 +35,6 @@ typedef struct {
 
 static void cp0_sdl_keyboard_read(lv_indev_t *indev, lv_indev_data_t *data);
 static void cp0_sdl_keyboard_delete_cb(lv_event_t *event);
-
-void init_lvgl_event(void)
-{
-    LV_C_EVENT_KEYBOARD = lv_event_register_id();
-    LV_C_EVENT_BATTERY = lv_event_register_id();
-    LV_C_EVENT_NETWORK = lv_event_register_id();
-    LV_C_EVENT_DATATIME = lv_event_register_id();
-}
 
 static const char *getenv_default(const char *name, const char *dflt)
 {
@@ -363,7 +351,7 @@ static void cp0_send_keyboard_event(const cp0_key_event_t *event)
 {
     lv_obj_t *root = lv_display_get_screen_active(NULL);
     if (root != NULL)
-        lv_obj_send_event(root, (lv_event_code_t)LV_C_EVENT_KEYBOARD, (void *)event);
+        lv_obj_send_event(root, (lv_event_code_t)lv_c_event[CP0_C_EVENT_KEYBOARD], (void *)event);
 }
 
 static void cp0_sdl_fill_key_meta(cp0_sdl_keyboard_t *kbd, const SDL_KeyboardEvent *event)

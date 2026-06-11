@@ -243,7 +243,7 @@ static void cp0_send_keyboard_event(const cp0_key_event_t *event)
 {
     lv_obj_t *root = lv_display_get_screen_active(NULL);
     if (root != NULL)
-        lv_obj_send_event(root, (lv_event_code_t)LV_C_EVENT_KEYBOARD, (void *)event);
+        lv_obj_send_event(root, (lv_event_code_t)lv_c_event[CP0_C_EVENT_KEYBOARD], (void *)event);
 }
 
 static int cp0_init_xkb(cp0_input_ctx_t *ctx)
@@ -456,4 +456,3 @@ void init_input()
     }
     pthread_detach(ctx->thread);
 }
-

@@ -1,4 +1,4 @@
-#include "../hal_paths.h"
+#include "hal/hal_paths.h"
 #include <stdio.h>
 #include <string.h>
 

@@ -1,5 +1,5 @@
-#include "../hal_process.h"
-#include "../hal_config.h"
+#include "hal/hal_process.h"
+#include "hal/hal_config.h"
 #include <unistd.h>
 #include <sys/wait.h>
 #include <signal.h>
@@ -17,6 +17,9 @@ extern "C" {
     extern void keyboard_pause(void);
     extern void keyboard_resume(void);
 }
+
+extern "C" void __attribute__((weak)) keyboard_pause(void) {}
+extern "C" void __attribute__((weak)) keyboard_resume(void) {}
 
 static const char *get_kbd_device()
 {

@@ -1,4 +1,4 @@
-#include "../hal_screenshot.h"
+#include "hal/hal_screenshot.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>

@@ -1,5 +1,16 @@
-#include "../hal_network.h"
+#include "hal/hal_network.h"
 #include <string.h>
+
+#ifdef _WIN32
+
+int hal_network_list(hal_netif_info_t *entries, int max_entries, int *out_count)
+{
+    (void)entries; (void)max_entries;
+    *out_count = 0;
+    return 0;
+}
+
+#else
 #include <ifaddrs.h>
 #include <arpa/inet.h>
 #include <net/if.h>
@@ -12,7 +23,7 @@ int hal_network_list(hal_netif_info_t *entries, int max_entries, int *out_count)
 
     for (struct ifaddrs *ifa = ifap; ifa; ifa = ifa->ifa_next) {
         if (!ifa->ifa_addr || ifa->ifa_addr->sa_family != AF_INET) continue;
-        if (strcmp(ifa->ifa_name, "lo") == 0) continue;
+        if (strcmp(ifa->ifa_name, "lo") == 0 || strcmp(ifa->ifa_name, "lo0") == 0) continue;
         if (*out_count >= max_entries) break;
 
         hal_netif_info_t *e = &entries[*out_count];
@@ -31,3 +42,5 @@ int hal_network_list(hal_netif_info_t *entries, int max_entries, int *out_count)
     freeifaddrs(ifap);
     return 0;
 }
+
+#endif

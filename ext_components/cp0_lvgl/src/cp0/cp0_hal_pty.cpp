@@ -1,28 +1,17 @@
-#include "../hal_pty.h"
-
-#if defined(_WIN32) || defined(__EMSCRIPTEN__)
-hal_pty_t hal_pty_open(const char *cmd, const char *const *args, int cols, int rows)
-{ (void)cmd; (void)args; (void)cols; (void)rows; return NULL; }
-int  hal_pty_read(hal_pty_t p, char *b, size_t s) { (void)p; (void)b; (void)s; return -1; }
-int  hal_pty_write(hal_pty_t p, const char *b, size_t l) { (void)p; (void)b; (void)l; return -1; }
-int  hal_pty_check_child(hal_pty_t p, int *e) { (void)p; (void)e; return -1; }
-void hal_pty_close(hal_pty_t p) { (void)p; }
-
-#else
+#include "hal/hal_pty.h"
+#include "hal/hal_config.h"
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
 #include <signal.h>
 #include <sys/wait.h>
 #include <sys/ioctl.h>
-
-#ifdef __APPLE__
-#include <util.h>
-#else
 #include <pty.h>
-#endif
+#include <pwd.h>
+#include <grp.h>
 
 struct hal_pty {
     int   master_fd;
@@ -43,11 +32,46 @@ hal_pty_t hal_pty_open(const char *cmd, const char *const *args,
 
     if (pid == 0) {
         setenv("TERM", "vt100", 1);
-        if (args) {
-            execvp(cmd, (char *const *)args);
-        } else {
-            execlp(cmd, cmd, (char *)NULL);
+
+        // Drop to regular user if running as root
+        if (getuid() == 0) {
+            const char *cfg_user = hal_config_get_str("run_as_user", NULL);
+            const char *username = NULL;
+            if (cfg_user && cfg_user[0]) {
+                username = cfg_user;
+            } else {
+                struct passwd *p;
+                setpwent();
+                while ((p = getpwent()) != NULL) {
+                    if (p->pw_uid >= 1000 && p->pw_uid < 65534 &&
+                        p->pw_shell && p->pw_shell[0] &&
+                        !strstr(p->pw_shell, "nologin") &&
+                        !strstr(p->pw_shell, "/bin/false")) {
+                        username = p->pw_name;
+                        break;
+                    }
+                }
+                endpwent();
+            }
+            if (!username) username = "pi";
+
+            struct passwd *pw = getpwnam(username);
+            if (pw && strcmp(username, "root") != 0) {
+                initgroups(pw->pw_name, pw->pw_gid);
+                setgid(pw->pw_gid);
+                setuid(pw->pw_uid);
+                setenv("HOME", pw->pw_dir, 1);
+                setenv("USER", pw->pw_name, 1);
+                setenv("LOGNAME", pw->pw_name, 1);
+                setenv("SHELL", pw->pw_shell[0] ? pw->pw_shell : "/bin/bash", 1);
+                chdir(pw->pw_dir);
+            }
         }
+
+        if (args)
+            execvp(cmd, (char *const *)args);
+        else
+            execlp(cmd, cmd, (char *)NULL);
         _exit(127);
     }
 
@@ -98,5 +122,3 @@ void hal_pty_close(hal_pty_t pty)
     close(pty->master_fd);
     free(pty);
 }
-
-#endif
