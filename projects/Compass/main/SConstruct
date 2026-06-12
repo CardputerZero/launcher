@@ -1,0 +1,113 @@
+import os
+
+Import("env")
+with open(env["PROJECT_TOOL_S"]) as f:
+    exec(f.read())
+
+if "CONFIG_TOOLCHAIN_PREFIX" in os.environ:
+    env["RANLIB"] = '${_concat(GCCPREFIX, "ranlib", GCCSUFFIX, __env__)}'
+    env["RANLIBCOM"] = "$RANLIB $TARGET"
+    env["ARFLAGS"] = ["rcs"]
+
+SRCS = Glob("src/*.c*")
+INCLUDE = [ADir("."), ADir("include")]
+PRIVATE_INCLUDE = []
+REQUIREMENTS = ["lvgl_component", "pthread", "freetype"]
+if "CONFIG_V9_5_LV_USE_SDL" not in os.environ:
+    REQUIREMENTS += ["input", "xkbcommon", "udev"]
+STATIC_LIB = []
+DYNAMIC_LIB = []
+DEFINITIONS = []
+DEFINITIONS_PRIVATE = []
+LDFLAGS = []
+LINK_SEARCH_PATH = []
+STATIC_FILES = []
+MULTIARCH_INCLUDE = None
+
+if "CONFIG_TOOLCHAIN_SYSROOT" in os.environ:
+    sysroot = os.environ["CONFIG_TOOLCHAIN_SYSROOT"].strip('"')
+    multiarch_include = os.path.join(sysroot, "usr", "include", "aarch64-linux-gnu")
+    if os.path.isdir(multiarch_include):
+        INCLUDE += [multiarch_include]
+        MULTIARCH_INCLUDE = multiarch_include
+    multiarch_lib = os.path.join(sysroot, "usr", "lib", "aarch64-linux-gnu")
+    if os.path.isdir(multiarch_lib):
+        LDFLAGS += [f"-B{multiarch_lib}", f"-Wl,-rpath-link,{multiarch_lib}"]
+        LINK_SEARCH_PATH += [multiarch_lib]
+
+lvgl_component = list(filter(lambda x: x["target"] == "lvgl_component", env["COMPONENTS"]))[0]
+if MULTIARCH_INCLUDE:
+    for component in env["COMPONENTS"]:
+        component["INCLUDE"] += [MULTIARCH_INCLUDE]
+
+# FreeType support
+freetype_includes = []
+freetype_link_paths = []
+if "CONFIG_TOOLCHAIN_SYSROOT" in os.environ:
+    sysroot = os.environ["CONFIG_TOOLCHAIN_SYSROOT"].strip('"')
+    ft_inc = os.path.join(sysroot, "usr", "include", "freetype2")
+    ft_lib = os.path.join(sysroot, "usr", "lib", "aarch64-linux-gnu")
+    if os.path.isdir(ft_inc):
+        freetype_includes += [ft_inc]
+    if os.path.isdir(ft_lib):
+        freetype_link_paths += [ft_lib]
+
+# Also check project local static_lib (for cross-compilation or local sysroot)
+local_static_lib = os.path.join(os.path.dirname(str(Dir('.').srcnode())), "static_lib")
+local_ft_inc = os.path.join(local_static_lib, "usr", "include", "freetype2")
+local_ft_lib = os.path.join(local_static_lib, "usr", "lib", "aarch64-linux-gnu")
+if os.path.isdir(local_ft_inc):
+    freetype_includes += [local_ft_inc]
+if os.path.isdir(local_ft_lib):
+    freetype_link_paths += [local_ft_lib]
+
+# Fallback to system paths
+if not freetype_includes:
+    for ft_inc in ["/usr/include/freetype2", "/usr/local/include/freetype2"]:
+        if os.path.exists(ft_inc):
+            freetype_includes += [ft_inc]
+if not freetype_link_paths:
+    for ft_lib in ["/usr/lib", "/usr/local/lib"]:
+        if os.path.exists(ft_lib):
+            freetype_link_paths += [ft_lib]
+
+for component in env["COMPONENTS"]:
+    component["INCLUDE"] += freetype_includes
+    component["LINK_SEARCH_PATH"] += freetype_link_paths
+
+if "CONFIG_V9_5_LV_USE_SDL" in os.environ:
+    lvgl_component["REQUIREMENTS"] += ["SDL2"]
+    lvgl_component["INCLUDE"] += ["/usr/include/SDL2"]
+    for sdl_include in [
+        "/opt/homebrew/include",
+        "/opt/homebrew/include/SDL2",
+        "/usr/local/include",
+        "/usr/local/include/SDL2",
+    ]:
+        if os.path.exists(sdl_include):
+            lvgl_component["INCLUDE"] += [sdl_include]
+    for sdl_lib in ["/opt/homebrew/lib", "/usr/local/lib"]:
+        if os.path.exists(sdl_lib):
+            lvgl_component["LINK_SEARCH_PATH"] += [sdl_lib]
+    lvgl_component["DEFINITIONS"] += ["-D_REENTRANT"]
+    for src in list(lvgl_component["SRCS"]):
+        if "lv_sdl_keyboard.c" in str(src):
+            lvgl_component["SRCS"].remove(src)
+
+env["COMPONENTS"].append(
+    {
+        "target": "M5CardputerZero-Compass",
+        "SRCS": SRCS,
+        "INCLUDE": INCLUDE,
+        "PRIVATE_INCLUDE": PRIVATE_INCLUDE,
+        "REQUIREMENTS": REQUIREMENTS,
+        "STATIC_LIB": STATIC_LIB,
+        "DYNAMIC_LIB": DYNAMIC_LIB,
+        "DEFINITIONS": DEFINITIONS,
+        "DEFINITIONS_PRIVATE": DEFINITIONS_PRIVATE,
+        "LDFLAGS": LDFLAGS,
+        "LINK_SEARCH_PATH": LINK_SEARCH_PATH,
+        "STATIC_FILES": STATIC_FILES,
+        "REGISTER": "project",
+    }
+)
