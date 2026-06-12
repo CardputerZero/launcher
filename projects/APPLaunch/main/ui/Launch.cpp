@@ -276,9 +276,9 @@ public:
         lv_refr_now(NULL);
         auto p = std::make_shared<UIConsolePage>();
         app_Page = p;
-        lv_disp_load_scr(p->get_ui());
-        lv_indev_set_group(lv_indev_get_next(NULL), p->get_key_group());
-        p->go_back_home = std::bind(&LaunchImpl::go_back_home, this);
+        lv_disp_load_scr(p->screen());
+        lv_indev_set_group(lv_indev_get_next(NULL), p->input_group());
+        p->navigate_home = std::bind(&LaunchImpl::go_back_home, this);
         p->terminal_sysplause = sysplause;
         /* Console page fully covers APP_Container; safe to hide now.
          * The heavy exec() call below will still run while the terminal
@@ -368,7 +368,7 @@ public:
             }
 
             // Parse the INI file
-            std::string app_name, app_icon, app_exec;
+            std::string page_title, app_icon, app_exec;
             bool app_terminal = false;
             bool app_sysplause = true;
             bool in_desktop_entry = false;
@@ -421,7 +421,7 @@ public:
                 rtrim(value);
 
                 if (key == "Name")
-                    app_name = value;
+                    page_title = value;
                 else if (key == "Icon")
                     app_icon = value;
                 else if (key == "Exec")
@@ -433,7 +433,7 @@ public:
             }
 
             // Name and Exec are required for registration
-            if (app_name.empty() || app_exec.empty())
+            if (page_title.empty() || app_exec.empty())
             {
                 fprintf(stderr, "applications_load: skip %s (missing Name or Exec)\n", filepath.c_str());
                 continue;
@@ -453,7 +453,7 @@ public:
                 continue;
             }
 
-            app_list.emplace_back(app_name, app_icon, app_exec, app_terminal, app_sysplause);
+            app_list.emplace_back(page_title, app_icon, app_exec, app_terminal, app_sysplause);
         }
 
         closedir(dir);
@@ -673,10 +673,10 @@ app::app(std::string name,
         lv_refr_now(NULL);
         auto p = std::make_shared<PageT>();
         self->app_Page = p;
-        lv_disp_load_scr(p->get_ui());
+        lv_disp_load_scr(p->screen());
         lv_indev_set_group(lv_indev_get_next(NULL),
-                           p->get_key_group());
-        p->go_back_home =
+                           p->input_group());
+        p->navigate_home =
             std::bind(&LaunchImpl::go_back_home, self);
         /* Page is now attached and drawable; hide the overlay. The
          * next LVGL frame will paint the new page without it. */

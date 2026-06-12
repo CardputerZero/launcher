@@ -13,7 +13,7 @@
 #include <unordered_map>
 #include <vector>
 
-class UITankBattlePage : public app_
+class UITankBattlePage : public AppPageRoot
 {
 private:
     enum class Dir
@@ -67,7 +67,7 @@ private:
     static constexpr int GRID_OY = (ARENA_H - GRID_H) / 2;
 
 public:
-    UITankBattlePage() : app_()
+    UITankBattlePage() : AppPageRoot()
     {
         init_game_state();
         creat_UI();
@@ -147,7 +147,7 @@ private:
 private:
     void creat_UI()
     {
-        lv_obj_t *bg = lv_obj_create(ui_root);
+        lv_obj_t *bg = lv_obj_create(root_screen_);
         lv_obj_set_size(bg, SCREEN_W, SCREEN_H);
         lv_obj_set_pos(bg, 0, 0);
         lv_obj_set_style_radius(bg, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -292,7 +292,7 @@ private:
 private:
     void event_handler_init()
     {
-        lv_obj_add_event_cb(ui_root, UITankBattlePage::static_lvgl_handler, LV_EVENT_ALL, this);
+        lv_obj_add_event_cb(root_screen_, UITankBattlePage::static_lvgl_handler, LV_EVENT_ALL, this);
     }
 
     static void static_lvgl_handler(lv_event_t *e)
@@ -313,8 +313,8 @@ private:
         uint32_t key = LV_EVENT_KEYBOARD_GET_KEY(e);
 
         if (key == KEY_ESC) {
-            if (go_back_home) {
-                go_back_home();
+            if (navigate_home) {
+                navigate_home();
             }
             return;
         }

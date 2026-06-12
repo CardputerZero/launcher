@@ -34,7 +34,7 @@
 //  Public API:
 //    exec(std::string cmd)  — start a command (supports command strings with arguments)
 // ============================================================
-class UIConsolePage : public app_base
+class UIConsolePage : public AppPage
 {
     /* ------------------------------------------------------------------ */
     /*  Terminal geometry                                                            */
@@ -68,7 +68,7 @@ public:
     bool terminal_sysplause = true;
 
 public:
-    UIConsolePage() : app_base()
+    UIConsolePage() : AppPage()
     {
         console_data_init();
         creat_console_UI();
@@ -262,7 +262,7 @@ private:
                            (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
 
         /* --------------------- line-level label ------------------------ */
-        const lv_font_t *mono_font = g_font_mono_12 ? g_font_mono_12 : g_font_cn_12;
+        const lv_font_t *mono_font = launcher_fonts().get("LiberationMono-Regular.ttf", 12, LV_FREETYPE_FONT_STYLE_NORMAL);
         for (int r = 0; r < ROWS; r++)
         {
             lv_obj_t *lbl = lv_label_create(term_canvas);
@@ -300,7 +300,7 @@ private:
     /* ================================================================== */
     void event_handler_init()
     {
-        lv_obj_add_event_cb(ui_root, UIConsolePage::static_lvgl_handler, LV_EVENT_ALL, this);
+        lv_obj_add_event_cb(root_screen_, UIConsolePage::static_lvgl_handler, LV_EVENT_ALL, this);
     }
 
     static void static_lvgl_handler(lv_event_t *e)
@@ -327,8 +327,8 @@ private:
                 else
                 {
                     waiting_key_to_exit = false;
-                    if (go_back_home)
-                        go_back_home();
+                    if (navigate_home)
+                        navigate_home();
                 }
             }
             else
@@ -383,8 +383,8 @@ private:
                     SLOGI("[CONSOLE] ESC held 5s -> kill PTY and go back home");
                     self->stop_pty();
                     self->terminal_active = false;
-                    if (self->go_back_home)
-                        self->go_back_home();
+                    if (self->navigate_home)
+                        self->navigate_home();
                 }
             }
             else

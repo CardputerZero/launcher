@@ -16,7 +16,7 @@
 //    VIEW_MAIN    — list (auto-refresh every second and show interface information)
 // ============================================================
 
-class UIIpPanelPage : public app_base
+class UIIpPanelPage : public AppPage
 {
     // ==================== Single network interface info ====================
     struct NetIfInfo
@@ -28,7 +28,7 @@ class UIIpPanelPage : public app_base
     };
 
 public:
-    UIIpPanelPage() : app_base()
+    UIIpPanelPage() : AppPage()
     {
         set_page_title("IP INFO");
         creat_UI();
@@ -293,7 +293,7 @@ private:
     // ==================== Event binding ====================
     void event_handler_init()
     {
-        lv_obj_add_event_cb(ui_root, UIIpPanelPage::static_lvgl_handler, LV_EVENT_ALL, this);
+        lv_obj_add_event_cb(root_screen_, UIIpPanelPage::static_lvgl_handler, LV_EVENT_ALL, this);
     }
     static void static_lvgl_handler(lv_event_t *e)
     {
@@ -342,7 +342,7 @@ private:
                 lv_timer_del(refresh_timer_);
                 refresh_timer_ = nullptr;
             }
-            if (go_back_home) go_back_home();
+            if (navigate_home) navigate_home();
             break;
 
         default:

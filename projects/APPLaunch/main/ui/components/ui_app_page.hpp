@@ -39,12 +39,21 @@ public:
         return create(parent, title_);
     }
 
+    void set_height(int height)
+    {
+        height_ = height;
+        if (ui_TOP_Container)
+            lv_obj_set_height(ui_TOP_Container, height_);
+        if (title_label_)
+            lv_obj_set_height(title_label_, height_);
+    }
+
     lv_obj_t *create(lv_obj_t *parent, const std::string &title)
     {
         title_ = title;
         ui_TOP_Container = lv_obj_create(parent);
         lv_obj_remove_style_all(ui_TOP_Container);
-        lv_obj_set_size(ui_TOP_Container, 320, 20);
+        lv_obj_set_size(ui_TOP_Container, 320, height_);
         lv_obj_clear_flag(ui_TOP_Container, (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
         lv_obj_set_flex_flow(ui_TOP_Container, LV_FLEX_FLOW_ROW);
         lv_obj_set_flex_align(ui_TOP_Container, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
@@ -124,10 +133,11 @@ private:
     lv_obj_t *time_label_ = nullptr;
     lv_obj_t *wifi_panel_ = nullptr;
     lv_obj_t *wifi_bars_[4] = {};
+    int height_ = 20;
 
     static lv_font_t *top_title_font()
     {
-        return g_font_bold_14 ? g_font_bold_14 : (lv_font_t *)&lv_font_montserrat_14;
+        return launcher_fonts().get("Montserrat-Bold.ttf", 16, LV_FREETYPE_FONT_STYLE_BOLD);
     }
 
 
@@ -147,7 +157,7 @@ private:
         lv_label_set_long_mode(title_label_, LV_LABEL_LONG_DOT);
         lv_label_set_text(title_label_, title_.c_str());
         lv_obj_set_width(title_label_, 150);
-        lv_obj_set_height(title_label_, 20);
+        lv_obj_set_height(title_label_, height_);
         lv_obj_set_style_text_font(title_label_, top_title_font(), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_text_color(title_label_, lv_color_hex(0xCCAA00), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_text_opa(title_label_, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -158,7 +168,7 @@ private:
     {
         lv_obj_t *spacer = lv_obj_create(parent);
         lv_obj_remove_style_all(spacer);
-        lv_obj_set_size(spacer, 0, 20);
+        lv_obj_set_size(spacer, 0, height_);
         lv_obj_set_flex_grow(spacer, 1);
         lv_obj_clear_flag(spacer, (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
     }
@@ -192,7 +202,7 @@ private:
         time_panel_ = lv_obj_create(parent);
         lv_obj_set_size(time_panel_, 40, 16);
         clear_status_panel_style(time_panel_);
-        lv_obj_set_style_bg_img_src(time_panel_, ui_img_time_png, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_img_src(time_panel_, cp0_file_path_c("status_time_background.png"), LV_PART_MAIN | LV_STATE_DEFAULT);
 
         time_label_ = lv_label_create(time_panel_);
         lv_obj_set_align(time_label_, LV_ALIGN_CENTER);
@@ -206,7 +216,7 @@ private:
         battery_panel_ = lv_obj_create(parent);
         lv_obj_set_size(battery_panel_, 36, 16);
         clear_status_panel_style(battery_panel_);
-        lv_obj_set_style_bg_img_src(battery_panel_, ui_img_battery_bg_png, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_img_src(battery_panel_, cp0_file_path_c("status_battery_background.png"), LV_PART_MAIN | LV_STATE_DEFAULT);
 
         battery_bar_ = lv_bar_create(battery_panel_);
         lv_bar_set_value(battery_bar_, 96, LV_ANIM_OFF);
@@ -277,36 +287,35 @@ private:
     lv_obj_t *ui_APP_Container = nullptr;
 };
 
-using UIAPPCOM = UIAppContainer;
 
-class app_
+class AppPageRoot
 {
 
 public:
-    std::string app_name = "APP";
-    lv_group_t *key_group;
-    lv_obj_t *ui_root;
-    lv_obj_t *get_ui() { return ui_root; }
-    lv_group_t *get_key_group() { return key_group; }
-    std::function<void(void)> go_back_home;
-    bool have_bottom = false;
-
+    std::string page_title_ = "APP";
+    lv_group_t *input_group_;
+    lv_obj_t *root_screen_;
+    lv_obj_t *screen() { return root_screen_; }
+    lv_group_t *input_group() { return input_group_; }
+    std::function<void(void)> navigate_home;
+    bool has_bottom_bar_ = false;
+    int top_bar_height_px_ = 20;
 public:
-    app_()
+    AppPageRoot()
     {
         creat_base_UI();
         creat_input_group();
     }
-    virtual ~app_()
+    virtual ~AppPageRoot()
     {
-        lv_obj_del(ui_root);
-        lv_group_delete(key_group);
+        lv_obj_del(root_screen_);
+        lv_group_delete(input_group_);
     }
 
     template <typename Component>
     lv_obj_t *add_bar(Component &&component)
     {
-        return component.create(ui_root);
+        return component.create(root_screen_);
     }
 
 private:
@@ -315,37 +324,38 @@ private:
     /* ================================================================== */
     void creat_base_UI()
     {
-        ui_root = lv_obj_create(NULL);
-        lv_obj_clear_flag(ui_root, LV_OBJ_FLAG_SCROLLABLE); /// Flags
-        lv_obj_set_flex_flow(ui_root, LV_FLEX_FLOW_COLUMN);
-        lv_obj_set_flex_align(ui_root, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-        lv_obj_set_style_pad_all(ui_root, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_pad_row(ui_root, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_color(ui_root, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_opa(ui_root, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+        root_screen_ = lv_obj_create(NULL);
+        lv_obj_clear_flag(root_screen_, LV_OBJ_FLAG_SCROLLABLE); /// Flags
+        lv_obj_set_flex_flow(root_screen_, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_flex_align(root_screen_, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_set_style_pad_all(root_screen_, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_pad_row(root_screen_, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_color(root_screen_, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_opa(root_screen_, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
     }
 
     void creat_input_group()
     {
-        key_group = lv_group_create();
-        lv_group_add_obj(key_group, ui_root);
-        // lv_group_focus_obj(ui_root);
+        input_group_ = lv_group_create();
+        lv_group_add_obj(input_group_, root_screen_);
+        // lv_group_focus_obj(root_screen_);
     }
 };
 
-class UIAppTopBara : virtual public app_
+class AppTopBarRegion : virtual public AppPageRoot
 {
 public:
-    UIAppTopBara()
+    AppTopBarRegion()
     {
-        top_bar_.set_title(app_name);
+        top_bar_.set_title(page_title_);
+        top_bar_.set_height(top_bar_height_px_);
         add_bar(top_bar_);
         UI_bind_event();
         update_status_bar();
         status_timer_ = lv_timer_create(app_status_timer_cb, 5000, this);
     }
 
-    virtual ~UIAppTopBara()
+    virtual ~AppTopBarRegion()
     {
         if (status_timer_)
             lv_timer_delete(status_timer_);
@@ -363,7 +373,7 @@ public:
 
     void set_page_title(const std::string &title)
     {
-        app_name = title;
+        page_title_ = title;
         top_bar_.set_title(title);
     }
 
@@ -373,7 +383,7 @@ private:
 
     static void app_battery_event_cb(lv_event_t *e)
     {
-        UIAppTopBara *self = static_cast<UIAppTopBara *>(lv_event_get_user_data(e));
+        AppTopBarRegion *self = static_cast<AppTopBarRegion *>(lv_event_get_user_data(e));
         if (!self || lv_event_get_code(e) != LV_EVENT_BATTERY)
             return;
         const cp0_battery_info_t *bat = LV_EVENT_BATTERY_GET_INFO(e);
@@ -383,21 +393,21 @@ private:
 
     static void app_status_timer_cb(lv_timer_t *timer)
     {
-        UIAppTopBara *self = static_cast<UIAppTopBara *>(lv_timer_get_user_data(timer));
+        AppTopBarRegion *self = static_cast<AppTopBarRegion *>(lv_timer_get_user_data(timer));
         if (self)
             self->update_status_bar();
     }
 
     void UI_bind_event()
     {
-        lv_obj_add_event_cb(ui_root, app_battery_event_cb, (lv_event_code_t)LV_EVENT_BATTERY, this);
+        lv_obj_add_event_cb(root_screen_, app_battery_event_cb, (lv_event_code_t)LV_EVENT_BATTERY, this);
     }
 };
 
-class UIAppAPPBara : virtual public app_
+class AppContentRegion : virtual public AppPageRoot
 {
 public:
-    UIAppAPPBara()
+    AppContentRegion()
     {
         refresh();
         ui_APP_Container = add_bar(app_container_);
@@ -405,7 +415,7 @@ public:
 
     void refresh()
     {
-        app_container_.set_height(have_bottom ? 130 : 150);
+        app_container_.set_height(has_bottom_bar_ ? 130 : 150);
     }
 
     void refash()
@@ -413,7 +423,7 @@ public:
         refresh();
     }
 
-    virtual ~UIAppAPPBara() = default;
+    virtual ~AppContentRegion() = default;
 
     lv_obj_t *ui_APP_Container = nullptr;
 
@@ -421,47 +431,47 @@ private:
     UIAppContainer app_container_;
 };
 
-class UIAppbottomBara : virtual public app_, virtual public UIAppAPPBara
+class AppBottomBarRegion : virtual public AppPageRoot, virtual public AppContentRegion
 {
 public:
-    UIAppbottomBara()
+    AppBottomBarRegion()
     {
-        have_bottom = true;
+        has_bottom_bar_ = true;
         refresh();
 
-        ui_BOTTOM_Container = lv_obj_create(ui_root);
+        ui_BOTTOM_Container = lv_obj_create(root_screen_);
         lv_obj_remove_style_all(ui_BOTTOM_Container);
         lv_obj_set_width(ui_BOTTOM_Container, 320);
         lv_obj_set_height(ui_BOTTOM_Container, 20);
         lv_obj_clear_flag(ui_BOTTOM_Container, (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
     }
 
-    virtual ~UIAppbottomBara() = default;
+    virtual ~AppBottomBarRegion() = default;
 
     lv_obj_t *ui_BOTTOM_Container = nullptr;
 };
 
-class app_page_base : virtual public UIAppTopBara, virtual public UIAppAPPBara
+class AppPageLayout : virtual public AppTopBarRegion, virtual public AppContentRegion
 {
 public:
-    app_page_base() : app_(), UIAppTopBara(), UIAppAPPBara()
+    AppPageLayout() : AppPageRoot(), AppTopBarRegion(), AppContentRegion()
     {
     }
 
-    virtual ~app_page_base() = default;
+    virtual ~AppPageLayout() = default;
 };
 
-class app_with_bottom_bar_base : virtual public UIAppTopBara, virtual public UIAppAPPBara, virtual public UIAppbottomBara
+class AppPageWithBottomBarLayout : virtual public AppTopBarRegion, virtual public AppContentRegion, virtual public AppBottomBarRegion
 {
 public:
-    app_with_bottom_bar_base() : app_(), UIAppTopBara(), UIAppAPPBara(), UIAppbottomBara()
+    AppPageWithBottomBarLayout() : AppPageRoot(), AppTopBarRegion(), AppContentRegion(), AppBottomBarRegion()
     {
     }
 
-    virtual ~app_with_bottom_bar_base() = default;
+    virtual ~AppPageWithBottomBarLayout() = default;
 };
 
-class home_base : public app_
+class home_base : public AppPageRoot
 {
 private:
     lv_obj_t *ui_TOP_logo;
@@ -475,7 +485,7 @@ public:
     lv_obj_t *ui_APP_Container;
 
 public:
-    home_base() : app_()
+    home_base() : AppPageRoot()
     {
         creat_Top_UI();
         UI_bind_event();
@@ -542,8 +552,8 @@ private:
     /* ================================================================== */
     void creat_Top_UI()
     {
-        ui_TOP_logo = lv_img_create(ui_root);
-        lv_img_set_src(ui_TOP_logo, ui_img_zero_png);
+        ui_TOP_logo = lv_img_create(root_screen_);
+        lv_img_set_src(ui_TOP_logo, cp0_file_path_c("launcher_brand_logo.png"));
         lv_obj_set_width(ui_TOP_logo, LV_SIZE_CONTENT);  /// 49
         lv_obj_set_height(ui_TOP_logo, LV_SIZE_CONTENT); /// 12
         lv_obj_set_x(ui_TOP_logo, 5);
@@ -551,7 +561,7 @@ private:
         lv_obj_add_flag(ui_TOP_logo, LV_OBJ_FLAG_ADV_HITTEST);  /// Flags
         lv_obj_clear_flag(ui_TOP_logo, LV_OBJ_FLAG_SCROLLABLE); /// Flags
 
-        ui_TOP_time = lv_obj_create(ui_root);
+        ui_TOP_time = lv_obj_create(root_screen_);
         lv_obj_set_width(ui_TOP_time, 45);
         lv_obj_set_height(ui_TOP_time, 16);
         lv_obj_set_x(ui_TOP_time, 237);
@@ -560,7 +570,7 @@ private:
         lv_obj_set_style_radius(ui_TOP_time, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_color(ui_TOP_time, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_opa(ui_TOP_time, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_img_src(ui_TOP_time, ui_img_time_png, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_img_src(ui_TOP_time, cp0_file_path_c("status_time_background.png"), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_border_width(ui_TOP_time, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
         ui_TOP_time_Label = lv_label_create(ui_TOP_time);
         lv_obj_set_width(ui_TOP_time_Label, LV_SIZE_CONTENT);  /// 1
@@ -570,7 +580,7 @@ private:
         lv_obj_set_style_text_color(ui_TOP_time_Label, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_text_opa(ui_TOP_time_Label, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-        ui_TOP_Power = lv_bar_create(ui_root);
+        ui_TOP_Power = lv_bar_create(root_screen_);
         lv_bar_set_value(ui_TOP_Power, 96, LV_ANIM_OFF);
         lv_bar_set_start_value(ui_TOP_Power, 0, LV_ANIM_OFF);
         lv_obj_set_width(ui_TOP_Power, 29);
@@ -593,7 +603,7 @@ private:
         lv_obj_set_style_text_color(ui_TOP_power_Label, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_text_opa(ui_TOP_power_Label, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-        ui_APP_Container = lv_obj_create(ui_root);
+        ui_APP_Container = lv_obj_create(root_screen_);
         lv_obj_remove_style_all(ui_APP_Container);
         lv_obj_set_width(ui_APP_Container, 320);
         lv_obj_set_height(ui_APP_Container, 150);
@@ -605,24 +615,16 @@ private:
 
     void UI_bind_event()
     {
-        lv_obj_add_event_cb(ui_root, home_battery_event_cb, (lv_event_code_t)LV_EVENT_BATTERY, this);
+        lv_obj_add_event_cb(root_screen_, home_battery_event_cb, (lv_event_code_t)LV_EVENT_BATTERY, this);
     }
 };
 
-class tmp_app_bash : public app_page_base
+class AppPage : public AppPageLayout
 {
 public:
-    tmp_app_bash() : app_page_base()
-    {
-    }
-};
-
-class app_base : public app_page_base
-{
-public:
-    app_base() : app_page_base()
+    AppPage() : AppPageLayout()
     {
     }
 
-    ~app_base() override = default;
+    ~AppPage() override = default;
 };

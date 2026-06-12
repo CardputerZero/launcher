@@ -8,7 +8,7 @@
 
 // ============================================================
 //  Snake Game  UIGamePage
-//  Screen: 320 x 170  (ui_root 320x170)
+//  Screen: 320 x 170  (root_screen_ 320x170)
 //
 //  Layout:
 //    Title bar: 22px with "GAME - Snake" and score
@@ -24,7 +24,7 @@
 //    ENTER              - start / restart
 //    ESC                - quit to home
 // ============================================================
-class UIGamePage : public app_
+class UIGamePage : public AppPageRoot
 {
     // ---- Screen constants ----
     static constexpr int SCREEN_W    = 320;  // Overall screen width
@@ -79,7 +79,7 @@ class UIGamePage : public app_
     int               score_        = 0;
 
 public:
-    UIGamePage() : app_()
+    UIGamePage() : AppPageRoot()
     {
 
         creat_UI();
@@ -99,7 +99,7 @@ private:
     void creat_UI()
     {
         // -- Background panel --
-        bg_ = lv_obj_create(ui_root);
+        bg_ = lv_obj_create(root_screen_);
         lv_obj_set_size(bg_, SCREEN_W, SCREEN_H);
         lv_obj_set_pos(bg_, 0, 0);
         lv_obj_set_style_radius(bg_, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -342,7 +342,7 @@ private:
     // ==================== Event handling ====================
     void event_handler_init()
     {
-        lv_obj_add_event_cb(ui_root, UIGamePage::static_lvgl_handler, LV_EVENT_ALL, this);
+        lv_obj_add_event_cb(root_screen_, UIGamePage::static_lvgl_handler, LV_EVENT_ALL, this);
     }
 
     static void static_lvgl_handler(lv_event_t *e)
@@ -380,7 +380,7 @@ private:
             game_start();
             break;
         case KEY_ESC:
-            if (go_back_home) go_back_home();
+            if (navigate_home) navigate_home();
             break;
         default:
             break;
@@ -430,7 +430,7 @@ private:
             game_start();
             break;
         case KEY_ESC:
-            if (go_back_home) go_back_home();
+            if (navigate_home) navigate_home();
             break;
         default:
             break;

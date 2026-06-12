@@ -21,7 +21,7 @@
 //    - LEFT or ESC goes to parent (ESC at root goes home)
 // ============================================================
 
-class UIFilePage : public app_base
+class UIFilePage : public AppPage
 {
     struct FileEntry
     {
@@ -31,7 +31,7 @@ class UIFilePage : public app_base
     };
 
 public:
-    UIFilePage() : app_base()
+    UIFilePage() : AppPage()
     {
         set_page_title("FILES");
         current_path_ = "/";
@@ -350,7 +350,7 @@ private:
     // ==================== event binding ====================
     void event_handler_init()
     {
-        lv_obj_add_event_cb(ui_root, UIFilePage::static_lvgl_handler, LV_EVENT_ALL, this);
+        lv_obj_add_event_cb(root_screen_, UIFilePage::static_lvgl_handler, LV_EVENT_ALL, this);
     }
 
     static void static_lvgl_handler(lv_event_t *e)
@@ -397,8 +397,8 @@ private:
             case KEY_ESC:
                 if (current_path_ != "/")
                     navigate_parent();
-                else if (go_back_home)
-                    go_back_home();
+                else if (navigate_home)
+                    navigate_home();
                 break;
 
             default:

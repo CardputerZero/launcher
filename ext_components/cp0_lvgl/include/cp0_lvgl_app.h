@@ -77,6 +77,7 @@ const char *cp0_config_get_str(const char *key, const char *default_val);
 void cp0_config_set_str(const char *key, const char *val);
 void cp0_config_save(void);
 
+
 const char *cp0_file_path_c(const char *file);
 
 int cp0_dir_list(const char *path, cp0_dirent_t *entries, int max_entries, int *out_count);

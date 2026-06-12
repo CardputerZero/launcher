@@ -6,6 +6,7 @@
 #include "ui.h"
 #include <stdio.h>
 #include <sys/stat.h>
+#include <cstdlib>
 #include "lvgl/src/widgets/gif/lv_gif.h"
 #include "cp0_lvgl_app.h"
 #include "sample_log.h"
@@ -17,6 +18,13 @@
 std::unique_ptr<zero_lvgl_os> home;
 void ui_init(void)
 {
-    UILaunchPage::init_ui();
     home = std::make_unique<zero_lvgl_os>();
+}
+
+LauncherFonts &launcher_fonts()
+{
+    if (!home) {
+        std::abort();
+    }
+    return *home->fonts_;
 }

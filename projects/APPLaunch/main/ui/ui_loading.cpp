@@ -86,8 +86,7 @@ static void ensure_loading_created(void)
                                 lv_color_hex(LOADING_TEXT_COLOR), 0);
     /* Use the project's 14pt font with montserrat fallback — matches
      * the sizing of the existing hint overlay's copy. */
-    lv_font_t *font = g_font_cn_14 ? g_font_cn_14
-                                   : (lv_font_t *)&lv_font_montserrat_14;
+    lv_font_t *font = launcher_fonts().get("AlibabaPuHuiTi-3-55-Regular.ttf", 14, LV_FREETYPE_FONT_STYLE_NORMAL);
     lv_obj_set_style_text_font(s_loading_label, font, 0);
     lv_label_set_text(s_loading_label, "");
 
