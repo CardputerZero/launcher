@@ -23,8 +23,6 @@
 #include <unordered_map>
 #include <utility>
 
-/* img_path() now defined in ui_app_page.hpp */
-
 #define PANEL_BORDER_CENTER  0x444444
 #define PANEL_BORDER_SIDE    0x222222
 #define PANEL_PAD_CENTER     0
@@ -143,17 +141,17 @@ public:
     {
         // Fixed icon; users cannot modify it
         app_list.emplace_back("Python",
-                              img_path("python_100.png"), "python3", true, false);
+                              cp0_file_path("python_100.png"), "python3", true, false);
         app_list.emplace_back("STORE",
-                              img_path("store_100.png"),
+                              cp0_file_path("store_100.png"),
                               "/usr/share/APPLaunch/bin/M5CardputerZero-AppStore", false, true, true);
         app_list.emplace_back("CLI",
-                              img_path("cli_100.png"), "bash", true, false);
+                              cp0_file_path("cli_100.png"), "bash", true, false);
         app_list.emplace_back("GAME",
-                              img_path("game_100.png"), page_v<UIGamePage>);
+                              cp0_file_path("game_100.png"), page_v<UIGamePage>);
 
         app_list.emplace_back("SETTING",
-                              img_path("setting_100.png"), page_v<UISetupPage>);
+                              cp0_file_path("setting_100.png"), page_v<UISetupPage>);
 
         {
             auto it = std::next(app_list.begin(), 0);
@@ -190,40 +188,40 @@ public:
 
         if (APP_ENABLED("Music"))
         app_list.emplace_back("MUSIC",
-                              img_path("music_100.png"), page_v<UIMusicPage>);
+                              cp0_file_path("music_100.png"), page_v<UIMusicPage>);
 
         if (APP_ENABLED("Math"))
         app_list.emplace_back("MATH",
-                              img_path("math_100.png"),
+                              cp0_file_path("math_100.png"),
                               "/usr/share/APPLaunch/bin/M5CardputerZero-Calculator", false);
 
         app_list.emplace_back("Compass",
-                              img_path("compass_needle_80.png"), page_v<UICompassPage>);
+                              cp0_file_path("compass_needle_80.png"), page_v<UICompassPage>);
 
 
 #if defined(__linux__) && !defined(HAL_PLATFORM_SDL)
         if (APP_ENABLED("IP_Panel"))
         app_list.emplace_back("IP_PANEL",
-                              img_path("ip_panel_100.png"), page_v<UIIpPanelPage>);
+                              cp0_file_path("ip_panel_100.png"), page_v<UIIpPanelPage>);
         if (APP_ENABLED("File"))
         app_list.emplace_back("FILE",
-                              img_path("file_100.png"), page_v<UIFilePage>);
+                              cp0_file_path("file_100.png"), page_v<UIFilePage>);
         if (APP_ENABLED("SSH"))
         app_list.emplace_back("SSH",
-                              img_path("ssh_100.png"), page_v<UISSHPage>);
+                              cp0_file_path("ssh_100.png"), page_v<UISSHPage>);
         if (APP_ENABLED("Mesh"))
         app_list.emplace_back("MESH",
-                              img_path("mesh_100.png"), page_v<UIMeshPage>);
+                              cp0_file_path("mesh_100.png"), page_v<UIMeshPage>);
         if (APP_ENABLED("Rec"))
         app_list.emplace_back("REC",
-                              img_path("rec_100.png"), page_v<UIRecPage>);
+                              cp0_file_path("rec_100.png"), page_v<UIRecPage>);
         if (APP_ENABLED("Camera"))
         app_list.emplace_back("CAMERA",
-                              img_path("camera_100.png"), page_v<UICameraPage>);
+                              cp0_file_path("camera_100.png"), page_v<UICameraPage>);
         if (APP_ENABLED("LoRa"))
-        app_list.emplace_back("LORA", img_path("lora_100.png"), page_v<UILoraPage>);
+        app_list.emplace_back("LORA", cp0_file_path("lora_100.png"), page_v<UILoraPage>);
         if (APP_ENABLED("Tank"))
-        app_list.emplace_back("TANK", img_path("tank_100.png"), page_v<UITankBattlePage>);
+        app_list.emplace_back("TANK", cp0_file_path("tank_100.png"), page_v<UITankBattlePage>);
 #endif
         #undef APP_ENABLED
 

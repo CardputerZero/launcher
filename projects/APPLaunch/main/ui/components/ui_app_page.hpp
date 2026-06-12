@@ -19,15 +19,6 @@
 #include "cp0_lvgl_file.hpp"
 #define APP_CONSOLE_EXIT_EVENT (lv_event_code_t)(LV_EVENT_LAST + 1)
 
-static inline std::string img_path(const char *name)
-{
-    return cp0_file_path(name);
-}
-static inline std::string audio_path(const char *name)
-{
-    return cp0_file_path(name);
-}
-
 class UIAppTopBar
 {
 public:

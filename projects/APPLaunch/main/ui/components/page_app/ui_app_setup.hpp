@@ -128,13 +128,13 @@ private:
 
     void cache_image_paths()
     {
-        img_arrow_up_    = img_path("setting_red_up.png");
-        img_arrow_down_  = img_path("setting_red_down.png");
-        img_right_arrow_ = img_path("setting_right_arrow.png");
-        img_ok_          = img_path("setting_ok.png");
-        img_cross_       = img_path("setting_cross.png");
-        snd_enter_       = audio_path("key_enter.wav");
-        snd_back_        = audio_path("key_back.wav");
+        img_arrow_up_    = cp0_file_path("setting_red_up.png");
+        img_arrow_down_  = cp0_file_path("setting_red_down.png");
+        img_right_arrow_ = cp0_file_path("setting_right_arrow.png");
+        img_ok_          = cp0_file_path("setting_ok.png");
+        img_cross_       = cp0_file_path("setting_cross.png");
+        snd_enter_       = cp0_file_path("key_enter.wav");
+        snd_back_        = cp0_file_path("key_back.wav");
     }
 
     // ==================== Menu init ====================
