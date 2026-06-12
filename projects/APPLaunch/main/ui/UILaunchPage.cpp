@@ -318,7 +318,7 @@ void switch_left(lv_event_t *e)
 void go_back_home(lv_event_t *e)
 {
     lv_disp_load_scr(ui_Screen1);
-    lv_indev_set_group(lv_indev_get_next(NULL), Screen1group);
+    UILaunchPage::bind_home_input_group();
 }
 
 
@@ -453,6 +453,7 @@ char mono_font_path_buf[512];
 char gif_path[256];
 const char *font_path = nullptr;
 const char *mono_font_path = nullptr;
+lv_group_t *home_input_group = nullptr;
 
 } // namespace
 
@@ -521,12 +522,37 @@ void UILaunchPage::init_fonts()
     if (!g_font_bold_12) g_font_bold_12 = (lv_font_t *)&lv_font_montserrat_12;
 }
 
+lv_group_t *UILaunchPage::home_input_group()
+{
+    return ::home_input_group;
+}
+
+void UILaunchPage::bind_home_input_group()
+{
+    lv_indev_t *indev = lv_indev_get_next(NULL);
+    if (indev) {
+        lv_indev_set_group(indev, ::home_input_group);
+    }
+}
+
+void UILaunchPage::init_input_group()
+{
+    if (::home_input_group) {
+        bind_home_input_group();
+        return;
+    }
+
+    ::home_input_group = lv_group_create();
+    lv_group_add_obj(::home_input_group, ui_Screen1);
+    bind_home_input_group();
+}
+
 void UILaunchPage::load_home_screen()
 {
     SLOGI("[HOME] home_screen_load() - loading launcher home screen");
     ui____initial_actions0 = lv_obj_create(NULL);
     lv_disp_load_scr(ui_Screen1);
-    lv_indev_set_group(lv_indev_get_next(NULL), Screen1group);
+    UILaunchPage::bind_home_input_group();
 
     cp0_signal_audio_api_play_asset("startup.mp3");
 }
@@ -571,7 +597,7 @@ void UILaunchPage::init_ui()
     ui_info_bind();
     launch_circle_init();
 
-    input_group_init();
+    init_input_group();
 
 #ifndef APPLAUNCH_STARTUP_ANIMATION
     load_home_screen();

@@ -252,7 +252,7 @@ public:
         auto self = (LaunchImpl *)arg;
         SLOGI("[HOME] lv_go_back_home executing (page=%p)", self->app_Page.get());
         lv_timer_enable(true);
-        lv_indev_set_group(lv_indev_get_next(NULL), Screen1group);
+        UILaunchPage::bind_home_input_group();
         lv_disp_load_scr(ui_Screen1);
         lv_refr_now(NULL);
         if (self->app_Page)
@@ -307,7 +307,7 @@ public:
         SLOGI("App %s exited with code %d", exec.c_str(), ret);
         lv_timer_enable(true);
         if (indev)
-            lv_indev_set_group(indev, Screen1group);
+            lv_indev_set_group(indev, UILaunchPage::home_input_group());
         lv_disp_load_scr(ui_Screen1);
         /* Child process has returned; we are back on the launcher home.
          * Hide the overlay so it doesn't linger. */

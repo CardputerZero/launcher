@@ -18,7 +18,6 @@ extern "C"
 #include "components/ui_comp.h"
 #include "components/ui_comp_hook.h"
 #include "ui_events.h"
-#include "ui_input_group.h"
 #include "keyboard_input.h"
 #include "cp0_lvgl_app.h"
 

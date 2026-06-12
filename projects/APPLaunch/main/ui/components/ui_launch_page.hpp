@@ -579,7 +579,7 @@ private:
         int ret = cp0_process_exec_blocking(it->Exec.c_str(), &LVGL_HOME_KEY_FLAG, 0);
         SLOGI("App %s exited with code %d", it->Exec.c_str(), ret);
         lv_timer_enable(true);
-        if (indev) lv_indev_set_group(lv_indev_get_next(NULL), Screen1group);
+        if (indev) lv_indev_set_group(lv_indev_get_next(NULL), get_key_group());
         lv_disp_load_scr(ui_Screen1);
         lv_refr_now(disp);
     }
