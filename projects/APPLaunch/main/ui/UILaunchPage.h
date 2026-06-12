@@ -12,9 +12,9 @@ public:
     explicit UILaunchPage(std::shared_ptr<Launch> launch);
     ~UILaunchPage();
 
-    static void load_home_screen();
-    static void start_startup_gif();
-    static void create_screen();
+    void load_home_screen();
+    void start_startup_gif();
+    void create_screen();
     enum LauncherCarouselElement : size_t {
         kCardFarLeft = 0,
         kCardLeft,
@@ -34,11 +34,15 @@ public:
         kLauncherCarouselElementCount,
     };
 
-    static void init_input_group();
+    void init_input_group();
     static void bind_home_input_group();
     static lv_group_t *home_input_group();
     static lv_obj_t *panel(size_t slot);
     static lv_obj_t *label(size_t slot);
+
+    void update_left_slot(lv_obj_t *panel, lv_obj_t *label);
+    void update_right_slot(lv_obj_t *panel, lv_obj_t *label);
+    void launch_selected_app();
 
     static std::array<lv_obj_t *, kLauncherCarouselElementCount> carousel_elements;
 

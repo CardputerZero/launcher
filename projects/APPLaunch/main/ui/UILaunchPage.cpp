@@ -24,9 +24,16 @@ static void rotate_carousel_right(size_t start, size_t end)
     std::rotate(items.begin() + start, items.begin() + end, items.begin() + end + 1);
 }
 
-extern "C" {
+namespace {
 
 typedef void (*switch_cb_t)(lv_event_t *);
+
+UILaunchPage *active_launch_page = nullptr;
+
+static void switch_left(lv_event_t *e);
+static void switch_right(lv_event_t *e);
+static void app_launch(lv_event_t *e);
+static void main_key_switch(lv_event_t *e);
 
 // ==================== standard layout for carousel slots ====================
 
@@ -214,7 +221,7 @@ static void snap_all_panels()
 // Switch right; called when the right arrow is clicked
 // ============================================================
 
-void switch_right(lv_event_t *e)
+static void switch_right(lv_event_t *e)
 {
     if (is_animating)
     {
@@ -234,7 +241,8 @@ void switch_right(lv_event_t *e)
 
     snap_label_to_slot(UILaunchPage::carousel_elements[9], 5);
 
-    cpp_app_right(UILaunchPage::carousel_elements[4], UILaunchPage::carousel_elements[9]);
+    if (active_launch_page)
+        active_launch_page->update_right_slot(UILaunchPage::carousel_elements[4], UILaunchPage::carousel_elements[9]);
 
     switchpanleEnableClick(2, 0);
     rotate_carousel_right(0, 4);
@@ -254,7 +262,7 @@ void switch_right(lv_event_t *e)
 // Switch left; called when the left arrow is clicked
 // ============================================================
 
-void switch_left(lv_event_t *e)
+static void switch_left(lv_event_t *e)
 {
     if (is_animating)
     {
@@ -274,7 +282,8 @@ void switch_left(lv_event_t *e)
 
     snap_label_to_slot(UILaunchPage::carousel_elements[5], 9);
 
-    cpp_app_left(UILaunchPage::carousel_elements[0], UILaunchPage::carousel_elements[5]);
+    if (active_launch_page)
+        active_launch_page->update_left_slot(UILaunchPage::carousel_elements[0], UILaunchPage::carousel_elements[5]);
 
     switchpanleEnableClick(2, 0);
     rotate_carousel_left(0, 4);
@@ -295,14 +304,14 @@ void switch_left(lv_event_t *e)
 // screen / app
 // ============================================================
 
-void go_back_home(lv_event_t *e)
+static void go_back_home(lv_event_t *e)
 {
     lv_disp_load_scr(ui_Screen1);
     UILaunchPage::bind_home_input_group();
 }
 
 
-void ui_event_Screen1(lv_event_t *e)
+static void ui_event_Screen1(lv_event_t *e)
 {
     if (lv_event_get_code(e) == LV_EVENT_KEYBOARD)
     {
@@ -311,9 +320,10 @@ void ui_event_Screen1(lv_event_t *e)
 }
 
 
-void app_launch(lv_event_t *e)
+static void app_launch(lv_event_t *e)
 {
-    cpp_app_launch();
+    if (active_launch_page)
+        active_launch_page->launch_selected_app();
 }
 
 
@@ -345,7 +355,7 @@ static uint32_t fzxc_to_arrow(uint32_t key)
 
 static int lvping_lock = 0;
 
-void main_key_switch(lv_event_t *e)
+static void main_key_switch(lv_event_t *e)
 {
     struct key_item *elm = (struct key_item *)lv_event_get_param(e);
     uint32_t code = fzxc_to_arrow(elm->key_code);
@@ -423,7 +433,7 @@ void main_key_switch(lv_event_t *e)
 }
 
 
-} // extern "C"
+} // namespace
 
 namespace {
 
@@ -535,7 +545,8 @@ static void ui_event_logo_over(lv_event_t *e)
         SLOGI("[GIF] first LV_EVENT_READY -> pause + home_screen_load()");
         if (startup_gif) lv_gif_pause(startup_gif);
 
-        UILaunchPage::load_home_screen();
+        if (active_launch_page)
+            active_launch_page->load_home_screen();
     }
 }
 
@@ -549,22 +560,35 @@ void UILaunchPage::start_startup_gif()
     lv_disp_load_scr(startup_gif);
 }
 
-extern "C" void home_screen_load()
-{
-    UILaunchPage::load_home_screen();
-}
-
-extern "C" void start_startup_gif()
-{
-    UILaunchPage::start_startup_gif();
-}
-
 UILaunchPage::UILaunchPage(std::shared_ptr<Launch> launch)
     : home_base(), launch_(std::move(launch))
 {
+    active_launch_page = this;
 }
 
-UILaunchPage::~UILaunchPage() = default;
+UILaunchPage::~UILaunchPage()
+{
+    if (active_launch_page == this)
+        active_launch_page = nullptr;
+}
+
+void UILaunchPage::update_left_slot(lv_obj_t *panel, lv_obj_t *label)
+{
+    if (launch_)
+        launch_->update_left_slot(panel, label);
+}
+
+void UILaunchPage::update_right_slot(lv_obj_t *panel, lv_obj_t *label)
+{
+    if (launch_)
+        launch_->update_right_slot(panel, label);
+}
+
+void UILaunchPage::launch_selected_app()
+{
+    if (launch_)
+        launch_->launch_app();
+}
 
 void UILaunchPage::create_screen()
 {
@@ -958,9 +982,4 @@ void UILaunchPage::create_app_container(lv_obj_t *parent)
     lv_obj_add_event_cb(ui_Screen1, main_key_switch, (lv_event_code_t)LV_EVENT_KEYBOARD, NULL);
 
 
-}
-
-extern "C" void ui_Screen1_screen_init(void)
-{
-    UILaunchPage::create_screen();
 }

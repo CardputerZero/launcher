@@ -19,6 +19,7 @@ std::unique_ptr<zero_lvgl_os> home;
 void ui_init(void)
 {
     home = std::make_unique<zero_lvgl_os>();
+    home->start();
 }
 
 LauncherFonts &launcher_fonts()
