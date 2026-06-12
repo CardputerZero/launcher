@@ -185,7 +185,7 @@ private:
         lv_obj_set_style_radius(circle_[1], 17, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_color(circle_[1], lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_opa(circle_[1], 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_img_src(circle_[1], ui_img_store_logo_png, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_img_src(circle_[1], cp0_file_path_c("store_100.png"), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_border_color(circle_[1], lv_color_hex(0x333333), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_border_opa(circle_[1], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
@@ -200,7 +200,7 @@ private:
         lv_obj_set_style_radius(circle_[2], 22, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_color(circle_[2], lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_opa(circle_[2], 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_img_src(circle_[2], ui_img_cli_logo_png, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_img_src(circle_[2], cp0_file_path_c("cli_100.png"), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_border_color(circle_[2], lv_color_hex(0x333333), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_border_opa(circle_[2], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
@@ -215,7 +215,7 @@ private:
         lv_obj_set_style_radius(circle_[3], 17, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_color(circle_[3], lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_opa(circle_[3], 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_img_src(circle_[3], ui_img_claw_logo_png, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_img_src(circle_[3], cp0_file_path_c("claw_100.png"), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_border_color(circle_[3], lv_color_hex(0x333333), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_border_opa(circle_[3], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
@@ -231,7 +231,7 @@ private:
         lv_obj_set_style_radius(circle_[0], 17, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_color(circle_[0], lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_opa(circle_[0], 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_img_src(circle_[0], ui_img_python_logo_png, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_img_src(circle_[0], cp0_file_path_c("python_100.png"), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_border_color(circle_[0], lv_color_hex(0x333333), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_border_opa(circle_[0], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
@@ -247,7 +247,7 @@ private:
         lv_obj_set_style_radius(circle_[4], 17, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_color(circle_[4], lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_opa(circle_[4], 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_img_src(circle_[4], ui_img_setting_logo_png, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_img_src(circle_[4], cp0_file_path_c("setting_100.png"), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_border_color(circle_[4], lv_color_hex(0x333333), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_border_opa(circle_[4], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
@@ -320,7 +320,7 @@ private:
         lv_obj_set_style_radius(ui_obj_["ui_rightButton"], 0, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_color(ui_obj_["ui_rightButton"], lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_opa(ui_obj_["ui_rightButton"], 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_img_src(ui_obj_["ui_rightButton"], ui_img_right_png, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_img_src(ui_obj_["ui_rightButton"], cp0_file_path_c("carousel_right_arrow.png"), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_shadow_color(ui_obj_["ui_rightButton"], lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_shadow_opa(ui_obj_["ui_rightButton"], 0, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_add_event_cb(ui_obj_["ui_rightButton"], [](lv_event_t *e){
@@ -339,7 +339,7 @@ private:
         lv_obj_set_style_radius(ui_obj_["ui_leftButton"], 0, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_color(ui_obj_["ui_leftButton"], lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_opa(ui_obj_["ui_leftButton"], 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_img_src(ui_obj_["ui_leftButton"], ui_img_left_png, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_img_src(ui_obj_["ui_leftButton"], cp0_file_path_c("carousel_left_arrow.png"), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_shadow_color(ui_obj_["ui_leftButton"], lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_shadow_opa(ui_obj_["ui_leftButton"], 0, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_add_event_cb(ui_obj_["ui_leftButton"], [](lv_event_t *e){

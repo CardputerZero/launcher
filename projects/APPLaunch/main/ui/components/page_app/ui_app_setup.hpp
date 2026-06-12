@@ -42,7 +42,7 @@
 //  Actual HAL integration: WiFi scan/connect, brightness, volume, power, reboot, about
 // ============================================================
 
-class UISetupPage : public app_base
+class UISetupPage : public AppPage
 {
     enum class ViewState { MAIN, SUB, VALUE_SELECT, WIFI_LIST, WIFI_PW };
 
@@ -61,7 +61,7 @@ class UISetupPage : public app_base
     };
 
 public:
-    UISetupPage() : app_base()
+    UISetupPage() : AppPage()
     {
         set_page_title("SETTING");
         cache_image_paths();
@@ -417,7 +417,7 @@ private:
         }
         lv_obj_set_pos(title, 8, 2);
         lv_obj_set_style_text_color(title, lv_color_hex(0x58A6FF), LV_PART_MAIN);
-        lv_obj_set_style_text_font(title, g_font_bold_12 ? g_font_bold_12 : &lv_font_montserrat_12, LV_PART_MAIN);
+        lv_obj_set_style_text_font(title, launcher_fonts().get("Montserrat-Bold.ttf", 12, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN);
 
         // Column headers
         lv_obj_t *h1 = lv_label_create(cont);
@@ -874,7 +874,7 @@ private:
             y += lv_obj_get_height(lbl) + 3;
         };
 
-        add_line("Help", 0x58A6FF, g_font_bold_14 ? g_font_bold_14 : &lv_font_montserrat_14);
+        add_line("Help", 0x58A6FF, launcher_fonts().get("Montserrat-Bold.ttf", 16, LV_FREETYPE_FONT_STYLE_BOLD));
         add_line("Screenshot: Ctrl+Alt+S", 0xCCCCCC, &lv_font_montserrat_12);
         add_line("  Saved to ~/Screenshots", 0x888888, &lv_font_montserrat_10);
         add_line("Home: Hold ESC 5s", 0xCCCCCC, &lv_font_montserrat_12);
@@ -1253,11 +1253,11 @@ private:
     RowStyle style_for_slot(int vi) {
         int dist = vi > ROW_CENTER ? vi - ROW_CENTER : ROW_CENTER - vi;
         if (dist == 0)
-            return {g_font_bold_20 ? g_font_bold_20 : &lv_font_montserrat_20, 0xFFFFFF, MENU_X, 255};
+            return {launcher_fonts().get("Montserrat-Bold.ttf", 18, LV_FREETYPE_FONT_STYLE_BOLD), 0xFFFFFF, MENU_X, 255};
         if (dist == 1)
-            return {g_font_bold_14 ? g_font_bold_14 : &lv_font_montserrat_16, 0xAAAAAA, MENU_X, 220};
+            return {launcher_fonts().get("Montserrat-Bold.ttf", 16, LV_FREETYPE_FONT_STYLE_BOLD), 0xAAAAAA, MENU_X, 220};
         if (dist == 2)
-            return {g_font_bold_12 ? g_font_bold_12 : &lv_font_montserrat_14, 0x777777, MENU_X, 170};
+            return {launcher_fonts().get("Montserrat-Bold.ttf", 12, LV_FREETYPE_FONT_STYLE_BOLD), 0x777777, MENU_X, 170};
         return {&lv_font_montserrat_12, 0x555555, MENU_X, 130};
     }
 
@@ -1275,13 +1275,13 @@ private:
         int opa;
         if (!smaller) {
             if (dist == 0) {
-                font = g_font_bold_20 ? g_font_bold_20 : &lv_font_montserrat_18;
+                font = launcher_fonts().get("Montserrat-Bold.ttf", 18, LV_FREETYPE_FONT_STYLE_BOLD);
                 color = 0xFFFFFF; opa = 255;
             } else if (dist == 1) {
-                font = g_font_bold_14 ? g_font_bold_14 : &lv_font_montserrat_16;
+                font = launcher_fonts().get("Montserrat-Bold.ttf", 16, LV_FREETYPE_FONT_STYLE_BOLD);
                 color = 0xAAAAAA; opa = 220;
             } else if (dist == 2) {
-                font = g_font_bold_12 ? g_font_bold_12 : &lv_font_montserrat_14;
+                font = launcher_fonts().get("Montserrat-Bold.ttf", 12, LV_FREETYPE_FONT_STYLE_BOLD);
                 color = 0x777777; opa = 170;
             } else {
                 font = &lv_font_montserrat_12;
@@ -1290,10 +1290,10 @@ private:
         } else {
             // Smaller variant for sub-menu / right column
             if (dist == 0) {
-                font = g_font_bold_14 ? g_font_bold_14 : &lv_font_montserrat_16;
+                font = launcher_fonts().get("Montserrat-Bold.ttf", 16, LV_FREETYPE_FONT_STYLE_BOLD);
                 color = 0xFFFFFF; opa = 255;
             } else if (dist == 1) {
-                font = g_font_bold_12 ? g_font_bold_12 : &lv_font_montserrat_14;
+                font = launcher_fonts().get("Montserrat-Bold.ttf", 12, LV_FREETYPE_FONT_STYLE_BOLD);
                 color = 0xAAAAAA; opa = 220;
             } else if (dist == 2) {
                 font = &lv_font_montserrat_12;
@@ -1389,7 +1389,7 @@ private:
         hint_lbl_ = lv_label_create(cont);
         lv_label_set_text(hint_lbl_, "ok:enter");
         lv_obj_set_style_text_color(hint_lbl_, lv_color_hex(0x00CC66), LV_PART_MAIN);
-        lv_obj_set_style_text_font(hint_lbl_, g_font_bold_14 ? g_font_bold_14 : &lv_font_montserrat_14, LV_PART_MAIN);
+        lv_obj_set_style_text_font(hint_lbl_, launcher_fonts().get("Montserrat-Bold.ttf", 16, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN);
         lv_obj_update_layout(hint_lbl_);
         int hint_w = lv_obj_get_width(hint_lbl_);
         int hint_h = lv_obj_get_height(hint_lbl_);
@@ -1594,7 +1594,7 @@ private:
         else
             lv_label_set_text(hint, "ok:enter");
         lv_obj_set_style_text_color(hint, lv_color_hex(0x00CC66), LV_PART_MAIN);
-        lv_obj_set_style_text_font(hint, g_font_bold_14 ? g_font_bold_14 : &lv_font_montserrat_14, LV_PART_MAIN);
+        lv_obj_set_style_text_font(hint, launcher_fonts().get("Montserrat-Bold.ttf", 16, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN);
         lv_obj_update_layout(hint);
         int sub_hint_w = lv_obj_get_width(hint);
         int sub_hint_h = lv_obj_get_height(hint);
@@ -1666,7 +1666,7 @@ private:
         lv_obj_t *hint = lv_label_create(cont);
         lv_label_set_text(hint, "ok:set");
         lv_obj_set_style_text_color(hint, lv_color_hex(0x00CC66), LV_PART_MAIN);
-        lv_obj_set_style_text_font(hint, g_font_bold_14 ? g_font_bold_14 : &lv_font_montserrat_14, LV_PART_MAIN);
+        lv_obj_set_style_text_font(hint, launcher_fonts().get("Montserrat-Bold.ttf", 16, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN);
         lv_obj_update_layout(hint);
         int val_hint_w = lv_obj_get_width(hint);
         int val_hint_h = lv_obj_get_height(hint);
@@ -1763,7 +1763,7 @@ private:
     // ==================== Events ====================
     void event_handler_init()
     {
-        lv_obj_add_event_cb(ui_root, UISetupPage::static_handler, LV_EVENT_ALL, this);
+        lv_obj_add_event_cb(root_screen_, UISetupPage::static_handler, LV_EVENT_ALL, this);
     }
     static void static_handler(lv_event_t *e)
     {
@@ -1852,7 +1852,7 @@ private:
         }
         case KEY_ESC:
             play_back();
-            if (go_back_home) go_back_home();
+            if (navigate_home) navigate_home();
             break;
         default:
             break;

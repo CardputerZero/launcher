@@ -18,7 +18,7 @@
 //    VIEW_TERMINAL -- Embedded UIConsolePage running ssh
 // ============================================================
 
-class UISSHPage : public app_base
+class UISSHPage : public AppPage
 {
     enum class ViewState { INPUT, TERMINAL };
 
@@ -29,7 +29,7 @@ class UISSHPage : public app_base
     };
 
 public:
-    UISSHPage() : app_base()
+    UISSHPage() : AppPage()
     {
         set_page_title("SSH");
         fields_.resize(3);
@@ -226,20 +226,19 @@ private:
         // Create console page
         console_page_ = std::make_shared<UIConsolePage>();
 
-        // Save our own go_back_home so we can restore the input view
-        auto self_go_home = this->go_back_home;
-        console_page_->go_back_home = [this, self_go_home]() {
+        // Restore the SSH input view when the embedded console exits.
+        console_page_->navigate_home = [this]() {
             // Return to the SSH input view
             console_page_.reset();
             // Switch screen back to our root
-            lv_disp_load_scr(this->get_ui());
-            lv_indev_set_group(lv_indev_get_next(NULL), this->get_key_group());
+            lv_disp_load_scr(this->screen());
+            lv_indev_set_group(lv_indev_get_next(NULL), this->input_group());
         };
 
         // Switch to console screen
         view_state_ = ViewState::TERMINAL;
-        lv_disp_load_scr(console_page_->get_ui());
-        lv_indev_set_group(lv_indev_get_next(NULL), console_page_->get_key_group());
+        lv_disp_load_scr(console_page_->screen());
+        lv_indev_set_group(lv_indev_get_next(NULL), console_page_->input_group());
 
         // Launch ssh command
         console_page_->exec(cmd);
@@ -248,7 +247,7 @@ private:
     // ==================== event binding ====================
     void event_handler_init()
     {
-        lv_obj_add_event_cb(ui_root, UISSHPage::static_lvgl_handler, LV_EVENT_ALL, this);
+        lv_obj_add_event_cb(root_screen_, UISSHPage::static_lvgl_handler, LV_EVENT_ALL, this);
     }
 
     static void static_lvgl_handler(lv_event_t *e)
@@ -289,7 +288,7 @@ private:
                 break;
 
             case KEY_ESC:
-                if (go_back_home) go_back_home();
+                if (navigate_home) navigate_home();
                 break;
 
             case KEY_BACKSPACE:

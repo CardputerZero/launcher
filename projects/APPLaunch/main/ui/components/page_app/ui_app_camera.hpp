@@ -270,13 +270,13 @@ private:
 };
 } // namespace camera_app
 
-class UICameraPage : public app_base
+class UICameraPage : public AppPage
 {
 public:
-    UICameraPage() : app_base()
+    UICameraPage() : AppPage()
     {
-        app_name = "CAMERA";
-        set_page_title(app_name);
+        page_title_ = "CAMERA";
+        set_page_title(page_title_);
         build_ui();
         bind_keyboard();
         start_camera();
@@ -461,7 +461,7 @@ private:
 
     void build_bottom_bar()
     {
-        bottom_bar_ = lv_obj_create(ui_root);
+        bottom_bar_ = lv_obj_create(root_screen_);
         camera_app::clear_obj(bottom_bar_);
         lv_obj_set_size(bottom_bar_, camera_app::kScreenW, camera_app::kBottomH);
         lv_obj_set_pos(bottom_bar_, 0, 145);
@@ -488,7 +488,7 @@ private:
 
     void build_delete_dialog()
     {
-        dialog_scrim_ = lv_obj_create(ui_root);
+        dialog_scrim_ = lv_obj_create(root_screen_);
         camera_app::clear_obj(dialog_scrim_);
         lv_obj_set_size(dialog_scrim_, camera_app::kScreenW, 170);
         lv_obj_set_pos(dialog_scrim_, 0, 0);
@@ -541,7 +541,7 @@ private:
 
     void build_info_panel()
     {
-        info_scrim_ = lv_obj_create(ui_root);
+        info_scrim_ = lv_obj_create(root_screen_);
         camera_app::clear_obj(info_scrim_);
         lv_obj_set_size(info_scrim_, camera_app::kScreenW, 170);
         lv_obj_set_pos(info_scrim_, 0, 0);
@@ -590,7 +590,7 @@ private:
 
     void bind_keyboard()
     {
-        lvgl_add_call(ui_root, [this](lv_event_code_t c, void *event_param, void *) {
+        lvgl_add_call(root_screen_, [this](lv_event_code_t c, void *event_param, void *) {
             if (c != static_cast<lv_event_code_t>(LV_EVENT_KEYBOARD))
                 return;
             struct key_item *key = static_cast<struct key_item *>(event_param);
@@ -733,8 +733,8 @@ private:
             show_page(Page::Camera);
             return;
         }
-        if (go_back_home)
-            go_back_home();
+        if (navigate_home)
+            navigate_home();
     }
 
     void show_page(Page page)

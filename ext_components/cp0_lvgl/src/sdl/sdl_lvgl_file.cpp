@@ -5,6 +5,7 @@
 #include <cctype>
 #include <limits.h>
 #include <string>
+#include <unordered_map>
 #include <unistd.h>
 #include <vector>
 
@@ -215,6 +216,7 @@ std::string app_relative_path(const std::string &root_path, const std::string &f
 
     return make_relative_to_cwd(absolute_path);
 }
+
 } // namespace
 
 std::string cp0_file_path(std::string file)
@@ -256,7 +258,11 @@ std::string cp0_file_path(std::string file)
 
 extern "C" const char *cp0_file_path_c(const char *file)
 {
-    static thread_local std::string path;
-    path = cp0_file_path(file ? std::string(file) : std::string());
-    return path.c_str();
+    static thread_local std::unordered_map<std::string, std::string> paths;
+    std::string key = file ? std::string(file) : std::string();
+    auto it = paths.find(key);
+    if (it == paths.end()) {
+        it = paths.emplace(key, cp0_file_path(key)).first;
+    }
+    return it->second.c_str();
 }

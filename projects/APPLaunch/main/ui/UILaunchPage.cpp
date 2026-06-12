@@ -199,7 +199,7 @@ static void snap_all_panels()
 
     // Reset all label fonts to bold
     for (int i = 5; i < 10; i++) {
-        lv_obj_set_style_text_font(UILaunchPage::carousel_elements[i], g_font_bold_14, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_text_font(UILaunchPage::carousel_elements[i], launcher_fonts().get("Montserrat-Bold.ttf", 16, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN | LV_STATE_DEFAULT);
     }
 
     if (pending_switch) {
@@ -427,79 +427,58 @@ void main_key_switch(lv_event_t *e)
 
 namespace {
 
-char img_path_buf[16][256];
-char regular_font_path[512];
-char mono_font_path_buf[512];
 char gif_path[256];
-const char *font_path = nullptr;
-const char *mono_font_path = nullptr;
 lv_group_t *home_input_group = nullptr;
 
 } // namespace
 
 lv_obj_t *startup_gif = nullptr;
 
-void UILaunchPage::init_images()
+LauncherFonts::~LauncherFonts()
 {
-    struct ImagePath {
-        const char **ptr;
-        const char *name;
-    };
-
-    ImagePath table[] = {
-        {&ui_img_zero_png, "zero.png"},
-        {&ui_img_time_png, "time_bg.png"},
-        {&ui_img_battery_bg_png, "battery_bg.png"},
-        {&ui_img_left_png, "left.png"},
-        {&ui_img_right_png, "right.png"},
-        {&ui_img_zero_logo_w_png, "zero_logo_w.png"},
-        {&ui_img_left_logo_png, "left_logo.png"},
-        {&ui_img_right_logo_png, "right_logo.png"},
-        {&ui_img_detail_info_png, "detail_info.png"},
-        {&ui_img_down_logo_png, "down_logo.png"},
-        {&ui_img_up_logo_png, "up_logo.png"},
-        {&ui_img_camera_png, "camera.png"},
-    };
-
-    int count = sizeof(table) / sizeof(table[0]);
-    for (int i = 0; i < count && i < 16; ++i) {
-        snprintf(img_path_buf[i], sizeof(img_path_buf[i]), "%s", cp0_file_path(table[i].name).c_str());
-        *table[i].ptr = img_path_buf[i];
-    }
+    release();
 }
 
-void UILaunchPage::init_fonts()
+lv_font_t *LauncherFonts::get(const char *ttf_name, uint16_t size, lv_freetype_font_style_t style)
 {
-    snprintf(regular_font_path, sizeof(regular_font_path), "%s", cp0_file_path("AlibabaPuHuiTi-3-55-Regular.ttf").c_str());
-    snprintf(mono_font_path_buf, sizeof(mono_font_path_buf), "%s", cp0_file_path("LiberationMono-Regular.ttf").c_str());
-    font_path = regular_font_path;
-    mono_font_path = mono_font_path_buf;
+    const std::string font_key = key(ttf_name, size, style);
+    auto it = fonts_.find(font_key);
+    if (it != fonts_.end()) {
+        return it->second ? it->second : fallback(size);
+    }
 
-    g_font_cn_20 = lv_freetype_font_create(font_path, LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 20,
-                                           LV_FREETYPE_FONT_STYLE_NORMAL);
-    g_font_cn_14 = lv_freetype_font_create(font_path, LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 14,
-                                           LV_FREETYPE_FONT_STYLE_NORMAL);
-    g_font_cn_12 = lv_freetype_font_create(font_path, LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 12,
-                                           LV_FREETYPE_FONT_STYLE_BOLD);
-    g_font_mono_12 = lv_freetype_font_create(mono_font_path, LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 12,
-                                             LV_FREETYPE_FONT_STYLE_NORMAL);
+    lv_font_t *font = lv_freetype_font_create(cp0_file_path_c(ttf_name), LV_FREETYPE_FONT_RENDER_MODE_BITMAP,
+                                              size, style);
+    fonts_[font_key] = font;
+    return font ? font : fallback(size);
+}
 
-    char bold_path[512];
-    snprintf(bold_path, sizeof(bold_path), "%s", cp0_file_path("Montserrat-Bold.ttf").c_str());
-    g_font_bold_20 = lv_freetype_font_create(bold_path, LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 18,
-                                             LV_FREETYPE_FONT_STYLE_BOLD);
-    g_font_bold_14 = lv_freetype_font_create(bold_path, LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 16,
-                                             LV_FREETYPE_FONT_STYLE_BOLD);
-    g_font_bold_12 = lv_freetype_font_create(bold_path, LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 12,
-                                             LV_FREETYPE_FONT_STYLE_BOLD);
+void LauncherFonts::release()
+{
+    for (auto &item : fonts_) {
+        if (item.second) {
+            lv_freetype_font_delete(item.second);
+            item.second = nullptr;
+        }
+    }
+    fonts_.clear();
+}
 
-    if (!g_font_cn_20) g_font_cn_20 = (lv_font_t *)&lv_font_montserrat_20;
-    if (!g_font_cn_14) g_font_cn_14 = (lv_font_t *)&lv_font_montserrat_14;
-    if (!g_font_cn_12) g_font_cn_12 = (lv_font_t *)&lv_font_montserrat_12;
-    if (!g_font_mono_12) g_font_mono_12 = (lv_font_t *)&lv_font_montserrat_12;
-    if (!g_font_bold_20) g_font_bold_20 = (lv_font_t *)&lv_font_montserrat_18;
-    if (!g_font_bold_14) g_font_bold_14 = (lv_font_t *)&lv_font_montserrat_14;
-    if (!g_font_bold_12) g_font_bold_12 = (lv_font_t *)&lv_font_montserrat_12;
+lv_font_t *LauncherFonts::fallback(uint16_t size) const
+{
+    if (size >= 18) {
+        return (lv_font_t *)&lv_font_montserrat_20;
+    }
+    if (size >= 14) {
+        return (lv_font_t *)&lv_font_montserrat_14;
+    }
+    return (lv_font_t *)&lv_font_montserrat_12;
+}
+
+std::string LauncherFonts::key(const char *ttf_name, uint16_t size, lv_freetype_font_style_t style)
+{
+    return std::string(ttf_name ? ttf_name : "") + "#" + std::to_string(size) + "#" +
+           std::to_string(static_cast<int>(style));
 }
 
 lv_group_t *UILaunchPage::home_input_group()
@@ -570,42 +549,6 @@ void UILaunchPage::start_startup_gif()
     lv_disp_load_scr(startup_gif);
 }
 
-void UILaunchPage::init_ui()
-{
-    init_images();
-    init_fonts();
-
-    LV_EVENT_GET_COMP_CHILD = lv_event_register_id();
-
-    lv_disp_t *dispp = lv_disp_get_default();
-    lv_theme_t *theme = lv_theme_default_init(dispp, lv_palette_main(LV_PALETTE_BLUE),
-                                              lv_palette_main(LV_PALETTE_RED), false, LV_FONT_DEFAULT);
-    lv_disp_set_theme(dispp, theme);
-
-    create_screen();
-
-    ui_info_bind();
-    init_input_group();
-
-#ifndef APPLAUNCH_STARTUP_ANIMATION
-    load_home_screen();
-#else
-#ifdef HAL_PLATFORM_SDL
-    load_home_screen();
-#else
-    char gif_check[256];
-    snprintf(gif_check, sizeof(gif_check), "%s", cp0_file_path("logo_output.gif").c_str());
-    FILE *gif_file = fopen(gif_check, "r");
-    if (gif_file) {
-        fclose(gif_file);
-        start_startup_gif();
-    } else {
-        load_home_screen();
-    }
-#endif
-#endif
-}
-
 extern "C" void home_screen_load()
 {
     UILaunchPage::load_home_screen();
@@ -615,12 +558,6 @@ extern "C" void start_startup_gif()
 {
     UILaunchPage::start_startup_gif();
 }
-
-extern "C" void ui_inita(void)
-{
-    UILaunchPage::init_ui();
-}
-
 
 UILaunchPage::UILaunchPage(std::shared_ptr<Launch> launch)
     : home_base(), launch_(std::move(launch))
@@ -648,7 +585,7 @@ void UILaunchPage::create_top(lv_obj_t *parent)
 {
 #ifdef APPLAUNCH_LOGO_USE_PNG
     ui_Image1 = lv_img_create(parent);
-    lv_img_set_src(ui_Image1, ui_img_zero_png);
+    lv_img_set_src(ui_Image1, cp0_file_path_c("launcher_brand_logo.png"));
     lv_obj_set_width(ui_Image1, LV_SIZE_CONTENT);
     lv_obj_set_height(ui_Image1, LV_SIZE_CONTENT);
     lv_obj_set_x(ui_Image1, 5);
@@ -660,7 +597,7 @@ void UILaunchPage::create_top(lv_obj_t *parent)
     lv_label_set_text(ui_Image1, "ZERO");
     lv_obj_set_x(ui_Image1, 5);
     lv_obj_set_y(ui_Image1, 2);
-    lv_obj_set_style_text_font(ui_Image1, g_font_bold_14, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_font(ui_Image1, launcher_fonts().get("Montserrat-Bold.ttf", 16, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_color(ui_Image1, lv_color_hex(0xCCAA00), LV_PART_MAIN | LV_STATE_DEFAULT);
 #endif
 
@@ -731,7 +668,7 @@ void UILaunchPage::create_top(lv_obj_t *parent)
     lv_obj_set_style_radius(ui_Panel1, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_color(ui_Panel1, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_opa(ui_Panel1, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_img_src(ui_Panel1, ui_img_time_png, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_img_src(ui_Panel1, cp0_file_path_c("status_time_background.png"), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_border_width(ui_Panel1, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
 
     ui_timeLabel = lv_label_create(ui_Panel1);
@@ -752,7 +689,7 @@ void UILaunchPage::create_top(lv_obj_t *parent)
     lv_obj_set_style_radius(ui_batteryPanel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_color(ui_batteryPanel, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_opa(ui_batteryPanel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_img_src(ui_batteryPanel, ui_img_battery_bg_png, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_img_src(ui_batteryPanel, cp0_file_path_c("status_battery_background.png"), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_border_width(ui_batteryPanel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_pad_all(ui_batteryPanel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
 
@@ -863,7 +800,7 @@ void UILaunchPage::create_app_container(lv_obj_t *parent)
     lv_obj_set_y(carousel_elements[kTitleCenter], LABEL_Y_CENTER);
     lv_obj_set_align(carousel_elements[kTitleCenter], LV_ALIGN_CENTER);
     lv_label_set_text(carousel_elements[kTitleCenter], "CLI");
-    lv_obj_set_style_text_font(carousel_elements[kTitleCenter], g_font_bold_14, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_font(carousel_elements[kTitleCenter], launcher_fonts().get("Montserrat-Bold.ttf", 16, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_color(carousel_elements[kTitleCenter], lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(carousel_elements[kTitleCenter], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
@@ -875,7 +812,7 @@ void UILaunchPage::create_app_container(lv_obj_t *parent)
     lv_obj_set_align(carousel_elements[kTitleRight], LV_ALIGN_CENTER);
     lv_label_set_text(carousel_elements[kTitleRight], "GAME");
     lv_obj_set_style_text_color(carousel_elements[kTitleRight], lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_font(carousel_elements[kTitleRight], g_font_bold_14, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_font(carousel_elements[kTitleRight], launcher_fonts().get("Montserrat-Bold.ttf", 16, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(carousel_elements[kTitleRight], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
     carousel_elements[kTitleLeft] = lv_label_create(::ui_APP_Container);
@@ -887,7 +824,7 @@ void UILaunchPage::create_app_container(lv_obj_t *parent)
     lv_label_set_text(carousel_elements[kTitleLeft], "STORE");
     lv_obj_set_style_text_color(carousel_elements[kTitleLeft], lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(carousel_elements[kTitleLeft], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_font(carousel_elements[kTitleLeft], g_font_bold_14, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_font(carousel_elements[kTitleLeft], launcher_fonts().get("Montserrat-Bold.ttf", 16, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN | LV_STATE_DEFAULT);
 
     carousel_elements[kCardLeft] = lv_obj_create(::ui_APP_Container);
     lv_obj_set_width(carousel_elements[kCardLeft], 80);
@@ -954,7 +891,7 @@ void UILaunchPage::create_app_container(lv_obj_t *parent)
     lv_obj_set_style_radius(ui_leftButton, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_color(ui_leftButton, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_opa(ui_leftButton, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_img_src(ui_leftButton, ui_img_left_png, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_img_src(ui_leftButton, cp0_file_path_c("carousel_left_arrow.png"), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_shadow_color(ui_leftButton, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_shadow_opa(ui_leftButton, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
 
@@ -969,7 +906,7 @@ void UILaunchPage::create_app_container(lv_obj_t *parent)
     lv_obj_set_style_radius(ui_rightButton, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_color(ui_rightButton, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_opa(ui_rightButton, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_img_src(ui_rightButton, ui_img_right_png, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_img_src(ui_rightButton, cp0_file_path_c("carousel_right_arrow.png"), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_shadow_color(ui_rightButton, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_shadow_opa(ui_rightButton, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
 
@@ -995,7 +932,7 @@ void UILaunchPage::create_app_container(lv_obj_t *parent)
     lv_obj_set_align(carousel_elements[kTitleFarLeft], LV_ALIGN_CENTER);
     lv_label_set_text(carousel_elements[kTitleFarLeft], "one");
     lv_obj_add_flag(carousel_elements[kTitleFarLeft], LV_OBJ_FLAG_HIDDEN);     /// Flags
-    lv_obj_set_style_text_font(carousel_elements[kTitleFarLeft], g_font_bold_14, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_font(carousel_elements[kTitleFarLeft], launcher_fonts().get("Montserrat-Bold.ttf", 16, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_color(carousel_elements[kTitleFarLeft], lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(carousel_elements[kTitleFarLeft], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
@@ -1007,7 +944,7 @@ void UILaunchPage::create_app_container(lv_obj_t *parent)
     lv_obj_set_align(carousel_elements[kTitleFarRight], LV_ALIGN_CENTER);
     lv_label_set_text(carousel_elements[kTitleFarRight], "three");
     lv_obj_add_flag(carousel_elements[kTitleFarRight], LV_OBJ_FLAG_HIDDEN);     /// Flags
-    lv_obj_set_style_text_font(carousel_elements[kTitleFarRight], g_font_bold_14, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_font(carousel_elements[kTitleFarRight], launcher_fonts().get("Montserrat-Bold.ttf", 16, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_color(carousel_elements[kTitleFarRight], lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(carousel_elements[kTitleFarRight], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 

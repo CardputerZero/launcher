@@ -53,33 +53,6 @@ extern "C"
     void ui_console_exit(lv_event_t *e);
     void ui_console_key(lv_event_t *e);
 
-    // CUSTOM VARIABLES
-    extern const char *ui_img_zero_png;
-    extern const char *ui_img_time_png;
-    extern const char *ui_img_battery_bg_png;
-    extern const char *ui_img_left_png;
-    extern const char *ui_img_right_png;
-    extern const char *ui_img_store_logo_png;
-    extern const char *ui_img_cli_logo_png;
-    extern const char *ui_img_claw_logo_png;
-    extern const char *ui_img_setting_logo_png;
-    extern const char *ui_img_python_logo_png;
-
-    extern const char *ui_img_zero_logo_w_png;
-    extern const char *ui_img_left_logo_png;
-    extern const char *ui_img_right_logo_png;
-    extern const char *ui_img_detail_info_png;
-    extern const char *ui_img_down_logo_png;
-    extern const char *ui_img_up_logo_png;
-    extern const char *ui_img_camera_png;
-
-    extern lv_font_t *g_font_cn_20;
-    extern lv_font_t *g_font_cn_14;
-    extern lv_font_t *g_font_cn_12;
-    extern lv_font_t *g_font_mono_12;
-    extern lv_font_t *g_font_bold_20;
-    extern lv_font_t *g_font_bold_14;
-    extern lv_font_t *g_font_bold_12;
 // Launcher layout constants
 #define BORDER_COLOR_CENTER 0x444444
 #define BORDER_COLOR_SIDE 0x222222
@@ -103,6 +76,28 @@ extern "C"
 
 #ifdef __cplusplus
 } /*extern "C"*/
+
+#include <memory>
+#include <string>
+#include <unordered_map>
+
+class LauncherFonts
+{
+public:
+    LauncherFonts() = default;
+    ~LauncherFonts();
+
+    lv_font_t *get(const char *ttf_name, uint16_t size, lv_freetype_font_style_t style);
+
+private:
+    void release();
+    lv_font_t *fallback(uint16_t size) const;
+    static std::string key(const char *ttf_name, uint16_t size, lv_freetype_font_style_t style);
+
+    std::unordered_map<std::string, lv_font_t *> fonts_;
+};
+
+LauncherFonts &launcher_fonts();
 #include "Launch.h"
 #include "UILaunchPage.h"
 #include "zero_lvgl_os.h"

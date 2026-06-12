@@ -11,13 +11,7 @@
 #include "sample_log.h"
 ///////////////////// VARIABLES ////////////////////
 
-
-
-// SCREEN: ui_Screen1
-
-
-
-
+// LVGL objects exported through ui_obj.h.
 #undef UI_DEFINE_OBJECT
 #undef UI_DEFINE_EVENT_FUN
 #define UI_DEFINE_OBJECT( x ) lv_obj_t * x ;
@@ -26,39 +20,8 @@
 #undef UI_DEFINE_OBJECT
 #undef UI_DEFINE_EVENT_FUN
 
-// CUSTOM VARIABLES
+// Launcher animation timing.
 int Animation_time = 200;
-const char *ui_img_zero_png;
-const char *ui_img_time_png;
-const char *ui_img_battery_bg_png;
-const char *ui_img_left_png;
-const char *ui_img_right_png;
-
-const char *ui_img_store_logo_png;
-const char *ui_img_cli_logo_png;
-const char *ui_img_claw_logo_png;
-const char *ui_img_setting_logo_png;
-const char *ui_img_python_logo_png;
-
-const char *ui_img_zero_logo_w_png;
-const char *ui_img_left_logo_png;
-const char *ui_img_right_logo_png;
-const char *ui_img_detail_info_png;
-const char *ui_img_down_logo_png;
-const char *ui_img_up_logo_png;
-const char *ui_img_camera_png;
-
-static uint32_t EVT_TERM_KEY;
-
-lv_font_t *g_font_cn_20 = NULL;
-lv_font_t *g_font_cn_14 = NULL;
-lv_font_t *g_font_cn_12 = NULL;
-lv_font_t *g_font_mono_12 = NULL;   /* terminal-only monospaced font */
-lv_font_t *g_font_bold_20 = NULL;   /* bold font for selected settings item */
-lv_font_t *g_font_bold_14 = NULL;   /* bold app-name font - center */
-lv_font_t *g_font_bold_12 = NULL;   /* bold app-name font - side */
-
-// // EVENTS
 
 
 ///////////////////// TEST LVGL SETTINGS ////////////////////

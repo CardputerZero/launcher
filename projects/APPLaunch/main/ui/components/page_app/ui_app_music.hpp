@@ -47,7 +47,7 @@
 //    LV_KEY_ESC   -> return to main screen / exit app
 // ============================================================
 
-class UIMusicPage : public app_base
+class UIMusicPage : public AppPage
 {
     enum class PlayState
     {
@@ -64,7 +64,7 @@ class UIMusicPage : public app_base
     };
 
 public:
-    UIMusicPage() : app_base()
+    UIMusicPage() : AppPage()
     {
         set_page_title("MUSIC");
 
@@ -389,7 +389,7 @@ private:
 
     void event_handler_init()
     {
-        lv_obj_add_event_cb(ui_root, UIMusicPage::static_lvgl_handler, LV_EVENT_ALL, this);
+        lv_obj_add_event_cb(root_screen_, UIMusicPage::static_lvgl_handler, LV_EVENT_ALL, this);
     }
 
     static void static_lvgl_handler(lv_event_t *e)
@@ -493,8 +493,8 @@ private:
             break;
 
         case LV_KEY_ESC:
-            SLOGI("[MUSIC] ESC -> go_back_home()");
-            go_back_home();
+            SLOGI("[MUSIC] ESC -> navigate_home()");
+            navigate_home();
             break;
 
         default:

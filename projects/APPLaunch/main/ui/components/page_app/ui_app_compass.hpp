@@ -34,7 +34,7 @@
  *    F6/ESC 返回主页
  * ============================================================
  */
-class UICompassPage : public app_
+class UICompassPage : public AppPageRoot
 {
     static constexpr int kScreenW = 320;
     static constexpr int kScreenH = 170;
@@ -59,9 +59,9 @@ class UICompassPage : public app_
     static constexpr const char* ICON_LIST = "\uEA04"; // .svgfont-list
 
 public:
-    UICompassPage() : app_()
+    UICompassPage() : AppPageRoot()
     {
-        app_name = "Compass";
+        page_title_ = "Compass";
         svg_font_ = lv_freetype_font_create(
             cp0_file_path("svgfont.ttf").c_str(), LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 16,
             LV_FREETYPE_FONT_STYLE_NORMAL);
@@ -145,16 +145,16 @@ private:
      */
     void creat_UI()
     {
-        lv_obj_set_size(ui_root, kScreenW, kScreenH);
-        lv_obj_clear_flag(ui_root, LV_OBJ_FLAG_SCROLLABLE);
-        lv_obj_set_style_bg_color(ui_root, color(kColorBg), 0);
-        lv_obj_set_style_bg_opa(ui_root, LV_OPA_COVER, 0);
+        lv_obj_set_size(root_screen_, kScreenW, kScreenH);
+        lv_obj_clear_flag(root_screen_, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_style_bg_color(root_screen_, color(kColorBg), 0);
+        lv_obj_set_style_bg_opa(root_screen_, LV_OPA_COVER, 0);
 
-        create_status_bar(ui_root);
-        create_compass_panel(ui_root);
-        create_imu_panel(ui_root);
-        create_bottom_bar(ui_root);
-        create_sensor_missing_overlay(ui_root);
+        create_status_bar(root_screen_);
+        create_compass_panel(root_screen_);
+        create_imu_panel(root_screen_);
+        create_bottom_bar(root_screen_);
+        create_sensor_missing_overlay(root_screen_);
 
         CompassUiState initial_state;
         IioDevicePaths initial_paths = enumerate_iio_devices();
@@ -635,7 +635,7 @@ private:
      */
     void event_handler_init()
     {
-        lv_obj_add_event_cb(ui_root, UICompassPage::static_lvgl_handler, LV_EVENT_ALL, this);
+        lv_obj_add_event_cb(root_screen_, UICompassPage::static_lvgl_handler, LV_EVENT_ALL, this);
     }
 
     static void static_lvgl_handler(lv_event_t* e)
@@ -663,8 +663,8 @@ private:
 
         case KEY_F6:
         case KEY_ESC:
-            if (go_back_home) {
-                go_back_home();
+            if (navigate_home) {
+                navigate_home();
             }
             break;
 

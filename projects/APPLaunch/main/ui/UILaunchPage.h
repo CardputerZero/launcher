@@ -12,7 +12,6 @@ public:
     explicit UILaunchPage(std::shared_ptr<Launch> launch);
     ~UILaunchPage();
 
-    static void init_ui();
     static void load_home_screen();
     static void start_startup_gif();
     static void create_screen();
@@ -44,8 +43,6 @@ public:
     static std::array<lv_obj_t *, kLauncherCarouselElementCount> carousel_elements;
 
 private:
-    static void init_images();
-    static void init_fonts();
     static void create_top(lv_obj_t *parent);
     static void create_app_container(lv_obj_t *parent);
 

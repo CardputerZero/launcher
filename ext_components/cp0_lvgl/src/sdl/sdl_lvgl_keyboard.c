@@ -170,6 +170,18 @@ static const char *cp0_sdl_ctrl_utf8(SDL_Keycode key)
     }
 }
 
+static bool cp0_sdl_ctrl_letter(const SDL_KeyboardEvent *event, char *out)
+{
+    SDL_Keymod mods = SDL_GetModState();
+    SDL_Keycode sym = event->keysym.sym;
+
+    if ((mods & KMOD_CTRL) == 0 || sym < SDLK_a || sym > SDLK_z)
+        return false;
+
+    *out = (char)(sym - SDLK_a + 1);
+    return true;
+}
+
 static uint32_t cp0_sdl_scancode_to_linux_key(SDL_Scancode scancode)
 {
     switch (scancode) {
@@ -551,10 +563,11 @@ void lv_sdl_keyboard_handler(SDL_Event *event)
     if (event->type == SDL_KEYDOWN) {
         cp0_sdl_fill_key_meta(kbd, &event->key);
         uint32_t ctrl_key = cp0_sdl_ctrl_to_lv_key(event->key.keysym.sym);
-        if (ctrl_key == 0)
+        char ctrl_char = 0;
+        if (ctrl_key == 0 && !cp0_sdl_ctrl_letter(&event->key, &ctrl_char))
             return;
 
-        char ctrl_buf[2] = {(char)ctrl_key, '\0'};
+        char ctrl_buf[2] = {ctrl_char != 0 ? ctrl_char : (char)ctrl_key, '\0'};
         cp0_sdl_enqueue_text(kbd, ctrl_buf);
     }
     else if (event->type == SDL_TEXTINPUT) {

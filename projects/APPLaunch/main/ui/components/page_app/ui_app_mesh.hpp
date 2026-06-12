@@ -22,7 +22,7 @@
 //  Actual LoRa hardware integration requires specific drivers.
 // ============================================================
 
-class UIMeshPage : public app_base
+class UIMeshPage : public AppPage
 {
     enum class ViewState { MAIN, INPUT };
 
@@ -42,7 +42,7 @@ class UIMeshPage : public app_base
     };
 
 public:
-    UIMeshPage() : app_base()
+    UIMeshPage() : AppPage()
     {
         set_page_title("MESH");
         srand((unsigned)time(nullptr));
@@ -444,7 +444,7 @@ private:
     // ==================== event binding ====================
     void event_handler_init()
     {
-        lv_obj_add_event_cb(ui_root, UIMeshPage::static_lvgl_handler, LV_EVENT_ALL, this);
+        lv_obj_add_event_cb(root_screen_, UIMeshPage::static_lvgl_handler, LV_EVENT_ALL, this);
     }
     static void static_lvgl_handler(lv_event_t *e)
     {
@@ -492,7 +492,7 @@ private:
                 lv_timer_delete(heartbeat_timer_);
                 heartbeat_timer_ = nullptr;
             }
-            if (go_back_home) go_back_home();
+            if (navigate_home) navigate_home();
             break;
 
         default:

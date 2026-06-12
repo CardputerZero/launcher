@@ -30,7 +30,7 @@
 #include "compat/input_keys.h"
 #include "hal_lvgl_bsp.h"
 
-class rec_page : public app_base
+class rec_page : public AppPage
 {
 public:
     lv_font_t *svg_font = NULL;
@@ -73,10 +73,10 @@ public:
     lv_obj_t *but[5];
 
 public:
-    rec_page() : app_base()
+    rec_page() : AppPage()
     {
-        app_name = "Recorder";
-        set_page_title(app_name);
+        page_title_ = "Recorder";
+        set_page_title(page_title_);
         svg_font = lv_freetype_font_create(
             cp0_file_path("svgfont.ttf").c_str(), LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 16,
             LV_FREETYPE_FONT_STYLE_NORMAL);
@@ -240,7 +240,7 @@ private:
 
     void creat_BOTTOM_UI()
     {
-        ui_BOTTOM_Container = lv_obj_create(ui_root);
+        ui_BOTTOM_Container = lv_obj_create(root_screen_);
         lv_obj_remove_style_all(ui_BOTTOM_Container);
         lv_obj_set_width(ui_BOTTOM_Container, 320);
         lv_obj_set_height(ui_BOTTOM_Container, 25);
@@ -912,7 +912,7 @@ private:
 
     void bind_keyboard_shortcuts()
     {
-        lvgl_add_call(ui_root, [this](lv_event_code_t c, void *event_param, void *user_data) {
+        lvgl_add_call(root_screen_, [this](lv_event_code_t c, void *event_param, void *user_data) {
             (void)user_data;
             if (c != static_cast<lv_event_code_t>(LV_EVENT_KEYBOARD))
                 return;
@@ -1044,8 +1044,8 @@ private:
             stop_recording_to_save();
             return;
         }
-        if (go_back_home)
-            go_back_home();
+        if (navigate_home)
+            navigate_home();
     }
 
     void toggle_record()
