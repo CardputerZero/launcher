@@ -1,4 +1,5 @@
 #include "hal/hal_settings.h"
+#include <cmath>
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
@@ -7,12 +8,23 @@ hal_battery_info_t hal_battery_read(void)
 {
     hal_battery_info_t info;
     memset(&info, 0, sizeof(info));
-    info.voltage_mv = 3800;
-    info.current_ma = -200;
+    const time_t now = time(NULL);
+    constexpr double kPi = 3.14159265358979323846;
+    constexpr double kBatteryPeriodSeconds = 20.0;
+    const double phase = (static_cast<double>(now % static_cast<time_t>(kBatteryPeriodSeconds)) /
+                          kBatteryPeriodSeconds) *
+                             (2.0 * kPi) -
+                         (kPi / 2.0);
+    const int soc = static_cast<int>((std::sin(phase) + 1.0) * 50.0 + 0.5);
+
+    info.voltage_mv = 3300 + soc * 9;
+    info.current_ma = soc < 50 ? 200 : -200;
     info.temperature_c10 = 350;
-    info.soc = 85;
-    info.remain_mah = 2500;
+    info.soc = soc;
+    info.remain_mah = soc * 30;
     info.full_mah = 3000;
+    info.flags = soc < 50 ? 1 : 0;
+    info.avg_current_ma = info.current_ma;
     info.valid = 1;
     return info;
 }
