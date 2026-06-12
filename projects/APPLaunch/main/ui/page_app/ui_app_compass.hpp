@@ -1,6 +1,12 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #pragma once
 
-#include "../../ui.h"
+#include "../ui.h"
 #include "../ui_app_page.hpp"
 #include "compat/input_keys.h"
 #include "hal_lvgl_bsp.h"

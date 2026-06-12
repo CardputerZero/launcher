@@ -1,6 +1,12 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #pragma once
 
-#include "components/ui_app_page.hpp"
+#include "ui_app_page.hpp"
 #include <array>
 #include <memory>
 
@@ -48,7 +54,35 @@ public:
     static std::array<lv_obj_t *, kLauncherCarouselElementCount> carousel_elements;
 
 private:
-    static void create_app_container(lv_obj_t *parent);
+    enum class PendingSwitch {
+        None,
+        Left,
+        Right,
+    };
+
+    void create_app_container(lv_obj_t *parent);
+    void switch_left();
+    void switch_right();
+    void finish_switch_animation();
+    void run_pending_switch();
+    void handle_home_key(lv_event_t *event);
+    void handle_startup_gif_event(lv_event_t *event);
+
+    static void on_left_arrow_clicked(lv_event_t *event);
+    static void on_right_arrow_clicked(lv_event_t *event);
+    static void on_app_clicked(lv_event_t *event);
+    static void on_home_key(lv_event_t *event);
+    static void on_startup_gif_event(lv_event_t *event);
 
     std::shared_ptr<Launch> launch_;
+    lv_obj_t *startup_gif_ = nullptr;
+    lv_obj_t *left_arrow_button_ = nullptr;
+    lv_obj_t *right_arrow_button_ = nullptr;
+    lv_obj_t *green_bg_ = nullptr;
+    std::array<char, 256> startup_gif_path_ = {};
+    bool is_animating_ = false;
+    bool startup_gif_done_ = false;
+    int lvping_lock_ = 0;
+    PendingSwitch pending_switch_ = PendingSwitch::None;
+    int switch_current_pos_ = kPageDot2;
 };

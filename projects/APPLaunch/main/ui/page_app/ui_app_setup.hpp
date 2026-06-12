@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #pragma once
 // Note: this file used to be wrapped in `#if !defined(HAL_PLATFORM_SDL)` to
 // exclude it from the emulator build, but ui_app_launch.cpp references

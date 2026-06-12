@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #pragma once
 #include "sample_log.h"
 #include "../ui_app_page.hpp"
@@ -230,6 +236,7 @@ private:
         console_page_->navigate_home = [this]() {
             // Return to the SSH input view
             console_page_.reset();
+            view_state_ = ViewState::INPUT;
             // Switch screen back to our root
             lv_disp_load_scr(this->screen());
             lv_indev_set_group(lv_indev_get_next(NULL), this->input_group());

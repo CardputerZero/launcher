@@ -1,9 +1,15 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "Launch.h"
 
 #include "ui.h"
 #include "UILaunchPage.h"
 #include "ui_loading.h"
-#include "components/page_app.h"
+#include "page_app.h"
 #include "cp0_lvgl_app.h"
 #include "cp0_lvgl_file.hpp"
 #include "sample_log.h"

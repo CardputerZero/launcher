@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+#
+# SPDX-License-Identifier: MIT
+
 import os
 import sys
 import platform
@@ -26,7 +30,7 @@ LINK_SEARCH_PATH = []
 STATIC_FILES = []
 
 # run generate_page_app_includes.py to generate the header file for including app pages in the UI.
-script_path = os.path.abspath(str(AFile('ui/components/generate_page_app_includes.py')))
+script_path = os.path.abspath(str(AFile('ui/generate_page_app_includes.py')))
 script_dir = os.path.dirname(script_path)
 subprocess.run(
     [sys.executable, script_path],

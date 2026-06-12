@@ -1,5 +1,11 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #pragma once
-#include "../ui.h"
+#include "ui.h"
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -343,6 +349,7 @@ public:
         top_bar_.set_height(top_bar_height_px_);
         add_bar(top_bar_);
         UI_bind_event();
+        update_datetime_status();
         update_status_bar();
         status_timer_ = lv_timer_create(app_status_timer_cb, 5000, this);
     }
@@ -355,7 +362,12 @@ public:
 
     void update_status_bar()
     {
-        top_bar_.update_status();
+        top_bar_.update_wifi();
+    }
+
+    void update_datetime_status()
+    {
+        top_bar_.update_time();
     }
 
     void update_battery_status(const cp0_battery_info_t &bat)
@@ -383,6 +395,14 @@ private:
             self->update_battery_status(*bat);
     }
 
+    static void app_datetime_event_cb(lv_event_t *e)
+    {
+        AppTopBarRegion *self = static_cast<AppTopBarRegion *>(lv_event_get_user_data(e));
+        if (!self || lv_event_get_code(e) != launcher_ui::events::datetime_event())
+            return;
+        self->update_datetime_status();
+    }
+
     static void app_status_timer_cb(lv_timer_t *timer)
     {
         AppTopBarRegion *self = static_cast<AppTopBarRegion *>(lv_timer_get_user_data(timer));
@@ -393,6 +413,7 @@ private:
     void UI_bind_event()
     {
         lv_obj_add_event_cb(root_screen_, app_battery_event_cb, launcher_ui::events::battery_event(), this);
+        lv_obj_add_event_cb(root_screen_, app_datetime_event_cb, launcher_ui::events::datetime_event(), this);
     }
 };
 
@@ -485,6 +506,7 @@ public:
     {
         creat_Top_UI();
         UI_bind_event();
+        update_time_status();
         update_status_bar();
         status_timer_ = lv_timer_create(home_status_timer_cb, 5000, this);
     }
@@ -504,6 +526,14 @@ public:
             self->update_battery_status(*bat);
     }
 
+    static void home_datetime_event_cb(lv_event_t *e)
+    {
+        home_base *self = static_cast<home_base *>(lv_event_get_user_data(e));
+        if (!self || lv_event_get_code(e) != launcher_ui::events::datetime_event())
+            return;
+        self->update_time_status();
+    }
+
     static void home_status_timer_cb(lv_timer_t *timer)
     {
         home_base *self = static_cast<home_base *>(lv_timer_get_user_data(timer));
@@ -513,7 +543,6 @@ public:
 
     void update_status_bar()
     {
-        update_time_status();
         update_wifi_status();
     }
 
@@ -726,6 +755,7 @@ private:
     void UI_bind_event()
     {
         lv_obj_add_event_cb(root_screen_, home_battery_event_cb, launcher_ui::events::battery_event(), this);
+        lv_obj_add_event_cb(root_screen_, home_datetime_event_cb, launcher_ui::events::datetime_event(), this);
     }
 };
 

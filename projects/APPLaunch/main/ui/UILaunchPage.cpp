@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "UILaunchPage.h"
 
 #include "Launch.h"
@@ -26,17 +32,8 @@ static void rotate_carousel_right(size_t start, size_t end)
 
 namespace {
 
-typedef void (*switch_cb_t)(lv_event_t *);
-
 UILaunchPage *active_launch_page = nullptr;
-
-static void switch_left(lv_event_t *e);
-static void switch_right(lv_event_t *e);
-static void app_launch(lv_event_t *e);
-static void main_key_switch(lv_event_t *e);
-
-lv_obj_t *left_arrow_button = nullptr;
-lv_obj_t *right_arrow_button = nullptr;
+lv_group_t *home_input_group = nullptr;
 
 // ==================== standard layout for carousel slots ====================
 
@@ -60,13 +57,6 @@ static const CarouselSlot CAROUSEL_SLOTS[] = {
     {99, LABEL_Y_SIDE, 0, 0, false},
     {177, LABEL_Y_SIDE, 0, 0, true},
 };
-
-static bool is_animating = false;
-static switch_cb_t pending_switch = NULL;
-
-static int Panel_current_pos = 2;
-static int switch_current_pos = UILaunchPage::kPageDot2;
-
 
 // ============================================================
 // audio
@@ -182,147 +172,6 @@ static void snap_label_to_slot(lv_obj_t *label, int slot)
     }
 }
 
-
-// ============================================================
-// Correct all panel positions after animation ends
-// ============================================================
-
-static void snap_all_panels()
-{
-    for (int i = 0; i < 5; i++)
-    {
-        snap_panel_to_slot(UILaunchPage::carousel_elements[i], i);
-    }
-
-    for (int i = 5; i < 10; i++)
-    {
-        snap_label_to_slot(UILaunchPage::carousel_elements[i], i);
-    }
-
-    is_animating = false;
-
-    // Reset border colors: center=bright, sides=dark
-    for (int i = 0; i < 5; i++) {
-        uint32_t color = (i == 2) ? BORDER_COLOR_CENTER : BORDER_COLOR_SIDE;
-        lv_obj_set_style_border_color(UILaunchPage::carousel_elements[i], lv_color_hex(color), LV_PART_MAIN | LV_STATE_DEFAULT);
-    }
-
-    // Reset all label fonts to bold
-    for (int i = 5; i < 10; i++) {
-        lv_obj_set_style_text_font(UILaunchPage::carousel_elements[i], launcher_fonts().get("Montserrat-Bold.ttf", 16, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN | LV_STATE_DEFAULT);
-    }
-
-    if (pending_switch) {
-        switch_cb_t cb = pending_switch;
-        pending_switch = NULL;
-        cb(NULL);
-    }
-}
-
-
-// ============================================================
-// Switch right; called when the right arrow is clicked
-// ============================================================
-
-static void switch_right(lv_event_t *e)
-{
-    if (is_animating)
-    {
-        pending_switch = &switch_right;
-        return;
-    }
-
-    is_animating = true;
-
-    lv_obj_clear_flag(UILaunchPage::carousel_elements[0], LV_OBJ_FLAG_HIDDEN);
-
-    launcher_home_animation::animate_right(UILaunchPage::carousel_elements.data(), snap_all_panels);
-
-    snap_panel_to_slot(UILaunchPage::carousel_elements[4], 0);
-
-    lv_obj_clear_flag(UILaunchPage::carousel_elements[5], LV_OBJ_FLAG_HIDDEN);
-
-    snap_label_to_slot(UILaunchPage::carousel_elements[9], 5);
-
-    if (active_launch_page)
-        active_launch_page->update_right_slot(UILaunchPage::carousel_elements[4], UILaunchPage::carousel_elements[9]);
-
-    switchpanleEnableClick(2, 0);
-    rotate_carousel_right(0, 4);
-    switchpanleEnableClick(2, 1);
-
-    rotate_carousel_right(5, 9);
-
-    switchpanleEnable(switch_current_pos, 0);
-
-    switch_current_pos = switch_current_pos == UILaunchPage::kPageDot0 ? UILaunchPage::kPageDot4 : switch_current_pos - 1;
-
-    switchpanleEnable(switch_current_pos, 1);
-}
-
-
-// ============================================================
-// Switch left; called when the left arrow is clicked
-// ============================================================
-
-static void switch_left(lv_event_t *e)
-{
-    if (is_animating)
-    {
-        pending_switch = &switch_left;
-        return;
-    }
-
-    is_animating = true;
-
-    lv_obj_clear_flag(UILaunchPage::carousel_elements[4], LV_OBJ_FLAG_HIDDEN);
-
-    launcher_home_animation::animate_left(UILaunchPage::carousel_elements.data(), snap_all_panels);
-
-    snap_panel_to_slot(UILaunchPage::carousel_elements[0], 4);
-
-    lv_obj_clear_flag(UILaunchPage::carousel_elements[9], LV_OBJ_FLAG_HIDDEN);
-
-    snap_label_to_slot(UILaunchPage::carousel_elements[5], 9);
-
-    if (active_launch_page)
-        active_launch_page->update_left_slot(UILaunchPage::carousel_elements[0], UILaunchPage::carousel_elements[5]);
-
-    switchpanleEnableClick(2, 0);
-    rotate_carousel_left(0, 4);
-    switchpanleEnableClick(2, 1);
-
-    rotate_carousel_left(5, 9);
-
-    switchpanleEnable(switch_current_pos, 0);
-
-    switch_current_pos = switch_current_pos == UILaunchPage::kPageDot4 ? UILaunchPage::kPageDot0 : switch_current_pos + 1;
-
-    switchpanleEnable(switch_current_pos, 1);
-}
-
-
-
-// ============================================================
-// screen / app
-// ============================================================
-
-static void ui_event_Screen1(lv_event_t *e)
-{
-    if (lv_event_get_code(e) == LV_EVENT_KEYBOARD)
-    {
-        main_key_switch(e);
-    }
-}
-
-
-static void app_launch(lv_event_t *e)
-{
-    if (active_launch_page)
-        active_launch_page->launch_selected_app();
-}
-
-
 static uint32_t fzxc_to_arrow(uint32_t key)
 {
     switch (key)
@@ -344,101 +193,13 @@ static uint32_t fzxc_to_arrow(uint32_t key)
     }
 }
 
-
-// ============================================================
-// key handler
-// ============================================================
-
-static int lvping_lock = 0;
-
-static void main_key_switch(lv_event_t *e)
+static UILaunchPage *page_from_event(lv_event_t *event)
 {
-    struct key_item *elm = (struct key_item *)lv_event_get_param(e);
-    uint32_t code = fzxc_to_arrow(elm->key_code);
-
-    SLOGI("[LAUNCHER] main_key_switch raw=%u->code=%u state=%s sym=%s",
-           elm->key_code,
-           code,
-           kbd_state_name(elm->key_state),
-           elm->sym_name);
-
-    if (elm->key_state)
-    {
-        switch (code)
-        {
-        case KEY_UP:
-            break;
-
-        case KEY_DOWN:
-            break;
-
-        case KEY_LEFT:
-        {
-            /* Play the preloaded sound effect directly before switching pages. */
-            if (!lvping_lock)
-            {
-                audio_play_switch();
-                switch_right(NULL);
-            }
-        }
-        break;
-
-        case KEY_RIGHT:
-        {
-            if (!lvping_lock)
-            {
-                audio_play_switch();
-                switch_left(NULL);
-            }
-        }
-        break;
-
-        default:
-            break;
-        }
-    }
-    else if (code == KEY_ENTER)
-    {
-        audio_play_enter();
-        app_launch(NULL);
-    }
-    else if (code == KEY_F12)
-    {
-        static lv_obj_t *green_bg;
-        if (lvping_lock == 0)
-        {
-            lvping_lock = 1;
-            green_bg = lv_obj_create(lv_scr_act());
-            lv_obj_set_size(green_bg, 320, 170);
-            lv_obj_align(green_bg, LV_ALIGN_TOP_LEFT, 0, 0);
-
-            lv_obj_set_style_bg_color(green_bg, lv_color_hex(0x00FF00), LV_PART_MAIN);
-            lv_obj_set_style_bg_opa(green_bg, LV_OPA_COVER, LV_PART_MAIN);
-
-            lv_obj_set_style_border_width(green_bg, 0, LV_PART_MAIN);
-            lv_obj_set_style_radius(green_bg, 0, LV_PART_MAIN);
-            lv_obj_set_style_shadow_width(green_bg, 0, LV_PART_MAIN);
-            lv_obj_set_style_pad_all(green_bg, 0, LV_PART_MAIN);
-        }
-        else
-        {
-            lvping_lock = 0;
-            lv_obj_del(green_bg);
-        }
-    }
+    return event ? static_cast<UILaunchPage *>(lv_event_get_user_data(event)) : nullptr;
 }
 
-
 } // namespace
 
-namespace {
-
-char gif_path[256];
-lv_group_t *home_input_group = nullptr;
-
-} // namespace
-
-lv_obj_t *startup_gif = nullptr;
 
 LauncherFonts::~LauncherFonts()
 {
@@ -506,7 +267,7 @@ lv_obj_t *UILaunchPage::label(size_t slot)
 
 void UILaunchPage::bind_home_input_group()
 {
-    lv_indev_t *indev = lv_indev_get_next(NULL);
+    lv_indev_t *indev = lv_indev_get_next(nullptr);
     if (indev) {
         lv_indev_set_group(indev, home_input_group());
     }
@@ -532,28 +293,15 @@ void UILaunchPage::load_home_screen()
     cp0_signal_audio_api_play_asset("startup.mp3");
 }
 
-static void ui_event_logo_over(lv_event_t *e)
-{
-    static int done = 0;
-    lv_event_code_t event_code = lv_event_get_code(e);
-    if (event_code == LV_EVENT_READY && !done) {
-        done = 1;
-        SLOGI("[GIF] first LV_EVENT_READY -> pause + home_screen_load()");
-        if (startup_gif) lv_gif_pause(startup_gif);
-
-        if (active_launch_page)
-            active_launch_page->load_home_screen();
-    }
-}
-
 void UILaunchPage::start_startup_gif()
 {
-    snprintf(gif_path, sizeof(gif_path), "%s", cp0_file_path("logo_output.gif").c_str());
-    startup_gif = lv_gif_create(NULL);
-    lv_gif_set_src(startup_gif, gif_path);
-    lv_obj_center(startup_gif);
-    lv_obj_add_event_cb(startup_gif, ui_event_logo_over, LV_EVENT_ALL, NULL);
-    lv_disp_load_scr(startup_gif);
+    snprintf(startup_gif_path_.data(), startup_gif_path_.size(), "%s", cp0_file_path("logo_output.gif").c_str());
+    startup_gif_done_ = false;
+    startup_gif_ = lv_gif_create(nullptr);
+    lv_gif_set_src(startup_gif_, startup_gif_path_.data());
+    lv_obj_center(startup_gif_);
+    lv_obj_add_event_cb(startup_gif_, on_startup_gif_event, LV_EVENT_ALL, this);
+    lv_disp_load_scr(startup_gif_);
 }
 
 UILaunchPage::UILaunchPage(std::shared_ptr<Launch> launch)
@@ -564,6 +312,10 @@ UILaunchPage::UILaunchPage(std::shared_ptr<Launch> launch)
 
 UILaunchPage::~UILaunchPage()
 {
+    if (green_bg_) {
+        lv_obj_del(green_bg_);
+        green_bg_ = nullptr;
+    }
     if (active_launch_page == this)
         active_launch_page = nullptr;
 }
@@ -584,6 +336,246 @@ void UILaunchPage::launch_selected_app()
 {
     if (launch_)
         launch_->launch_app();
+}
+
+void UILaunchPage::finish_switch_animation()
+{
+    for (int i = 0; i < 5; i++)
+    {
+        snap_panel_to_slot(carousel_elements[i], i);
+    }
+
+    for (int i = 5; i < 10; i++)
+    {
+        snap_label_to_slot(carousel_elements[i], i);
+    }
+
+    is_animating_ = false;
+
+    for (int i = 0; i < 5; i++) {
+        uint32_t color = (i == 2) ? BORDER_COLOR_CENTER : BORDER_COLOR_SIDE;
+        lv_obj_set_style_border_color(carousel_elements[i], lv_color_hex(color), LV_PART_MAIN | LV_STATE_DEFAULT);
+    }
+
+    for (int i = 5; i < 10; i++) {
+        lv_obj_set_style_text_font(carousel_elements[i], launcher_fonts().get("Montserrat-Bold.ttf", 16, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN | LV_STATE_DEFAULT);
+    }
+
+    run_pending_switch();
+}
+
+void UILaunchPage::run_pending_switch()
+{
+    PendingSwitch pending = pending_switch_;
+    pending_switch_ = PendingSwitch::None;
+
+    switch (pending) {
+    case PendingSwitch::Left:
+        switch_left();
+        break;
+    case PendingSwitch::Right:
+        switch_right();
+        break;
+    case PendingSwitch::None:
+        break;
+    }
+}
+
+void UILaunchPage::switch_right()
+{
+    if (is_animating_)
+    {
+        pending_switch_ = PendingSwitch::Right;
+        return;
+    }
+
+    is_animating_ = true;
+
+    lv_obj_clear_flag(carousel_elements[0], LV_OBJ_FLAG_HIDDEN);
+
+    launcher_home_animation::animate_right(carousel_elements.data(), [this]() { finish_switch_animation(); });
+
+    snap_panel_to_slot(carousel_elements[4], 0);
+
+    lv_obj_clear_flag(carousel_elements[5], LV_OBJ_FLAG_HIDDEN);
+
+    snap_label_to_slot(carousel_elements[9], 5);
+
+    update_right_slot(carousel_elements[4], carousel_elements[9]);
+
+    switchpanleEnableClick(2, 0);
+    rotate_carousel_right(0, 4);
+    switchpanleEnableClick(2, 1);
+
+    rotate_carousel_right(5, 9);
+
+    switchpanleEnable(switch_current_pos_, 0);
+
+    switch_current_pos_ = switch_current_pos_ == UILaunchPage::kPageDot0 ? UILaunchPage::kPageDot4 : switch_current_pos_ - 1;
+
+    switchpanleEnable(switch_current_pos_, 1);
+}
+
+void UILaunchPage::switch_left()
+{
+    if (is_animating_)
+    {
+        pending_switch_ = PendingSwitch::Left;
+        return;
+    }
+
+    is_animating_ = true;
+
+    lv_obj_clear_flag(carousel_elements[4], LV_OBJ_FLAG_HIDDEN);
+
+    launcher_home_animation::animate_left(carousel_elements.data(), [this]() { finish_switch_animation(); });
+
+    snap_panel_to_slot(carousel_elements[0], 4);
+
+    lv_obj_clear_flag(carousel_elements[9], LV_OBJ_FLAG_HIDDEN);
+
+    snap_label_to_slot(carousel_elements[5], 9);
+
+    update_left_slot(carousel_elements[0], carousel_elements[5]);
+
+    switchpanleEnableClick(2, 0);
+    rotate_carousel_left(0, 4);
+    switchpanleEnableClick(2, 1);
+
+    rotate_carousel_left(5, 9);
+
+    switchpanleEnable(switch_current_pos_, 0);
+
+    switch_current_pos_ = switch_current_pos_ == UILaunchPage::kPageDot4 ? UILaunchPage::kPageDot0 : switch_current_pos_ + 1;
+
+    switchpanleEnable(switch_current_pos_, 1);
+}
+
+void UILaunchPage::handle_home_key(lv_event_t *event)
+{
+    if (!event)
+        return;
+
+    struct key_item *elm = static_cast<struct key_item *>(lv_event_get_param(event));
+    if (!elm)
+        return;
+
+    uint32_t code = fzxc_to_arrow(elm->key_code);
+
+    SLOGI("[LAUNCHER] main_key_switch raw=%u->code=%u state=%s sym=%s",
+           elm->key_code,
+           code,
+           kbd_state_name(elm->key_state),
+           elm->sym_name);
+
+    if (elm->key_state)
+    {
+        switch (code)
+        {
+        case KEY_UP:
+            break;
+
+        case KEY_DOWN:
+            break;
+
+        case KEY_LEFT:
+        {
+            if (!lvping_lock_)
+            {
+                audio_play_switch();
+                switch_right();
+            }
+        }
+        break;
+
+        case KEY_RIGHT:
+        {
+            if (!lvping_lock_)
+            {
+                audio_play_switch();
+                switch_left();
+            }
+        }
+        break;
+
+        default:
+            break;
+        }
+    }
+    else if (code == KEY_ENTER)
+    {
+        audio_play_enter();
+        launch_selected_app();
+    }
+    else if (code == KEY_F12)
+    {
+        if (lvping_lock_ == 0)
+        {
+            lvping_lock_ = 1;
+            green_bg_ = lv_obj_create(lv_scr_act());
+            lv_obj_set_size(green_bg_, 320, 170);
+            lv_obj_align(green_bg_, LV_ALIGN_TOP_LEFT, 0, 0);
+
+            lv_obj_set_style_bg_color(green_bg_, lv_color_hex(0x00FF00), LV_PART_MAIN);
+            lv_obj_set_style_bg_opa(green_bg_, LV_OPA_COVER, LV_PART_MAIN);
+
+            lv_obj_set_style_border_width(green_bg_, 0, LV_PART_MAIN);
+            lv_obj_set_style_radius(green_bg_, 0, LV_PART_MAIN);
+            lv_obj_set_style_shadow_width(green_bg_, 0, LV_PART_MAIN);
+            lv_obj_set_style_pad_all(green_bg_, 0, LV_PART_MAIN);
+        }
+        else
+        {
+            lvping_lock_ = 0;
+            if (green_bg_) {
+                lv_obj_del(green_bg_);
+                green_bg_ = nullptr;
+            }
+        }
+    }
+}
+
+void UILaunchPage::handle_startup_gif_event(lv_event_t *event)
+{
+    if (!event || lv_event_get_code(event) != LV_EVENT_READY || startup_gif_done_)
+        return;
+
+    startup_gif_done_ = true;
+    SLOGI("[GIF] first LV_EVENT_READY -> pause + home_screen_load()");
+    if (startup_gif_)
+        lv_gif_pause(startup_gif_);
+
+    load_home_screen();
+}
+
+void UILaunchPage::on_left_arrow_clicked(lv_event_t *event)
+{
+    if (UILaunchPage *self = page_from_event(event))
+        self->switch_right();
+}
+
+void UILaunchPage::on_right_arrow_clicked(lv_event_t *event)
+{
+    if (UILaunchPage *self = page_from_event(event))
+        self->switch_left();
+}
+
+void UILaunchPage::on_app_clicked(lv_event_t *event)
+{
+    if (UILaunchPage *self = page_from_event(event))
+        self->launch_selected_app();
+}
+
+void UILaunchPage::on_home_key(lv_event_t *event)
+{
+    if (UILaunchPage *self = page_from_event(event))
+        self->handle_home_key(event);
+}
+
+void UILaunchPage::on_startup_gif_event(lv_event_t *event)
+{
+    if (UILaunchPage *self = page_from_event(event))
+        self->handle_startup_gif_event(event);
 }
 
 void UILaunchPage::create_screen()
@@ -757,35 +749,35 @@ void UILaunchPage::create_app_container(lv_obj_t *parent)
     lv_obj_set_style_border_color(carousel_elements[kCardFarRight], lv_color_hex(0x333333), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_border_opa(carousel_elements[kCardFarRight], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    left_arrow_button = lv_btn_create(app_container);
-    lv_obj_set_width(left_arrow_button, 17);
-    lv_obj_set_height(left_arrow_button, 23);
-    lv_obj_set_x(left_arrow_button, -151);
-    lv_obj_set_y(left_arrow_button, -4);
-    lv_obj_set_align(left_arrow_button, LV_ALIGN_CENTER);
-    lv_obj_add_flag(left_arrow_button, LV_OBJ_FLAG_SCROLL_ON_FOCUS);     /// Flags
-    lv_obj_clear_flag(left_arrow_button, LV_OBJ_FLAG_SCROLLABLE);      /// Flags
-    lv_obj_set_style_radius(left_arrow_button, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(left_arrow_button, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_opa(left_arrow_button, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_img_src(left_arrow_button, cp0_file_path_c("carousel_left_arrow.png"), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_shadow_color(left_arrow_button, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_shadow_opa(left_arrow_button, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+    left_arrow_button_ = lv_btn_create(app_container);
+    lv_obj_set_width(left_arrow_button_, 17);
+    lv_obj_set_height(left_arrow_button_, 23);
+    lv_obj_set_x(left_arrow_button_, -151);
+    lv_obj_set_y(left_arrow_button_, -4);
+    lv_obj_set_align(left_arrow_button_, LV_ALIGN_CENTER);
+    lv_obj_add_flag(left_arrow_button_, LV_OBJ_FLAG_SCROLL_ON_FOCUS);     /// Flags
+    lv_obj_clear_flag(left_arrow_button_, LV_OBJ_FLAG_SCROLLABLE);      /// Flags
+    lv_obj_set_style_radius(left_arrow_button_, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(left_arrow_button_, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(left_arrow_button_, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_img_src(left_arrow_button_, cp0_file_path_c("carousel_left_arrow.png"), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_shadow_color(left_arrow_button_, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_shadow_opa(left_arrow_button_, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    right_arrow_button = lv_btn_create(app_container);
-    lv_obj_set_width(right_arrow_button, 17);
-    lv_obj_set_height(right_arrow_button, 23);
-    lv_obj_set_x(right_arrow_button, 150);
-    lv_obj_set_y(right_arrow_button, -4);
-    lv_obj_set_align(right_arrow_button, LV_ALIGN_CENTER);
-    lv_obj_add_flag(right_arrow_button, LV_OBJ_FLAG_SCROLL_ON_FOCUS);     /// Flags
-    lv_obj_clear_flag(right_arrow_button, LV_OBJ_FLAG_SCROLLABLE);      /// Flags
-    lv_obj_set_style_radius(right_arrow_button, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(right_arrow_button, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_opa(right_arrow_button, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_img_src(right_arrow_button, cp0_file_path_c("carousel_right_arrow.png"), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_shadow_color(right_arrow_button, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_shadow_opa(right_arrow_button, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+    right_arrow_button_ = lv_btn_create(app_container);
+    lv_obj_set_width(right_arrow_button_, 17);
+    lv_obj_set_height(right_arrow_button_, 23);
+    lv_obj_set_x(right_arrow_button_, 150);
+    lv_obj_set_y(right_arrow_button_, -4);
+    lv_obj_set_align(right_arrow_button_, LV_ALIGN_CENTER);
+    lv_obj_add_flag(right_arrow_button_, LV_OBJ_FLAG_SCROLL_ON_FOCUS);     /// Flags
+    lv_obj_clear_flag(right_arrow_button_, LV_OBJ_FLAG_SCROLLABLE);      /// Flags
+    lv_obj_set_style_radius(right_arrow_button_, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(right_arrow_button_, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(right_arrow_button_, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_img_src(right_arrow_button_, cp0_file_path_c("carousel_right_arrow.png"), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_shadow_color(right_arrow_button_, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_shadow_opa(right_arrow_button_, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
 
     carousel_elements[kCardFarLeft] = lv_obj_create(app_container);
     lv_obj_set_width(carousel_elements[kCardFarLeft], 61);
@@ -825,15 +817,14 @@ void UILaunchPage::create_app_container(lv_obj_t *parent)
     lv_obj_set_style_text_color(carousel_elements[kTitleFarRight], lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(carousel_elements[kTitleFarRight], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    lv_obj_add_event_cb(carousel_elements[kCardLeft], app_launch, LV_EVENT_CLICKED, NULL);
-    lv_obj_add_event_cb(carousel_elements[kCardCenter], app_launch, LV_EVENT_CLICKED, NULL);
-    lv_obj_add_event_cb(carousel_elements[kCardRight], app_launch, LV_EVENT_CLICKED, NULL);
-    lv_obj_add_event_cb(carousel_elements[kCardFarRight], app_launch, LV_EVENT_CLICKED, NULL);
-    lv_obj_add_event_cb(left_arrow_button, switch_right, LV_EVENT_CLICKED, NULL);
-    lv_obj_add_event_cb(right_arrow_button, switch_left, LV_EVENT_CLICKED, NULL);
-    lv_obj_add_event_cb(carousel_elements[kCardFarLeft], app_launch, LV_EVENT_CLICKED, NULL);
-    if (active_launch_page)
-        lv_obj_add_event_cb(active_launch_page->screen(), main_key_switch, (lv_event_code_t)LV_EVENT_KEYBOARD, NULL);
+    lv_obj_add_event_cb(carousel_elements[kCardLeft], on_app_clicked, LV_EVENT_CLICKED, this);
+    lv_obj_add_event_cb(carousel_elements[kCardCenter], on_app_clicked, LV_EVENT_CLICKED, this);
+    lv_obj_add_event_cb(carousel_elements[kCardRight], on_app_clicked, LV_EVENT_CLICKED, this);
+    lv_obj_add_event_cb(carousel_elements[kCardFarRight], on_app_clicked, LV_EVENT_CLICKED, this);
+    lv_obj_add_event_cb(left_arrow_button_, on_left_arrow_clicked, LV_EVENT_CLICKED, this);
+    lv_obj_add_event_cb(right_arrow_button_, on_right_arrow_clicked, LV_EVENT_CLICKED, this);
+    lv_obj_add_event_cb(carousel_elements[kCardFarLeft], on_app_clicked, LV_EVENT_CLICKED, this);
+    lv_obj_add_event_cb(screen(), on_home_key, (lv_event_code_t)LV_EVENT_KEYBOARD, this);
 
 
 }

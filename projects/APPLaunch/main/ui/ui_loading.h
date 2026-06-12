@@ -1,4 +1,10 @@
 /*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
+/*
  * ui_loading.h
  *
  * Global "Loading..." overlay used to give instant visual feedback when

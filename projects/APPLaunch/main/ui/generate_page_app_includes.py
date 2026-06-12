@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+#
+# SPDX-License-Identifier: MIT
+
 import os
 
 PAGE_APP_DIR = "page_app"
@@ -19,7 +23,15 @@ def generate_includes():
         print(f"No .hpp files found in '{PAGE_APP_DIR}'.")
         return
 
-    new_content = "#pragma once\n\n"
+    new_content = """/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
+#pragma once
+
+"""
     for hpp_file in hpp_files:
         new_content += f'#include "{PAGE_APP_DIR}/{hpp_file}"\n'
 

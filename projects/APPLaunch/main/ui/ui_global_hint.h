@@ -1,4 +1,10 @@
 /*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
+/*
  * ui_global_hint.h
  *
  * Global on-screen hint/toast overlay for the launcher and any sub-app
