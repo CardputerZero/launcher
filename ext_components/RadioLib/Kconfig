@@ -1,0 +1,6 @@
+menuconfig RADIOLIB_COMPONENT_ENABLED
+    bool "Enable RadioLib"
+    default n
+    help
+        Enable the RadioLib external component and expose RadioLib headers and
+        the SX126x/SX1262 implementation used by LoRa applications.
