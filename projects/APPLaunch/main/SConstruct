@@ -88,7 +88,7 @@ lvgl_component['SRCS'] = list(filter(
 ))
 
 # x86
-if 'linux_x86_sdl2_config_defaults.mk' in os.environ.get("CONFIG_DEFAULT_FILE", ''):
+if 'CONFIG_APPLAUNCH_LINUX_X86_SDL2' in os.environ:
     lvgl_component['DEFINITIONS'] += pkg_config_cflags("freetype2")
     lvgl_component['REQUIREMENTS'] += pkg_config_ldflags("freetype2")
 
@@ -98,7 +98,7 @@ if 'linux_x86_sdl2_config_defaults.mk' in os.environ.get("CONFIG_DEFAULT_FILE", 
     REQUIREMENTS += ['input', 'xkbcommon', 'udev']
 
 # x86 cross
-if 'linux_x86_cross_cp0_config_defaults.mk' in os.environ.get("CONFIG_DEFAULT_FILE", ''):
+if 'CONFIG_APPLAUNCH_LINUX_X86_CROSS_CP0' in os.environ:
     lvgl_component['DEFINITIONS'] += ['-D_REENTRANT']
     lvgl_component['INCLUDE'] += [f'{rootfs_path}/usr/include/freetype2', 
                                   f'{rootfs_path}/usr/include/libpng16',
@@ -111,11 +111,11 @@ if 'linux_x86_cross_cp0_config_defaults.mk' in os.environ.get("CONFIG_DEFAULT_FI
     LDFLAGS += [f'{rootfs_path}/usr/lib/aarch64-linux-gnu/libstdc++.so.6']
     DEFINITIONS += ['-Wno-format-truncation']
 
-if os.environ.get("CONFIG_DEFAULT_FILE", '') == 'config_defaults.mk':
+if 'CONFIG_APPLAUNCH_LINUX_CP0' in os.environ:
     REQUIREMENTS += ['cp0_lvgl']
     REQUIREMENTS += ['input', 'xkbcommon', 'udev', 'freetype']
 
-if 'mac_cross_cp0_config_defaults.mk' in os.environ.get("CONFIG_DEFAULT_FILE", ''):
+if 'CONFIG_APPLAUNCH_MAC_CROSS_CP0' in os.environ:
     lvgl_component['DEFINITIONS'] += ['-D_REENTRANT']
     lvgl_component['INCLUDE'] += [f'{os.environ.get("CONFIG_TOOLCHAIN_SYSROOT", "")}/usr/include/freetype2', f'{os.environ.get("CONFIG_TOOLCHAIN_SYSROOT", "")}/usr/include/libpng16']
 
@@ -136,7 +136,7 @@ if 'mac_cross_cp0_config_defaults.mk' in os.environ.get("CONFIG_DEFAULT_FILE", '
     LDFLAGS += [f'{os.environ.get("CONFIG_TOOLCHAIN_SYSROOT", "")}/usr/lib/aarch64-linux-gnu/libstdc++.so.6',f'-Wl,-rpath-link,{os.environ.get("CONFIG_TOOLCHAIN_SYSROOT", "")}/usr/lib/aarch64-linux-gnu',f'-B{os.environ.get("CONFIG_TOOLCHAIN_SYSROOT", "")}/usr/lib/aarch64-linux-gnu']
     DEFINITIONS += ['-Wno-format-truncation']
 # macOS
-if 'darwin_config_defaults.mk' in os.environ.get("CONFIG_DEFAULT_FILE", ''):
+if 'CONFIG_APPLAUNCH_DARWIN_SDL' in os.environ:
     # macOS Use the SDL backend
     REQUIREMENTS += ['cp0_lvgl']
 
