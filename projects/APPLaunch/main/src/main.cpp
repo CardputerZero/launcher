@@ -68,7 +68,7 @@ int main(void)
     if (LV_EVENT_KEYBOARD == 0)
         LV_EVENT_KEYBOARD = lv_event_register_id();
 
-    ui_init();
+    launcher_ui::init();
 
     // Force full-screen refresh immediately after init
     SLOGI("[BOOT] ui_init done, forcing full refresh...");

@@ -261,9 +261,9 @@ private:
         // Only handle input view events; terminal view is handled by UIConsolePage
         if (view_state_ != ViewState::INPUT) return;
 
-        if (IS_KEY_RELEASED(e))
+        if (launcher_ui::events::is_key_released(e))
         {
-            uint32_t key = LV_EVENT_KEYBOARD_GET_KEY(e);
+            uint32_t key = launcher_ui::events::keyboard_key(e);
 
             switch (key)
             {

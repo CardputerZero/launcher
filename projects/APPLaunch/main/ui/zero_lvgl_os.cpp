@@ -17,8 +17,6 @@ void zero_lvgl_os::creat_display()
 
 void zero_lvgl_os::create_launcher_home()
 {
-    LV_EVENT_GET_COMP_CHILD = lv_event_register_id();
-
     launch_page_->create_screen();
     launch_->bind_ui();
     launch_page_->init_input_group();

@@ -529,7 +529,6 @@ void UILaunchPage::init_input_group()
 void UILaunchPage::load_home_screen()
 {
     SLOGI("[HOME] home_screen_load() - loading launcher home screen");
-    ui____initial_actions0 = lv_obj_create(NULL);
     lv_disp_load_scr(ui_Screen1);
     UILaunchPage::bind_home_input_group();
 

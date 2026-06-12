@@ -1776,8 +1776,8 @@ private:
 
     void on_event(lv_event_t *e)
     {
-        bool released = IS_KEY_RELEASED(e);
-        bool pressed = IS_KEY_PRESSED(e);
+        bool released = launcher_ui::events::is_key_released(e);
+        bool pressed = launcher_ui::events::is_key_pressed(e);
         if (!released && !pressed) return;
 
         struct key_item *elm = (struct key_item *)lv_event_get_param(e);

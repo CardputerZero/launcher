@@ -188,7 +188,9 @@ static void show_hint(const char *text)
     }
 }
 
-extern "C" void ui_global_hint_on_key(const struct key_item *elm)
+namespace ui_global_hint {
+
+void on_key(const struct key_item *elm)
 {
     if (elm == NULL) return;
 
@@ -282,4 +284,11 @@ extern "C" void ui_global_hint_on_key(const struct key_item *elm)
             show_hint("Double-tap to lock");
         }
     }
+}
+
+} // namespace ui_global_hint
+
+extern "C" void ui_global_hint_on_key(const struct key_item *elm)
+{
+    ui_global_hint::on_key(elm);
 }

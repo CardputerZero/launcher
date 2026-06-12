@@ -3,7 +3,7 @@
  *
  * Transient "Loading..." overlay for app launches.
  *
- * Created lazily on first ui_loading_show() call as a child of
+ * Created lazily on first ui_loading::show() call as a child of
  * lv_layer_top() so it floats above any screen. Never deleted;
  * visibility is toggled via LV_OBJ_FLAG_HIDDEN. An lv_spinner sits
  * to the left of a short text label, both centered on-screen inside
@@ -12,7 +12,7 @@
  *
  * Design notes:
  *   - Because internal page construction happens synchronously on the
- *     LVGL thread, callers should follow ui_loading_show() with
+ *     LVGL thread, callers should follow ui_loading::show() with
  *     lv_refr_now(NULL) to force the overlay to actually paint BEFORE
  *     the slow work begins. Otherwise LVGL would only render on the
  *     next frame, which is after the freeze.
@@ -93,7 +93,9 @@ static void ensure_loading_created(void)
     lv_obj_add_flag(s_loading_obj, LV_OBJ_FLAG_HIDDEN);
 }
 
-extern "C" void ui_loading_show(const char *label)
+namespace ui_loading {
+
+void show(const char *label)
 {
     ensure_loading_created();
     if (s_loading_obj == NULL || s_loading_label == NULL) return;
@@ -106,8 +108,10 @@ extern "C" void ui_loading_show(const char *label)
     lv_obj_clear_flag(s_loading_obj, LV_OBJ_FLAG_HIDDEN);
 }
 
-extern "C" void ui_loading_hide(void)
+void hide()
 {
     if (s_loading_obj == NULL) return;
     lv_obj_add_flag(s_loading_obj, LV_OBJ_FLAG_HIDDEN);
 }
+
+} // namespace ui_loading

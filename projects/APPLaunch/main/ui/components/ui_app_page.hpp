@@ -384,9 +384,9 @@ private:
     static void app_battery_event_cb(lv_event_t *e)
     {
         AppTopBarRegion *self = static_cast<AppTopBarRegion *>(lv_event_get_user_data(e));
-        if (!self || lv_event_get_code(e) != LV_EVENT_BATTERY)
+        if (!self || lv_event_get_code(e) != launcher_ui::events::battery_event())
             return;
-        const cp0_battery_info_t *bat = LV_EVENT_BATTERY_GET_INFO(e);
+        const cp0_battery_info_t *bat = launcher_ui::events::battery_info(e);
         if (bat)
             self->update_battery_status(*bat);
     }
@@ -400,7 +400,7 @@ private:
 
     void UI_bind_event()
     {
-        lv_obj_add_event_cb(root_screen_, app_battery_event_cb, (lv_event_code_t)LV_EVENT_BATTERY, this);
+        lv_obj_add_event_cb(root_screen_, app_battery_event_cb, launcher_ui::events::battery_event(), this);
     }
 };
 
@@ -501,9 +501,9 @@ public:
     static void home_battery_event_cb(lv_event_t *e)
     {
         home_base *self = static_cast<home_base *>(lv_event_get_user_data(e));
-        if (!self || lv_event_get_code(e) != LV_EVENT_BATTERY)
+        if (!self || lv_event_get_code(e) != launcher_ui::events::battery_event())
             return;
-        const cp0_battery_info_t *bat = LV_EVENT_BATTERY_GET_INFO(e);
+        const cp0_battery_info_t *bat = launcher_ui::events::battery_info(e);
         if (bat)
             self->update_battery_status(*bat);
     }
@@ -615,7 +615,7 @@ private:
 
     void UI_bind_event()
     {
-        lv_obj_add_event_cb(root_screen_, home_battery_event_cb, (lv_event_code_t)LV_EVENT_BATTERY, this);
+        lv_obj_add_event_cb(root_screen_, home_battery_event_cb, launcher_ui::events::battery_event(), this);
     }
 };
 

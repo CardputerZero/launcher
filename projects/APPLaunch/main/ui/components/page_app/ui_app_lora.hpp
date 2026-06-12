@@ -180,7 +180,6 @@ static bool g_hat_5vout_last_cdev_ok = false;
 
 // Back callback
 static std::function<void(void)> g_go_back_home_fn;
-static void (*g_go_back_home_c_fn)(void) = NULL;
 
 void ui_app_lora_set_go_back(std::function<void(void)> go_back)
 {
@@ -1732,7 +1731,6 @@ static bool handle_app_key(uint32_t key)
 
     if (key == LV_KEY_ESC || key == LV_KEY_BACKSPACE || key == LV_KEY_DEL) {
         if (g_go_back_home_fn) g_go_back_home_fn();
-        if (g_go_back_home_c_fn) g_go_back_home_c_fn();
         return true;
     }
 
@@ -1871,10 +1869,6 @@ void lora_app_task()
     lora_poll_irq_and_update_ui();
 }
 
-extern "C" void lora_set_go_back_home(void (*cb)(void))
-{
-    g_go_back_home_c_fn = cb;
-}
 
 void ui_app_lora_destroy(void)
 {

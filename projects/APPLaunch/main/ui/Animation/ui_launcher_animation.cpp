@@ -4,9 +4,9 @@
 
 #include <utility>
 
-extern "C" int Animation_time;
-
 namespace {
+
+constexpr int kLauncherAnimationTimeMs = 200;
 
 struct LauncherSlot {
     lv_coord_t x;
@@ -128,7 +128,7 @@ void launcher_home_animate(lv_obj_t **items, bool to_right, launcher_home_animat
     }
 
     LvglAnimation::start_raw(
-        Animation_time,
+        kLauncherAnimationTimeMs,
         [ctx](LvglAnimation *anim) {
             animate_home(ctx, anim);
         },

@@ -453,9 +453,9 @@ private:
     }
     void event_handler(lv_event_t *e)
     {
-        if (IS_KEY_RELEASED(e))
+        if (launcher_ui::events::is_key_released(e))
         {
-            uint32_t key = LV_EVENT_KEYBOARD_GET_KEY(e);
+            uint32_t key = launcher_ui::events::keyboard_key(e);
             switch (view_state_)
             {
             case ViewState::MAIN:  handle_main_key(key); break;

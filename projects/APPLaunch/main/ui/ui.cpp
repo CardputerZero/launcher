@@ -11,16 +11,34 @@
 #include "cp0_lvgl_app.h"
 #include "sample_log.h"
 
+///////////////////// TEST LVGL SETTINGS ////////////////////
+#if LV_COLOR_DEPTH != 16
+    #error "LV_COLOR_DEPTH should be 16bit to match SquareLine Studio's settings"
+#endif
+#if LV_COLOR_16_SWAP != 0
+    #error "LV_COLOR_16_SWAP should be 0 to match SquareLine Studio's settings"
+#endif
 
-
-
+// LVGL objects exported through ui_obj.h.
+#undef UI_DEFINE_OBJECT
+#undef UI_DEFINE_EVENT_FUN
+#define UI_DEFINE_OBJECT(x) lv_obj_t *x;
+#define UI_DEFINE_EVENT_FUN(x)
+#include "ui_obj.h"
+#undef UI_DEFINE_OBJECT
+#undef UI_DEFINE_EVENT_FUN
 
 std::unique_ptr<zero_lvgl_os> home;
-void ui_init(void)
+
+namespace launcher_ui {
+
+void init()
 {
     home = std::make_unique<zero_lvgl_os>();
     home->start();
 }
+
+} // namespace launcher_ui
 
 LauncherFonts &launcher_fonts()
 {

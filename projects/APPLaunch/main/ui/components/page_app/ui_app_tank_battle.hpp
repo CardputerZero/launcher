@@ -306,11 +306,11 @@ private:
 
     void event_handler(lv_event_t *e)
     {
-        if (!IS_KEY_PRESSED(e) && !IS_KEY_RELEASED(e)) {
+        if (!launcher_ui::events::is_key_pressed(e) && !launcher_ui::events::is_key_released(e)) {
             return;
         }
 
-        uint32_t key = LV_EVENT_KEYBOARD_GET_KEY(e);
+        uint32_t key = launcher_ui::events::keyboard_key(e);
 
         if (key == KEY_ESC) {
             if (navigate_home) {
@@ -319,7 +319,7 @@ private:
             return;
         }
 
-        if (!IS_KEY_PRESSED(e)) {
+        if (!launcher_ui::events::is_key_pressed(e)) {
             return;
         }
 

@@ -272,7 +272,7 @@ public:
         SLOGI("Launching terminal app: %s", exec.c_str());
         /* Instant visual feedback; paint before the (potentially slow)
          * Console page construction so the user sees it right away. */
-        ui_loading_show("Loading...");
+        ui_loading::show("Loading...");
         lv_refr_now(NULL);
         auto p = std::make_shared<UIConsolePage>();
         app_Page = p;
@@ -283,7 +283,7 @@ public:
         /* Console page fully covers APP_Container; safe to hide now.
          * The heavy exec() call below will still run while the terminal
          * page is on-screen — no overlay needed at that point. */
-        ui_loading_hide();
+        ui_loading::hide();
         p->exec(exec);
     }
 
@@ -294,7 +294,7 @@ public:
          * gets immediate feedback when ENTER was pressed. The overlay
          * stays drawn on the framebuffer right up until the child takes
          * it over via cp0_process_exec_blocking(). */
-        ui_loading_show("Loading...");
+        ui_loading::show("Loading...");
         lv_disp_t *disp = lv_disp_get_default();
         lv_indev_t *indev = lv_indev_get_next(NULL);
         LVGL_RUN_FLAGE = 0;
@@ -311,7 +311,7 @@ public:
         lv_disp_load_scr(ui_Screen1);
         /* Child process has returned; we are back on the launcher home.
          * Hide the overlay so it doesn't linger. */
-        ui_loading_hide();
+        ui_loading::hide();
         lv_obj_invalidate(lv_screen_active());
         lv_refr_now(disp);
         LVGL_RUN_FLAGE = 1;
@@ -669,7 +669,7 @@ app::app(std::string name,
          * construction starts. Without lv_refr_now() the overlay would
          * only hit the framebuffer after the constructor returns, which
          * defeats the whole point. */
-        ui_loading_show("Loading...");
+        ui_loading::show("Loading...");
         lv_refr_now(NULL);
         auto p = std::make_shared<PageT>();
         self->app_Page = p;
@@ -680,7 +680,7 @@ app::app(std::string name,
             std::bind(&LaunchImpl::go_back_home, self);
         /* Page is now attached and drawable; hide the overlay. The
          * next LVGL frame will paint the new page without it. */
-        ui_loading_hide();
+        ui_loading::hide();
     };
 }
 

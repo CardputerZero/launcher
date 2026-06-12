@@ -8,34 +8,10 @@
 
 #include "hal_lvgl_bsp.h"
 
-#ifdef __cplusplus
-extern "C"
-{
-#endif
-
 #include "lvgl/lvgl.h"
 
-#include "components/ui_comp.h"
-#include "components/ui_comp_hook.h"
-#include "ui_events.h"
 #include "keyboard_input.h"
 #include "cp0_lvgl_app.h"
-
-#define lv_mem_alloc lv_malloc
-#define lv_mem_free lv_free
-#define lv_event_send(obj, evt, param) lv_obj_send_event(obj, evt, param)
-
-    // SCREEN: ui_Screen1
-
-#define LV_EVENT_KEYBOARD_GET_KEY(e) ((struct key_item *)lv_event_get_param(e))->key_code
-#define LV_EVENT_KEYBOARD_GET_KEY_STATE(e) ((struct key_item *)lv_event_get_param(e))->key_state
-#define IS_KEY_PRESSED(e) ((lv_event_get_code(e) == LV_EVENT_KEYBOARD) && (LV_EVENT_KEYBOARD_GET_KEY_STATE(e) > 0))
-#define IS_KEY_RELEASED(e) ((lv_event_get_code(e) == LV_EVENT_KEYBOARD) && (LV_EVENT_KEYBOARD_GET_KEY_STATE(e) == 0))
-
-#define LV_EVENT_BATTERY lv_c_event[CP0_C_EVENT_BATTERY]
-#define LV_EVENT_DELL_CPP_DATA lv_c_event[CP0_C_EVENT_DELL_CPP_DATA]
-
-#define LV_EVENT_BATTERY_GET_INFO(e) ((cp0_battery_info_t *)lv_event_get_param(e))
 
 #undef UI_DEFINE_OBJECT
 #undef UI_DEFINE_EVENT_FUN
@@ -45,37 +21,62 @@ extern "C"
 #undef UI_DEFINE_OBJECT
 #undef UI_DEFINE_EVENT_FUN
 
-    lv_obj_t *ui_console_creat(lv_event_t *e);
-    void ui_console_exit(lv_event_t *e);
-    void ui_console_key(lv_event_t *e);
-
 // Launcher layout constants
 #define BORDER_COLOR_CENTER 0x444444
 #define BORDER_COLOR_SIDE 0x222222
 #define LABEL_Y_CENTER 50
 #define LABEL_Y_SIDE 50
 
-    // EVENTS
-    extern lv_obj_t *ui____initial_actions0;
-
-#ifdef _WIN32
-#define PATH_SEP "\\"
-#else
-#define PATH_SEP "/"
-#endif
-    char *cimg_path(const char *name);
-    char *caudio_path(const char *name);
-    char *cfont_path(const char *name);
-
-    // UI INIT
-    void ui_init(void);
-
 #ifdef __cplusplus
-} /*extern "C"*/
-
 #include <memory>
 #include <string>
 #include <unordered_map>
+
+namespace launcher_ui {
+
+namespace events {
+inline const struct key_item *keyboard_item(lv_event_t *event)
+{
+    return static_cast<const struct key_item *>(lv_event_get_param(event));
+}
+
+inline uint32_t keyboard_key(lv_event_t *event)
+{
+    const struct key_item *item = keyboard_item(event);
+    return item ? item->key_code : 0;
+}
+
+inline int keyboard_state(lv_event_t *event)
+{
+    const struct key_item *item = keyboard_item(event);
+    return item ? item->key_state : 0;
+}
+
+inline bool is_key_pressed(lv_event_t *event)
+{
+    return lv_event_get_code(event) == static_cast<lv_event_code_t>(LV_EVENT_KEYBOARD) &&
+           keyboard_state(event) > 0;
+}
+
+inline bool is_key_released(lv_event_t *event)
+{
+    return lv_event_get_code(event) == static_cast<lv_event_code_t>(LV_EVENT_KEYBOARD) &&
+           keyboard_state(event) == 0;
+}
+
+inline lv_event_code_t battery_event()
+{
+    return static_cast<lv_event_code_t>(lv_c_event[CP0_C_EVENT_BATTERY]);
+}
+
+inline const cp0_battery_info_t *battery_info(lv_event_t *event)
+{
+    return static_cast<const cp0_battery_info_t *>(lv_event_get_param(event));
+}
+} // namespace events
+
+void init();
+}
 
 class LauncherFonts
 {

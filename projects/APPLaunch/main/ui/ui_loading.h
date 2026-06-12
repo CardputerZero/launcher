@@ -11,31 +11,27 @@
  *
  * Typical usage from the launcher:
  *
- *   ui_loading_show("Loading...");
+ *   ui_loading::show("Loading...");
  *   lv_refr_now(NULL);   // force the overlay to paint *before* the
  *                        //   (possibly slow) page construction below
  *   auto p = std::make_shared<PageT>();
  *   lv_disp_load_scr(p->get_ui());
- *   ui_loading_hide();
+ *   ui_loading::hide();
  */
 #ifndef UI_LOADING_H
 #define UI_LOADING_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+namespace ui_loading {
 
 /* Show the loading overlay with the given label. Idempotent: calling
  * repeatedly just updates the text. Safe to call before LVGL is fully
  * initialised (no-op if lv_layer_top() is not yet available).
  */
-void ui_loading_show(const char *label);
+void show(const char *label);
 
 /* Hide the loading overlay. Safe to call when not shown (no-op). */
-void ui_loading_hide(void);
+void hide();
 
-#ifdef __cplusplus
-}
-#endif
+} // namespace ui_loading
 
 #endif /* UI_LOADING_H */
