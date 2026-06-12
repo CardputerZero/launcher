@@ -9,12 +9,12 @@
 #include "hal_lvgl_bsp.h"
 
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
 
 #include "lvgl/lvgl.h"
 
-#include "ui_helpers.h"
 #include "components/ui_comp.h"
 #include "components/ui_comp_hook.h"
 #include "ui_events.h"
@@ -23,133 +23,91 @@ extern "C" {
 #include "cp0_lvgl_app.h"
 
 #define lv_mem_alloc lv_malloc
-#define lv_mem_free   lv_free
+#define lv_mem_free lv_free
 #define lv_event_send(obj, evt, param) lv_obj_send_event(obj, evt, param)
 
-// typedef void (*ui_anim_ready_cb_t)(lv_anim_t * a);
-typedef void (*ui_anim_ready_cb_t)(lv_anim_t *);
+    // SCREEN: ui_Screen1
 
-void leftPanelToCenter_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb);
-void centerPanelToRight_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb);
-void rightPanelToRightOuter_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb);
-void leftOuterPanelToLeft_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb);
-void leftPanelToLeftOuter_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb);
-void centerPanelToLeft_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb);
-void rightPanelToCenter_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb);
-void rightOuterPanelToRight_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb);
-// Label animations - rightward direction
-void leftOuterLabelToLeft_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb);
-void leftLabelToCenter_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb);
-void centerLabelToRight_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb);
-void rightLabelToRightOuter_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb);
-// Label animations - leftward direction
-void rightOuterLabelToRight_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb);
-void rightLabelToCenter_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb);
-void centerLabelToLeft_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb);
-void leftLabelToLeftOuter_Animation(lv_obj_t * TargetObject, int delay, ui_anim_ready_cb_t ready_cb);
-// SCREEN: ui_Screen1
+    void ui_Screen1_screen_init(void);
 
-void ui_Screen1_screen_init(void);
-
-
-void launch_circle_init();
-void ui_info_bind();
-
-
-
-
-
+    void launch_circle_init();
+    void ui_info_bind();
 
 #define LV_EVENT_KEYBOARD_GET_KEY(e) ((struct key_item *)lv_event_get_param(e))->key_code
 #define LV_EVENT_KEYBOARD_GET_KEY_STATE(e) ((struct key_item *)lv_event_get_param(e))->key_state
-#define IS_KEY_PRESSED(e) ((lv_event_get_code(e) == LV_EVENT_KEYBOARD)&&(LV_EVENT_KEYBOARD_GET_KEY_STATE(e) > 0))
-#define IS_KEY_RELEASED(e) ((lv_event_get_code(e) == LV_EVENT_KEYBOARD)&&(LV_EVENT_KEYBOARD_GET_KEY_STATE(e) == 0))
+#define IS_KEY_PRESSED(e) ((lv_event_get_code(e) == LV_EVENT_KEYBOARD) && (LV_EVENT_KEYBOARD_GET_KEY_STATE(e) > 0))
+#define IS_KEY_RELEASED(e) ((lv_event_get_code(e) == LV_EVENT_KEYBOARD) && (LV_EVENT_KEYBOARD_GET_KEY_STATE(e) == 0))
 
 #define LV_EVENT_BATTERY lv_c_event[CP0_C_EVENT_BATTERY]
 #define LV_EVENT_DELL_CPP_DATA lv_c_event[CP0_C_EVENT_DELL_CPP_DATA]
 
 #define LV_EVENT_BATTERY_GET_INFO(e) ((cp0_battery_info_t *)lv_event_get_param(e))
 
-
 #undef UI_DEFINE_OBJECT
 #undef UI_DEFINE_EVENT_FUN
-#define UI_DEFINE_OBJECT( x ) extern lv_obj_t * x ;
-#define UI_DEFINE_EVENT_FUN( x ) void x(lv_event_t * e);
+#define UI_DEFINE_OBJECT(x) extern lv_obj_t *x;
+#define UI_DEFINE_EVENT_FUN(x) void x(lv_event_t *e);
 #include "ui_obj.h"
 #undef UI_DEFINE_OBJECT
 #undef UI_DEFINE_EVENT_FUN
 
+    lv_obj_t *ui_console_creat(lv_event_t *e);
+    void ui_console_exit(lv_event_t *e);
+    void ui_console_key(lv_event_t *e);
 
+    // CUSTOM VARIABLES
+    extern const char *ui_img_zero_png;
+    extern const char *ui_img_time_png;
+    extern const char *ui_img_battery_bg_png;
+    extern const char *ui_img_left_png;
+    extern const char *ui_img_right_png;
+    extern const char *ui_img_store_logo_png;
+    extern const char *ui_img_cli_logo_png;
+    extern const char *ui_img_claw_logo_png;
+    extern const char *ui_img_setting_logo_png;
+    extern const char *ui_img_python_logo_png;
 
+    extern const char *ui_img_zero_logo_w_png;
+    extern const char *ui_img_left_logo_png;
+    extern const char *ui_img_right_logo_png;
+    extern const char *ui_img_detail_info_png;
+    extern const char *ui_img_down_logo_png;
+    extern const char *ui_img_up_logo_png;
+    extern const char *ui_img_camera_png;
 
-#define UI_DEFINE_UI_EVENT_FUN(event_fun, call_fun) void event_fun(lv_event_t * e);
-
-#include "ui_event_fun.h"
-#undef UI_DEFINE_UI_EVENT_FUN
-
-
-lv_obj_t * ui_console_creat(lv_event_t * e);
-void ui_console_exit(lv_event_t * e);
-void ui_console_key(lv_event_t * e);
-
-
-
-// CUSTOM VARIABLES
-extern const char *ui_img_zero_png;
-extern const char *ui_img_time_png;
-extern const char *ui_img_battery_bg_png;
-extern const char *ui_img_left_png;
-extern const char *ui_img_right_png;
-extern const char *ui_img_store_logo_png ;
-extern const char *ui_img_cli_logo_png   ;
-extern const char *ui_img_claw_logo_png  ;
-extern const char *ui_img_setting_logo_png ;
-extern const char *ui_img_python_logo_png ;
-
-
-
-
-
-extern const char *ui_img_zero_logo_w_png ;
-extern const char *ui_img_left_logo_png ;
-extern const char *ui_img_right_logo_png ;
-extern const char *ui_img_detail_info_png ;
-extern const char *ui_img_down_logo_png ;
-extern const char *ui_img_up_logo_png ;
-extern const char *ui_img_camera_png ;
-
-
-extern lv_font_t *g_font_cn_20;
-extern lv_font_t *g_font_cn_14;
-extern lv_font_t *g_font_cn_12;
-extern lv_font_t *g_font_mono_12;
-extern lv_font_t *g_font_bold_20;
-extern lv_font_t *g_font_bold_14;
-extern lv_font_t *g_font_bold_12;
+    extern lv_font_t *g_font_cn_20;
+    extern lv_font_t *g_font_cn_14;
+    extern lv_font_t *g_font_cn_12;
+    extern lv_font_t *g_font_mono_12;
+    extern lv_font_t *g_font_bold_20;
+    extern lv_font_t *g_font_bold_14;
+    extern lv_font_t *g_font_bold_12;
 // Launcher layout constants
-#define BORDER_COLOR_CENTER  0x444444
-#define BORDER_COLOR_SIDE    0x222222
-#define LABEL_Y_CENTER       50
-#define LABEL_Y_SIDE         50
+#define BORDER_COLOR_CENTER 0x444444
+#define BORDER_COLOR_SIDE 0x222222
+#define LABEL_Y_CENTER 50
+#define LABEL_Y_SIDE 50
 
-// EVENTS
-extern lv_obj_t * ui____initial_actions0;
+    // EVENTS
+    extern lv_obj_t *ui____initial_actions0;
 
 #ifdef _WIN32
-    #define PATH_SEP "\\"
+#define PATH_SEP "\\"
 #else
-    #define PATH_SEP "/"
+#define PATH_SEP "/"
 #endif
-char* cimg_path(const char *name);
-char* caudio_path(const char *name);
-char* cfont_path(const char *name);
+    char *cimg_path(const char *name);
+    char *caudio_path(const char *name);
+    char *cfont_path(const char *name);
 
-
-// UI INIT
-void ui_init(void);
+    // UI INIT
+    void ui_init(void);
 
 #ifdef __cplusplus
 } /*extern "C"*/
+#include "Launch.h"
+#include "UILaunchPage.h"
+#include "zero_lvgl_os.h"
 #endif
 
 #endif

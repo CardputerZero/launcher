@@ -2,15 +2,13 @@
 
 #include "lvgl/lvgl.h"
 
-typedef void (*launcher_anim_ready_cb_t)(lv_anim_t *);
+#include <functional>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+namespace launcher_home_animation {
 
-void launcher_home_animate_right(lv_obj_t **items, launcher_anim_ready_cb_t ready_cb);
-void launcher_home_animate_left(lv_obj_t **items, launcher_anim_ready_cb_t ready_cb);
+using ReadyCallback = std::function<void()>;
 
-#ifdef __cplusplus
-}
-#endif
+void animate_right(lv_obj_t **items, ReadyCallback ready_cb);
+void animate_left(lv_obj_t **items, ReadyCallback ready_cb);
+
+} // namespace launcher_home_animation

@@ -4,7 +4,6 @@
 // Project name: zero
 
 #include "../ui.h"
-#include "../ui_helpers.h"
 #include "ui_comp.h"
 
 uint32_t LV_EVENT_GET_COMP_CHILD;

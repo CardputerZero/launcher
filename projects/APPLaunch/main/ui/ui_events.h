@@ -12,10 +12,12 @@ extern "C" {
 
 
 
-#define UI_DEFINE_UI_EVENT_FUN(event_fun, call_fun) void call_fun(lv_event_t * e);
+void switch_left(lv_event_t *e);
+void switch_right(lv_event_t *e);
+void app_launch(lv_event_t *e);
+void go_back_home(lv_event_t *e);
+void main_key_switch(lv_event_t *e);
 
-#include "ui_event_fun.h"
-#undef UI_DEFINE_UI_EVENT_FUN
 void app_card_click(lv_event_t * e);
 
 

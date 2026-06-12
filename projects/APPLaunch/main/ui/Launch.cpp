@@ -1,22 +1,27 @@
-#include "../ui.h"
-#include <stdio.h>
-#include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <dirent.h>
+#include "Launch.h"
+
+#include "ui.h"
+#include "UILaunchPage.h"
+#include "ui_loading.h"
+#include "components/page_app.h"
 #include "cp0_lvgl_app.h"
 #include "cp0_lvgl_file.hpp"
-#include <unordered_map>
+#include "sample_log.h"
+
+#include <chrono>
+#include <dirent.h>
+#include <fcntl.h>
+#include <fstream>
+#include <functional>
 #include <list>
 #include <memory>
-#include <string>
-#include <functional>
-#include <chrono>
-#include <fstream>
 #include <sstream>
-#include "../ui_loading.h"
-#include "page_app.h"
-#include "sample_log.h"
+#include <stdio.h>
+#include <string>
+#include <string.h>
+#include <unistd.h>
+#include <unordered_map>
+#include <utility>
 
 /* img_path() now defined in ui_app_page.hpp */
 
@@ -63,7 +68,7 @@ Icon=share/images/e-Mail_80.png
 */
 
 // Forward declarations
-class app_launch_S;
+class LaunchImpl;
 
 // ============================================================
 // Type tag
@@ -86,7 +91,7 @@ struct app
     std::string Icon;
     std::string Exec;
 
-    std::function<void(app_launch_S *)> launch;
+    std::function<void(LaunchImpl *)> launch;
 
     // ① External command
     app(std::string name,
@@ -117,9 +122,9 @@ struct app
 };
 
 // ============================================================
-// app_launch_S
+// LaunchImpl
 // ============================================================
-class app_launch_S
+class LaunchImpl
 {
 private:
     int current_app = 2;
@@ -131,9 +136,9 @@ private:
 public:
     std::list<app> app_list;
     std::shared_ptr<void> app_Page;
-
+    std::shared_ptr<void> home_Page;
 public:
-    app_launch_S()
+    LaunchImpl()
     {
         // Fixed icon; users cannot modify it
         app_list.emplace_back("Python",
@@ -244,7 +249,7 @@ public:
 
     static void lv_go_back_home(void *arg)
     {
-        auto self = (app_launch_S *)arg;
+        auto self = (LaunchImpl *)arg;
         SLOGI("[HOME] lv_go_back_home executing (page=%p)", self->app_Page.get());
         lv_timer_enable(true);
         lv_indev_set_group(lv_indev_get_next(NULL), Screen1group);
@@ -273,7 +278,7 @@ public:
         app_Page = p;
         lv_disp_load_scr(p->get_ui());
         lv_indev_set_group(lv_indev_get_next(NULL), p->get_key_group());
-        p->go_back_home = std::bind(&app_launch_S::go_back_home, this);
+        p->go_back_home = std::bind(&LaunchImpl::go_back_home, this);
         p->terminal_sysplause = sysplause;
         /* Console page fully covers APP_Container; safe to hide now.
          * The heavy exec() call below will still run while the terminal
@@ -535,7 +540,7 @@ public:
     // ============================================================
     static void home_status_timer_cb(lv_timer_t *timer)
     {
-        auto *self = static_cast<app_launch_S *>(lv_timer_get_user_data(timer));
+        auto *self = static_cast<LaunchImpl *>(lv_timer_get_user_data(timer));
         if (self)
             self->update_home_status_bar();
     }
@@ -590,7 +595,7 @@ public:
     // ============================================================
     static void app_dir_watch_cb(lv_timer_t *timer)
     {
-        auto *self = static_cast<app_launch_S *>(lv_timer_get_user_data(timer));
+        auto *self = static_cast<LaunchImpl *>(lv_timer_get_user_data(timer));
         if (!self || !self->dir_watcher)
             return;
 
@@ -601,18 +606,18 @@ public:
         }
     }
 
-    ~app_launch_S();
+    ~LaunchImpl();
 };
 
 // ============================================================
-// app constructor implementation (placed after app_launch_S definition)
+// app constructor implementation (placed after LaunchImpl definition)
 // ============================================================
 inline app::app(std::string name,
                 std::string icon,
                 std::string exec,
                 bool terminal)
     : Name(std::move(name)), Icon(std::move(icon)){
-    launch = [exec = std::move(exec), terminal](app_launch_S *ctx)
+    launch = [exec = std::move(exec), terminal](LaunchImpl *ctx)
     {
         if (terminal)
             ctx->launch_Exec_in_terminal(exec);
@@ -627,7 +632,7 @@ inline app::app(std::string name,
                 bool terminal,
                 bool sysplause)
     : Name(std::move(name)), Icon(std::move(icon)){
-    launch = [exec = std::move(exec), terminal, sysplause](app_launch_S *ctx)
+    launch = [exec = std::move(exec), terminal, sysplause](LaunchImpl *ctx)
     {
         if (terminal)
             ctx->launch_Exec_in_terminal(exec, sysplause);
@@ -643,7 +648,7 @@ inline app::app(std::string name,
                 bool sysplause,
                 bool run_as_root)
     : Name(std::move(name)), Icon(std::move(icon)){
-    launch = [exec = std::move(exec), terminal, sysplause, run_as_root](app_launch_S *ctx)
+    launch = [exec = std::move(exec), terminal, sysplause, run_as_root](LaunchImpl *ctx)
     {
         if (terminal)
             ctx->launch_Exec_in_terminal(exec, sysplause);
@@ -657,7 +662,7 @@ app::app(std::string name,
          std::string icon,
          page_t<PageT> /*tag*/)
     : Name(std::move(name)), Icon(std::move(icon)){
-    launch = [](app_launch_S *self)
+    launch = [](LaunchImpl *self)
     {
         /* Instant feedback: show the overlay, then force an immediate
          * redraw so it actually paints BEFORE the (sometimes slow) page
@@ -672,7 +677,7 @@ app::app(std::string name,
         lv_indev_set_group(lv_indev_get_next(NULL),
                            p->get_key_group());
         p->go_back_home =
-            std::bind(&app_launch_S::go_back_home, self);
+            std::bind(&LaunchImpl::go_back_home, self);
         /* Page is now attached and drawable; hide the overlay. The
          * next LVGL frame will paint the new page without it. */
         ui_loading_hide();
@@ -680,9 +685,9 @@ app::app(std::string name,
 }
 
 // ============================================================
-// app_launch_S destructor implementation
+// LaunchImpl destructor implementation
 // ============================================================
-app_launch_S::~app_launch_S()
+LaunchImpl::~LaunchImpl()
 {
     if (status_timer)
     {
@@ -701,15 +706,48 @@ app_launch_S::~app_launch_S()
     }
 }
 
+Launch::Launch() = default;
+
+Launch::~Launch() = default;
+
+void Launch::set_launch_page(std::shared_ptr<UILaunchPage> launch_page)
+{
+    launch_page_ = std::move(launch_page);
+}
+
+void Launch::bind_ui()
+{
+    impl_ = std::make_unique<LaunchImpl>();
+}
+
+void Launch::update_left_slot(lv_obj_t *panel, lv_obj_t *label)
+{
+    if (impl_)
+        impl_->update_left_slot(panel, label);
+}
+
+void Launch::update_right_slot(lv_obj_t *panel, lv_obj_t *label)
+{
+    if (impl_)
+        impl_->update_right_slot(panel, label);
+}
+
+void Launch::launch_app()
+{
+    if (impl_)
+        impl_->launch_app();
+}
+
 // ============================================================
-std::unique_ptr<app_launch_S> app_launch_Ser;
+std::unique_ptr<Launch> app_launch_Ser;
 
 extern "C"
 {
 
     void ui_info_bind()
     {
-        app_launch_Ser = std::make_unique<app_launch_S>();
+        app_launch_Ser = std::make_unique<Launch>();
+        app_launch_Ser->bind_ui();
     }
     void cpp_app_left(lv_obj_t *panel, lv_obj_t *label)
     {

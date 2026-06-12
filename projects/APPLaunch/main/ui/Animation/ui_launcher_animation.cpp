@@ -2,6 +2,8 @@
 
 #include "Animation.hpp"
 
+#include <utility>
+
 extern "C" int Animation_time;
 
 namespace {
@@ -16,7 +18,7 @@ struct LauncherSlot {
 struct LauncherHomeAnimContext {
     lv_obj_t *items[10];
     bool to_right;
-    launcher_anim_ready_cb_t ready_cb;
+    launcher_home_animation::ReadyCallback ready_cb;
 };
 
 constexpr LauncherSlot kPanelSlots[] = {
@@ -109,13 +111,13 @@ void finish_home(LauncherHomeAnimContext *ctx)
     }
 
     if (ctx->ready_cb) {
-        ctx->ready_cb(nullptr);
+        ctx->ready_cb();
     }
 
     delete ctx;
 }
 
-void launcher_home_animate(lv_obj_t **items, bool to_right, launcher_anim_ready_cb_t ready_cb)
+void launcher_home_animate(lv_obj_t **items, bool to_right, launcher_home_animation::ReadyCallback ready_cb)
 {
     auto *ctx = new LauncherHomeAnimContext{};
     ctx->to_right = to_right;
@@ -137,12 +139,16 @@ void launcher_home_animate(lv_obj_t **items, bool to_right, launcher_anim_ready_
 
 } // namespace
 
-extern "C" void launcher_home_animate_right(lv_obj_t **items, launcher_anim_ready_cb_t ready_cb)
+namespace launcher_home_animation {
+
+void animate_right(lv_obj_t **items, ReadyCallback ready_cb)
 {
-    launcher_home_animate(items, true, ready_cb);
+    launcher_home_animate(items, true, std::move(ready_cb));
 }
 
-extern "C" void launcher_home_animate_left(lv_obj_t **items, launcher_anim_ready_cb_t ready_cb)
+void animate_left(lv_obj_t **items, ReadyCallback ready_cb)
 {
-    launcher_home_animate(items, false, ready_cb);
+    launcher_home_animate(items, false, std::move(ready_cb));
 }
+
+} // namespace launcher_home_animation

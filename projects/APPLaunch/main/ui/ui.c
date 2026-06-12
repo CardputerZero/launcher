@@ -4,7 +4,6 @@
 // Project name: zero
 
 #include "ui.h"
-#include "ui_helpers.h"
 #include <stdio.h>
 #include <sys/stat.h>
 #include "lvgl/src/widgets/gif/lv_gif.h"
@@ -26,7 +25,6 @@
 #include "ui_obj.h"
 #undef UI_DEFINE_OBJECT
 #undef UI_DEFINE_EVENT_FUN
-lv_obj_t * startup_gif;
 
 // CUSTOM VARIABLES
 int Animation_time = 200;
@@ -50,42 +48,6 @@ const char *ui_img_down_logo_png;
 const char *ui_img_up_logo_png;
 const char *ui_img_camera_png;
 
-static char _img_path_buf[16][256];
-static void ui_images_init(void)
-{
-    struct { const char **ptr; const char *name; } tbl[] = {
-        { &ui_img_zero_png,       "zero.png" },
-        { &ui_img_time_png,       "time_bg.png" },
-        { &ui_img_battery_bg_png, "battery_bg.png" },
-        { &ui_img_left_png,        "left.png" },
-        { &ui_img_right_png,        "right.png" },
-        { &ui_img_zero_logo_w_png,"zero_logo_w.png" },
-        { &ui_img_left_logo_png,   "left_logo.png" },
-        { &ui_img_right_logo_png,   "right_logo.png" },
-        { &ui_img_detail_info_png,"detail_info.png" },
-        { &ui_img_down_logo_png,  "down_logo.png" },
-        { &ui_img_up_logo_png,    "up_logo.png" },
-        { &ui_img_camera_png,     "camera.png" },
-    };
-    int n = sizeof(tbl) / sizeof(tbl[0]);
-    for (int i = 0; i < n && i < 16; i++) {
-        snprintf(_img_path_buf[i], sizeof(_img_path_buf[i]), "%s", cp0_file_path(tbl[i].name));
-        *tbl[i].ptr = _img_path_buf[i];
-    }
-}
-
-
-
-
-
-
-const char * font_path = NULL;
-const char * mono_font_path = NULL;
-
-
-
-
-
 static uint32_t EVT_TERM_KEY;
 
 lv_font_t *g_font_cn_20 = NULL;
@@ -107,154 +69,8 @@ lv_font_t *g_font_bold_12 = NULL;   /* bold app-name font - side */
     #error "LV_COLOR_16_SWAP should be 0 to match SquareLine Studio's settings"
 #endif
 
-///////////////////// ANIMATIONS ////////////////////
-#include "Animation/Animation_panel.h"
-
-// ==================== Label Animations ====================
-// Labels only animate x and y (no width/height change)
-// rightward direction: labels slide right (pos5→6→7→8→9)
-
-#include "Animation/Animation_lable.h"
-
 
 ///////////////////// FUNCTIONS ////////////////////
-#define UI_DEFINE_UI_EVENT_FUN(event_fun, call_fun) __attribute__((weak)) void event_fun(lv_event_t * e) { \
-    lv_event_code_t event_code = lv_event_get_code(e); \
-    if(event_code == LV_EVENT_CLICKED) { \
-        call_fun(e); \
-    } \
-}
-
-#include "ui_event_fun.h"
-
-
-
-#undef UI_DEFINE_UI_EVENT_FUN
-
-
-
-void font_manager_init(void)
-{
-    g_font_cn_20 = lv_freetype_font_create(
-        font_path, LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 20,
-        LV_FREETYPE_FONT_STYLE_NORMAL);
-
-    g_font_cn_14 = lv_freetype_font_create(
-        font_path, LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 14,
-        LV_FREETYPE_FONT_STYLE_NORMAL);
-
-    g_font_cn_12 = lv_freetype_font_create(
-        font_path, LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 12,
-        LV_FREETYPE_FONT_STYLE_BOLD);
-
-    g_font_mono_12 = lv_freetype_font_create(
-        mono_font_path, LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 12,
-        LV_FREETYPE_FONT_STYLE_NORMAL);
-
-    {
-        static char bold_path[512];
-        snprintf(bold_path, sizeof(bold_path), "%s", cp0_file_path("Montserrat-Bold.ttf"));
-        g_font_bold_20 = lv_freetype_font_create(
-            bold_path, LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 18,
-            LV_FREETYPE_FONT_STYLE_BOLD);
-        g_font_bold_14 = lv_freetype_font_create(
-            bold_path, LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 16,
-            LV_FREETYPE_FONT_STYLE_BOLD);
-        g_font_bold_12 = lv_freetype_font_create(
-            bold_path, LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 12,
-            LV_FREETYPE_FONT_STYLE_BOLD);
-    }
-
-    // Fallback to built-in fonts if freetype loading failed (e.g. on macOS emulator)
-    if (!g_font_cn_20)  g_font_cn_20  = (lv_font_t *)&lv_font_montserrat_20;
-    if (!g_font_cn_14)  g_font_cn_14  = (lv_font_t *)&lv_font_montserrat_14;
-    if (!g_font_cn_12)  g_font_cn_12  = (lv_font_t *)&lv_font_montserrat_12;
-    if (!g_font_mono_12) g_font_mono_12 = (lv_font_t *)&lv_font_montserrat_12;
-    if (!g_font_bold_20) g_font_bold_20 = (lv_font_t *)&lv_font_montserrat_18;
-    if (!g_font_bold_14) g_font_bold_14 = (lv_font_t *)&lv_font_montserrat_14;
-    if (!g_font_bold_12) g_font_bold_12 = (lv_font_t *)&lv_font_montserrat_12;
-}
-
-///////////////////// SCREENS ////////////////////
-
-void home_screen_load()
-{
-    SLOGI("[HOME] home_screen_load() - loading launcher home screen");
-    ui____initial_actions0 = lv_obj_create(NULL);
-    lv_disp_load_scr(ui_Screen1);
-    lv_indev_set_group(lv_indev_get_next(NULL), Screen1group);
-
-    cp0_signal_audio_api_play_asset("startup.mp3");
-}
-
-void ui_event_logo_over(lv_event_t * e) {
-    static int done = 0;
-    lv_event_code_t event_code = lv_event_get_code(e);
-    if(event_code == LV_EVENT_READY && !done) {
-        done = 1;
-        SLOGI("[GIF] first LV_EVENT_READY -> pause + home_screen_load()");
-        if (startup_gif) lv_gif_pause(startup_gif);
-
-        home_screen_load();
-    }
-}
-
-static char _gif_path[256];
-void start_startup_gif()
-{
-    snprintf(_gif_path, sizeof(_gif_path), "%s", cp0_file_path("logo_output.gif"));
-    startup_gif = lv_gif_create(NULL);
-    lv_gif_set_src(startup_gif, _gif_path);
-    lv_obj_center(startup_gif);
-    lv_obj_add_event_cb(startup_gif, ui_event_logo_over, LV_EVENT_ALL, NULL);
-    lv_disp_load_scr(startup_gif);
-}
-
-void ui_init(void)
-{
-    ui_images_init();
-    static char regular_font_path[512];
-    static char mono_font_path_buf[512];
-    snprintf(regular_font_path, sizeof(regular_font_path), "%s", cp0_file_path("AlibabaPuHuiTi-3-55-Regular.ttf"));
-    snprintf(mono_font_path_buf, sizeof(mono_font_path_buf), "%s", cp0_file_path("LiberationMono-Regular.ttf"));
-    font_path = regular_font_path;
-    mono_font_path = mono_font_path_buf;
-    font_manager_init();
-
-    LV_EVENT_GET_COMP_CHILD = lv_event_register_id();
-
-    lv_disp_t * dispp = lv_disp_get_default();
-    lv_theme_t * theme = lv_theme_default_init(dispp, lv_palette_main(LV_PALETTE_BLUE), lv_palette_main(LV_PALETTE_RED),
-                                               false, LV_FONT_DEFAULT);
-    lv_disp_set_theme(dispp, theme);
-
-    // Initialize each screen
-    ui_Screen1_screen_init();
-
-    // Bind screen metadata
-    ui_info_bind();
-    launch_circle_init();
-
-    // Initialize the input group
-    input_group_init();
-
-    // Show the boot animation (requires share/images/logo_output.gif)
-#ifndef APPLAUNCH_STARTUP_ANIMATION
-    home_screen_load();
-#else
-    #ifdef HAL_PLATFORM_SDL
-    home_screen_load();
-    #else
-    {
-        char gif_check[256];
-        snprintf(gif_check, sizeof(gif_check), "%s", cp0_file_path("logo_output.gif"));
-        FILE *_gif_f = fopen(gif_check, "r");
-        if (_gif_f) { fclose(_gif_f); start_startup_gif(); }
-        else { home_screen_load(); }
-    }
-    #endif
-#endif
-}
 
 
 
