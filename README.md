@@ -46,8 +46,9 @@ launcher/
 │   ├── Calculator/             # Calculator
 │   ├── AppStore/               # App store
 │   └── HelloWorld/             # Hello World example
-├── ext_components/             # External components (Miniaudio, etc.)
-├── doc/                        # Documentation resources
+├── ext_components/             # External components (Miniaudio, RadioLib, etc.)
+├── docs/                       # Project documentation
+├── scripts/                    # Repository helper tools
 ├── README.md
 └── README_ZH.md
 ```

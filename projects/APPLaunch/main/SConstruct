@@ -162,7 +162,6 @@ REQUIREMENTS += ['RadioLib']
 
 # add static files
 STATIC_FILES += [ADir('../APPLaunch')]
-STATIC_FILES += [os.path.join(env['component_dir'], '..', '..', '..', 'doc', 'store_cache_sync.py')]
 # register the component to the build system
 env['COMPONENTS'].append({'target':'M5CardputerZero-APPLaunch',
                           'SRCS':SRCS,

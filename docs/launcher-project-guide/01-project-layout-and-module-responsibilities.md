@@ -9,7 +9,6 @@ launcher/
 ├── SDK/
 ├── ext_components/
 ├── projects/
-├── doc/
 ├── docs/
 ├── README.md
 └── README_ZH.md
@@ -48,6 +47,7 @@ env = SConscript(
 ext_components/
 ├── cp0_lvgl/
 ├── Miniaudio/
+├── RadioLib/
 └── Sigslot/
 ```
 
@@ -56,6 +56,7 @@ ext_components/
 | `cp0_lvgl` | CardputerZero platform adaptation; wraps LVGL initialization, file paths, input, processes, PTY, and system capabilities |
 | `Miniaudio` | Dependency for audio playback and recording |
 | `Sigslot` | Signal-slot mechanism |
+| `RadioLib` | LoRa/SX126x wireless communication library component |
 
 ### 1.3 `projects/`
 
@@ -78,10 +79,11 @@ projects/
 | `HelloWorld` | Minimal example project for learning the build flow |
 | `UserDemo` | User demo project |
 
-### 1.4 `doc/` and `docs/`
+### 1.4 `docs/`, `scripts/`, and Runtime Helpers
 
-- `doc/`: historical documentation, packaging guides, and helper scripts, such as `APPLaunch-App-打包指南.md` and `store_cache_sync.py`.
-- `docs/`: developer-facing documentation. This documentation set is placed here.
+- `docs/`: developer-facing documentation and standalone packaging docs, including `APPLaunch-App-打包指南.md`.
+- `scripts/`: repository-level helper tools, such as `firmware_manager.py` and `debian_packager.py`.
+- `projects/APPLaunch/APPLaunch/bin/`: APPLaunch runtime helper scripts copied into `/usr/share/APPLaunch/bin/`, including `store_cache_sync.py`.
 
 ## 2. APPLaunch Top-Level Structure
 
@@ -117,6 +119,8 @@ projects/APPLaunch/
 projects/APPLaunch/APPLaunch/
 ├── applications/
 │   └── vim.desktop.temple
+├── bin/
+│   └── store_cache_sync.py
 ├── lib/
 │   └── nihao.so
 └── share/

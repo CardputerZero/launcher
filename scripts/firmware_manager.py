@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
 FirmwareManagementV3 命令行客户端
-基于 doc/FirmwareManagementV3.md
 
 使用方法:
     python3 firmware_manager.py <command> [options]

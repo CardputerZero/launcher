@@ -46,8 +46,9 @@ launcher/
 │   ├── Calculator/             # 计算器
 │   ├── AppStore/               # 应用商店
 │   └── HelloWorld/             # Hello World 示例
-├── ext_components/             # 外部组件（Miniaudio 等）
-├── doc/                        # 文档资源
+├── ext_components/             # 外部组件（Miniaudio、RadioLib 等）
+├── docs/                       # 工程文档
+├── scripts/                    # 仓库辅助工具
 ├── README.md
 └── README_ZH.md
 ```
