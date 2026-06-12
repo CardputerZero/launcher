@@ -521,6 +521,7 @@ void UILaunchPage::init_input_group()
 void UILaunchPage::show_home_screen()
 {
     SLOGI("[HOME] show_home_screen() - loading launcher home screen");
+    use_bold_home_title_font();
     lv_disp_load_scr(screen());
     UILaunchPage::bind_home_input_group();
 }

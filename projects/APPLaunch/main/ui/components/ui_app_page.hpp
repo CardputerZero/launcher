@@ -517,6 +517,17 @@ public:
         update_wifi_status();
     }
 
+    void use_bold_home_title_font()
+    {
+#ifndef APPLAUNCH_LOGO_USE_PNG
+        if (!ui_TOP_logo)
+            return;
+        lv_obj_set_style_text_font(ui_TOP_logo,
+                                   launcher_fonts().get("Montserrat-Bold.ttf", 16, LV_FREETYPE_FONT_STYLE_BOLD),
+                                   LV_PART_MAIN | LV_STATE_DEFAULT);
+#endif
+    }
+
     void update_battery_status(const cp0_battery_info_t &bat)
     {
         if (bat.valid)
