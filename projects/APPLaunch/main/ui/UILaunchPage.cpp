@@ -493,6 +493,8 @@ std::string LauncherFonts::key(const char *ttf_name, uint16_t size, lv_freetype_
 
 lv_group_t *UILaunchPage::home_input_group()
 {
+    if (active_launch_page)
+        return active_launch_page->input_group();
     return ::home_input_group;
 }
 
@@ -510,19 +512,13 @@ void UILaunchPage::bind_home_input_group()
 {
     lv_indev_t *indev = lv_indev_get_next(NULL);
     if (indev) {
-        lv_indev_set_group(indev, ::home_input_group);
+        lv_indev_set_group(indev, home_input_group());
     }
 }
 
 void UILaunchPage::init_input_group()
 {
-    if (::home_input_group) {
-        bind_home_input_group();
-        return;
-    }
-
-    ::home_input_group = lv_group_create();
-    lv_group_add_obj(::home_input_group, ui_Screen1);
+    ::home_input_group = input_group();
     bind_home_input_group();
 }
 
@@ -591,164 +587,26 @@ void UILaunchPage::launch_selected_app()
 
 void UILaunchPage::create_screen()
 {
-    if (ui_Screen1)
+    if (!ui_Screen1)
+        ui_Screen1 = screen();
+    if (!::ui_APP_Container)
+        ::ui_APP_Container = content_container();
+
+    if (carousel_elements[kCardCenter])
         return;
 
-    ui_Screen1 = lv_obj_create(NULL);
-    lv_obj_clear_flag(ui_Screen1, LV_OBJ_FLAG_SCROLLABLE);      /// Flags
-    lv_obj_set_style_bg_color(ui_Screen1, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_opa(ui_Screen1, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-
-    create_top(ui_Screen1);
-    create_app_container(ui_Screen1);
+    create_app_container(content_container());
 
 }
 
-void UILaunchPage::create_top(lv_obj_t *parent)
-{
-#ifdef APPLAUNCH_LOGO_USE_PNG
-    ui_Image1 = lv_img_create(parent);
-    lv_img_set_src(ui_Image1, cp0_file_path_c("launcher_brand_logo.png"));
-    lv_obj_set_width(ui_Image1, LV_SIZE_CONTENT);
-    lv_obj_set_height(ui_Image1, LV_SIZE_CONTENT);
-    lv_obj_set_x(ui_Image1, 5);
-    lv_obj_set_y(ui_Image1, 5);
-    lv_obj_add_flag(ui_Image1, LV_OBJ_FLAG_ADV_HITTEST);
-    lv_obj_clear_flag(ui_Image1, LV_OBJ_FLAG_SCROLLABLE);
-#else
-    ui_Image1 = lv_label_create(parent);
-    lv_label_set_text(ui_Image1, "ZERO");
-    lv_obj_set_x(ui_Image1, 5);
-    lv_obj_set_y(ui_Image1, 2);
-    lv_obj_set_style_text_font(ui_Image1, launcher_fonts().get("Montserrat-Bold.ttf", 16, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_color(ui_Image1, lv_color_hex(0xCCAA00), LV_PART_MAIN | LV_STATE_DEFAULT);
-#endif
-
-    // --- WiFi signal strength bars (4 bars, hidden when disconnected) ---
-    ui_wifiPanel = lv_obj_create(parent);
-    lv_obj_set_width(ui_wifiPanel, 24);
-    lv_obj_set_height(ui_wifiPanel, 15);
-    lv_obj_set_x(ui_wifiPanel, 210);
-    lv_obj_set_y(ui_wifiPanel, 4);
-    lv_obj_clear_flag(ui_wifiPanel, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_radius(ui_wifiPanel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_opa(ui_wifiPanel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_border_width(ui_wifiPanel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_pad_all(ui_wifiPanel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_add_flag(ui_wifiPanel, LV_OBJ_FLAG_HIDDEN);
-
-    ui_wifiBar1 = lv_obj_create(ui_wifiPanel);
-    lv_obj_set_width(ui_wifiBar1, 4);
-    lv_obj_set_height(ui_wifiBar1, 6);
-    lv_obj_set_align(ui_wifiBar1, LV_ALIGN_BOTTOM_LEFT);
-    lv_obj_set_x(ui_wifiBar1, 0);
-    lv_obj_clear_flag(ui_wifiBar1, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_radius(ui_wifiBar1, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(ui_wifiBar1, lv_color_hex(0x4D4D4D), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_opa(ui_wifiBar1, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_border_width(ui_wifiBar1, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-
-    ui_wifiBar2 = lv_obj_create(ui_wifiPanel);
-    lv_obj_set_width(ui_wifiBar2, 4);
-    lv_obj_set_height(ui_wifiBar2, 9);
-    lv_obj_set_align(ui_wifiBar2, LV_ALIGN_BOTTOM_LEFT);
-    lv_obj_set_x(ui_wifiBar2, 6);
-    lv_obj_clear_flag(ui_wifiBar2, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_radius(ui_wifiBar2, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(ui_wifiBar2, lv_color_hex(0x4D4D4D), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_opa(ui_wifiBar2, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_border_width(ui_wifiBar2, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-
-    ui_wifiBar3 = lv_obj_create(ui_wifiPanel);
-    lv_obj_set_width(ui_wifiBar3, 4);
-    lv_obj_set_height(ui_wifiBar3, 12);
-    lv_obj_set_align(ui_wifiBar3, LV_ALIGN_BOTTOM_LEFT);
-    lv_obj_set_x(ui_wifiBar3, 12);
-    lv_obj_clear_flag(ui_wifiBar3, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_radius(ui_wifiBar3, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(ui_wifiBar3, lv_color_hex(0x4D4D4D), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_opa(ui_wifiBar3, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_border_width(ui_wifiBar3, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-
-    ui_wifiBar4 = lv_obj_create(ui_wifiPanel);
-    lv_obj_set_width(ui_wifiBar4, 4);
-    lv_obj_set_height(ui_wifiBar4, 15);
-    lv_obj_set_align(ui_wifiBar4, LV_ALIGN_BOTTOM_LEFT);
-    lv_obj_set_x(ui_wifiBar4, 18);
-    lv_obj_clear_flag(ui_wifiBar4, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_radius(ui_wifiBar4, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(ui_wifiBar4, lv_color_hex(0x4D4D4D), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_opa(ui_wifiBar4, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_border_width(ui_wifiBar4, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-
-    // --- Time status icon ---
-    ui_Panel1 = lv_obj_create(parent);
-    lv_obj_set_width(ui_Panel1, 40);
-    lv_obj_set_height(ui_Panel1, 16);
-    lv_obj_set_x(ui_Panel1, 236);
-    lv_obj_set_y(ui_Panel1, 4);
-    lv_obj_clear_flag(ui_Panel1, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_radius(ui_Panel1, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(ui_Panel1, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_opa(ui_Panel1, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_img_src(ui_Panel1, cp0_file_path_c("status_time_background.png"), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_border_width(ui_Panel1, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-
-    ui_timeLabel = lv_label_create(ui_Panel1);
-    lv_obj_set_width(ui_timeLabel, LV_SIZE_CONTENT);
-    lv_obj_set_height(ui_timeLabel, LV_SIZE_CONTENT);
-    lv_obj_set_align(ui_timeLabel, LV_ALIGN_CENTER);
-    lv_label_set_text(ui_timeLabel, "15:21");
-    lv_obj_set_style_text_color(ui_timeLabel, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_opa(ui_timeLabel, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-
-    // --- Battery status icon ---
-    ui_batteryPanel = lv_obj_create(parent);
-    lv_obj_set_width(ui_batteryPanel, 36);
-    lv_obj_set_height(ui_batteryPanel, 16);
-    lv_obj_set_x(ui_batteryPanel, 280);
-    lv_obj_set_y(ui_batteryPanel, 4);
-    lv_obj_clear_flag(ui_batteryPanel, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_radius(ui_batteryPanel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(ui_batteryPanel, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_opa(ui_batteryPanel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_img_src(ui_batteryPanel, cp0_file_path_c("status_battery_background.png"), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_border_width(ui_batteryPanel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_pad_all(ui_batteryPanel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-
-    ui_Bar1 = lv_bar_create(ui_batteryPanel);
-    lv_bar_set_value(ui_Bar1, 96, LV_ANIM_OFF);
-    lv_bar_set_start_value(ui_Bar1, 0, LV_ANIM_OFF);
-    lv_obj_set_width(ui_Bar1, 33);
-    lv_obj_set_height(ui_Bar1, 14);
-    lv_obj_set_align(ui_Bar1, LV_ALIGN_CENTER);
-    lv_obj_set_style_radius(ui_Bar1, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(ui_Bar1, lv_color_hex(0x484847), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_opa(ui_Bar1, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-
-    lv_obj_set_style_radius(ui_Bar1, 0, LV_PART_INDICATOR | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(ui_Bar1, lv_color_hex(0x666633), LV_PART_INDICATOR | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_opa(ui_Bar1, 0, LV_PART_INDICATOR | LV_STATE_DEFAULT);
-
-    ui_powerLabel = lv_label_create(ui_batteryPanel);
-    lv_obj_set_width(ui_powerLabel, LV_SIZE_CONTENT);
-    lv_obj_set_height(ui_powerLabel, LV_SIZE_CONTENT);
-    lv_obj_set_align(ui_powerLabel, LV_ALIGN_CENTER);
-    lv_label_set_text(ui_powerLabel, "96%");
-    lv_obj_set_style_text_color(ui_powerLabel, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_opa(ui_powerLabel, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-
-}
 
 void UILaunchPage::create_app_container(lv_obj_t *parent)
 {
-    ::ui_APP_Container = lv_obj_create(parent);
-    lv_obj_remove_style_all(::ui_APP_Container);
-    lv_obj_set_width(::ui_APP_Container, 320);
-    lv_obj_set_height(::ui_APP_Container, 150);
-    lv_obj_set_x(::ui_APP_Container, 0);
-    lv_obj_set_y(::ui_APP_Container, 10);
-    lv_obj_set_align(::ui_APP_Container, LV_ALIGN_CENTER);
+    ::ui_APP_Container = parent;
+    if (!::ui_APP_Container)
+        return;
+
+    lv_obj_set_size(::ui_APP_Container, 320, 150);
     lv_obj_clear_flag(::ui_APP_Container, (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
 
     carousel_elements[kPageDot0] = lv_obj_create(::ui_APP_Container);

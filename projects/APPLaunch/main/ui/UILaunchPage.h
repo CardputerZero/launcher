@@ -47,7 +47,6 @@ public:
     static std::array<lv_obj_t *, kLauncherCarouselElementCount> carousel_elements;
 
 private:
-    static void create_top(lv_obj_t *parent);
     static void create_app_container(lv_obj_t *parent);
 
     std::shared_ptr<Launch> launch_;
