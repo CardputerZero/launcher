@@ -702,7 +702,7 @@ private:
             if (!ui_TOP_wifiBars[i])
                 continue;
             lv_obj_set_style_bg_color(ui_TOP_wifiBars[i],
-                                      lv_color_hex(ws.connected && ws.signal >= thresholds[i] ? 0x00CCFF : 0x4D4D4D),
+                                      lv_color_hex(ws.connected && ws.signal >= thresholds[i] ? 0x33CC33 : 0x4D4D4D),
                                       LV_PART_MAIN | LV_STATE_DEFAULT);
         }
 

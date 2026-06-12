@@ -41,7 +41,7 @@ class UICompassPage : public AppPageRoot
     static constexpr int kStatusH = 30;
     static constexpr int kBottomH = 25;
     static constexpr int kBtnW = kScreenW / 5;
-    static constexpr int kCompassDia = 116;
+    static constexpr int kCompassDia = 120;
     static constexpr int kLevelDia = 100;
 
     static constexpr uint32_t kColorBg = 0x000000;
@@ -189,7 +189,7 @@ private:
 
         compass_disc_ = lv_img_create(parent);
         lv_img_set_src(compass_disc_, cp0_file_path("compass_disc_transparent.png").c_str());
-        lv_obj_set_pos(compass_disc_, 12, kStatusH + 1);
+        lv_obj_set_pos(compass_disc_, 20, kStatusH + 2);
         lv_obj_set_size(compass_disc_, kCompassDia, kCompassDia);
         lv_img_set_pivot(compass_disc_, kCompassDia / 2, kCompassDia / 2);
         lv_obj_clear_flag(compass_disc_, LV_OBJ_FLAG_SCROLLABLE);

@@ -15,5 +15,6 @@ void cp0_lvgl_init(void)
     init_sdl_disp();
     init_sdl_input();
     init_audio();
+    init_battery();
     init_camera();
 }
