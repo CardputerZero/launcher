@@ -163,13 +163,13 @@ private:
 
     void init_APP_UI()
     {
-        lv_obj_set_height(ui_APP_Container, 120);
-        lv_obj_set_y(ui_APP_Container, 5);
+        lv_obj_set_height(ui_APP_Container, 125);
+        lv_obj_set_y(ui_APP_Container, 20);
         lv_obj_clear_flag(ui_APP_Container, LV_OBJ_FLAG_SCROLLABLE);
 
         lv_obj_t *bg = lv_obj_create(ui_APP_Container);
         lv_obj_remove_style_all(bg);
-        lv_obj_set_size(bg, 320, 120);
+        lv_obj_set_size(bg, 320, 125);
         lv_obj_set_pos(bg, 0, 0);
         lv_obj_set_style_bg_color(bg, lv_color_hex(0x0D1117), 0);
         lv_obj_set_style_bg_opa(bg, LV_OPA_COVER, 0);
@@ -303,7 +303,7 @@ private:
 namespace rec_ui2
 {
 static constexpr int kScreenW = 320;
-static constexpr int kContentH = 120;
+static constexpr int kContentH = 125;
 static constexpr int kBtnCount = 5;
 static constexpr int kWaveBarCount = 40;
 static constexpr uint32_t kBg = 0x0D1117;
@@ -852,7 +852,7 @@ private:
     {
         lv_obj_clean(ui_APP_Container);
         lv_obj_set_height(ui_APP_Container, rec_ui2::kContentH);
-        lv_obj_set_y(ui_APP_Container, 5);
+        lv_obj_set_y(ui_APP_Container, 20);
         lv_obj_clear_flag(ui_APP_Container, LV_OBJ_FLAG_SCROLLABLE);
 
         for (size_t i = 0; i < pages_.size(); ++i)
@@ -920,6 +920,13 @@ private:
             struct key_item *key = static_cast<struct key_item *>(event_param);
             if (!key || key->key_state != 0)
                 return;
+
+            if (key->key_code == KEY_ESC)
+            {
+                if (button_actions_[0])
+                    button_actions_[0]();
+                return;
+            }
 
             int index = -1;
             switch (key->key_code)
