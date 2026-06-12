@@ -19,15 +19,6 @@
     #error "LV_COLOR_16_SWAP should be 0 to match SquareLine Studio's settings"
 #endif
 
-// LVGL objects exported through ui_obj.h.
-#undef UI_DEFINE_OBJECT
-#undef UI_DEFINE_EVENT_FUN
-#define UI_DEFINE_OBJECT(x) lv_obj_t *x;
-#define UI_DEFINE_EVENT_FUN(x)
-#include "ui_obj.h"
-#undef UI_DEFINE_OBJECT
-#undef UI_DEFINE_EVENT_FUN
-
 std::unique_ptr<zero_lvgl_os> home;
 
 namespace launcher_ui {

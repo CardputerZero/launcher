@@ -127,10 +127,10 @@ struct app
 class LaunchImpl
 {
 private:
+    std::shared_ptr<UILaunchPage> launch_page_;
     int current_app = 2;
     cp0_watcher_t dir_watcher = NULL;
     lv_timer_t *watch_timer = nullptr;  // LVGL 3s timer
-    lv_timer_t *status_timer = nullptr; // status-bar refresh timer
     int fixed_count;
 
 public:
@@ -138,7 +138,8 @@ public:
     std::shared_ptr<void> app_Page;
     std::shared_ptr<void> home_Page;
 public:
-    LaunchImpl()
+    explicit LaunchImpl(std::shared_ptr<UILaunchPage> launch_page)
+        : launch_page_(std::move(launch_page))
     {
         // Fixed icon; users cannot modify it
         app_list.emplace_back("Python",
@@ -236,9 +237,6 @@ public:
         // Create a 3s LVGL timer to periodically check directory changes
         watch_timer = lv_timer_create(app_dir_watch_cb, 3000, this);
 
-        // Refresh the status bar (time + battery) every 5 seconds
-        update_home_status_bar();
-        status_timer = lv_timer_create(home_status_timer_cb, 5000, this);
     }
 
     void launch_app()
@@ -252,8 +250,8 @@ public:
         auto self = (LaunchImpl *)arg;
         SLOGI("[HOME] lv_go_back_home executing (page=%p)", self->app_Page.get());
         lv_timer_enable(true);
-        UILaunchPage::bind_home_input_group();
-        lv_disp_load_scr(ui_Screen1);
+        if (self->launch_page_)
+            self->launch_page_->show_home_screen();
         lv_refr_now(NULL);
         if (self->app_Page)
             self->app_Page.reset();
@@ -308,7 +306,8 @@ public:
         lv_timer_enable(true);
         if (indev)
             lv_indev_set_group(indev, UILaunchPage::home_input_group());
-        lv_disp_load_scr(ui_Screen1);
+        if (launch_page_)
+            launch_page_->show_home_screen();
         /* Child process has returned; we are back on the launcher home.
          * Hide the overlay so it doesn't linger. */
         ui_loading::hide();
@@ -536,61 +535,6 @@ public:
     }
 
     // ============================================================
-    // Home status-bar refresh: time + battery (BQ27220)
-    // ============================================================
-    static void home_status_timer_cb(lv_timer_t *timer)
-    {
-        auto *self = static_cast<LaunchImpl *>(lv_timer_get_user_data(timer));
-        if (self)
-            self->update_home_status_bar();
-    }
-
-    void update_home_status_bar()
-    {
-        // WiFi signal bars: show/hide + color by strength
-        cp0_wifi_status_t wifi = cp0_wifi_get_status();
-        fprintf(stderr, "[HOME_STATUS] connected=%d sig=%d ssid=%s\n",
-                wifi.connected, wifi.signal, wifi.ssid);
-        if (wifi.connected) {
-            lv_obj_clear_flag(ui_wifiPanel, LV_OBJ_FLAG_HIDDEN);
-            int sig = wifi.signal;
-            uint32_t on_color  = 0x33CC33;
-            uint32_t off_color = 0x4D4D4D;
-            lv_obj_set_style_bg_color(ui_wifiBar1, lv_color_hex(sig > 0 ? on_color : off_color), LV_PART_MAIN | LV_STATE_DEFAULT);
-            lv_obj_set_style_bg_color(ui_wifiBar2, lv_color_hex(sig >= 30 ? on_color : off_color), LV_PART_MAIN | LV_STATE_DEFAULT);
-            lv_obj_set_style_bg_color(ui_wifiBar3, lv_color_hex(sig >= 60 ? on_color : off_color), LV_PART_MAIN | LV_STATE_DEFAULT);
-            lv_obj_set_style_bg_color(ui_wifiBar4, lv_color_hex(sig >= 80 ? on_color : off_color), LV_PART_MAIN | LV_STATE_DEFAULT);
-        } else {
-            lv_obj_add_flag(ui_wifiPanel, LV_OBJ_FLAG_HIDDEN);
-        }
-
-        // Time
-        char time_buf[16];
-        cp0_time_str(time_buf, sizeof(time_buf));
-        lv_label_set_text(ui_timeLabel, time_buf);
-
-        // Battery
-        cp0_battery_info_t bat = cp0_battery_read();
-        if (bat.valid)
-        {
-            int soc = bat.soc;
-            if (soc > 100)
-                soc = 100;
-            if (soc < 0)
-                soc = 0;
-            lv_bar_set_value(ui_Bar1, soc, LV_ANIM_ON);
-
-            char pwr_buf[16];
-            snprintf(pwr_buf, sizeof(pwr_buf), "%d%%", soc);
-            lv_label_set_text(ui_powerLabel, pwr_buf);
-            if (soc == 100)
-                lv_obj_set_style_text_font(ui_powerLabel, &lv_font_montserrat_10, LV_PART_MAIN | LV_STATE_DEFAULT);
-            else
-                lv_obj_set_style_text_font(ui_powerLabel, LV_FONT_DEFAULT, LV_PART_MAIN | LV_STATE_DEFAULT);
-        }
-    }
-
-    // ============================================================
     // LVGL timer callback: check inotify events and refresh the list on changes
     // ============================================================
     static void app_dir_watch_cb(lv_timer_t *timer)
@@ -689,11 +633,6 @@ app::app(std::string name,
 // ============================================================
 LaunchImpl::~LaunchImpl()
 {
-    if (status_timer)
-    {
-        lv_timer_delete(status_timer);
-        status_timer = nullptr;
-    }
     if (watch_timer)
     {
         lv_timer_delete(watch_timer);
@@ -717,7 +656,7 @@ void Launch::set_launch_page(std::shared_ptr<UILaunchPage> launch_page)
 
 void Launch::bind_ui()
 {
-    impl_ = std::make_unique<LaunchImpl>();
+    impl_ = std::make_unique<LaunchImpl>(launch_page_);
 }
 
 void Launch::update_left_slot(lv_obj_t *panel, lv_obj_t *label)

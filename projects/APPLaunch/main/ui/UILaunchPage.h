@@ -12,6 +12,7 @@ public:
     explicit UILaunchPage(std::shared_ptr<Launch> launch);
     ~UILaunchPage();
 
+    void show_home_screen();
     void load_home_screen();
     void start_startup_gif();
     void create_screen();

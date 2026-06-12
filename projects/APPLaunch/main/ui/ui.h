@@ -13,14 +13,6 @@
 #include "keyboard_input.h"
 #include "cp0_lvgl_app.h"
 
-#undef UI_DEFINE_OBJECT
-#undef UI_DEFINE_EVENT_FUN
-#define UI_DEFINE_OBJECT(x) extern lv_obj_t *x;
-#define UI_DEFINE_EVENT_FUN(x) void x(lv_event_t *e);
-#include "ui_obj.h"
-#undef UI_DEFINE_OBJECT
-#undef UI_DEFINE_EVENT_FUN
-
 // Launcher layout constants
 #define BORDER_COLOR_CENTER 0x444444
 #define BORDER_COLOR_SIDE 0x222222

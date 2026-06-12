@@ -35,6 +35,9 @@ static void switch_right(lv_event_t *e);
 static void app_launch(lv_event_t *e);
 static void main_key_switch(lv_event_t *e);
 
+lv_obj_t *left_arrow_button = nullptr;
+lv_obj_t *right_arrow_button = nullptr;
+
 // ==================== standard layout for carousel slots ====================
 
 struct CarouselSlot {
@@ -304,13 +307,6 @@ static void switch_left(lv_event_t *e)
 // screen / app
 // ============================================================
 
-static void go_back_home(lv_event_t *e)
-{
-    lv_disp_load_scr(ui_Screen1);
-    UILaunchPage::bind_home_input_group();
-}
-
-
 static void ui_event_Screen1(lv_event_t *e)
 {
     if (lv_event_get_code(e) == LV_EVENT_KEYBOARD)
@@ -522,12 +518,16 @@ void UILaunchPage::init_input_group()
     bind_home_input_group();
 }
 
+void UILaunchPage::show_home_screen()
+{
+    SLOGI("[HOME] show_home_screen() - loading launcher home screen");
+    lv_disp_load_scr(screen());
+    UILaunchPage::bind_home_input_group();
+}
+
 void UILaunchPage::load_home_screen()
 {
-    SLOGI("[HOME] home_screen_load() - loading launcher home screen");
-    lv_disp_load_scr(ui_Screen1);
-    UILaunchPage::bind_home_input_group();
-
+    show_home_screen();
     cp0_signal_audio_api_play_asset("startup.mp3");
 }
 
@@ -587,11 +587,6 @@ void UILaunchPage::launch_selected_app()
 
 void UILaunchPage::create_screen()
 {
-    if (!ui_Screen1)
-        ui_Screen1 = screen();
-    if (!::ui_APP_Container)
-        ::ui_APP_Container = content_container();
-
     if (carousel_elements[kCardCenter])
         return;
 
@@ -602,14 +597,14 @@ void UILaunchPage::create_screen()
 
 void UILaunchPage::create_app_container(lv_obj_t *parent)
 {
-    ::ui_APP_Container = parent;
-    if (!::ui_APP_Container)
+    lv_obj_t *app_container = parent;
+    if (!app_container)
         return;
 
-    lv_obj_set_size(::ui_APP_Container, 320, 150);
-    lv_obj_clear_flag(::ui_APP_Container, (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
+    lv_obj_set_size(app_container, 320, 150);
+    lv_obj_clear_flag(app_container, (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
 
-    carousel_elements[kPageDot0] = lv_obj_create(::ui_APP_Container);
+    carousel_elements[kPageDot0] = lv_obj_create(app_container);
     lv_obj_set_width(carousel_elements[kPageDot0], 5);
     lv_obj_set_height(carousel_elements[kPageDot0], 5);
     lv_obj_set_x(carousel_elements[kPageDot0], -20);
@@ -622,7 +617,7 @@ void UILaunchPage::create_app_container(lv_obj_t *parent)
     lv_obj_set_style_border_color(carousel_elements[kPageDot0], lv_color_hex(0x4A4C4A), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_border_opa(carousel_elements[kPageDot0], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    carousel_elements[kPageDot1] = lv_obj_create(::ui_APP_Container);
+    carousel_elements[kPageDot1] = lv_obj_create(app_container);
     lv_obj_set_width(carousel_elements[kPageDot1], 5);
     lv_obj_set_height(carousel_elements[kPageDot1], 5);
     lv_obj_set_x(carousel_elements[kPageDot1], -10);
@@ -635,7 +630,7 @@ void UILaunchPage::create_app_container(lv_obj_t *parent)
     lv_obj_set_style_border_color(carousel_elements[kPageDot1], lv_color_hex(0x4A4C4A), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_border_opa(carousel_elements[kPageDot1], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    carousel_elements[kPageDot2] = lv_obj_create(::ui_APP_Container);
+    carousel_elements[kPageDot2] = lv_obj_create(app_container);
     lv_obj_set_width(carousel_elements[kPageDot2], 10);
     lv_obj_set_height(carousel_elements[kPageDot2], 10);
     lv_obj_set_x(carousel_elements[kPageDot2], 0);
@@ -648,7 +643,7 @@ void UILaunchPage::create_app_container(lv_obj_t *parent)
     lv_obj_set_style_border_color(carousel_elements[kPageDot2], lv_color_hex(0xCCCC33), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_border_opa(carousel_elements[kPageDot2], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    carousel_elements[kPageDot3] = lv_obj_create(::ui_APP_Container);
+    carousel_elements[kPageDot3] = lv_obj_create(app_container);
     lv_obj_set_width(carousel_elements[kPageDot3], 5);
     lv_obj_set_height(carousel_elements[kPageDot3], 5);
     lv_obj_set_x(carousel_elements[kPageDot3], 10);
@@ -661,7 +656,7 @@ void UILaunchPage::create_app_container(lv_obj_t *parent)
     lv_obj_set_style_border_color(carousel_elements[kPageDot3], lv_color_hex(0x4A4C4A), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_border_opa(carousel_elements[kPageDot3], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    carousel_elements[kPageDot4] = lv_obj_create(::ui_APP_Container);
+    carousel_elements[kPageDot4] = lv_obj_create(app_container);
     lv_obj_set_width(carousel_elements[kPageDot4], 5);
     lv_obj_set_height(carousel_elements[kPageDot4], 5);
     lv_obj_set_x(carousel_elements[kPageDot4], 20);
@@ -674,7 +669,7 @@ void UILaunchPage::create_app_container(lv_obj_t *parent)
     lv_obj_set_style_border_color(carousel_elements[kPageDot4], lv_color_hex(0x4A4C4A), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_border_opa(carousel_elements[kPageDot4], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    carousel_elements[kTitleCenter] = lv_label_create(::ui_APP_Container);
+    carousel_elements[kTitleCenter] = lv_label_create(app_container);
     lv_obj_set_width(carousel_elements[kTitleCenter], LV_SIZE_CONTENT);
     lv_obj_set_height(carousel_elements[kTitleCenter], LV_SIZE_CONTENT);    /// 1
     lv_obj_set_x(carousel_elements[kTitleCenter], 0);
@@ -685,7 +680,7 @@ void UILaunchPage::create_app_container(lv_obj_t *parent)
     lv_obj_set_style_text_color(carousel_elements[kTitleCenter], lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(carousel_elements[kTitleCenter], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    carousel_elements[kTitleRight] = lv_label_create(::ui_APP_Container);
+    carousel_elements[kTitleRight] = lv_label_create(app_container);
     lv_obj_set_width(carousel_elements[kTitleRight], LV_SIZE_CONTENT);
     lv_obj_set_height(carousel_elements[kTitleRight], LV_SIZE_CONTENT);    /// 1
     lv_obj_set_x(carousel_elements[kTitleRight], 99);
@@ -696,7 +691,7 @@ void UILaunchPage::create_app_container(lv_obj_t *parent)
     lv_obj_set_style_text_font(carousel_elements[kTitleRight], launcher_fonts().get("Montserrat-Bold.ttf", 16, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(carousel_elements[kTitleRight], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    carousel_elements[kTitleLeft] = lv_label_create(::ui_APP_Container);
+    carousel_elements[kTitleLeft] = lv_label_create(app_container);
     lv_obj_set_width(carousel_elements[kTitleLeft], LV_SIZE_CONTENT);
     lv_obj_set_height(carousel_elements[kTitleLeft], LV_SIZE_CONTENT);    /// 1
     lv_obj_set_x(carousel_elements[kTitleLeft], -99);
@@ -707,7 +702,7 @@ void UILaunchPage::create_app_container(lv_obj_t *parent)
     lv_obj_set_style_text_opa(carousel_elements[kTitleLeft], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_font(carousel_elements[kTitleLeft], launcher_fonts().get("Montserrat-Bold.ttf", 16, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    carousel_elements[kCardLeft] = lv_obj_create(::ui_APP_Container);
+    carousel_elements[kCardLeft] = lv_obj_create(app_container);
     lv_obj_set_width(carousel_elements[kCardLeft], 80);
     lv_obj_set_height(carousel_elements[kCardLeft], 80);
     lv_obj_set_x(carousel_elements[kCardLeft], -99);
@@ -720,7 +715,7 @@ void UILaunchPage::create_app_container(lv_obj_t *parent)
     lv_obj_set_style_border_color(carousel_elements[kCardLeft], lv_color_hex(0x222222), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_border_opa(carousel_elements[kCardLeft], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    carousel_elements[kCardCenter] = lv_obj_create(::ui_APP_Container);
+    carousel_elements[kCardCenter] = lv_obj_create(app_container);
     lv_obj_set_width(carousel_elements[kCardCenter], 100);
     lv_obj_set_height(carousel_elements[kCardCenter], 100);
     lv_obj_set_x(carousel_elements[kCardCenter], 0);
@@ -734,7 +729,7 @@ void UILaunchPage::create_app_container(lv_obj_t *parent)
     lv_obj_set_style_border_opa(carousel_elements[kCardCenter], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_border_width(carousel_elements[kCardCenter], 2, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    carousel_elements[kCardRight] = lv_obj_create(::ui_APP_Container);
+    carousel_elements[kCardRight] = lv_obj_create(app_container);
     lv_obj_set_width(carousel_elements[kCardRight], 80);
     lv_obj_set_height(carousel_elements[kCardRight], 80);
     lv_obj_set_x(carousel_elements[kCardRight], 99);
@@ -747,7 +742,7 @@ void UILaunchPage::create_app_container(lv_obj_t *parent)
     lv_obj_set_style_border_color(carousel_elements[kCardRight], lv_color_hex(0x222222), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_border_opa(carousel_elements[kCardRight], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    carousel_elements[kCardFarRight] = lv_obj_create(::ui_APP_Container);
+    carousel_elements[kCardFarRight] = lv_obj_create(app_container);
     lv_obj_set_width(carousel_elements[kCardFarRight], 61);
     lv_obj_set_height(carousel_elements[kCardFarRight], 61);
     lv_obj_set_x(carousel_elements[kCardFarRight], 177);
@@ -761,37 +756,37 @@ void UILaunchPage::create_app_container(lv_obj_t *parent)
     lv_obj_set_style_border_color(carousel_elements[kCardFarRight], lv_color_hex(0x333333), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_border_opa(carousel_elements[kCardFarRight], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    ui_leftButton = lv_btn_create(::ui_APP_Container);
-    lv_obj_set_width(ui_leftButton, 17);
-    lv_obj_set_height(ui_leftButton, 23);
-    lv_obj_set_x(ui_leftButton, -151);
-    lv_obj_set_y(ui_leftButton, -4);
-    lv_obj_set_align(ui_leftButton, LV_ALIGN_CENTER);
-    lv_obj_add_flag(ui_leftButton, LV_OBJ_FLAG_SCROLL_ON_FOCUS);     /// Flags
-    lv_obj_clear_flag(ui_leftButton, LV_OBJ_FLAG_SCROLLABLE);      /// Flags
-    lv_obj_set_style_radius(ui_leftButton, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(ui_leftButton, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_opa(ui_leftButton, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_img_src(ui_leftButton, cp0_file_path_c("carousel_left_arrow.png"), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_shadow_color(ui_leftButton, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_shadow_opa(ui_leftButton, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+    left_arrow_button = lv_btn_create(app_container);
+    lv_obj_set_width(left_arrow_button, 17);
+    lv_obj_set_height(left_arrow_button, 23);
+    lv_obj_set_x(left_arrow_button, -151);
+    lv_obj_set_y(left_arrow_button, -4);
+    lv_obj_set_align(left_arrow_button, LV_ALIGN_CENTER);
+    lv_obj_add_flag(left_arrow_button, LV_OBJ_FLAG_SCROLL_ON_FOCUS);     /// Flags
+    lv_obj_clear_flag(left_arrow_button, LV_OBJ_FLAG_SCROLLABLE);      /// Flags
+    lv_obj_set_style_radius(left_arrow_button, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(left_arrow_button, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(left_arrow_button, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_img_src(left_arrow_button, cp0_file_path_c("carousel_left_arrow.png"), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_shadow_color(left_arrow_button, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_shadow_opa(left_arrow_button, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    ui_rightButton = lv_btn_create(::ui_APP_Container);
-    lv_obj_set_width(ui_rightButton, 17);
-    lv_obj_set_height(ui_rightButton, 23);
-    lv_obj_set_x(ui_rightButton, 150);
-    lv_obj_set_y(ui_rightButton, -4);
-    lv_obj_set_align(ui_rightButton, LV_ALIGN_CENTER);
-    lv_obj_add_flag(ui_rightButton, LV_OBJ_FLAG_SCROLL_ON_FOCUS);     /// Flags
-    lv_obj_clear_flag(ui_rightButton, LV_OBJ_FLAG_SCROLLABLE);      /// Flags
-    lv_obj_set_style_radius(ui_rightButton, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(ui_rightButton, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_opa(ui_rightButton, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_img_src(ui_rightButton, cp0_file_path_c("carousel_right_arrow.png"), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_shadow_color(ui_rightButton, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_shadow_opa(ui_rightButton, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+    right_arrow_button = lv_btn_create(app_container);
+    lv_obj_set_width(right_arrow_button, 17);
+    lv_obj_set_height(right_arrow_button, 23);
+    lv_obj_set_x(right_arrow_button, 150);
+    lv_obj_set_y(right_arrow_button, -4);
+    lv_obj_set_align(right_arrow_button, LV_ALIGN_CENTER);
+    lv_obj_add_flag(right_arrow_button, LV_OBJ_FLAG_SCROLL_ON_FOCUS);     /// Flags
+    lv_obj_clear_flag(right_arrow_button, LV_OBJ_FLAG_SCROLLABLE);      /// Flags
+    lv_obj_set_style_radius(right_arrow_button, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(right_arrow_button, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(right_arrow_button, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_img_src(right_arrow_button, cp0_file_path_c("carousel_right_arrow.png"), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_shadow_color(right_arrow_button, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_shadow_opa(right_arrow_button, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    carousel_elements[kCardFarLeft] = lv_obj_create(::ui_APP_Container);
+    carousel_elements[kCardFarLeft] = lv_obj_create(app_container);
     lv_obj_set_width(carousel_elements[kCardFarLeft], 61);
     lv_obj_set_height(carousel_elements[kCardFarLeft], 61);
     lv_obj_set_x(carousel_elements[kCardFarLeft], -177);
@@ -805,7 +800,7 @@ void UILaunchPage::create_app_container(lv_obj_t *parent)
     lv_obj_set_style_border_color(carousel_elements[kCardFarLeft], lv_color_hex(0x333333), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_border_opa(carousel_elements[kCardFarLeft], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    carousel_elements[kTitleFarLeft] = lv_label_create(::ui_APP_Container);
+    carousel_elements[kTitleFarLeft] = lv_label_create(app_container);
     lv_obj_set_width(carousel_elements[kTitleFarLeft], LV_SIZE_CONTENT);
     lv_obj_set_height(carousel_elements[kTitleFarLeft], LV_SIZE_CONTENT);    /// 1
     lv_obj_set_x(carousel_elements[kTitleFarLeft], -177);
@@ -817,7 +812,7 @@ void UILaunchPage::create_app_container(lv_obj_t *parent)
     lv_obj_set_style_text_color(carousel_elements[kTitleFarLeft], lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(carousel_elements[kTitleFarLeft], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    carousel_elements[kTitleFarRight] = lv_label_create(::ui_APP_Container);
+    carousel_elements[kTitleFarRight] = lv_label_create(app_container);
     lv_obj_set_width(carousel_elements[kTitleFarRight], LV_SIZE_CONTENT);
     lv_obj_set_height(carousel_elements[kTitleFarRight], LV_SIZE_CONTENT);    /// 1
     lv_obj_set_x(carousel_elements[kTitleFarRight], 177);
@@ -833,10 +828,11 @@ void UILaunchPage::create_app_container(lv_obj_t *parent)
     lv_obj_add_event_cb(carousel_elements[kCardCenter], app_launch, LV_EVENT_CLICKED, NULL);
     lv_obj_add_event_cb(carousel_elements[kCardRight], app_launch, LV_EVENT_CLICKED, NULL);
     lv_obj_add_event_cb(carousel_elements[kCardFarRight], app_launch, LV_EVENT_CLICKED, NULL);
-    lv_obj_add_event_cb(ui_leftButton, switch_right, LV_EVENT_CLICKED, NULL);
-    lv_obj_add_event_cb(ui_rightButton, switch_left, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_event_cb(left_arrow_button, switch_right, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_event_cb(right_arrow_button, switch_left, LV_EVENT_CLICKED, NULL);
     lv_obj_add_event_cb(carousel_elements[kCardFarLeft], app_launch, LV_EVENT_CLICKED, NULL);
-    lv_obj_add_event_cb(ui_Screen1, main_key_switch, (lv_event_code_t)LV_EVENT_KEYBOARD, NULL);
+    if (active_launch_page)
+        lv_obj_add_event_cb(active_launch_page->screen(), main_key_switch, (lv_event_code_t)LV_EVENT_KEYBOARD, NULL);
 
 
 }

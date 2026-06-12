@@ -54,6 +54,7 @@ public:
         ui_TOP_Container = lv_obj_create(parent);
         lv_obj_remove_style_all(ui_TOP_Container);
         lv_obj_set_size(ui_TOP_Container, 320, height_);
+        lv_obj_set_pos(ui_TOP_Container, 0, 0);
         lv_obj_clear_flag(ui_TOP_Container, (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
         lv_obj_set_flex_flow(ui_TOP_Container, LV_FLEX_FLOW_ROW);
         lv_obj_set_flex_align(ui_TOP_Container, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
@@ -273,6 +274,7 @@ public:
         lv_obj_remove_style_all(ui_APP_Container);
         lv_obj_set_width(ui_APP_Container, 320);
         lv_obj_set_height(ui_APP_Container, height_);
+        lv_obj_set_pos(ui_APP_Container, 0, 20);
         lv_obj_clear_flag(ui_APP_Container, (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
         return ui_APP_Container;
     }
@@ -328,10 +330,7 @@ private:
     {
         root_screen_ = lv_obj_create(NULL);
         lv_obj_clear_flag(root_screen_, LV_OBJ_FLAG_SCROLLABLE); /// Flags
-        lv_obj_set_flex_flow(root_screen_, LV_FLEX_FLOW_COLUMN);
-        lv_obj_set_flex_align(root_screen_, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
         lv_obj_set_style_pad_all(root_screen_, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_pad_row(root_screen_, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_color(root_screen_, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_opa(root_screen_, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
     }
@@ -445,6 +444,7 @@ public:
         lv_obj_remove_style_all(ui_BOTTOM_Container);
         lv_obj_set_width(ui_BOTTOM_Container, 320);
         lv_obj_set_height(ui_BOTTOM_Container, 20);
+        lv_obj_set_pos(ui_BOTTOM_Container, 0, 150);
         lv_obj_clear_flag(ui_BOTTOM_Container, (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
     }
 
@@ -478,6 +478,8 @@ class home_base : public AppPageRoot
 private:
     lv_obj_t *ui_TOP_Container = nullptr;
     lv_obj_t *ui_TOP_logo = nullptr;
+    lv_obj_t *ui_TOP_wifiPanel = nullptr;
+    lv_obj_t *ui_TOP_wifiBars[4] = {};
     lv_obj_t *ui_TOP_time = nullptr;
     lv_obj_t *ui_TOP_time_Label = nullptr;
     lv_obj_t *ui_TOP_Power = nullptr;
@@ -499,10 +501,6 @@ public:
     {
         if (status_timer_)
             lv_timer_delete(status_timer_);
-        if (::ui_Screen1 == root_screen_)
-            ::ui_Screen1 = nullptr;
-        if (::ui_APP_Container == ui_APP_Container)
-            ::ui_APP_Container = nullptr;
     }
 
     static void home_battery_event_cb(lv_event_t *e)
@@ -541,6 +539,10 @@ public:
             char pwr_buf[16];
             snprintf(pwr_buf, sizeof(pwr_buf), "%d%%", soc);
             lv_label_set_text(ui_TOP_power_Label, pwr_buf);
+            if (soc == 100)
+                lv_obj_set_style_text_font(ui_TOP_power_Label, &lv_font_montserrat_10, LV_PART_MAIN | LV_STATE_DEFAULT);
+            else
+                lv_obj_set_style_text_font(ui_TOP_power_Label, LV_FONT_DEFAULT, LV_PART_MAIN | LV_STATE_DEFAULT);
 
             uint32_t color = 0x66CC33;
             if (soc <= 20)
@@ -568,16 +570,14 @@ private:
     /* ================================================================== */
     void creat_Top_UI()
     {
-        ::ui_Screen1 = root_screen_;
-
         ui_TOP_Container = lv_obj_create(root_screen_);
         lv_obj_remove_style_all(ui_TOP_Container);
         lv_obj_set_size(ui_TOP_Container, 320, 20);
+        lv_obj_set_pos(ui_TOP_Container, 0, 0);
         lv_obj_clear_flag(ui_TOP_Container, (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
 
 #ifdef APPLAUNCH_LOGO_USE_PNG
         ui_TOP_logo = lv_img_create(ui_TOP_Container);
-        ::ui_Image1 = ui_TOP_logo;
         lv_img_set_src(ui_TOP_logo, cp0_file_path_c("launcher_brand_logo.png"));
         lv_obj_set_width(ui_TOP_logo, LV_SIZE_CONTENT);
         lv_obj_set_height(ui_TOP_logo, LV_SIZE_CONTENT);
@@ -587,7 +587,6 @@ private:
         lv_obj_clear_flag(ui_TOP_logo, LV_OBJ_FLAG_SCROLLABLE);
 #else
         ui_TOP_logo = lv_label_create(ui_TOP_Container);
-        ::ui_Image1 = ui_TOP_logo;
         lv_label_set_text(ui_TOP_logo, "ZERO");
         lv_obj_set_x(ui_TOP_logo, 5);
         lv_obj_set_y(ui_TOP_logo, 2);
@@ -598,7 +597,6 @@ private:
         create_wifi_status(ui_TOP_Container);
 
         ui_TOP_time = lv_obj_create(ui_TOP_Container);
-        ::ui_Panel1 = ui_TOP_time;
         lv_obj_set_width(ui_TOP_time, 40);
         lv_obj_set_height(ui_TOP_time, 16);
         lv_obj_set_x(ui_TOP_time, 236);
@@ -610,7 +608,6 @@ private:
         lv_obj_set_style_bg_img_src(ui_TOP_time, cp0_file_path_c("status_time_background.png"), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_border_width(ui_TOP_time, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
         ui_TOP_time_Label = lv_label_create(ui_TOP_time);
-        ::ui_timeLabel = ui_TOP_time_Label;
         lv_obj_set_width(ui_TOP_time_Label, LV_SIZE_CONTENT);
         lv_obj_set_height(ui_TOP_time_Label, LV_SIZE_CONTENT);
         lv_obj_set_align(ui_TOP_time_Label, LV_ALIGN_CENTER);
@@ -618,21 +615,20 @@ private:
         lv_obj_set_style_text_color(ui_TOP_time_Label, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_text_opa(ui_TOP_time_Label, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-        ::ui_batteryPanel = lv_obj_create(ui_TOP_Container);
-        lv_obj_set_width(::ui_batteryPanel, 36);
-        lv_obj_set_height(::ui_batteryPanel, 16);
-        lv_obj_set_x(::ui_batteryPanel, 280);
-        lv_obj_set_y(::ui_batteryPanel, 4);
-        lv_obj_clear_flag(::ui_batteryPanel, LV_OBJ_FLAG_SCROLLABLE);
-        lv_obj_set_style_radius(::ui_batteryPanel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_color(::ui_batteryPanel, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_opa(::ui_batteryPanel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_img_src(::ui_batteryPanel, cp0_file_path_c("status_battery_background.png"), LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_border_width(::ui_batteryPanel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_pad_all(::ui_batteryPanel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_t *battery_panel = lv_obj_create(ui_TOP_Container);
+        lv_obj_set_width(battery_panel, 36);
+        lv_obj_set_height(battery_panel, 16);
+        lv_obj_set_x(battery_panel, 280);
+        lv_obj_set_y(battery_panel, 4);
+        lv_obj_clear_flag(battery_panel, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_style_radius(battery_panel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_color(battery_panel, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_opa(battery_panel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_img_src(battery_panel, cp0_file_path_c("status_battery_background.png"), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_border_width(battery_panel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_pad_all(battery_panel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-        ui_TOP_Power = lv_bar_create(::ui_batteryPanel);
-        ::ui_Bar1 = ui_TOP_Power;
+        ui_TOP_Power = lv_bar_create(battery_panel);
         lv_bar_set_value(ui_TOP_Power, 96, LV_ANIM_OFF);
         lv_bar_set_start_value(ui_TOP_Power, 0, LV_ANIM_OFF);
         lv_obj_set_width(ui_TOP_Power, 33);
@@ -647,7 +643,6 @@ private:
         lv_obj_set_style_bg_opa(ui_TOP_Power, 0, LV_PART_INDICATOR | LV_STATE_DEFAULT);
 
         ui_TOP_power_Label = lv_label_create(ui_TOP_Power);
-        ::ui_powerLabel = ui_TOP_power_Label;
         lv_obj_set_width(ui_TOP_power_Label, LV_SIZE_CONTENT);
         lv_obj_set_height(ui_TOP_power_Label, LV_SIZE_CONTENT);
         lv_obj_set_align(ui_TOP_power_Label, LV_ALIGN_CENTER);
@@ -656,41 +651,40 @@ private:
         lv_obj_set_style_text_opa(ui_TOP_power_Label, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
         ui_APP_Container = lv_obj_create(root_screen_);
-        ::ui_APP_Container = ui_APP_Container;
         lv_obj_remove_style_all(ui_APP_Container);
         lv_obj_set_size(ui_APP_Container, 320, 150);
+        lv_obj_set_pos(ui_APP_Container, 0, 20);
         lv_obj_clear_flag(ui_APP_Container, (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE)); /// Flags
     }
 
     void create_wifi_status(lv_obj_t *parent)
     {
         static const int bar_heights[4] = {6, 9, 12, 15};
-        lv_obj_t **bars[4] = {&::ui_wifiBar1, &::ui_wifiBar2, &::ui_wifiBar3, &::ui_wifiBar4};
 
-        ::ui_wifiPanel = lv_obj_create(parent);
-        lv_obj_set_width(::ui_wifiPanel, 24);
-        lv_obj_set_height(::ui_wifiPanel, 15);
-        lv_obj_set_x(::ui_wifiPanel, 210);
-        lv_obj_set_y(::ui_wifiPanel, 4);
-        lv_obj_clear_flag(::ui_wifiPanel, LV_OBJ_FLAG_SCROLLABLE);
-        lv_obj_set_style_radius(::ui_wifiPanel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_opa(::ui_wifiPanel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_border_width(::ui_wifiPanel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_pad_all(::ui_wifiPanel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_add_flag(::ui_wifiPanel, LV_OBJ_FLAG_HIDDEN);
+        ui_TOP_wifiPanel = lv_obj_create(parent);
+        lv_obj_set_width(ui_TOP_wifiPanel, 24);
+        lv_obj_set_height(ui_TOP_wifiPanel, 15);
+        lv_obj_set_x(ui_TOP_wifiPanel, 210);
+        lv_obj_set_y(ui_TOP_wifiPanel, 4);
+        lv_obj_clear_flag(ui_TOP_wifiPanel, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_style_radius(ui_TOP_wifiPanel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_opa(ui_TOP_wifiPanel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_border_width(ui_TOP_wifiPanel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_pad_all(ui_TOP_wifiPanel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_add_flag(ui_TOP_wifiPanel, LV_OBJ_FLAG_HIDDEN);
 
         for (int i = 0; i < 4; ++i)
         {
-            *bars[i] = lv_obj_create(::ui_wifiPanel);
-            lv_obj_set_width(*bars[i], 4);
-            lv_obj_set_height(*bars[i], bar_heights[i]);
-            lv_obj_set_align(*bars[i], LV_ALIGN_BOTTOM_LEFT);
-            lv_obj_set_x(*bars[i], i * 6);
-            lv_obj_clear_flag(*bars[i], LV_OBJ_FLAG_SCROLLABLE);
-            lv_obj_set_style_radius(*bars[i], 2, LV_PART_MAIN | LV_STATE_DEFAULT);
-            lv_obj_set_style_bg_color(*bars[i], lv_color_hex(0x4D4D4D), LV_PART_MAIN | LV_STATE_DEFAULT);
-            lv_obj_set_style_bg_opa(*bars[i], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-            lv_obj_set_style_border_width(*bars[i], 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+            ui_TOP_wifiBars[i] = lv_obj_create(ui_TOP_wifiPanel);
+            lv_obj_set_width(ui_TOP_wifiBars[i], 4);
+            lv_obj_set_height(ui_TOP_wifiBars[i], bar_heights[i]);
+            lv_obj_set_align(ui_TOP_wifiBars[i], LV_ALIGN_BOTTOM_LEFT);
+            lv_obj_set_x(ui_TOP_wifiBars[i], i * 6);
+            lv_obj_clear_flag(ui_TOP_wifiBars[i], LV_OBJ_FLAG_SCROLLABLE);
+            lv_obj_set_style_radius(ui_TOP_wifiBars[i], 2, LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_obj_set_style_bg_color(ui_TOP_wifiBars[i], lv_color_hex(0x4D4D4D), LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_obj_set_style_bg_opa(ui_TOP_wifiBars[i], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_obj_set_style_border_width(ui_TOP_wifiBars[i], 0, LV_PART_MAIN | LV_STATE_DEFAULT);
         }
     }
 
@@ -706,26 +700,25 @@ private:
 
     void update_wifi_status()
     {
-        if (!::ui_wifiPanel)
+        if (!ui_TOP_wifiPanel)
             return;
 
         cp0_wifi_status_t ws = cp0_wifi_get_status();
-        lv_obj_t *bars[4] = {::ui_wifiBar1, ::ui_wifiBar2, ::ui_wifiBar3, ::ui_wifiBar4};
         static const int thresholds[4] = {1, 30, 60, 80};
 
         for (int i = 0; i < 4; ++i)
         {
-            if (!bars[i])
+            if (!ui_TOP_wifiBars[i])
                 continue;
-            lv_obj_set_style_bg_color(bars[i],
+            lv_obj_set_style_bg_color(ui_TOP_wifiBars[i],
                                       lv_color_hex(ws.connected && ws.signal >= thresholds[i] ? 0x00CCFF : 0x4D4D4D),
                                       LV_PART_MAIN | LV_STATE_DEFAULT);
         }
 
         if (ws.connected)
-            lv_obj_clear_flag(::ui_wifiPanel, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_clear_flag(ui_TOP_wifiPanel, LV_OBJ_FLAG_HIDDEN);
         else
-            lv_obj_add_flag(::ui_wifiPanel, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(ui_TOP_wifiPanel, LV_OBJ_FLAG_HIDDEN);
     }
 
     void UI_bind_event()
