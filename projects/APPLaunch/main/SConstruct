@@ -156,22 +156,8 @@ if 'CONFIG_APPLAUNCH_DARWIN_SDL' in os.environ:
 #     REQUIREMENTS += pkg_config_ldflags("freetype2")
 
 
-# add RadioLib
-RadioLib = wget_github('https://github.com/jgromes/RadioLib.git')
-SRCS += [
-    os.path.join(RadioLib, 'src', 'Hal.cpp'),
-    os.path.join(RadioLib, 'src', 'Module.cpp'),
-    os.path.join(RadioLib, 'src', 'utils', 'CRC.cpp'),
-    os.path.join(RadioLib, 'src', 'utils', 'ConvCode.cpp'),
-    os.path.join(RadioLib, 'src', 'utils', 'Utils.cpp'),
-    os.path.join(RadioLib, 'src', 'protocols', 'PhysicalLayer', 'PhysicalLayer.cpp'),
-    os.path.join(RadioLib, 'src', 'modules', 'SX126x', 'SX126x.cpp'),
-    os.path.join(RadioLib, 'src', 'modules', 'SX126x', 'SX126x_commands.cpp'),
-    os.path.join(RadioLib, 'src', 'modules', 'SX126x', 'SX126x_config.cpp'),
-    os.path.join(RadioLib, 'src', 'modules', 'SX126x', 'SX126x_LR_FHSS.cpp'),
-    os.path.join(RadioLib, 'src', 'modules', 'SX126x', 'SX1262.cpp'),
-]
-INCLUDE += [os.path.join(RadioLib, 'src')]
+# RadioLib is provided by ext_components/RadioLib.
+REQUIREMENTS += ['RadioLib']
 
 
 # add static files
