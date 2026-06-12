@@ -14,48 +14,18 @@
 #include "cp0_lvgl_file.hpp"
 #include "sample_log.h"
 
-#include <chrono>
 #include <dirent.h>
-#include <fcntl.h>
 #include <fstream>
 #include <functional>
-#include <list>
 #include <memory>
-#include <sstream>
 #include <stdio.h>
 #include <string>
 #include <string.h>
-#include <unistd.h>
-#include <unordered_map>
 #include <utility>
 
-#define PANEL_BORDER_CENTER  0x444444
-#define PANEL_BORDER_SIDE    0x222222
-#define PANEL_PAD_CENTER     0
-#define PANEL_PAD_SIDE       0
-
-
-static void panel_set_icon(lv_obj_t *panel, const char *src)
-{
-    const char *icon_src = src ? src : "";
-    if (icon_src[0] == '\0') {
-        SLOGW("[LAUNCHER] set panel icon with empty path");
-    } else if (access(icon_src, R_OK) == 0) {
-        SLOGI("[LAUNCHER] set panel icon: %s", icon_src);
-    } else {
-        SLOGW("[LAUNCHER] set panel icon missing/unreadable: %s", icon_src);
-    }
-
-    lv_obj_set_style_pad_all(panel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-
-    lv_obj_t *img = lv_obj_get_child(panel, 0);
-    if (!img || !lv_obj_check_type(img, &lv_image_class)) {
-        img = lv_image_create(panel);
-        lv_obj_set_size(img, LV_PCT(100), LV_PCT(100));
-        lv_obj_set_align(img, LV_ALIGN_CENTER);
-        lv_image_set_inner_align(img, LV_IMAGE_ALIGN_STRETCH);
-    }
-    lv_image_set_src(img, icon_src);
+namespace {
+constexpr size_t kHomeCarouselSlotCount = 5;
+constexpr int kHomeCarouselCenterSlot = 2;
 }
 
 // ============================================================
@@ -76,6 +46,12 @@ Icon=share/images/e-Mail_80.png
 // ============================================================
 void Launch::bind_ui()
 {
+        if (bound_) {
+            refresh_home_carousel();
+            return;
+        }
+        bound_ = true;
+
         // Fixed icon; users cannot modify it
         app_list.emplace_back("Python",
                               cp0_file_path("python_100.png"), "python3", true, false);
@@ -90,35 +66,6 @@ void Launch::bind_ui()
         app_list.emplace_back("SETTING",
                               cp0_file_path("setting_100.png"), page_v<UISetupPage>);
 
-        {
-            auto it = std::next(app_list.begin(), 0);
-            lv_label_set_text(launch_page_->label(0), it->Name.c_str());
-            panel_set_icon(launch_page_->panel(0), it->Icon.c_str());
-        }
-
-        {
-            auto it = std::next(app_list.begin(), 1);
-            lv_label_set_text(launch_page_->label(1), it->Name.c_str());
-            panel_set_icon(launch_page_->panel(1), it->Icon.c_str());
-        }
-
-        {
-            auto it = std::next(app_list.begin(), 2);
-            lv_label_set_text(launch_page_->label(2), it->Name.c_str());
-            panel_set_icon(launch_page_->panel(2), it->Icon.c_str());
-        }
-
-        {
-            auto it = std::next(app_list.begin(), 3);
-            lv_label_set_text(launch_page_->label(3), it->Name.c_str());
-            panel_set_icon(launch_page_->panel(3), it->Icon.c_str());
-        }
-
-        {
-            auto it = std::next(app_list.begin(), 4);
-            lv_label_set_text(launch_page_->label(4), it->Name.c_str());
-            panel_set_icon(launch_page_->panel(4), it->Icon.c_str());
-        }
 
         // Dynamic icons filtered by Settings configuration
         #define APP_ENABLED(key) (cp0_config_get_int("app_" key, 1) != 0)
@@ -165,6 +112,7 @@ void Launch::bind_ui()
         fixed_count = app_list.size();
 
         applications_load();
+        refresh_home_carousel();
 
         // Initialize inotify and watch the applications directory
         inotify_init_watch();
@@ -176,8 +124,9 @@ void Launch::bind_ui()
 
 void Launch::launch_app()
     {
-        auto it = std::next(app_list.begin(), current_app);
-        it->launch(this);
+        const app *selected = app_at_index(current_app);
+        if (selected)
+            selected->launch(this);
     }
 
 void Launch::lv_go_back_home(void *arg)
@@ -251,27 +200,26 @@ void Launch::launch_Exec(const std::string &exec, bool keep_root)
         LVGL_RUN_FLAGE = 1;
     }
 
-void Launch::update_left_slot(lv_obj_t *panel, lv_obj_t *label)
+void Launch::select_next_app()
     {
-        current_app = current_app == (int)app_list.size() - 1 ? 0 : current_app + 1;
-        int next_app = current_app;
-        next_app = next_app == (int)app_list.size() - 1 ? 0 : next_app + 1;
-        next_app = next_app == (int)app_list.size() - 1 ? 0 : next_app + 1;
-        auto it = std::next(app_list.begin(), next_app);
-        lv_label_set_text(label, it->Name.c_str());
-        panel_set_icon(panel, it->Icon.c_str());
+        int next = normalized_app_index(current_app + 1);
+        if (next >= 0)
+            current_app = next;
     }
 
-void Launch::update_right_slot(lv_obj_t *panel, lv_obj_t *label)
+void Launch::select_previous_app()
     {
-        current_app = current_app == 0 ? (int)app_list.size() - 1 : current_app - 1;
-        int next_app = current_app;
-        next_app = next_app == 0 ? (int)app_list.size() - 1 : next_app - 1;
-        next_app = next_app == 0 ? (int)app_list.size() - 1 : next_app - 1;
-        auto it = std::next(app_list.begin(), next_app);
-        lv_label_set_text(label, it->Name.c_str());
-        panel_set_icon(panel, it->Icon.c_str());
+        int previous = normalized_app_index(current_app - 1);
+        if (previous >= 0)
+            current_app = previous;
     }
+
+const app *Launch::carousel_slot_app(size_t slot) const
+{
+    if (slot >= kHomeCarouselSlotCount)
+        return nullptr;
+    return app_at_index(current_app + static_cast<int>(slot) - kHomeCarouselCenterSlot);
+}
 
 void Launch::applications_load()
     {
@@ -373,7 +321,7 @@ void Launch::applications_load()
                 continue;
             }
             bool in_list = false;
-            for (auto it : app_list)
+            for (const auto &it : app_list)
             {
                 if (it.Exec == app_exec)
                 {
@@ -403,55 +351,16 @@ void Launch::inotify_init_watch()
     }
 
     // ============================================================
-    // Refresh UI panels (update 5 slots from current_app)
+    // Refresh home carousel slots from current_app
     // ============================================================
-void Launch::refresh_ui_panels()
+void Launch::refresh_home_carousel()
     {
-        int sz = (int)app_list.size();
-        if (sz == 0)
+        int normalized = normalized_app_index(current_app);
+        if (normalized < 0)
             return;
-
-        // Ensure current_app is in range
-        if (current_app >= sz)
-            current_app = sz - 1;
-
-        auto app_at = [&](int idx) -> app &
-        {
-            idx = ((idx % sz) + sz) % sz;
-            return *std::next(app_list.begin(), idx);
-        };
-
-        // far left outside (hidden)
-        {
-            auto &a = app_at(current_app - 2);
-            lv_label_set_text(launch_page_->label(0), a.Name.c_str());
-            panel_set_icon(launch_page_->panel(0), a.Icon.c_str());
-        }
-        // left
-        {
-            auto &a = app_at(current_app - 1);
-            lv_label_set_text(launch_page_->label(1), a.Name.c_str());
-            panel_set_icon(launch_page_->panel(1), a.Icon.c_str());
-        }
-        // center
-        {
-            auto &a = app_at(current_app);
-            lv_label_set_text(launch_page_->label(2), a.Name.c_str());
-            panel_set_icon(launch_page_->panel(2), a.Icon.c_str());
-        }
-        // right
-        {
-            auto &a = app_at(current_app + 1);
-            lv_label_set_text(launch_page_->label(3), a.Name.c_str());
-            panel_set_icon(launch_page_->panel(3), a.Icon.c_str());
-        }
-        // far right outside (hidden)
-        {
-            auto &a = app_at(current_app + 2);
-            lv_label_set_text(launch_page_->label(4), a.Name.c_str());
-            panel_set_icon(launch_page_->panel(4), a.Icon.c_str());
-        }
-
+        current_app = normalized;
+        if (launch_page_)
+            launch_page_->refresh_carousel();
     }
 
     // ============================================================
@@ -466,8 +375,27 @@ void Launch::applications_reload()
             app_list.erase(it, app_list.end());
         }
         applications_load();
-        refresh_ui_panels();
+        refresh_home_carousel();
     }
+
+int Launch::normalized_app_index(int index) const
+{
+    int size = static_cast<int>(app_list.size());
+    if (size == 0)
+        return -1;
+
+    index %= size;
+    return index < 0 ? index + size : index;
+}
+
+const app *Launch::app_at_index(int index) const
+{
+    int normalized = normalized_app_index(index);
+    if (normalized < 0)
+        return nullptr;
+
+    return &*std::next(app_list.begin(), normalized);
+}
 
     // ============================================================
     // LVGL timer callback: check inotify events and refresh the list on changes

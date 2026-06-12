@@ -49,8 +49,9 @@ public:
 
     void bind_ui();
     void set_launch_page(std::shared_ptr<UILaunchPage> launch_page);
-    void update_left_slot(lv_obj_t *panel, lv_obj_t *label);
-    void update_right_slot(lv_obj_t *panel, lv_obj_t *label);
+    void select_next_app();
+    void select_previous_app();
+    const app *carousel_slot_app(size_t slot) const;
     void launch_app();
 
 private:
@@ -61,8 +62,10 @@ private:
     void launch_Exec(const std::string &exec, bool keep_root = false);
     void applications_load();
     void inotify_init_watch();
-    void refresh_ui_panels();
+    void refresh_home_carousel();
     void applications_reload();
+    int normalized_app_index(int index) const;
+    const app *app_at_index(int index) const;
 
     static void lv_go_back_home(void *arg);
     static void app_dir_watch_cb(lv_timer_t *timer);
@@ -72,7 +75,7 @@ private:
     cp0_watcher_t dir_watcher = NULL;
     lv_timer_t *watch_timer = nullptr;
     int fixed_count = 0;
+    bool bound_ = false;
     std::list<app> app_list;
     std::shared_ptr<void> app_Page;
-    std::shared_ptr<void> home_Page;
 };

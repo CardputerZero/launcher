@@ -15,6 +15,7 @@
 #include "Animation/ui_launcher_animation.h"
 
 #include <algorithm>
+#include <unistd.h>
 
 void UILaunchPage::rotate_carousel_left(size_t start, size_t end)
 {
@@ -77,6 +78,32 @@ void UILaunchPage::switchpanleEnableClick(int obj_index, int enable)
     {
         lv_obj_clear_flag(obj, LV_OBJ_FLAG_CLICKABLE);
     }
+}
+
+void UILaunchPage::set_panel_icon(lv_obj_t *panel, const char *src)
+{
+    if (!panel)
+        return;
+
+    const char *icon_src = src ? src : "";
+    if (icon_src[0] == '\0') {
+        SLOGW("[LAUNCHER] set panel icon with empty path");
+    } else if (access(icon_src, R_OK) == 0) {
+        SLOGI("[LAUNCHER] set panel icon: %s", icon_src);
+    } else {
+        SLOGW("[LAUNCHER] set panel icon missing/unreadable: %s", icon_src);
+    }
+
+    lv_obj_set_style_pad_all(panel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+    lv_obj_t *img = lv_obj_get_child(panel, 0);
+    if (!img || !lv_obj_check_type(img, &lv_image_class)) {
+        img = lv_image_create(panel);
+        lv_obj_set_size(img, LV_PCT(100), LV_PCT(100));
+        lv_obj_set_align(img, LV_ALIGN_CENTER);
+        lv_image_set_inner_align(img, LV_IMAGE_ALIGN_STRETCH);
+    }
+    lv_image_set_src(img, icon_src);
 }
 
 
@@ -319,16 +346,47 @@ UILaunchPage::~UILaunchPage()
         active_launch_page = nullptr;
 }
 
-void UILaunchPage::update_left_slot(lv_obj_t *panel, lv_obj_t *label)
+void UILaunchPage::fill_right_entering_slot(lv_obj_t *panel, lv_obj_t *label)
 {
-    if (launch_)
-        launch_->update_left_slot(panel, label);
+    if (!launch_)
+        return;
+
+    launch_->select_next_app();
+    if (const app *item = launch_->carousel_slot_app(kCardFarRight))
+        update_carousel_item(panel, label, item->Name.c_str(), item->Icon.c_str());
 }
 
-void UILaunchPage::update_right_slot(lv_obj_t *panel, lv_obj_t *label)
+void UILaunchPage::fill_left_entering_slot(lv_obj_t *panel, lv_obj_t *label)
 {
-    if (launch_)
-        launch_->update_right_slot(panel, label);
+    if (!launch_)
+        return;
+
+    launch_->select_previous_app();
+    if (const app *item = launch_->carousel_slot_app(kCardFarLeft))
+        update_carousel_item(panel, label, item->Name.c_str(), item->Icon.c_str());
+}
+
+void UILaunchPage::refresh_carousel()
+{
+    if (!launch_)
+        return;
+
+    for (size_t slot = 0; slot < 5; ++slot) {
+        if (const app *item = launch_->carousel_slot_app(slot))
+            update_carousel_slot(slot, item->Name.c_str(), item->Icon.c_str());
+    }
+}
+
+void UILaunchPage::update_carousel_slot(size_t slot, const char *title, const char *icon)
+{
+    update_carousel_item(panel(slot), label(slot), title, icon);
+}
+
+void UILaunchPage::update_carousel_item(lv_obj_t *panel, lv_obj_t *label, const char *title, const char *icon)
+{
+    if (label)
+        lv_label_set_text(label, title ? title : "");
+    set_panel_icon(panel, icon);
 }
 
 void UILaunchPage::launch_selected_app()
@@ -400,7 +458,7 @@ void UILaunchPage::switch_right()
 
     snap_label_to_slot(carousel_elements_[9], 5);
 
-    update_right_slot(carousel_elements_[4], carousel_elements_[9]);
+    fill_left_entering_slot(carousel_elements_[4], carousel_elements_[9]);
 
     switchpanleEnableClick(2, 0);
     rotate_carousel_right(0, 4);
@@ -435,7 +493,7 @@ void UILaunchPage::switch_left()
 
     snap_label_to_slot(carousel_elements_[5], 9);
 
-    update_left_slot(carousel_elements_[0], carousel_elements_[5]);
+    fill_right_entering_slot(carousel_elements_[0], carousel_elements_[5]);
 
     switchpanleEnableClick(2, 0);
     rotate_carousel_left(0, 4);

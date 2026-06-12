@@ -47,8 +47,9 @@ public:
     lv_obj_t *panel(size_t slot);
     lv_obj_t *label(size_t slot);
 
-    void update_left_slot(lv_obj_t *panel, lv_obj_t *label);
-    void update_right_slot(lv_obj_t *panel, lv_obj_t *label);
+    void refresh_carousel();
+    void update_carousel_slot(size_t slot, const char *title, const char *icon);
+    void update_carousel_item(lv_obj_t *panel, lv_obj_t *label, const char *title, const char *icon);
     void launch_selected_app();
 
 protected:
@@ -64,6 +65,8 @@ private:
     void create_app_container(lv_obj_t *parent);
     void switch_left();
     void switch_right();
+    void fill_left_entering_slot(lv_obj_t *panel, lv_obj_t *label);
+    void fill_right_entering_slot(lv_obj_t *panel, lv_obj_t *label);
     void finish_switch_animation();
     void run_pending_switch();
     void handle_home_key(lv_event_t *event);
@@ -73,6 +76,7 @@ private:
     void rotate_carousel_right(size_t start, size_t end);
     void switchpanleEnable(int obj_index, int enable);
     void switchpanleEnableClick(int obj_index, int enable);
+    static void set_panel_icon(lv_obj_t *panel, const char *src);
     static void on_left_arrow_clicked(lv_event_t *event);
     static void on_right_arrow_clicked(lv_event_t *event);
     static void on_app_clicked(lv_event_t *event);
