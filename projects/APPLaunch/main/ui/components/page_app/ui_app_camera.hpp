@@ -343,7 +343,7 @@ private:
     {
         lv_obj_clean(ui_APP_Container);
         lv_obj_set_height(ui_APP_Container, camera_app::kContentH);
-        lv_obj_set_y(ui_APP_Container, 10);
+        lv_obj_set_y(ui_APP_Container, 20);
         lv_obj_clear_flag(ui_APP_Container, LV_OBJ_FLAG_SCROLLABLE);
 
         page_camera_ = make_page();
