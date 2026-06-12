@@ -1,0 +1,901 @@
+# 09 - 打包部署与 systemd
+
+本章说明 APPLaunch 如何从 `dist` 目录打包为 Debian `.deb`，如何部署到 M5CardputerZero，如何通过 systemd 自启动，以及如何验证和排查部署问题。
+
+所有命令默认从仓库根目录开始：
+
+```bash
+cd /home/nihao/w2T/github/launcher
+```
+
+## 1. 部署形态总览
+
+APPLaunch 的设备端运行依赖两类文件：
+
+1. 主程序：`M5CardputerZero-APPLaunch`。
+2. 运行时资源树：`APPLaunch/`，包含应用描述、字体、图片、音频、脚本和可选子应用。
+
+正式安装后的目标路径是：
+
+```text
+/usr/share/APPLaunch/
+├── applications/
+├── bin/
+│   ├── M5CardputerZero-APPLaunch
+│   ├── M5CardputerZero-AppStore              # 如果 dist/bin 中存在则打包
+│   ├── M5CardputerZero-Calculator            # 如果 dist/bin 中存在则打包
+│   └── appstore.py                           # 如果 dist/bin 中存在则打包
+├── lib/
+├── share/
+│   ├── font/
+│   └── images/
+└── cache -> /var/cache/APPLaunch             # postinst 创建
+```
+
+systemd 服务文件安装到：
+
+```text
+/lib/systemd/system/APPLaunch.service
+```
+
+服务启动命令是：
+
+```text
+/usr/share/APPLaunch/bin/M5CardputerZero-APPLaunch
+```
+
+工作目录是：
+
+```text
+/usr/share/APPLaunch
+```
+
+## 2. 打包前必须先完成设备目标构建
+
+`.deb` 应该使用 arm64 设备产物，而不是 Linux SDL2 x86_64 仿真产物。
+
+推荐在 Linux x86_64 开发机交叉编译：
+
+```bash
+cd /home/nihao/w2T/github/launcher/projects/APPLaunch
+scons distclean
+export CONFIG_DEFAULT_FILE=linux_x86_cross_cp0_config_defaults.mk
+scons -j8
+file dist/M5CardputerZero-APPLaunch
+```
+
+`file` 结果应包含：
+
+```text
+ARM aarch64
+```
+
+如果看到 `x86-64`，说明你打包的是 SDL2 本机产物，不能安装到设备作为正式 launcher。
+
+设备端原生编译也可以用于打包：
+
+```bash
+cd /home/pi/launcher/projects/APPLaunch
+scons distclean
+export CONFIG_DEFAULT_FILE=config_defaults.mk
+scons -j2
+file dist/M5CardputerZero-APPLaunch
+```
+
+## 3. `llm_pack.py` 打包脚本说明
+
+打包脚本位于：
+
+```text
+projects/APPLaunch/tools/llm_pack.py
+```
+
+核心常量：
+
+| 常量 | 值 | 说明 |
+| --- | --- | --- |
+| `PACKAGE_NAME` | `applaunch` | Debian 包名 |
+| `APP_NAME` | `APPLaunch` | 应用名和服务名基础 |
+| `BIN_NAME` | `M5CardputerZero-APPLaunch` | 主可执行文件名 |
+| `INSTALL_PPREFIX` | `usr/share` | 安装前缀上层目录 |
+| `INSTALL_PREFIX` | `usr/share/APPLaunch` | 应用安装根目录 |
+| `BIN_PATH` | `usr/share/APPLaunch/bin` | 可执行文件目录 |
+| `LIB_PATH` | `usr/share/APPLaunch/lib` | 动态库目录 |
+| `SHARE_PATH` | `usr/share/APPLaunch/share` | 共享资源目录 |
+| `APP_PATH` | `usr/share/APPLaunch/applications` | `.desktop` 应用描述目录 |
+| `SERVICE_PATH` | `lib/systemd/system` | systemd 服务目录 |
+
+默认版本信息在脚本入口处：
+
+```python
+version = '0.2.1'
+src_folder = '../dist'
+revision = 'm5stack1'
+```
+
+生成的包文件名格式：
+
+```text
+applaunch_0.2.1-m5stack1_arm64.deb
+```
+
+## 4. `.deb` 包目录结构
+
+运行脚本后会在 `projects/APPLaunch/tools` 下生成临时目录：
+
+```text
+projects/APPLaunch/tools/debian-APPLaunch/
+├── DEBIAN/
+│   ├── control
+│   ├── postinst
+│   └── prerm
+├── lib/
+│   └── systemd/
+│       └── system/
+│           └── APPLaunch.service
+└── usr/
+    └── share/
+        └── APPLaunch/
+            ├── applications/
+            ├── bin/
+            │   └── M5CardputerZero-APPLaunch
+            ├── lib/
+            └── share/
+                ├── font/
+                └── images/
+```
+
+最终 `.deb` 文件位于：
+
+```text
+projects/APPLaunch/tools/applaunch_0.2.1-m5stack1_arm64.deb
+```
+
+## 5. 打包命令
+
+### 5.1 安装打包工具
+
+Linux 开发机：
+
+```bash
+sudo apt update
+sudo apt install -y dpkg-dev fakeroot
+```
+
+只要有 `dpkg-deb` 即可：
+
+```bash
+dpkg-deb --version
+```
+
+### 5.2 执行打包
+
+```bash
+cd /home/nihao/w2T/github/launcher/projects/APPLaunch/tools
+python3 llm_pack.py
+```
+
+成功时会看到类似：
+
+```text
+Creating Debian package applaunch 0.2.1 ...
+Debian package created: .../applaunch_0.2.1-m5stack1_arm64.deb
+applaunch create success!
+```
+
+### 5.3 指定自定义版本
+
+当前脚本入口固定使用 `0.2.1` 和 `m5stack1`。如果需要临时打自定义版本，可以直接从 Python 调用函数，不修改仓库文件：
+
+```bash
+cd /home/nihao/w2T/github/launcher/projects/APPLaunch/tools
+python3 - <<'PY'
+from llm_pack import create_applaunch_deb
+print(create_applaunch_deb(version='0.2.1', src_folder='../dist', revision='m5stack1'))
+PY
+```
+
+如果要长期改变版本号，应通过正式代码变更修改 `llm_pack.py`，并同步记录发布说明。
+
+### 5.4 清理打包产物
+
+脚本支持：
+
+```bash
+python3 llm_pack.py clean
+python3 llm_pack.py distclean
+```
+
+差异：
+
+| 命令 | 行为 |
+| --- | --- |
+| `clean` | 删除当前目录下 `*.deb`，并删除当前目录一级子目录 |
+| `distclean` | 删除当前目录下 `*.deb` 和 `m5stack_*` |
+
+注意：`clean` 会删除 `tools` 目录下的一级目录，包括 `debian-APPLaunch` 这类临时目录。不要在放有重要子目录的非预期目录执行。
+
+## 6. 打包脚本复制规则
+
+### 6.1 主程序查找
+
+脚本从 `src_folder` 查找主程序，默认 `src_folder='../dist'`。
+
+查找顺序：
+
+1. `../dist/M5CardputerZero-APPLaunch`
+2. `../dist/bin/M5CardputerZero-APPLaunch`
+
+如果两个位置都不存在，会抛出：
+
+```text
+FileNotFoundError: Binary M5CardputerZero-APPLaunch not found in ../dist
+```
+
+### 6.2 附加应用和后端
+
+脚本会尝试包含以下可选文件：
+
+```text
+../dist/bin/M5CardputerZero-AppStore
+../dist/bin/appstore.py
+../dist/bin/M5CardputerZero-Calculator
+```
+
+如果存在则复制到：
+
+```text
+/usr/share/APPLaunch/bin/
+```
+
+其中非 `.py` 文件会设置为 `0755`。
+
+### 6.3 资源树复制
+
+脚本优先复制源码中的资源树：
+
+```text
+projects/APPLaunch/APPLaunch
+```
+
+目标是包内：
+
+```text
+usr/share/APPLaunch
+```
+
+如果源码资源树不存在，则尝试使用：
+
+```text
+../dist/APPLaunch
+```
+
+这意味着打包时通常不只依赖 `dist/APPLaunch`，也会把工程源码目录中的 `APPLaunch/` 资源树复制进去。
+
+### 6.4 AppStore 图片补充
+
+如果存在：
+
+```text
+projects/AppStore/share/images
+```
+
+脚本会把以下图片复制到包内 `usr/share/APPLaunch/share/images`：
+
+```text
+store_wordmark.png
+store_arrow_*.png
+```
+
+## 7. Debian 控制脚本
+
+### 7.1 `DEBIAN/control`
+
+打包脚本生成的 control 包含：
+
+```text
+Package: applaunch
+Version: 0.2.1
+Architecture: arm64
+Maintainer: dianjixz <dianjixz@m5stack.com>
+Original-Maintainer: m5stack <m5stack@m5stack.com>
+Section: APPLaunch
+Priority: optional
+Homepage: https://www.m5stack.com
+Packaged-Date: <打包时间>
+Description: M5CardputerZero APPLaunch
+```
+
+重要点：
+
+- `Architecture` 固定为 `arm64`。
+- 脚本不自动声明 `Depends`，因此依赖库需要由基础镜像提供，或在后续版本中补充依赖声明。
+
+### 7.2 `DEBIAN/postinst`
+
+安装后脚本执行：
+
+```sh
+mkdir -p /var/cache/APPLaunch
+ln -s /var/cache/APPLaunch /usr/share/APPLaunch/cache
+[ -f "/lib/systemd/system/APPLaunch.service" ] && systemctl enable APPLaunch.service
+[ -f "/lib/systemd/system/APPLaunch.service" ] && systemctl start APPLaunch.service
+exit 0
+```
+
+作用：
+
+- 创建可写缓存目录 `/var/cache/APPLaunch`。
+- 在只读/系统资源目录下建立 `cache` 软链接。
+- 启用并启动 systemd 服务。
+
+注意：如果 `/usr/share/APPLaunch/cache` 已存在，`ln -s` 可能报错。当前脚本没有使用 `ln -sfn`，重复安装时需要留意安装日志。
+
+### 7.3 `DEBIAN/prerm`
+
+卸载前脚本执行：
+
+```sh
+[ -f "/lib/systemd/system/APPLaunch.service" ] && systemctl stop APPLaunch.service
+[ -f "/lib/systemd/system/APPLaunch.service" ] && systemctl disable APPLaunch.service
+rm -rf /var/cache/APPLaunch
+exit 0
+```
+
+作用：
+
+- 停止服务。
+- 禁用开机自启动。
+- 删除缓存目录。
+
+注意：卸载会删除 `/var/cache/APPLaunch`，其中若存有运行时缓存或应用商店缓存，会一并清除。
+
+## 8. systemd 服务文件
+
+脚本生成：
+
+```ini
+[Unit]
+Description=APPLaunch Service
+
+[Service]
+ExecStart=/usr/share/APPLaunch/bin/M5CardputerZero-APPLaunch
+WorkingDirectory=/usr/share/APPLaunch
+Restart=always
+RestartSec=1
+StartLimitInterval=0
+
+[Install]
+WantedBy=multi-user.target
+```
+
+字段说明：
+
+| 字段 | 说明 |
+| --- | --- |
+| `ExecStart` | 启动 APPLaunch 主程序 |
+| `WorkingDirectory` | 设置当前目录为 `/usr/share/APPLaunch`，方便相对路径访问 |
+| `Restart=always` | 进程退出后总是重启 |
+| `RestartSec=1` | 退出 1 秒后重启 |
+| `StartLimitInterval=0` | 关闭默认启动频率限制，避免频繁崩溃后 systemd 停止重启 |
+| `WantedBy=multi-user.target` | enable 后随多用户目标启动 |
+
+当前服务文件没有显式设置用户，默认以 systemd system service 的 root 身份运行。这通常有利于访问 framebuffer、evdev、GPIO、音频和相机设备，但也意味着程序权限较高。
+
+## 9. 安装到设备
+
+### 9.1 复制 `.deb` 到设备
+
+假设设备 IP 是 `192.168.28.177`，用户名是 `pi`：
+
+```bash
+cd /home/nihao/w2T/github/launcher/projects/APPLaunch/tools
+scp applaunch_0.2.1-m5stack1_arm64.deb pi@192.168.28.177:/home/pi/
+```
+
+### 9.2 在设备上安装
+
+```bash
+ssh pi@192.168.28.177
+sudo dpkg -i /home/pi/applaunch_0.2.1-m5stack1_arm64.deb
+```
+
+如果安装过程中提示缺少依赖，先修复依赖：
+
+```bash
+sudo apt-get -f install
+sudo dpkg -i /home/pi/applaunch_0.2.1-m5stack1_arm64.deb
+```
+
+### 9.3 覆盖安装
+
+再次安装同名或更高版本包：
+
+```bash
+sudo dpkg -i /home/pi/applaunch_0.2.1-m5stack1_arm64.deb
+```
+
+如果服务正在运行，`postinst` 会尝试 enable/start。为了减少安装期间 framebuffer 或输入设备占用问题，可以手动先停服务：
+
+```bash
+sudo systemctl stop APPLaunch.service || true
+sudo dpkg -i /home/pi/applaunch_0.2.1-m5stack1_arm64.deb
+sudo systemctl restart APPLaunch.service
+```
+
+## 10. 使用 `scons push` 快速部署
+
+除了 `.deb`，工程还支持通过 `setup.ini` 上传 `dist` 目录。
+
+配置文件：
+
+```text
+projects/APPLaunch/setup.ini
+```
+
+默认内容示例：
+
+```ini
+[ssh]
+local_file_path = dist
+remote_file_path = /home/pi/dist
+remote_host = 192.168.28.177
+remote_port = 22
+username = pi
+password = pi
+; before_cmd = 'echo pi |  sudo -S systemctl stop APPLaunch.service'
+; after_cmd = 'echo pi |  sudo -S systemctl stop APPLaunch.service; echo pi |  sudo -S cp /home/pi/dist/M5CardputerZero-APPLaunch /usr/share/APPLaunch/bin ; echo pi |  sudo -S systemctl start APPLaunch.service'
+```
+
+执行：
+
+```bash
+cd /home/nihao/w2T/github/launcher/projects/APPLaunch
+scons push
+```
+
+`SDK/tools/scons/push.py` 会：
+
+1. 读取 `setup.ini`。
+2. 遍历 `local_file_path` 下所有文件。
+3. 计算本地 MD5。
+4. 通过 SSH 获取远端文件 MD5。
+5. 只上传有变化的文件。
+6. 可选执行 `before_cmd` 和 `after_cmd`。
+
+适用场景：
+
+- 开发阶段快速替换 `dist`。
+- 快速上传单次编译结果。
+- 不需要测试 Debian 安装脚本时。
+
+不适用场景：
+
+- 验证正式安装路径。
+- 验证 `postinst`、`prerm`。
+- 验证 systemd enable/install 行为。
+- 需要生成可分发安装包。
+
+## 11. 手动部署方式
+
+当不想使用 `.deb`，也不想使用 `scons push`，可以手动复制。
+
+在开发机上传：
+
+```bash
+cd /home/nihao/w2T/github/launcher/projects/APPLaunch
+scp dist/M5CardputerZero-APPLaunch pi@192.168.28.177:/home/pi/
+scp -r dist/APPLaunch pi@192.168.28.177:/home/pi/APPLaunch-new
+```
+
+在设备上安装：
+
+```bash
+sudo systemctl stop APPLaunch.service || true
+sudo mkdir -p /usr/share/APPLaunch/bin
+sudo install -m 0755 /home/pi/M5CardputerZero-APPLaunch /usr/share/APPLaunch/bin/M5CardputerZero-APPLaunch
+sudo rsync -a --delete /home/pi/APPLaunch-new/ /usr/share/APPLaunch/
+sudo mkdir -p /var/cache/APPLaunch
+sudo ln -sfn /var/cache/APPLaunch /usr/share/APPLaunch/cache
+sudo systemctl daemon-reload
+sudo systemctl restart APPLaunch.service
+```
+
+如果服务文件尚未安装，可以手动创建 `/lib/systemd/system/APPLaunch.service`，内容参考第 8 节。
+
+## 12. 部署验证命令
+
+### 12.1 包状态
+
+```bash
+dpkg -l | grep applaunch
+dpkg -s applaunch
+```
+
+查看包安装了哪些文件：
+
+```bash
+dpkg -L applaunch
+```
+
+查看 `.deb` 包内容但不安装：
+
+```bash
+dpkg-deb -c applaunch_0.2.1-m5stack1_arm64.deb
+```
+
+查看 `.deb` 元信息：
+
+```bash
+dpkg-deb -I applaunch_0.2.1-m5stack1_arm64.deb
+```
+
+### 12.2 文件和权限
+
+```bash
+ls -l /usr/share/APPLaunch/bin/M5CardputerZero-APPLaunch
+file /usr/share/APPLaunch/bin/M5CardputerZero-APPLaunch
+ls -ld /usr/share/APPLaunch
+ls -l /usr/share/APPLaunch/cache
+ls -l /var/cache/APPLaunch
+find /usr/share/APPLaunch/share/images -maxdepth 1 -type f | head
+find /usr/share/APPLaunch/share/font -maxdepth 1 -type f | head
+```
+
+期望：
+
+- 主程序有执行权限。
+- 主程序架构为 `ARM aarch64`。
+- `/usr/share/APPLaunch/cache` 指向 `/var/cache/APPLaunch`。
+- 图片和字体资源存在。
+
+### 12.3 动态库依赖
+
+在设备上：
+
+```bash
+ldd /usr/share/APPLaunch/bin/M5CardputerZero-APPLaunch
+```
+
+检查是否有缺失：
+
+```bash
+ldd /usr/share/APPLaunch/bin/M5CardputerZero-APPLaunch | grep 'not found' || true
+```
+
+如果缺少库，需要安装对应系统包，或补充打包规则把私有库放入 `/usr/share/APPLaunch/lib` 并配置运行时搜索路径。
+
+### 12.4 systemd 状态
+
+```bash
+systemctl status APPLaunch.service --no-pager
+systemctl is-enabled APPLaunch.service
+systemctl is-active APPLaunch.service
+```
+
+查看日志：
+
+```bash
+journalctl -u APPLaunch.service -b --no-pager
+journalctl -u APPLaunch.service -b -f
+```
+
+重启：
+
+```bash
+sudo systemctl restart APPLaunch.service
+```
+
+停止：
+
+```bash
+sudo systemctl stop APPLaunch.service
+```
+
+开机自启动：
+
+```bash
+sudo systemctl enable APPLaunch.service
+```
+
+取消开机自启动：
+
+```bash
+sudo systemctl disable APPLaunch.service
+```
+
+重新读取服务文件：
+
+```bash
+sudo systemctl daemon-reload
+```
+
+### 12.5 手动前台运行
+
+排查 systemd 前，建议先前台运行：
+
+```bash
+sudo systemctl stop APPLaunch.service || true
+cd /usr/share/APPLaunch
+sudo ./bin/M5CardputerZero-APPLaunch
+```
+
+这样可以直接看到标准输出和崩溃信息。如果前台运行正常但 systemd 不正常，再检查服务文件、权限和工作目录。
+
+### 12.6 framebuffer 和输入设备
+
+检查 framebuffer：
+
+```bash
+ls -l /dev/fb*
+cat /sys/class/graphics/fb0/name 2>/dev/null || true
+```
+
+检查输入设备：
+
+```bash
+ls -l /dev/input/
+cat /proc/bus/input/devices
+```
+
+检查当前谁占用 framebuffer 或输入设备：
+
+```bash
+sudo fuser -v /dev/fb0 2>/dev/null || true
+sudo fuser -v /dev/input/event* 2>/dev/null || true
+```
+
+如果另一个图形程序正在运行，APPLaunch 可能无法正确显示或读取输入。
+
+## 13. 卸载和回滚
+
+### 13.1 卸载
+
+```bash
+sudo dpkg -r applaunch
+```
+
+这会触发 `prerm`：停止服务、disable 服务、删除 `/var/cache/APPLaunch`。
+
+如果要同时清理配置文件：
+
+```bash
+sudo dpkg -P applaunch
+```
+
+### 13.2 安装旧包回滚
+
+```bash
+sudo systemctl stop APPLaunch.service || true
+sudo dpkg -i /home/pi/applaunch_旧版本-m5stack1_arm64.deb
+sudo systemctl restart APPLaunch.service
+```
+
+验证：
+
+```bash
+dpkg -s applaunch | grep Version
+systemctl status APPLaunch.service --no-pager
+```
+
+### 13.3 临时禁用 launcher
+
+```bash
+sudo systemctl disable --now APPLaunch.service
+```
+
+恢复：
+
+```bash
+sudo systemctl enable --now APPLaunch.service
+```
+
+## 14. 常见部署错误
+
+### 14.1 安装时报 `package architecture (arm64) does not match system`
+
+原因：设备系统不是 arm64，或在 x86_64 开发机上直接安装了 arm64 包。
+
+处理：
+
+```bash
+uname -m
+dpkg --print-architecture
+```
+
+`.deb` 应安装在 M5CardputerZero 设备上，而不是 Linux x86_64 开发机上。
+
+### 14.2 设备运行时报 `Exec format error`
+
+原因：主程序架构错误。常见情况是把 Linux SDL2 x86_64 产物打进了 arm64 包。
+
+检查：
+
+```bash
+file /usr/share/APPLaunch/bin/M5CardputerZero-APPLaunch
+```
+
+正确处理：重新交叉编译：
+
+```bash
+cd projects/APPLaunch
+scons distclean
+export CONFIG_DEFAULT_FILE=linux_x86_cross_cp0_config_defaults.mk
+scons -j8
+```
+
+然后重新打包安装。
+
+### 14.3 服务反复重启
+
+检查：
+
+```bash
+systemctl status APPLaunch.service --no-pager
+journalctl -u APPLaunch.service -b --no-pager | tail -n 100
+```
+
+常见原因：
+
+- 缺少动态库。
+- 资源路径不存在。
+- framebuffer 或输入设备不可用。
+- 程序启动即崩溃。
+- 安装的是错误架构产物。
+
+进一步检查：
+
+```bash
+ldd /usr/share/APPLaunch/bin/M5CardputerZero-APPLaunch | grep 'not found' || true
+ls /usr/share/APPLaunch/share/images
+ls /dev/fb0
+```
+
+### 14.4 `ln: failed to create symbolic link '/usr/share/APPLaunch/cache': File exists`
+
+原因：重复安装时 `postinst` 使用 `ln -s`，目标已存在。
+
+处理：
+
+```bash
+sudo rm -rf /usr/share/APPLaunch/cache
+sudo mkdir -p /var/cache/APPLaunch
+sudo ln -s /var/cache/APPLaunch /usr/share/APPLaunch/cache
+sudo systemctl restart APPLaunch.service
+```
+
+如果要从根本上修复，应修改打包脚本为 `ln -sfn`，但这属于代码变更。
+
+### 14.5 `dpkg-deb: error: failed to open package info file .../DEBIAN/control`
+
+原因：打包目录结构不完整，或脚本中途失败后残留目录异常。
+
+处理：
+
+```bash
+cd projects/APPLaunch/tools
+python3 llm_pack.py clean
+python3 llm_pack.py
+```
+
+### 14.6 `FileNotFoundError: Binary M5CardputerZero-APPLaunch not found in ../dist`
+
+原因：未构建，或构建目录不是 `projects/APPLaunch/dist`，或打包脚本不是从 `tools` 目录运行。
+
+处理：
+
+```bash
+cd /home/nihao/w2T/github/launcher/projects/APPLaunch
+export CONFIG_DEFAULT_FILE=linux_x86_cross_cp0_config_defaults.mk
+scons -j8
+ls -l dist/M5CardputerZero-APPLaunch
+cd tools
+python3 llm_pack.py
+```
+
+### 14.7 服务启动后黑屏
+
+排查顺序：
+
+1. 确认可执行文件能前台运行。
+2. 确认 framebuffer 存在。
+3. 确认没有其它进程占用显示。
+4. 确认资源路径存在。
+5. 查看 journal 日志。
+
+命令：
+
+```bash
+sudo systemctl stop APPLaunch.service || true
+cd /usr/share/APPLaunch
+sudo ./bin/M5CardputerZero-APPLaunch
+ls -l /dev/fb0
+sudo fuser -v /dev/fb0 2>/dev/null || true
+journalctl -u APPLaunch.service -b --no-pager | tail -n 100
+```
+
+### 14.8 外部应用无法启动
+
+APPLaunch 会从资源树和 `.desktop` 描述中找到外部应用。先检查：
+
+```bash
+find /usr/share/APPLaunch/applications -maxdepth 1 -type f -print
+find /usr/share/APPLaunch/bin -maxdepth 1 -type f -print
+```
+
+确认外部应用有执行权限：
+
+```bash
+ls -l /usr/share/APPLaunch/bin
+```
+
+如果 `.desktop` 中的 Exec 指向不存在的路径，需要修正资源树或重新打包。
+
+## 15. 发布前检查清单
+
+打包前：
+
+```bash
+cd /home/nihao/w2T/github/launcher/projects/APPLaunch
+scons distclean
+export CONFIG_DEFAULT_FILE=linux_x86_cross_cp0_config_defaults.mk
+scons -j8
+file dist/M5CardputerZero-APPLaunch
+```
+
+打包后：
+
+```bash
+cd tools
+python3 llm_pack.py
+dpkg-deb -I applaunch_0.2.1-m5stack1_arm64.deb
+dpkg-deb -c applaunch_0.2.1-m5stack1_arm64.deb | head -n 50
+```
+
+安装后：
+
+```bash
+dpkg -s applaunch | grep -E 'Package|Version|Architecture'
+systemctl status APPLaunch.service --no-pager
+systemctl is-enabled APPLaunch.service
+ldd /usr/share/APPLaunch/bin/M5CardputerZero-APPLaunch | grep 'not found' || true
+ls -l /usr/share/APPLaunch/cache
+journalctl -u APPLaunch.service -b --no-pager | tail -n 100
+```
+
+功能验证：
+
+- 设备开机后 APPLaunch 自动显示首页。
+- 键盘/按键输入可用。
+- 首页应用轮播可切换。
+- 资源图片和字体正常显示。
+- 内置页面可进入和返回。
+- 外部应用启动后能退出并回到 APPLaunch。
+- AppStore/Calculator 等可选子应用如已打包，能从 launcher 正常启动。
+
+## 16. 推荐部署流程
+
+正式发布建议使用：
+
+```bash
+cd /home/nihao/w2T/github/launcher/projects/APPLaunch
+scons distclean
+export CONFIG_DEFAULT_FILE=linux_x86_cross_cp0_config_defaults.mk
+scons -j8
+file dist/M5CardputerZero-APPLaunch
+cd tools
+python3 llm_pack.py
+scp applaunch_0.2.1-m5stack1_arm64.deb pi@192.168.28.177:/home/pi/
+ssh pi@192.168.28.177 'sudo dpkg -i /home/pi/applaunch_0.2.1-m5stack1_arm64.deb && systemctl status APPLaunch.service --no-pager'
+```
+
+开发阶段快速替换建议使用：
+
+```bash
+cd /home/nihao/w2T/github/launcher/projects/APPLaunch
+export CONFIG_DEFAULT_FILE=linux_x86_cross_cp0_config_defaults.mk
+scons -j8
+scons push
+```
+
+两者区别：`.deb` 验证完整安装和 systemd 生命周期；`scons push` 更快，但不能替代正式打包验证。
