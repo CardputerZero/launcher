@@ -737,28 +737,3 @@ void Launch::launch_app()
     if (impl_)
         impl_->launch_app();
 }
-
-// ============================================================
-std::unique_ptr<Launch> app_launch_Ser;
-
-extern "C"
-{
-
-    void ui_info_bind()
-    {
-        app_launch_Ser = std::make_unique<Launch>();
-        app_launch_Ser->bind_ui();
-    }
-    void cpp_app_left(lv_obj_t *panel, lv_obj_t *label)
-    {
-        app_launch_Ser->update_left_slot(panel, label);
-    }
-    void cpp_app_right(lv_obj_t *panel, lv_obj_t *label)
-    {
-        app_launch_Ser->update_right_slot(panel, label);
-    }
-    void cpp_app_launch()
-    {
-        app_launch_Ser->launch_app();
-    }
-}

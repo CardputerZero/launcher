@@ -27,10 +27,6 @@ extern "C"
 
     // SCREEN: ui_Screen1
 
-    void ui_Screen1_screen_init(void);
-
-    void ui_info_bind();
-
 #define LV_EVENT_KEYBOARD_GET_KEY(e) ((struct key_item *)lv_event_get_param(e))->key_code
 #define LV_EVENT_KEYBOARD_GET_KEY_STATE(e) ((struct key_item *)lv_event_get_param(e))->key_state
 #define IS_KEY_PRESSED(e) ((lv_event_get_code(e) == LV_EVENT_KEYBOARD) && (LV_EVENT_KEYBOARD_GET_KEY_STATE(e) > 0))

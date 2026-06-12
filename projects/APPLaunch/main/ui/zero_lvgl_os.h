@@ -13,6 +13,8 @@ public:
     zero_lvgl_os();
     ~zero_lvgl_os();
 
+    void start();
+
 private:
     friend LauncherFonts &launcher_fonts();
     void creat_display();

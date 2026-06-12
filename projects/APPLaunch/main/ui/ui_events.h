@@ -6,26 +6,4 @@
 #ifndef _UI_EVENTS_H
 #define _UI_EVENTS_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-
-
-void switch_left(lv_event_t *e);
-void switch_right(lv_event_t *e);
-void app_launch(lv_event_t *e);
-void go_back_home(lv_event_t *e);
-void main_key_switch(lv_event_t *e);
-
-void app_card_click(lv_event_t * e);
-
-
-void cpp_app_left(lv_obj_t *panel, lv_obj_t *label);
-void cpp_app_right(lv_obj_t *panel, lv_obj_t *label);
-void cpp_app_launch();
-#ifdef __cplusplus
-} /*extern "C"*/
-#endif
-
 #endif
