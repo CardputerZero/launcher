@@ -44,15 +44,15 @@ public:
     void init_input_group();
     static void bind_home_input_group();
     static lv_group_t *home_input_group();
-    static lv_obj_t *panel(size_t slot);
-    static lv_obj_t *label(size_t slot);
+    lv_obj_t *panel(size_t slot);
+    lv_obj_t *label(size_t slot);
 
     void update_left_slot(lv_obj_t *panel, lv_obj_t *label);
     void update_right_slot(lv_obj_t *panel, lv_obj_t *label);
     void launch_selected_app();
 
 protected:
-    static std::array<lv_obj_t *, kLauncherCarouselElementCount> carousel_elements;
+    std::array<lv_obj_t *, kLauncherCarouselElementCount> carousel_elements_ = {};
 
 private:
     enum class PendingSwitch {
@@ -69,10 +69,10 @@ private:
     void handle_home_key(lv_event_t *event);
     void handle_startup_gif_event(lv_event_t *event);
 
-    static void rotate_carousel_left(size_t start, size_t end);
-    static void rotate_carousel_right(size_t start, size_t end);
-    static void switchpanleEnable(int obj_index, int enable);
-    static void switchpanleEnableClick(int obj_index, int enable);
+    void rotate_carousel_left(size_t start, size_t end);
+    void rotate_carousel_right(size_t start, size_t end);
+    void switchpanleEnable(int obj_index, int enable);
+    void switchpanleEnableClick(int obj_index, int enable);
     static void on_left_arrow_clicked(lv_event_t *event);
     static void on_right_arrow_clicked(lv_event_t *event);
     static void on_app_clicked(lv_event_t *event);

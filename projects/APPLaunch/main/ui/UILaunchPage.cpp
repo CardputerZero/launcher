@@ -16,17 +16,15 @@
 
 #include <algorithm>
 
-std::array<lv_obj_t *, UILaunchPage::kLauncherCarouselElementCount> UILaunchPage::carousel_elements = {};
-
 void UILaunchPage::rotate_carousel_left(size_t start, size_t end)
 {
-    auto &items = carousel_elements;
+    auto &items = carousel_elements_;
     std::rotate(items.begin() + start, items.begin() + start + 1, items.begin() + end + 1);
 }
 
 void UILaunchPage::rotate_carousel_right(size_t start, size_t end)
 {
-    auto &items = carousel_elements;
+    auto &items = carousel_elements_;
     std::rotate(items.begin() + start, items.begin() + end, items.begin() + end + 1);
 }
 
@@ -36,7 +34,7 @@ void UILaunchPage::rotate_carousel_right(size_t start, size_t end)
 
 void UILaunchPage::switchpanleEnable(int obj_index, int enable)
 {
-    lv_obj_t *obj = carousel_elements[obj_index];
+    lv_obj_t *obj = carousel_elements_[obj_index];
 
     if (enable)
     {
@@ -69,7 +67,7 @@ void UILaunchPage::switchpanleEnable(int obj_index, int enable)
 
 void UILaunchPage::switchpanleEnableClick(int obj_index, int enable)
 {
-    lv_obj_t *obj = carousel_elements[obj_index];
+    lv_obj_t *obj = carousel_elements_[obj_index];
 
     if (enable)
     {
@@ -258,12 +256,12 @@ lv_group_t *UILaunchPage::home_input_group()
 
 lv_obj_t *UILaunchPage::panel(size_t slot)
 {
-    return carousel_elements[kCardFarLeft + slot];
+    return carousel_elements_[kCardFarLeft + slot];
 }
 
 lv_obj_t *UILaunchPage::label(size_t slot)
 {
-    return carousel_elements[kTitleFarLeft + slot];
+    return carousel_elements_[kTitleFarLeft + slot];
 }
 
 void UILaunchPage::bind_home_input_group()
@@ -343,23 +341,23 @@ void UILaunchPage::finish_switch_animation()
 {
     for (int i = 0; i < 5; i++)
     {
-        snap_panel_to_slot(carousel_elements[i], i);
+        snap_panel_to_slot(carousel_elements_[i], i);
     }
 
     for (int i = 5; i < 10; i++)
     {
-        snap_label_to_slot(carousel_elements[i], i);
+        snap_label_to_slot(carousel_elements_[i], i);
     }
 
     is_animating_ = false;
 
     for (int i = 0; i < 5; i++) {
         uint32_t color = (i == 2) ? BORDER_COLOR_CENTER : BORDER_COLOR_SIDE;
-        lv_obj_set_style_border_color(carousel_elements[i], lv_color_hex(color), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_border_color(carousel_elements_[i], lv_color_hex(color), LV_PART_MAIN | LV_STATE_DEFAULT);
     }
 
     for (int i = 5; i < 10; i++) {
-        lv_obj_set_style_text_font(carousel_elements[i], launcher_fonts().get("Montserrat-Bold.ttf", 16, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_text_font(carousel_elements_[i], launcher_fonts().get("Montserrat-Bold.ttf", 16, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN | LV_STATE_DEFAULT);
     }
 
     run_pending_switch();
@@ -392,17 +390,17 @@ void UILaunchPage::switch_right()
 
     is_animating_ = true;
 
-    lv_obj_clear_flag(carousel_elements[0], LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(carousel_elements_[0], LV_OBJ_FLAG_HIDDEN);
 
-    launcher_home_animation::animate_right(carousel_elements.data(), [this]() { finish_switch_animation(); });
+    launcher_home_animation::animate_right(carousel_elements_.data(), [this]() { finish_switch_animation(); });
 
-    snap_panel_to_slot(carousel_elements[4], 0);
+    snap_panel_to_slot(carousel_elements_[4], 0);
 
-    lv_obj_clear_flag(carousel_elements[5], LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(carousel_elements_[5], LV_OBJ_FLAG_HIDDEN);
 
-    snap_label_to_slot(carousel_elements[9], 5);
+    snap_label_to_slot(carousel_elements_[9], 5);
 
-    update_right_slot(carousel_elements[4], carousel_elements[9]);
+    update_right_slot(carousel_elements_[4], carousel_elements_[9]);
 
     switchpanleEnableClick(2, 0);
     rotate_carousel_right(0, 4);
@@ -427,17 +425,17 @@ void UILaunchPage::switch_left()
 
     is_animating_ = true;
 
-    lv_obj_clear_flag(carousel_elements[4], LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(carousel_elements_[4], LV_OBJ_FLAG_HIDDEN);
 
-    launcher_home_animation::animate_left(carousel_elements.data(), [this]() { finish_switch_animation(); });
+    launcher_home_animation::animate_left(carousel_elements_.data(), [this]() { finish_switch_animation(); });
 
-    snap_panel_to_slot(carousel_elements[0], 4);
+    snap_panel_to_slot(carousel_elements_[0], 4);
 
-    lv_obj_clear_flag(carousel_elements[9], LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(carousel_elements_[9], LV_OBJ_FLAG_HIDDEN);
 
-    snap_label_to_slot(carousel_elements[5], 9);
+    snap_label_to_slot(carousel_elements_[5], 9);
 
-    update_left_slot(carousel_elements[0], carousel_elements[5]);
+    update_left_slot(carousel_elements_[0], carousel_elements_[5]);
 
     switchpanleEnableClick(2, 0);
     rotate_carousel_left(0, 4);
@@ -581,7 +579,7 @@ void UILaunchPage::on_startup_gif_event(lv_event_t *event)
 
 void UILaunchPage::create_screen()
 {
-    if (carousel_elements[kCardCenter])
+    if (carousel_elements_[kCardCenter])
         return;
 
     create_app_container(content_container());
@@ -598,157 +596,157 @@ void UILaunchPage::create_app_container(lv_obj_t *parent)
     lv_obj_set_size(app_container, 320, 150);
     lv_obj_clear_flag(app_container, (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
 
-    carousel_elements[kPageDot0] = lv_obj_create(app_container);
-    lv_obj_set_width(carousel_elements[kPageDot0], 5);
-    lv_obj_set_height(carousel_elements[kPageDot0], 5);
-    lv_obj_set_x(carousel_elements[kPageDot0], -20);
-    lv_obj_set_y(carousel_elements[kPageDot0], 70);
-    lv_obj_set_align(carousel_elements[kPageDot0], LV_ALIGN_CENTER);
-    lv_obj_clear_flag(carousel_elements[kPageDot0], LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_bg_color(carousel_elements[kPageDot0], lv_color_hex(0x4A4C4A), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_opa(carousel_elements[kPageDot0], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_grad_color(carousel_elements[kPageDot0], lv_color_hex(0x4A4C4A), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_border_color(carousel_elements[kPageDot0], lv_color_hex(0x4A4C4A), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_border_opa(carousel_elements[kPageDot0], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+    carousel_elements_[kPageDot0] = lv_obj_create(app_container);
+    lv_obj_set_width(carousel_elements_[kPageDot0], 5);
+    lv_obj_set_height(carousel_elements_[kPageDot0], 5);
+    lv_obj_set_x(carousel_elements_[kPageDot0], -20);
+    lv_obj_set_y(carousel_elements_[kPageDot0], 70);
+    lv_obj_set_align(carousel_elements_[kPageDot0], LV_ALIGN_CENTER);
+    lv_obj_clear_flag(carousel_elements_[kPageDot0], LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_bg_color(carousel_elements_[kPageDot0], lv_color_hex(0x4A4C4A), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(carousel_elements_[kPageDot0], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_grad_color(carousel_elements_[kPageDot0], lv_color_hex(0x4A4C4A), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_color(carousel_elements_[kPageDot0], lv_color_hex(0x4A4C4A), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_opa(carousel_elements_[kPageDot0], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    carousel_elements[kPageDot1] = lv_obj_create(app_container);
-    lv_obj_set_width(carousel_elements[kPageDot1], 5);
-    lv_obj_set_height(carousel_elements[kPageDot1], 5);
-    lv_obj_set_x(carousel_elements[kPageDot1], -10);
-    lv_obj_set_y(carousel_elements[kPageDot1], 70);
-    lv_obj_set_align(carousel_elements[kPageDot1], LV_ALIGN_CENTER);
-    lv_obj_clear_flag(carousel_elements[kPageDot1], LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_bg_color(carousel_elements[kPageDot1], lv_color_hex(0x4A4C4A), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_opa(carousel_elements[kPageDot1], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_grad_color(carousel_elements[kPageDot1], lv_color_hex(0x4A4C4A), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_border_color(carousel_elements[kPageDot1], lv_color_hex(0x4A4C4A), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_border_opa(carousel_elements[kPageDot1], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+    carousel_elements_[kPageDot1] = lv_obj_create(app_container);
+    lv_obj_set_width(carousel_elements_[kPageDot1], 5);
+    lv_obj_set_height(carousel_elements_[kPageDot1], 5);
+    lv_obj_set_x(carousel_elements_[kPageDot1], -10);
+    lv_obj_set_y(carousel_elements_[kPageDot1], 70);
+    lv_obj_set_align(carousel_elements_[kPageDot1], LV_ALIGN_CENTER);
+    lv_obj_clear_flag(carousel_elements_[kPageDot1], LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_bg_color(carousel_elements_[kPageDot1], lv_color_hex(0x4A4C4A), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(carousel_elements_[kPageDot1], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_grad_color(carousel_elements_[kPageDot1], lv_color_hex(0x4A4C4A), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_color(carousel_elements_[kPageDot1], lv_color_hex(0x4A4C4A), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_opa(carousel_elements_[kPageDot1], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    carousel_elements[kPageDot2] = lv_obj_create(app_container);
-    lv_obj_set_width(carousel_elements[kPageDot2], 10);
-    lv_obj_set_height(carousel_elements[kPageDot2], 10);
-    lv_obj_set_x(carousel_elements[kPageDot2], 0);
-    lv_obj_set_y(carousel_elements[kPageDot2], 70);
-    lv_obj_set_align(carousel_elements[kPageDot2], LV_ALIGN_CENTER);
-    lv_obj_clear_flag(carousel_elements[kPageDot2], LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_bg_color(carousel_elements[kPageDot2], lv_color_hex(0xCCCC33), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_opa(carousel_elements[kPageDot2], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_grad_color(carousel_elements[kPageDot2], lv_color_hex(0x4A4C4A), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_border_color(carousel_elements[kPageDot2], lv_color_hex(0xCCCC33), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_border_opa(carousel_elements[kPageDot2], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+    carousel_elements_[kPageDot2] = lv_obj_create(app_container);
+    lv_obj_set_width(carousel_elements_[kPageDot2], 10);
+    lv_obj_set_height(carousel_elements_[kPageDot2], 10);
+    lv_obj_set_x(carousel_elements_[kPageDot2], 0);
+    lv_obj_set_y(carousel_elements_[kPageDot2], 70);
+    lv_obj_set_align(carousel_elements_[kPageDot2], LV_ALIGN_CENTER);
+    lv_obj_clear_flag(carousel_elements_[kPageDot2], LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_bg_color(carousel_elements_[kPageDot2], lv_color_hex(0xCCCC33), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(carousel_elements_[kPageDot2], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_grad_color(carousel_elements_[kPageDot2], lv_color_hex(0x4A4C4A), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_color(carousel_elements_[kPageDot2], lv_color_hex(0xCCCC33), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_opa(carousel_elements_[kPageDot2], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    carousel_elements[kPageDot3] = lv_obj_create(app_container);
-    lv_obj_set_width(carousel_elements[kPageDot3], 5);
-    lv_obj_set_height(carousel_elements[kPageDot3], 5);
-    lv_obj_set_x(carousel_elements[kPageDot3], 10);
-    lv_obj_set_y(carousel_elements[kPageDot3], 70);
-    lv_obj_set_align(carousel_elements[kPageDot3], LV_ALIGN_CENTER);
-    lv_obj_clear_flag(carousel_elements[kPageDot3], LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_bg_color(carousel_elements[kPageDot3], lv_color_hex(0x4A4C4A), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_opa(carousel_elements[kPageDot3], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_grad_color(carousel_elements[kPageDot3], lv_color_hex(0x4A4C4A), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_border_color(carousel_elements[kPageDot3], lv_color_hex(0x4A4C4A), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_border_opa(carousel_elements[kPageDot3], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+    carousel_elements_[kPageDot3] = lv_obj_create(app_container);
+    lv_obj_set_width(carousel_elements_[kPageDot3], 5);
+    lv_obj_set_height(carousel_elements_[kPageDot3], 5);
+    lv_obj_set_x(carousel_elements_[kPageDot3], 10);
+    lv_obj_set_y(carousel_elements_[kPageDot3], 70);
+    lv_obj_set_align(carousel_elements_[kPageDot3], LV_ALIGN_CENTER);
+    lv_obj_clear_flag(carousel_elements_[kPageDot3], LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_bg_color(carousel_elements_[kPageDot3], lv_color_hex(0x4A4C4A), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(carousel_elements_[kPageDot3], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_grad_color(carousel_elements_[kPageDot3], lv_color_hex(0x4A4C4A), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_color(carousel_elements_[kPageDot3], lv_color_hex(0x4A4C4A), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_opa(carousel_elements_[kPageDot3], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    carousel_elements[kPageDot4] = lv_obj_create(app_container);
-    lv_obj_set_width(carousel_elements[kPageDot4], 5);
-    lv_obj_set_height(carousel_elements[kPageDot4], 5);
-    lv_obj_set_x(carousel_elements[kPageDot4], 20);
-    lv_obj_set_y(carousel_elements[kPageDot4], 70);
-    lv_obj_set_align(carousel_elements[kPageDot4], LV_ALIGN_CENTER);
-    lv_obj_clear_flag(carousel_elements[kPageDot4], LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_bg_color(carousel_elements[kPageDot4], lv_color_hex(0x4A4C4A), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_opa(carousel_elements[kPageDot4], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_grad_color(carousel_elements[kPageDot4], lv_color_hex(0x4A4C4A), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_border_color(carousel_elements[kPageDot4], lv_color_hex(0x4A4C4A), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_border_opa(carousel_elements[kPageDot4], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+    carousel_elements_[kPageDot4] = lv_obj_create(app_container);
+    lv_obj_set_width(carousel_elements_[kPageDot4], 5);
+    lv_obj_set_height(carousel_elements_[kPageDot4], 5);
+    lv_obj_set_x(carousel_elements_[kPageDot4], 20);
+    lv_obj_set_y(carousel_elements_[kPageDot4], 70);
+    lv_obj_set_align(carousel_elements_[kPageDot4], LV_ALIGN_CENTER);
+    lv_obj_clear_flag(carousel_elements_[kPageDot4], LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_bg_color(carousel_elements_[kPageDot4], lv_color_hex(0x4A4C4A), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(carousel_elements_[kPageDot4], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_grad_color(carousel_elements_[kPageDot4], lv_color_hex(0x4A4C4A), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_color(carousel_elements_[kPageDot4], lv_color_hex(0x4A4C4A), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_opa(carousel_elements_[kPageDot4], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    carousel_elements[kTitleCenter] = lv_label_create(app_container);
-    lv_obj_set_width(carousel_elements[kTitleCenter], LV_SIZE_CONTENT);
-    lv_obj_set_height(carousel_elements[kTitleCenter], LV_SIZE_CONTENT);    /// 1
-    lv_obj_set_x(carousel_elements[kTitleCenter], 0);
-    lv_obj_set_y(carousel_elements[kTitleCenter], LABEL_Y_CENTER);
-    lv_obj_set_align(carousel_elements[kTitleCenter], LV_ALIGN_CENTER);
-    lv_label_set_text(carousel_elements[kTitleCenter], "CLI");
-    lv_obj_set_style_text_font(carousel_elements[kTitleCenter], launcher_fonts().get("Montserrat-Bold.ttf", 16, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_color(carousel_elements[kTitleCenter], lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_opa(carousel_elements[kTitleCenter], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+    carousel_elements_[kTitleCenter] = lv_label_create(app_container);
+    lv_obj_set_width(carousel_elements_[kTitleCenter], LV_SIZE_CONTENT);
+    lv_obj_set_height(carousel_elements_[kTitleCenter], LV_SIZE_CONTENT);    /// 1
+    lv_obj_set_x(carousel_elements_[kTitleCenter], 0);
+    lv_obj_set_y(carousel_elements_[kTitleCenter], LABEL_Y_CENTER);
+    lv_obj_set_align(carousel_elements_[kTitleCenter], LV_ALIGN_CENTER);
+    lv_label_set_text(carousel_elements_[kTitleCenter], "CLI");
+    lv_obj_set_style_text_font(carousel_elements_[kTitleCenter], launcher_fonts().get("Montserrat-Bold.ttf", 16, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_color(carousel_elements_[kTitleCenter], lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_opa(carousel_elements_[kTitleCenter], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    carousel_elements[kTitleRight] = lv_label_create(app_container);
-    lv_obj_set_width(carousel_elements[kTitleRight], LV_SIZE_CONTENT);
-    lv_obj_set_height(carousel_elements[kTitleRight], LV_SIZE_CONTENT);    /// 1
-    lv_obj_set_x(carousel_elements[kTitleRight], 99);
-    lv_obj_set_y(carousel_elements[kTitleRight], LABEL_Y_SIDE);
-    lv_obj_set_align(carousel_elements[kTitleRight], LV_ALIGN_CENTER);
-    lv_label_set_text(carousel_elements[kTitleRight], "GAME");
-    lv_obj_set_style_text_color(carousel_elements[kTitleRight], lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_font(carousel_elements[kTitleRight], launcher_fonts().get("Montserrat-Bold.ttf", 16, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_opa(carousel_elements[kTitleRight], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+    carousel_elements_[kTitleRight] = lv_label_create(app_container);
+    lv_obj_set_width(carousel_elements_[kTitleRight], LV_SIZE_CONTENT);
+    lv_obj_set_height(carousel_elements_[kTitleRight], LV_SIZE_CONTENT);    /// 1
+    lv_obj_set_x(carousel_elements_[kTitleRight], 99);
+    lv_obj_set_y(carousel_elements_[kTitleRight], LABEL_Y_SIDE);
+    lv_obj_set_align(carousel_elements_[kTitleRight], LV_ALIGN_CENTER);
+    lv_label_set_text(carousel_elements_[kTitleRight], "GAME");
+    lv_obj_set_style_text_color(carousel_elements_[kTitleRight], lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_font(carousel_elements_[kTitleRight], launcher_fonts().get("Montserrat-Bold.ttf", 16, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_opa(carousel_elements_[kTitleRight], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    carousel_elements[kTitleLeft] = lv_label_create(app_container);
-    lv_obj_set_width(carousel_elements[kTitleLeft], LV_SIZE_CONTENT);
-    lv_obj_set_height(carousel_elements[kTitleLeft], LV_SIZE_CONTENT);    /// 1
-    lv_obj_set_x(carousel_elements[kTitleLeft], -99);
-    lv_obj_set_y(carousel_elements[kTitleLeft], LABEL_Y_SIDE);
-    lv_obj_set_align(carousel_elements[kTitleLeft], LV_ALIGN_CENTER);
-    lv_label_set_text(carousel_elements[kTitleLeft], "STORE");
-    lv_obj_set_style_text_color(carousel_elements[kTitleLeft], lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_opa(carousel_elements[kTitleLeft], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_font(carousel_elements[kTitleLeft], launcher_fonts().get("Montserrat-Bold.ttf", 16, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN | LV_STATE_DEFAULT);
+    carousel_elements_[kTitleLeft] = lv_label_create(app_container);
+    lv_obj_set_width(carousel_elements_[kTitleLeft], LV_SIZE_CONTENT);
+    lv_obj_set_height(carousel_elements_[kTitleLeft], LV_SIZE_CONTENT);    /// 1
+    lv_obj_set_x(carousel_elements_[kTitleLeft], -99);
+    lv_obj_set_y(carousel_elements_[kTitleLeft], LABEL_Y_SIDE);
+    lv_obj_set_align(carousel_elements_[kTitleLeft], LV_ALIGN_CENTER);
+    lv_label_set_text(carousel_elements_[kTitleLeft], "STORE");
+    lv_obj_set_style_text_color(carousel_elements_[kTitleLeft], lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_opa(carousel_elements_[kTitleLeft], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_font(carousel_elements_[kTitleLeft], launcher_fonts().get("Montserrat-Bold.ttf", 16, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    carousel_elements[kCardLeft] = lv_obj_create(app_container);
-    lv_obj_set_width(carousel_elements[kCardLeft], 80);
-    lv_obj_set_height(carousel_elements[kCardLeft], 80);
-    lv_obj_set_x(carousel_elements[kCardLeft], -99);
-    lv_obj_set_y(carousel_elements[kCardLeft], -6);
-    lv_obj_set_align(carousel_elements[kCardLeft], LV_ALIGN_CENTER);
-    lv_obj_clear_flag(carousel_elements[kCardLeft], (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));      /// Flags
-    lv_obj_set_style_radius(carousel_elements[kCardLeft], 17, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(carousel_elements[kCardLeft], lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_opa(carousel_elements[kCardLeft], 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_border_color(carousel_elements[kCardLeft], lv_color_hex(0x222222), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_border_opa(carousel_elements[kCardLeft], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+    carousel_elements_[kCardLeft] = lv_obj_create(app_container);
+    lv_obj_set_width(carousel_elements_[kCardLeft], 80);
+    lv_obj_set_height(carousel_elements_[kCardLeft], 80);
+    lv_obj_set_x(carousel_elements_[kCardLeft], -99);
+    lv_obj_set_y(carousel_elements_[kCardLeft], -6);
+    lv_obj_set_align(carousel_elements_[kCardLeft], LV_ALIGN_CENTER);
+    lv_obj_clear_flag(carousel_elements_[kCardLeft], (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));      /// Flags
+    lv_obj_set_style_radius(carousel_elements_[kCardLeft], 17, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(carousel_elements_[kCardLeft], lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(carousel_elements_[kCardLeft], 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_color(carousel_elements_[kCardLeft], lv_color_hex(0x222222), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_opa(carousel_elements_[kCardLeft], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    carousel_elements[kCardCenter] = lv_obj_create(app_container);
-    lv_obj_set_width(carousel_elements[kCardCenter], 100);
-    lv_obj_set_height(carousel_elements[kCardCenter], 100);
-    lv_obj_set_x(carousel_elements[kCardCenter], 0);
-    lv_obj_set_y(carousel_elements[kCardCenter], -16);
-    lv_obj_set_align(carousel_elements[kCardCenter], LV_ALIGN_CENTER);
-    lv_obj_clear_flag(carousel_elements[kCardCenter], LV_OBJ_FLAG_SCROLLABLE);      /// Flags
-    lv_obj_set_style_radius(carousel_elements[kCardCenter], 22, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(carousel_elements[kCardCenter], lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_opa(carousel_elements[kCardCenter], 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_border_color(carousel_elements[kCardCenter], lv_color_hex(0x444444), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_border_opa(carousel_elements[kCardCenter], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_border_width(carousel_elements[kCardCenter], 2, LV_PART_MAIN | LV_STATE_DEFAULT);
+    carousel_elements_[kCardCenter] = lv_obj_create(app_container);
+    lv_obj_set_width(carousel_elements_[kCardCenter], 100);
+    lv_obj_set_height(carousel_elements_[kCardCenter], 100);
+    lv_obj_set_x(carousel_elements_[kCardCenter], 0);
+    lv_obj_set_y(carousel_elements_[kCardCenter], -16);
+    lv_obj_set_align(carousel_elements_[kCardCenter], LV_ALIGN_CENTER);
+    lv_obj_clear_flag(carousel_elements_[kCardCenter], LV_OBJ_FLAG_SCROLLABLE);      /// Flags
+    lv_obj_set_style_radius(carousel_elements_[kCardCenter], 22, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(carousel_elements_[kCardCenter], lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(carousel_elements_[kCardCenter], 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_color(carousel_elements_[kCardCenter], lv_color_hex(0x444444), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_opa(carousel_elements_[kCardCenter], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_width(carousel_elements_[kCardCenter], 2, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    carousel_elements[kCardRight] = lv_obj_create(app_container);
-    lv_obj_set_width(carousel_elements[kCardRight], 80);
-    lv_obj_set_height(carousel_elements[kCardRight], 80);
-    lv_obj_set_x(carousel_elements[kCardRight], 99);
-    lv_obj_set_y(carousel_elements[kCardRight], -6);
-    lv_obj_set_align(carousel_elements[kCardRight], LV_ALIGN_CENTER);
-    lv_obj_clear_flag(carousel_elements[kCardRight], (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));      /// Flags
-    lv_obj_set_style_radius(carousel_elements[kCardRight], 17, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(carousel_elements[kCardRight], lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_opa(carousel_elements[kCardRight], 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_border_color(carousel_elements[kCardRight], lv_color_hex(0x222222), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_border_opa(carousel_elements[kCardRight], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+    carousel_elements_[kCardRight] = lv_obj_create(app_container);
+    lv_obj_set_width(carousel_elements_[kCardRight], 80);
+    lv_obj_set_height(carousel_elements_[kCardRight], 80);
+    lv_obj_set_x(carousel_elements_[kCardRight], 99);
+    lv_obj_set_y(carousel_elements_[kCardRight], -6);
+    lv_obj_set_align(carousel_elements_[kCardRight], LV_ALIGN_CENTER);
+    lv_obj_clear_flag(carousel_elements_[kCardRight], (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));      /// Flags
+    lv_obj_set_style_radius(carousel_elements_[kCardRight], 17, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(carousel_elements_[kCardRight], lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(carousel_elements_[kCardRight], 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_color(carousel_elements_[kCardRight], lv_color_hex(0x222222), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_opa(carousel_elements_[kCardRight], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    carousel_elements[kCardFarRight] = lv_obj_create(app_container);
-    lv_obj_set_width(carousel_elements[kCardFarRight], 61);
-    lv_obj_set_height(carousel_elements[kCardFarRight], 61);
-    lv_obj_set_x(carousel_elements[kCardFarRight], 177);
-    lv_obj_set_y(carousel_elements[kCardFarRight], 4);
-    lv_obj_set_align(carousel_elements[kCardFarRight], LV_ALIGN_CENTER);
-    lv_obj_add_flag(carousel_elements[kCardFarRight], LV_OBJ_FLAG_HIDDEN);     /// Flags
-    lv_obj_clear_flag(carousel_elements[kCardFarRight], (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));      /// Flags
-    lv_obj_set_style_radius(carousel_elements[kCardFarRight], 17, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(carousel_elements[kCardFarRight], lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_opa(carousel_elements[kCardFarRight], 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_border_color(carousel_elements[kCardFarRight], lv_color_hex(0x333333), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_border_opa(carousel_elements[kCardFarRight], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+    carousel_elements_[kCardFarRight] = lv_obj_create(app_container);
+    lv_obj_set_width(carousel_elements_[kCardFarRight], 61);
+    lv_obj_set_height(carousel_elements_[kCardFarRight], 61);
+    lv_obj_set_x(carousel_elements_[kCardFarRight], 177);
+    lv_obj_set_y(carousel_elements_[kCardFarRight], 4);
+    lv_obj_set_align(carousel_elements_[kCardFarRight], LV_ALIGN_CENTER);
+    lv_obj_add_flag(carousel_elements_[kCardFarRight], LV_OBJ_FLAG_HIDDEN);     /// Flags
+    lv_obj_clear_flag(carousel_elements_[kCardFarRight], (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));      /// Flags
+    lv_obj_set_style_radius(carousel_elements_[kCardFarRight], 17, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(carousel_elements_[kCardFarRight], lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(carousel_elements_[kCardFarRight], 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_color(carousel_elements_[kCardFarRight], lv_color_hex(0x333333), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_opa(carousel_elements_[kCardFarRight], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
     left_arrow_button_ = lv_btn_create(app_container);
     lv_obj_set_width(left_arrow_button_, 17);
@@ -780,51 +778,51 @@ void UILaunchPage::create_app_container(lv_obj_t *parent)
     lv_obj_set_style_shadow_color(right_arrow_button_, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_shadow_opa(right_arrow_button_, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    carousel_elements[kCardFarLeft] = lv_obj_create(app_container);
-    lv_obj_set_width(carousel_elements[kCardFarLeft], 61);
-    lv_obj_set_height(carousel_elements[kCardFarLeft], 61);
-    lv_obj_set_x(carousel_elements[kCardFarLeft], -177);
-    lv_obj_set_y(carousel_elements[kCardFarLeft], 4);
-    lv_obj_set_align(carousel_elements[kCardFarLeft], LV_ALIGN_CENTER);
-    lv_obj_add_flag(carousel_elements[kCardFarLeft], LV_OBJ_FLAG_HIDDEN);     /// Flags
-    lv_obj_clear_flag(carousel_elements[kCardFarLeft], (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));      /// Flags
-    lv_obj_set_style_radius(carousel_elements[kCardFarLeft], 17, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(carousel_elements[kCardFarLeft], lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_opa(carousel_elements[kCardFarLeft], 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_border_color(carousel_elements[kCardFarLeft], lv_color_hex(0x333333), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_border_opa(carousel_elements[kCardFarLeft], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+    carousel_elements_[kCardFarLeft] = lv_obj_create(app_container);
+    lv_obj_set_width(carousel_elements_[kCardFarLeft], 61);
+    lv_obj_set_height(carousel_elements_[kCardFarLeft], 61);
+    lv_obj_set_x(carousel_elements_[kCardFarLeft], -177);
+    lv_obj_set_y(carousel_elements_[kCardFarLeft], 4);
+    lv_obj_set_align(carousel_elements_[kCardFarLeft], LV_ALIGN_CENTER);
+    lv_obj_add_flag(carousel_elements_[kCardFarLeft], LV_OBJ_FLAG_HIDDEN);     /// Flags
+    lv_obj_clear_flag(carousel_elements_[kCardFarLeft], (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));      /// Flags
+    lv_obj_set_style_radius(carousel_elements_[kCardFarLeft], 17, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(carousel_elements_[kCardFarLeft], lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(carousel_elements_[kCardFarLeft], 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_color(carousel_elements_[kCardFarLeft], lv_color_hex(0x333333), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_opa(carousel_elements_[kCardFarLeft], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    carousel_elements[kTitleFarLeft] = lv_label_create(app_container);
-    lv_obj_set_width(carousel_elements[kTitleFarLeft], LV_SIZE_CONTENT);
-    lv_obj_set_height(carousel_elements[kTitleFarLeft], LV_SIZE_CONTENT);    /// 1
-    lv_obj_set_x(carousel_elements[kTitleFarLeft], -177);
-    lv_obj_set_y(carousel_elements[kTitleFarLeft], LABEL_Y_SIDE);
-    lv_obj_set_align(carousel_elements[kTitleFarLeft], LV_ALIGN_CENTER);
-    lv_label_set_text(carousel_elements[kTitleFarLeft], "one");
-    lv_obj_add_flag(carousel_elements[kTitleFarLeft], LV_OBJ_FLAG_HIDDEN);     /// Flags
-    lv_obj_set_style_text_font(carousel_elements[kTitleFarLeft], launcher_fonts().get("Montserrat-Bold.ttf", 16, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_color(carousel_elements[kTitleFarLeft], lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_opa(carousel_elements[kTitleFarLeft], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+    carousel_elements_[kTitleFarLeft] = lv_label_create(app_container);
+    lv_obj_set_width(carousel_elements_[kTitleFarLeft], LV_SIZE_CONTENT);
+    lv_obj_set_height(carousel_elements_[kTitleFarLeft], LV_SIZE_CONTENT);    /// 1
+    lv_obj_set_x(carousel_elements_[kTitleFarLeft], -177);
+    lv_obj_set_y(carousel_elements_[kTitleFarLeft], LABEL_Y_SIDE);
+    lv_obj_set_align(carousel_elements_[kTitleFarLeft], LV_ALIGN_CENTER);
+    lv_label_set_text(carousel_elements_[kTitleFarLeft], "one");
+    lv_obj_add_flag(carousel_elements_[kTitleFarLeft], LV_OBJ_FLAG_HIDDEN);     /// Flags
+    lv_obj_set_style_text_font(carousel_elements_[kTitleFarLeft], launcher_fonts().get("Montserrat-Bold.ttf", 16, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_color(carousel_elements_[kTitleFarLeft], lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_opa(carousel_elements_[kTitleFarLeft], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    carousel_elements[kTitleFarRight] = lv_label_create(app_container);
-    lv_obj_set_width(carousel_elements[kTitleFarRight], LV_SIZE_CONTENT);
-    lv_obj_set_height(carousel_elements[kTitleFarRight], LV_SIZE_CONTENT);    /// 1
-    lv_obj_set_x(carousel_elements[kTitleFarRight], 177);
-    lv_obj_set_y(carousel_elements[kTitleFarRight], LABEL_Y_SIDE);
-    lv_obj_set_align(carousel_elements[kTitleFarRight], LV_ALIGN_CENTER);
-    lv_label_set_text(carousel_elements[kTitleFarRight], "three");
-    lv_obj_add_flag(carousel_elements[kTitleFarRight], LV_OBJ_FLAG_HIDDEN);     /// Flags
-    lv_obj_set_style_text_font(carousel_elements[kTitleFarRight], launcher_fonts().get("Montserrat-Bold.ttf", 16, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_color(carousel_elements[kTitleFarRight], lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_opa(carousel_elements[kTitleFarRight], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+    carousel_elements_[kTitleFarRight] = lv_label_create(app_container);
+    lv_obj_set_width(carousel_elements_[kTitleFarRight], LV_SIZE_CONTENT);
+    lv_obj_set_height(carousel_elements_[kTitleFarRight], LV_SIZE_CONTENT);    /// 1
+    lv_obj_set_x(carousel_elements_[kTitleFarRight], 177);
+    lv_obj_set_y(carousel_elements_[kTitleFarRight], LABEL_Y_SIDE);
+    lv_obj_set_align(carousel_elements_[kTitleFarRight], LV_ALIGN_CENTER);
+    lv_label_set_text(carousel_elements_[kTitleFarRight], "three");
+    lv_obj_add_flag(carousel_elements_[kTitleFarRight], LV_OBJ_FLAG_HIDDEN);     /// Flags
+    lv_obj_set_style_text_font(carousel_elements_[kTitleFarRight], launcher_fonts().get("Montserrat-Bold.ttf", 16, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_color(carousel_elements_[kTitleFarRight], lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_opa(carousel_elements_[kTitleFarRight], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    lv_obj_add_event_cb(carousel_elements[kCardLeft], on_app_clicked, LV_EVENT_CLICKED, this);
-    lv_obj_add_event_cb(carousel_elements[kCardCenter], on_app_clicked, LV_EVENT_CLICKED, this);
-    lv_obj_add_event_cb(carousel_elements[kCardRight], on_app_clicked, LV_EVENT_CLICKED, this);
-    lv_obj_add_event_cb(carousel_elements[kCardFarRight], on_app_clicked, LV_EVENT_CLICKED, this);
+    lv_obj_add_event_cb(carousel_elements_[kCardLeft], on_app_clicked, LV_EVENT_CLICKED, this);
+    lv_obj_add_event_cb(carousel_elements_[kCardCenter], on_app_clicked, LV_EVENT_CLICKED, this);
+    lv_obj_add_event_cb(carousel_elements_[kCardRight], on_app_clicked, LV_EVENT_CLICKED, this);
+    lv_obj_add_event_cb(carousel_elements_[kCardFarRight], on_app_clicked, LV_EVENT_CLICKED, this);
     lv_obj_add_event_cb(left_arrow_button_, on_left_arrow_clicked, LV_EVENT_CLICKED, this);
     lv_obj_add_event_cb(right_arrow_button_, on_right_arrow_clicked, LV_EVENT_CLICKED, this);
-    lv_obj_add_event_cb(carousel_elements[kCardFarLeft], on_app_clicked, LV_EVENT_CLICKED, this);
+    lv_obj_add_event_cb(carousel_elements_[kCardFarLeft], on_app_clicked, LV_EVENT_CLICKED, this);
     lv_obj_add_event_cb(screen(), on_home_key, (lv_event_code_t)LV_EVENT_KEYBOARD, this);
 
 
