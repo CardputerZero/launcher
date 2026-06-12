@@ -30,7 +30,7 @@ git status --short
 | Change startup flow | `projects/APPLaunch/main/src/main.cpp` | `lv_init()`, `cp0_lvgl_init()`, `ui_init()`, main loop | Check `[BOOT]` logs |
 | Change build dependencies | `projects/APPLaunch/main/SConstruct` | `SRCS`, `INCLUDE`, `REQUIREMENTS`, `STATIC_FILES` | scons build |
 | Change build configuration | `projects/APPLaunch/*.mk` | Different configs for SDL2, device, and cross build | Build with a specific `CONFIG_DEFAULT_FILE` |
-| Change package contents | `projects/APPLaunch/tools/llm_pack.py`, `projects/APPLaunch/APPLaunch/` | Asset tree and install path | Check file list after building package |
+| Change package contents | `scripts/debian_packager.py`, `projects/APPLaunch/APPLaunch/` | Asset tree and install path | Check file list after building package |
 | Change platform HAL | `ext_components/cp0_lvgl/src/cp0/`, `ext_components/cp0_lvgl/include/hal/` | framebuffer, audio, network, settings, process, etc. | Test on the device |
 
 ## 2. Source Directory Quick Reference

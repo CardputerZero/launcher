@@ -12,6 +12,7 @@ on:
       - 'SDK/**'
       - '.gitmodules'
       - '.github/workflows/launcher-build.yml'
+      - 'scripts/debian_packager.py'
   pull_request:
     branches: [master]
   workflow_dispatch:
@@ -99,8 +100,7 @@ jobs:
 
     - name: Build .deb package
       run: |
-        cd projects/APPLaunch/tools
-        python3 llm_pack.py
+        python3 scripts/debian_packager.py
 
     - name: Collect artifacts
       run: |

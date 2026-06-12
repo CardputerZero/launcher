@@ -228,9 +228,8 @@ scons push
 
 ### 打包
 ```bash
-# brew install dpkg # mac 需要安装 dpkg 工具
-cd projects/APPLaunch/tools
-./llm_pack.py
+# 可选：安装 dpkg 后会使用 dpkg-deb；否则使用 Python 写包器。
+python3 scripts/debian_packager.py
 ```
 该命令会生成一个 DEB 安装包。将安装包通过 `scp` 传输到设备后，可使用 `sudo dpkg -i ./***.deb` 进行安装。
 

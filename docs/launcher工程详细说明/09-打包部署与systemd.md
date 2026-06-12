@@ -82,38 +82,31 @@ scons -j2
 file dist/M5CardputerZero-APPLaunch
 ```
 
-## 3. `llm_pack.py` 打包脚本说明
+## 3. `debian_packager.py` 通用打包脚本说明
 
-打包脚本位于：
+仓库级打包脚本位于：
 
 ```text
-projects/APPLaunch/tools/llm_pack.py
+scripts/debian_packager.py
 ```
 
-核心常量：
+它替代原来 APPLaunch 项目内的打包脚本，便于 `projects/` 下其他项目复用同一套 Debian 打包流程。APPLaunch 仍然是默认目标，所以不带参数运行时仍会打包 APPLaunch。
 
-| 常量 | 值 | 说明 |
+关键默认值和参数：
+
+| 参数 / 默认值 | 值 | 说明 |
 | --- | --- | --- |
-| `PACKAGE_NAME` | `applaunch` | Debian 包名 |
-| `APP_NAME` | `APPLaunch` | 应用名和服务名基础 |
-| `BIN_NAME` | `M5CardputerZero-APPLaunch` | 主可执行文件名 |
-| `INSTALL_PPREFIX` | `usr/share` | 安装前缀上层目录 |
-| `INSTALL_PREFIX` | `usr/share/APPLaunch` | 应用安装根目录 |
-| `BIN_PATH` | `usr/share/APPLaunch/bin` | 可执行文件目录 |
-| `LIB_PATH` | `usr/share/APPLaunch/lib` | 动态库目录 |
-| `SHARE_PATH` | `usr/share/APPLaunch/share` | 共享资源目录 |
-| `APP_PATH` | `usr/share/APPLaunch/applications` | `.desktop` 应用描述目录 |
-| `SERVICE_PATH` | `lib/systemd/system` | systemd 服务目录 |
+| `--project` | `APPLaunch` | `projects/` 下的项目名，也可以传项目路径 |
+| `--package-name` | `applaunch` | Debian 包名 |
+| `--app-name` | `APPLaunch` | 安装到 `/usr/share` 下的应用名，也是 systemd 服务名 |
+| `--bin-name` | `M5CardputerZero-APPLaunch` | 主可执行文件名 |
+| `--src` / `--src-folder` | `dist` | 构建输出目录，相对项目目录解析 |
+| `--app-tree` | 自动 | 运行时资源树，默认依次查找 `<project>/<app-name>`、`<src>/<app-name>` |
+| `--output-dir` | `<project>/tools` | `.deb` 输出目录 |
+| `--work-dir` | 输出目录 | 打包临时目录所在目录 |
+| `--builder` | `auto` | 有 `dpkg-deb` 时使用 `dpkg-deb`，否则使用纯 Python 写包器 |
 
-默认版本信息在脚本入口处：
-
-```python
-version = '0.2.1'
-src_folder = '../dist'
-revision = 'm5stack1'
-```
-
-生成的包文件名格式：
+APPLaunch 默认生成的包文件名格式：
 
 ```text
 applaunch_0.2.1-m5stack1_arm64.deb
@@ -121,7 +114,7 @@ applaunch_0.2.1-m5stack1_arm64.deb
 
 ## 4. `.deb` 包目录结构
 
-运行脚本后会在 `projects/APPLaunch/tools` 下生成临时目录：
+使用默认 APPLaunch 参数运行脚本后，会在 `projects/APPLaunch/tools` 下生成临时目录：
 
 ```text
 projects/APPLaunch/tools/debian-APPLaunch/
@@ -141,11 +134,12 @@ projects/APPLaunch/tools/debian-APPLaunch/
             │   └── M5CardputerZero-APPLaunch
             ├── lib/
             └── share/
+                ├── audio/
                 ├── font/
                 └── images/
 ```
 
-最终 `.deb` 文件位于：
+APPLaunch 最终 `.deb` 文件位于：
 
 ```text
 projects/APPLaunch/tools/applaunch_0.2.1-m5stack1_arm64.deb
@@ -155,6 +149,8 @@ projects/APPLaunch/tools/applaunch_0.2.1-m5stack1_arm64.deb
 
 ### 5.1 安装打包工具
 
+`debian_packager.py` 只依赖 Python 也可以生成 `.deb`。如果系统安装了 `dpkg-deb`，默认 `--builder auto` 会优先使用它。
+
 Linux 开发机：
 
 ```bash
@@ -162,58 +158,76 @@ sudo apt update
 sudo apt install -y dpkg-dev fakeroot
 ```
 
-只要有 `dpkg-deb` 即可：
+macOS 可以直接使用 Python 写包器，也可以通过 Homebrew 安装 `dpkg`：
 
 ```bash
-dpkg-deb --version
+brew install dpkg
 ```
 
-### 5.2 执行打包
+### 5.2 执行 APPLaunch 打包
+
+从仓库根目录运行：
 
 ```bash
-cd /home/nihao/w2T/github/launcher/projects/APPLaunch/tools
-python3 llm_pack.py
+python3 scripts/debian_packager.py
+```
+
+等价的完整参数写法：
+
+```bash
+python3 scripts/debian_packager.py build \
+  --project APPLaunch \
+  --package-name applaunch \
+  --app-name APPLaunch \
+  --bin-name M5CardputerZero-APPLaunch
 ```
 
 成功时会看到类似：
 
 ```text
-Creating Debian package applaunch 0.2.1 ...
-Debian package created: .../applaunch_0.2.1-m5stack1_arm64.deb
-applaunch create success!
+Creating Debian package applaunch_0.2.1-m5stack1_arm64.deb ...
+Staged package tree: .../projects/APPLaunch/tools/debian-APPLaunch
+Debian package created: .../projects/APPLaunch/tools/applaunch_0.2.1-m5stack1_arm64.deb
+Builder: dpkg-deb
 ```
 
 ### 5.3 指定自定义版本
 
-当前脚本入口固定使用 `0.2.1` 和 `m5stack1`。如果需要临时打自定义版本，可以直接从 Python 调用函数，不修改仓库文件：
-
 ```bash
-cd /home/nihao/w2T/github/launcher/projects/APPLaunch/tools
-python3 - <<'PY'
-from llm_pack import create_applaunch_deb
-print(create_applaunch_deb(version='0.2.1', src_folder='../dist', revision='m5stack1'))
-PY
+python3 scripts/debian_packager.py build --version 0.2.2 --revision m5stack2
 ```
 
-如果要长期改变版本号，应通过正式代码变更修改 `llm_pack.py`，并同步记录发布说明。
+给其他项目复用时，需要覆盖项目元数据和主程序名：
+
+```bash
+python3 scripts/debian_packager.py build \
+  --project Calculator \
+  --package-name calculator \
+  --app-name Calculator \
+  --bin-name M5CardputerZero-Calculator \
+  --src dist \
+  --app-tree share
+```
+
+其中 `--app-tree` 应指向需要安装为 `/usr/share/<app-name>` 的资源树。
 
 ### 5.4 清理打包产物
 
 脚本支持：
 
 ```bash
-python3 llm_pack.py clean
-python3 llm_pack.py distclean
+python3 scripts/debian_packager.py clean
+python3 scripts/debian_packager.py distclean
 ```
 
 差异：
 
 | 命令 | 行为 |
 | --- | --- |
-| `clean` | 删除当前目录下 `*.deb`，并删除当前目录一级子目录 |
-| `distclean` | 删除当前目录下 `*.deb` 和 `m5stack_*` |
+| `clean` | 删除 `projects/APPLaunch/tools` 下默认 APPLaunch 的 `*.deb` 和 `debian-APPLaunch` |
+| `distclean` | 在 `clean` 基础上额外删除 `projects/APPLaunch/tools` 下旧版 `m5stack_*` 输出 |
 
-注意：`clean` 会删除 `tools` 目录下的一级目录，包括 `debian-APPLaunch` 这类临时目录。不要在放有重要子目录的非预期目录执行。
+同样可以给清理命令传 `--project`、`--project-dir`、`--app-name` 和 `--output-dir`，用于非默认项目。
 
 ## 6. 打包脚本复制规则
 
@@ -329,7 +343,7 @@ exit 0
 - 在只读/系统资源目录下建立 `cache` 软链接。
 - 启用并启动 systemd 服务。
 
-注意：如果 `/usr/share/APPLaunch/cache` 已存在，`ln -s` 可能报错。当前脚本没有使用 `ln -sfn`，重复安装时需要留意安装日志。
+注意：当前通用打包脚本使用 `ln -sfn`，重复安装时可以安全刷新缓存链接。
 
 ### 7.3 `DEBIAN/prerm`
 
@@ -753,18 +767,18 @@ ls /dev/fb0
 
 ### 14.4 `ln: failed to create symbolic link '/usr/share/APPLaunch/cache': File exists`
 
-原因：重复安装时 `postinst` 使用 `ln -s`，目标已存在。
+原因：旧版安装包使用非幂等的 `ln -s` 创建缓存链接，目标已存在。
 
 处理：
 
 ```bash
 sudo rm -rf /usr/share/APPLaunch/cache
 sudo mkdir -p /var/cache/APPLaunch
-sudo ln -s /var/cache/APPLaunch /usr/share/APPLaunch/cache
+sudo ln -sfn /var/cache/APPLaunch /usr/share/APPLaunch/cache
 sudo systemctl restart APPLaunch.service
 ```
 
-如果要从根本上修复，应修改打包脚本为 `ln -sfn`，但这属于代码变更。
+当前通用打包脚本已经写入 `ln -sfn`；重新打包并安装即可持久修复。
 
 ### 14.5 `dpkg-deb: error: failed to open package info file .../DEBIAN/control`
 
@@ -773,14 +787,14 @@ sudo systemctl restart APPLaunch.service
 处理：
 
 ```bash
-cd projects/APPLaunch/tools
-python3 llm_pack.py clean
-python3 llm_pack.py
+cd /home/nihao/w2T/github/launcher
+python3 scripts/debian_packager.py clean
+python3 scripts/debian_packager.py
 ```
 
-### 14.6 `FileNotFoundError: Binary M5CardputerZero-APPLaunch not found in ../dist`
+### 14.6 `Binary M5CardputerZero-APPLaunch not found in .../dist`
 
-原因：未构建，或构建目录不是 `projects/APPLaunch/dist`，或打包脚本不是从 `tools` 目录运行。
+原因：未构建，或构建目录不是 `projects/APPLaunch/dist`。
 
 处理：
 
@@ -789,8 +803,8 @@ cd /home/nihao/w2T/github/launcher/projects/APPLaunch
 export CONFIG_DEFAULT_FILE=linux_x86_cross_cp0_config_defaults.mk
 scons -j8
 ls -l dist/M5CardputerZero-APPLaunch
-cd tools
-python3 llm_pack.py
+cd /home/nihao/w2T/github/launcher
+python3 scripts/debian_packager.py
 ```
 
 ### 14.7 服务启动后黑屏
@@ -846,10 +860,10 @@ file dist/M5CardputerZero-APPLaunch
 打包后：
 
 ```bash
-cd tools
-python3 llm_pack.py
-dpkg-deb -I applaunch_0.2.1-m5stack1_arm64.deb
-dpkg-deb -c applaunch_0.2.1-m5stack1_arm64.deb | head -n 50
+cd /home/nihao/w2T/github/launcher
+python3 scripts/debian_packager.py
+dpkg-deb -I projects/APPLaunch/tools/applaunch_0.2.1-m5stack1_arm64.deb
+dpkg-deb -c projects/APPLaunch/tools/applaunch_0.2.1-m5stack1_arm64.deb | head -n 50
 ```
 
 安装后：
@@ -883,9 +897,9 @@ scons distclean
 export CONFIG_DEFAULT_FILE=linux_x86_cross_cp0_config_defaults.mk
 scons -j8
 file dist/M5CardputerZero-APPLaunch
-cd tools
-python3 llm_pack.py
-scp applaunch_0.2.1-m5stack1_arm64.deb pi@192.168.28.177:/home/pi/
+cd /home/nihao/w2T/github/launcher
+python3 scripts/debian_packager.py
+scp projects/APPLaunch/tools/applaunch_0.2.1-m5stack1_arm64.deb pi@192.168.28.177:/home/pi/
 ssh pi@192.168.28.177 'sudo dpkg -i /home/pi/applaunch_0.2.1-m5stack1_arm64.deb && systemctl status APPLaunch.service --no-pager'
 ```
 

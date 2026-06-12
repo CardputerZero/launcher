@@ -237,9 +237,8 @@ Refer to the HelloWorld build instructions.
 ### Package
 
 ```bash
-# brew install dpkg # mac install dpkg tool.
-cd projects/APPLaunch/tools
-./llm_pack.py
+# Optional: install dpkg to use dpkg-deb; otherwise the Python builder is used.
+python3 scripts/debian_packager.py
 ```
 
 This command generates a DEB installation package. After transferring the package to the device with `scp`, install it with `sudo dpkg -i ./***.deb`.

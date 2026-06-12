@@ -82,38 +82,31 @@ scons -j2
 file dist/M5CardputerZero-APPLaunch
 ```
 
-## 3. `llm_pack.py` Packaging Script
+## 3. `debian_packager.py` Shared Packaging Script
 
-The packaging script is located at:
+The repository-level packaging script is located at:
 
 ```text
-projects/APPLaunch/tools/llm_pack.py
+scripts/debian_packager.py
 ```
 
-Core constants:
+It replaces the former APPLaunch-local packaging script so other projects under `projects/` can reuse the same Debian packaging flow. APPLaunch remains the default target, so running the script with no arguments still packages APPLaunch.
 
-| Constant | Value | Description |
+Key defaults and options:
+
+| Option / Default | Value | Description |
 | --- | --- | --- |
-| `PACKAGE_NAME` | `applaunch` | Debian package name |
-| `APP_NAME` | `APPLaunch` | Base application and service name |
-| `BIN_NAME` | `M5CardputerZero-APPLaunch` | Main executable name |
-| `INSTALL_PPREFIX` | `usr/share` | Parent installation prefix |
-| `INSTALL_PREFIX` | `usr/share/APPLaunch` | Application installation root |
-| `BIN_PATH` | `usr/share/APPLaunch/bin` | Executable directory |
-| `LIB_PATH` | `usr/share/APPLaunch/lib` | Dynamic-library directory |
-| `SHARE_PATH` | `usr/share/APPLaunch/share` | Shared-resource directory |
-| `APP_PATH` | `usr/share/APPLaunch/applications` | `.desktop` application descriptor directory |
-| `SERVICE_PATH` | `lib/systemd/system` | systemd service directory |
+| `--project` | `APPLaunch` | Project name under `projects/`, or a project path |
+| `--package-name` | `applaunch` | Debian package name |
+| `--app-name` | `APPLaunch` | Installed application name and systemd service name |
+| `--bin-name` | `M5CardputerZero-APPLaunch` | Main executable name |
+| `--src` / `--src-folder` | `dist` | Build-output directory, resolved relative to the project directory |
+| `--app-tree` | auto | Runtime resource tree; defaults to `<project>/<app-name>` then `<src>/<app-name>` |
+| `--output-dir` | `<project>/tools` | Output directory for the generated `.deb` |
+| `--work-dir` | output directory | Staging directory parent |
+| `--builder` | `auto` | Uses `dpkg-deb` when available, otherwise the pure Python writer |
 
-Default version information at the script entry point:
-
-```python
-version = '0.2.1'
-src_folder = '../dist'
-revision = 'm5stack1'
-```
-
-Generated package filename format:
+Generated APPLaunch package filename format:
 
 ```text
 applaunch_0.2.1-m5stack1_arm64.deb
@@ -121,7 +114,7 @@ applaunch_0.2.1-m5stack1_arm64.deb
 
 ## 4. `.deb` Package Directory Structure
 
-After running the script, a temporary directory is generated under `projects/APPLaunch/tools`:
+After running the script with default APPLaunch options, the staging directory is generated under `projects/APPLaunch/tools`:
 
 ```text
 projects/APPLaunch/tools/debian-APPLaunch/
@@ -141,11 +134,12 @@ projects/APPLaunch/tools/debian-APPLaunch/
             │   └── M5CardputerZero-APPLaunch
             ├── lib/
             └── share/
+                ├── audio/
                 ├── font/
                 └── images/
 ```
 
-The final `.deb` file is located at:
+The final APPLaunch `.deb` file is located at:
 
 ```text
 projects/APPLaunch/tools/applaunch_0.2.1-m5stack1_arm64.deb
@@ -155,6 +149,8 @@ projects/APPLaunch/tools/applaunch_0.2.1-m5stack1_arm64.deb
 
 ### 5.1 Install Packaging Tools
 
+`debian_packager.py` can build `.deb` files with only Python. If `dpkg-deb` is installed, the default `--builder auto` path uses it automatically.
+
 Linux development machine:
 
 ```bash
@@ -162,58 +158,76 @@ sudo apt update
 sudo apt install -y dpkg-dev fakeroot
 ```
 
-Only `dpkg-deb` is required:
+macOS can use either the Python builder or Homebrew `dpkg`:
 
 ```bash
-dpkg-deb --version
+brew install dpkg
 ```
 
-### 5.2 Run Packaging
+### 5.2 Run APPLaunch Packaging
+
+Run from the repository root:
 
 ```bash
-cd /home/nihao/w2T/github/launcher/projects/APPLaunch/tools
-python3 llm_pack.py
+python3 scripts/debian_packager.py
+```
+
+Equivalent explicit command:
+
+```bash
+python3 scripts/debian_packager.py build \
+  --project APPLaunch \
+  --package-name applaunch \
+  --app-name APPLaunch \
+  --bin-name M5CardputerZero-APPLaunch
 ```
 
 On success, output similar to the following appears:
 
 ```text
-Creating Debian package applaunch 0.2.1 ...
-Debian package created: .../applaunch_0.2.1-m5stack1_arm64.deb
-applaunch create success!
+Creating Debian package applaunch_0.2.1-m5stack1_arm64.deb ...
+Staged package tree: .../projects/APPLaunch/tools/debian-APPLaunch
+Debian package created: .../projects/APPLaunch/tools/applaunch_0.2.1-m5stack1_arm64.deb
+Builder: dpkg-deb
 ```
 
 ### 5.3 Specify a Custom Version
 
-The current script entry point uses fixed values `0.2.1` and `m5stack1`. To build a temporary custom version without modifying repository files, call the function directly from Python:
-
 ```bash
-cd /home/nihao/w2T/github/launcher/projects/APPLaunch/tools
-python3 - <<'PY'
-from llm_pack import create_applaunch_deb
-print(create_applaunch_deb(version='0.2.1', src_folder='../dist', revision='m5stack1'))
-PY
+python3 scripts/debian_packager.py build --version 0.2.2 --revision m5stack2
 ```
 
-If the version number needs to change long-term, make a formal code change to `llm_pack.py` and update the release notes accordingly.
+For another project, override the project metadata and executable name:
+
+```bash
+python3 scripts/debian_packager.py build \
+  --project Calculator \
+  --package-name calculator \
+  --app-name Calculator \
+  --bin-name M5CardputerZero-Calculator \
+  --src dist \
+  --app-tree share
+```
+
+Adjust `--app-tree` to the resource tree that should become `/usr/share/<app-name>` in the package.
 
 ### 5.4 Clean Packaging Artifacts
 
 The script supports:
 
 ```bash
-python3 llm_pack.py clean
-python3 llm_pack.py distclean
+python3 scripts/debian_packager.py clean
+python3 scripts/debian_packager.py distclean
 ```
 
 Differences:
 
 | Command | Behavior |
 | --- | --- |
-| `clean` | Deletes `*.deb` in the current directory and deletes first-level subdirectories under the current directory |
-| `distclean` | Deletes `*.deb` and `m5stack_*` under the current directory |
+| `clean` | Deletes default APPLaunch `*.deb` files and `debian-APPLaunch` under `projects/APPLaunch/tools` |
+| `distclean` | Runs `clean` and also deletes legacy `m5stack_*` outputs under `projects/APPLaunch/tools` |
 
-Note: `clean` deletes first-level directories under `tools`, including temporary directories such as `debian-APPLaunch`. Do not run it from an unintended directory that contains important subdirectories.
+The same clean commands accept `--project`, `--project-dir`, `--app-name`, and `--output-dir` for non-default projects.
 
 ## 6. Packaging Script Copy Rules
 
@@ -329,7 +343,7 @@ Purpose:
 - Creates a `cache` symlink under the read-only/system resource directory.
 - Enables and starts the systemd service.
 
-Note: if `/usr/share/APPLaunch/cache` already exists, `ln -s` may fail. The current script does not use `ln -sfn`, so check install logs on repeated installation.
+Note: the current shared packager uses `ln -sfn`, so repeated installation can refresh the cache link safely.
 
 ### 7.3 `DEBIAN/prerm`
 
@@ -753,18 +767,18 @@ ls /dev/fb0
 
 ### 14.4 `ln: failed to create symbolic link '/usr/share/APPLaunch/cache': File exists`
 
-Cause: during repeated installation, `postinst` uses `ln -s` and the target already exists.
+Cause: older packages created the cache link with non-idempotent `ln -s`, and the target already exists.
 
 Fix:
 
 ```bash
 sudo rm -rf /usr/share/APPLaunch/cache
 sudo mkdir -p /var/cache/APPLaunch
-sudo ln -s /var/cache/APPLaunch /usr/share/APPLaunch/cache
+sudo ln -sfn /var/cache/APPLaunch /usr/share/APPLaunch/cache
 sudo systemctl restart APPLaunch.service
 ```
 
-To fix this at the root, change the packaging script to use `ln -sfn`, but that is a code change.
+The current shared packager already writes `ln -sfn`; rebuild and reinstall the package to make the fix persistent.
 
 ### 14.5 `dpkg-deb: error: failed to open package info file .../DEBIAN/control`
 
@@ -773,14 +787,14 @@ Cause: the packaging directory structure is incomplete, or the script failed mid
 Fix:
 
 ```bash
-cd projects/APPLaunch/tools
-python3 llm_pack.py clean
-python3 llm_pack.py
+cd /home/nihao/w2T/github/launcher
+python3 scripts/debian_packager.py clean
+python3 scripts/debian_packager.py
 ```
 
-### 14.6 `FileNotFoundError: Binary M5CardputerZero-APPLaunch not found in ../dist`
+### 14.6 `Binary M5CardputerZero-APPLaunch not found in .../dist`
 
-Cause: the project has not been built, the build directory is not `projects/APPLaunch/dist`, or the packaging script was not run from the `tools` directory.
+Cause: the project has not been built, or the build directory is not `projects/APPLaunch/dist`.
 
 Fix:
 
@@ -789,8 +803,8 @@ cd /home/nihao/w2T/github/launcher/projects/APPLaunch
 export CONFIG_DEFAULT_FILE=linux_x86_cross_cp0_config_defaults.mk
 scons -j8
 ls -l dist/M5CardputerZero-APPLaunch
-cd tools
-python3 llm_pack.py
+cd /home/nihao/w2T/github/launcher
+python3 scripts/debian_packager.py
 ```
 
 ### 14.7 Black Screen After Service Starts
@@ -846,10 +860,10 @@ file dist/M5CardputerZero-APPLaunch
 After packaging:
 
 ```bash
-cd tools
-python3 llm_pack.py
-dpkg-deb -I applaunch_0.2.1-m5stack1_arm64.deb
-dpkg-deb -c applaunch_0.2.1-m5stack1_arm64.deb | head -n 50
+cd /home/nihao/w2T/github/launcher
+python3 scripts/debian_packager.py
+dpkg-deb -I projects/APPLaunch/tools/applaunch_0.2.1-m5stack1_arm64.deb
+dpkg-deb -c projects/APPLaunch/tools/applaunch_0.2.1-m5stack1_arm64.deb | head -n 50
 ```
 
 After installation:
@@ -883,9 +897,9 @@ scons distclean
 export CONFIG_DEFAULT_FILE=linux_x86_cross_cp0_config_defaults.mk
 scons -j8
 file dist/M5CardputerZero-APPLaunch
-cd tools
-python3 llm_pack.py
-scp applaunch_0.2.1-m5stack1_arm64.deb pi@192.168.28.177:/home/pi/
+cd /home/nihao/w2T/github/launcher
+python3 scripts/debian_packager.py
+scp projects/APPLaunch/tools/applaunch_0.2.1-m5stack1_arm64.deb pi@192.168.28.177:/home/pi/
 ssh pi@192.168.28.177 'sudo dpkg -i /home/pi/applaunch_0.2.1-m5stack1_arm64.deb && systemctl status APPLaunch.service --no-pager'
 ```
 

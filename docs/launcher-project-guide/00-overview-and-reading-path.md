@@ -73,7 +73,7 @@ If you only want to complete a specific task:
 | `projects/APPLaunch/main/ui/components/page_app` | Built-in page implementations |
 | `projects/APPLaunch/APPLaunch` | Resource tree packaged into the runtime environment |
 | `ext_components/cp0_lvgl` | Platform adaptation layer that wraps file, process, input, and system interfaces |
-| `projects/APPLaunch/tools/llm_pack.py` | Debian package build script |
+| `scripts/debian_packager.py` | Debian package build script |
 
 ## 5. Terminology
 

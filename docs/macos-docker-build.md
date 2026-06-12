@@ -61,7 +61,7 @@ docker run --rm --platform linux/arm64 \
 编译 + 打包 deb（一条命令）：
 ```bash
 docker run --rm -v $(git rev-parse --show-toplevel):/src -w /src/projects/APPLaunch \
-  cardputer-build bash -c "CardputerZero=y CONFIG_REPO_AUTOMATION=y scons -j4 && cd tools && python3 llm_pack.py"
+  cardputer-build bash -c "CardputerZero=y CONFIG_REPO_AUTOMATION=y scons -j4 && cd ../.. && python3 scripts/debian_packager.py"
 ```
 
 产物路径：`projects/APPLaunch/tools/applaunch_*.deb`（约 15MB）
