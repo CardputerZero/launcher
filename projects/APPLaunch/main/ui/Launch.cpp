@@ -71,80 +71,11 @@ Terminal=true
 Icon=share/images/e-Mail_80.png
 */
 
-// Forward declarations
-class LaunchImpl;
-
 // ============================================================
-// Type tag
+// Launch
 // ============================================================
-template <class PageT>
-struct page_t
+void Launch::bind_ui()
 {
-    using type = PageT;
-};
-
-template <class PageT>
-inline constexpr page_t<PageT> page_v{};
-
-// ============================================================
-// app:unified app descriptor + launcher
-// ============================================================
-struct app
-{
-    std::string Name;
-    std::string Icon;
-    std::string Exec;
-
-    std::function<void(LaunchImpl *)> launch;
-
-    // ① External command
-    app(std::string name,
-        std::string icon,
-        std::string exec,
-        bool terminal);
-
-    // ① External command
-    app(std::string name,
-        std::string icon,
-        std::string exec,
-        bool terminal,
-        bool sysplause);
-
-    // ① External command (with run_as_root)
-    app(std::string name,
-        std::string icon,
-        std::string exec,
-        bool terminal,
-        bool sysplause,
-        bool run_as_root);
-
-    // ② Built-in UI page
-    template <class PageT>
-    app(std::string name,
-        std::string icon,
-        page_t<PageT> /*tag*/);
-};
-
-// ============================================================
-// LaunchImpl
-// ============================================================
-class LaunchImpl
-{
-private:
-    std::shared_ptr<UILaunchPage> launch_page_;
-    int current_app = 2;
-    cp0_watcher_t dir_watcher = NULL;
-    lv_timer_t *watch_timer = nullptr;  // LVGL 3s timer
-    int fixed_count;
-
-public:
-    std::list<app> app_list;
-    std::shared_ptr<void> app_Page;
-    std::shared_ptr<void> home_Page;
-public:
-    explicit LaunchImpl(std::shared_ptr<UILaunchPage> launch_page)
-        : launch_page_(std::move(launch_page))
-    {
         // Fixed icon; users cannot modify it
         app_list.emplace_back("Python",
                               cp0_file_path("python_100.png"), "python3", true, false);
@@ -243,15 +174,15 @@ public:
 
     }
 
-    void launch_app()
+void Launch::launch_app()
     {
         auto it = std::next(app_list.begin(), current_app);
         it->launch(this);
     }
 
-    static void lv_go_back_home(void *arg)
+void Launch::lv_go_back_home(void *arg)
     {
-        auto self = (LaunchImpl *)arg;
+        auto self = (Launch *)arg;
         SLOGI("[HOME] lv_go_back_home executing (page=%p)", self->app_Page.get());
         lv_timer_enable(true);
         if (self->launch_page_)
@@ -262,14 +193,14 @@ public:
         SLOGI("[HOME] lv_go_back_home done, on launcher home");
     }
 
-    void go_back_home()
+void Launch::go_back_home()
     {
         SLOGI("[HOME] go_back_home() requested, scheduling async call (page=%p)", app_Page.get());
         lv_async_call(lv_go_back_home, this);
     }
 
     // Changed to accept std::string and no longer depend on app::Exec
-    void launch_Exec_in_terminal(const std::string &exec, bool sysplause = true)
+void Launch::launch_Exec_in_terminal(const std::string &exec, bool sysplause)
     {
         SLOGI("Launching terminal app: %s", exec.c_str());
         /* Instant visual feedback; paint before the (potentially slow)
@@ -280,7 +211,7 @@ public:
         app_Page = p;
         lv_disp_load_scr(p->screen());
         lv_indev_set_group(lv_indev_get_next(NULL), p->input_group());
-        p->navigate_home = std::bind(&LaunchImpl::go_back_home, this);
+        p->navigate_home = std::bind(&Launch::go_back_home, this);
         p->terminal_sysplause = sysplause;
         /* Console page fully covers APP_Container; safe to hide now.
          * The heavy exec() call below will still run while the terminal
@@ -289,7 +220,7 @@ public:
         p->exec(exec);
     }
 
-    void launch_Exec(const std::string &exec, bool keep_root = false)
+void Launch::launch_Exec(const std::string &exec, bool keep_root)
     {
         SLOGI("Launching external app: %s (keep_root=%d)", exec.c_str(), keep_root);
         /* Show overlay BEFORE we tear down LVGL input/timers so the user
@@ -320,7 +251,7 @@ public:
         LVGL_RUN_FLAGE = 1;
     }
 
-    void update_left_slot(lv_obj_t *panel, lv_obj_t *label)
+void Launch::update_left_slot(lv_obj_t *panel, lv_obj_t *label)
     {
         current_app = current_app == (int)app_list.size() - 1 ? 0 : current_app + 1;
         int next_app = current_app;
@@ -331,7 +262,7 @@ public:
         panel_set_icon(panel, it->Icon.c_str());
     }
 
-    void update_right_slot(lv_obj_t *panel, lv_obj_t *label)
+void Launch::update_right_slot(lv_obj_t *panel, lv_obj_t *label)
     {
         current_app = current_app == 0 ? (int)app_list.size() - 1 : current_app - 1;
         int next_app = current_app;
@@ -342,7 +273,7 @@ public:
         panel_set_icon(panel, it->Icon.c_str());
     }
 
-    void applications_load()
+void Launch::applications_load()
     {
         const std::string app_dir_path = cp0_file_path("applications");
         const char *app_dir = app_dir_path.c_str();
@@ -465,7 +396,7 @@ public:
     // ============================================================
     // Initialize inotify in non-blocking mode and watch the applications directory
     // ============================================================
-    void inotify_init_watch()
+void Launch::inotify_init_watch()
     {
         const std::string app_dir_path = cp0_file_path("applications");
         dir_watcher = cp0_dir_watch_start(app_dir_path.c_str());
@@ -474,7 +405,7 @@ public:
     // ============================================================
     // Refresh UI panels (update 5 slots from current_app)
     // ============================================================
-    void refresh_ui_panels()
+void Launch::refresh_ui_panels()
     {
         int sz = (int)app_list.size();
         if (sz == 0)
@@ -526,7 +457,7 @@ public:
     // ============================================================
     // Reload the dynamic app list (keep fixed entries and rescan applications directory)
     // ============================================================
-    void applications_reload()
+void Launch::applications_reload()
     {
         int sz = (int)app_list.size();
         if (sz > fixed_count)
@@ -541,9 +472,9 @@ public:
     // ============================================================
     // LVGL timer callback: check inotify events and refresh the list on changes
     // ============================================================
-    static void app_dir_watch_cb(lv_timer_t *timer)
+void Launch::app_dir_watch_cb(lv_timer_t *timer)
     {
-        auto *self = static_cast<LaunchImpl *>(lv_timer_get_user_data(timer));
+        auto *self = static_cast<Launch *>(lv_timer_get_user_data(timer));
         if (!self || !self->dir_watcher)
             return;
 
@@ -554,18 +485,16 @@ public:
         }
     }
 
-    ~LaunchImpl();
-};
 
 // ============================================================
-// app constructor implementation (placed after LaunchImpl definition)
+// app constructor implementation (placed after Launch definition)
 // ============================================================
 inline app::app(std::string name,
                 std::string icon,
                 std::string exec,
                 bool terminal)
     : Name(std::move(name)), Icon(std::move(icon)){
-    launch = [exec = std::move(exec), terminal](LaunchImpl *ctx)
+    launch = [exec = std::move(exec), terminal](Launch *ctx)
     {
         if (terminal)
             ctx->launch_Exec_in_terminal(exec);
@@ -580,7 +509,7 @@ inline app::app(std::string name,
                 bool terminal,
                 bool sysplause)
     : Name(std::move(name)), Icon(std::move(icon)){
-    launch = [exec = std::move(exec), terminal, sysplause](LaunchImpl *ctx)
+    launch = [exec = std::move(exec), terminal, sysplause](Launch *ctx)
     {
         if (terminal)
             ctx->launch_Exec_in_terminal(exec, sysplause);
@@ -596,7 +525,7 @@ inline app::app(std::string name,
                 bool sysplause,
                 bool run_as_root)
     : Name(std::move(name)), Icon(std::move(icon)){
-    launch = [exec = std::move(exec), terminal, sysplause, run_as_root](LaunchImpl *ctx)
+    launch = [exec = std::move(exec), terminal, sysplause, run_as_root](Launch *ctx)
     {
         if (terminal)
             ctx->launch_Exec_in_terminal(exec, sysplause);
@@ -610,7 +539,7 @@ app::app(std::string name,
          std::string icon,
          page_t<PageT> /*tag*/)
     : Name(std::move(name)), Icon(std::move(icon)){
-    launch = [](LaunchImpl *self)
+    launch = [](Launch *self)
     {
         /* Instant feedback: show the overlay, then force an immediate
          * redraw so it actually paints BEFORE the (sometimes slow) page
@@ -625,7 +554,7 @@ app::app(std::string name,
         lv_indev_set_group(lv_indev_get_next(NULL),
                            p->input_group());
         p->navigate_home =
-            std::bind(&LaunchImpl::go_back_home, self);
+            std::bind(&Launch::go_back_home, self);
         /* Page is now attached and drawable; hide the overlay. The
          * next LVGL frame will paint the new page without it. */
         ui_loading::hide();
@@ -633,9 +562,9 @@ app::app(std::string name,
 }
 
 // ============================================================
-// LaunchImpl destructor implementation
+// Launch destructor implementation
 // ============================================================
-LaunchImpl::~LaunchImpl()
+Launch::~Launch()
 {
     if (watch_timer)
     {
@@ -651,32 +580,7 @@ LaunchImpl::~LaunchImpl()
 
 Launch::Launch() = default;
 
-Launch::~Launch() = default;
-
 void Launch::set_launch_page(std::shared_ptr<UILaunchPage> launch_page)
 {
     launch_page_ = std::move(launch_page);
-}
-
-void Launch::bind_ui()
-{
-    impl_ = std::make_unique<LaunchImpl>(launch_page_);
-}
-
-void Launch::update_left_slot(lv_obj_t *panel, lv_obj_t *label)
-{
-    if (impl_)
-        impl_->update_left_slot(panel, label);
-}
-
-void Launch::update_right_slot(lv_obj_t *panel, lv_obj_t *label)
-{
-    if (impl_)
-        impl_->update_right_slot(panel, label);
-}
-
-void Launch::launch_app()
-{
-    if (impl_)
-        impl_->launch_app();
 }
