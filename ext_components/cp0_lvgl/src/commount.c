@@ -6,6 +6,17 @@
 
 uint32_t lv_c_event[(2*CP0_C_EVENT_END)] = {0};
 
+static void datetime_timer_cb(lv_timer_t *timer)
+{
+    (void)timer;
+    if (lv_c_event[CP0_C_EVENT_DATATIME] == 0)
+        return;
+
+    lv_obj_t *root = lv_display_get_screen_active(NULL);
+    if (root != NULL)
+        lv_obj_send_event(root, (lv_event_code_t)lv_c_event[CP0_C_EVENT_DATATIME], NULL);
+}
+
 static const char *getenv_default(const char *name, const char *dflt)
 {
     const char *value = getenv(name);
@@ -44,5 +55,6 @@ void init_lvgl_event()
 {
     for (int i = 0; i < CP0_C_EVENT_END; i++)
         lv_c_event[i] = lv_event_register_id();
+    lv_timer_create(datetime_timer_cb, 60000, NULL);
     init_lvgl_event_cpp();
 }
