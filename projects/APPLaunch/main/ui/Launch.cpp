@@ -156,32 +156,32 @@ public:
 
         {
             auto it = std::next(app_list.begin(), 0);
-            lv_label_set_text(ui_leftOuterLabel, it->Name.c_str());
-            panel_set_icon(ui_leftOuterPanel, it->Icon.c_str());
+            lv_label_set_text(UILaunchPage::label(0), it->Name.c_str());
+            panel_set_icon(UILaunchPage::panel(0), it->Icon.c_str());
         }
 
         {
             auto it = std::next(app_list.begin(), 1);
-            lv_label_set_text(ui_leftLabel, it->Name.c_str());
-            panel_set_icon(ui_leftPanel, it->Icon.c_str());
+            lv_label_set_text(UILaunchPage::label(1), it->Name.c_str());
+            panel_set_icon(UILaunchPage::panel(1), it->Icon.c_str());
         }
 
         {
             auto it = std::next(app_list.begin(), 2);
-            lv_label_set_text(ui_switchLabel, it->Name.c_str());
-            panel_set_icon(ui_switchPanel, it->Icon.c_str());
+            lv_label_set_text(UILaunchPage::label(2), it->Name.c_str());
+            panel_set_icon(UILaunchPage::panel(2), it->Icon.c_str());
         }
 
         {
             auto it = std::next(app_list.begin(), 3);
-            lv_label_set_text(ui_rightLabel, it->Name.c_str());
-            panel_set_icon(ui_rightPanel, it->Icon.c_str());
+            lv_label_set_text(UILaunchPage::label(3), it->Name.c_str());
+            panel_set_icon(UILaunchPage::panel(3), it->Icon.c_str());
         }
 
         {
             auto it = std::next(app_list.begin(), 4);
-            lv_label_set_text(ui_rightOuterLabel, it->Name.c_str());
-            panel_set_icon(ui_rightOuterPanel, it->Icon.c_str());
+            lv_label_set_text(UILaunchPage::label(4), it->Name.c_str());
+            panel_set_icon(UILaunchPage::panel(4), it->Icon.c_str());
         }
 
         // Dynamic icons filtered by Settings configuration
@@ -490,32 +490,32 @@ public:
         // far left outside (hidden)
         {
             auto &a = app_at(current_app - 2);
-            lv_label_set_text(ui_leftOuterLabel, a.Name.c_str());
-            panel_set_icon(ui_leftOuterPanel, a.Icon.c_str());
+            lv_label_set_text(UILaunchPage::label(0), a.Name.c_str());
+            panel_set_icon(UILaunchPage::panel(0), a.Icon.c_str());
         }
         // left
         {
             auto &a = app_at(current_app - 1);
-            lv_label_set_text(ui_leftLabel, a.Name.c_str());
-            panel_set_icon(ui_leftPanel, a.Icon.c_str());
+            lv_label_set_text(UILaunchPage::label(1), a.Name.c_str());
+            panel_set_icon(UILaunchPage::panel(1), a.Icon.c_str());
         }
         // center
         {
             auto &a = app_at(current_app);
-            lv_label_set_text(ui_switchLabel, a.Name.c_str());
-            panel_set_icon(ui_switchPanel, a.Icon.c_str());
+            lv_label_set_text(UILaunchPage::label(2), a.Name.c_str());
+            panel_set_icon(UILaunchPage::panel(2), a.Icon.c_str());
         }
         // right
         {
             auto &a = app_at(current_app + 1);
-            lv_label_set_text(ui_rightLabel, a.Name.c_str());
-            panel_set_icon(ui_rightPanel, a.Icon.c_str());
+            lv_label_set_text(UILaunchPage::label(3), a.Name.c_str());
+            panel_set_icon(UILaunchPage::panel(3), a.Icon.c_str());
         }
         // far right outside (hidden)
         {
             auto &a = app_at(current_app + 2);
-            lv_label_set_text(ui_rightOuterLabel, a.Name.c_str());
-            panel_set_icon(ui_rightOuterPanel, a.Icon.c_str());
+            lv_label_set_text(UILaunchPage::label(4), a.Name.c_str());
+            panel_set_icon(UILaunchPage::panel(4), a.Icon.c_str());
         }
 
     }

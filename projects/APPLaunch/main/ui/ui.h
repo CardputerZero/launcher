@@ -29,7 +29,6 @@ extern "C"
 
     void ui_Screen1_screen_init(void);
 
-    void launch_circle_init();
     void ui_info_bind();
 
 #define LV_EVENT_KEYBOARD_GET_KEY(e) ((struct key_item *)lv_event_get_param(e))->key_code
