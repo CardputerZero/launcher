@@ -1,6 +1,6 @@
 # 06 - Resources and Configuration System
 
-This chapter explains APPLaunch runtime resource directories, path resolution rules, `.desktop` dynamic application files, configuration APIs, settings-page configuration keys, and resource usage notes. Key source files are `ext_components/cp0_lvgl/include/cp0_lvgl_app.h`, `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_file.cpp`, `ext_components/cp0_lvgl/src/sdl/sdl_lvgl_file.cpp`, `projects/APPLaunch/main/ui/Launch.cpp`, and `projects/APPLaunch/main/ui/components/page_app/ui_app_setup.hpp`.
+This chapter explains APPLaunch runtime resource directories, path resolution rules, `.desktop` dynamic application files, configuration APIs, settings-page configuration keys, and resource usage notes. Key source files are `ext_components/cp0_lvgl/include/cp0_lvgl_app.h`, `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_file.cpp`, `ext_components/cp0_lvgl/src/sdl/sdl_lvgl_file.cpp`, `projects/APPLaunch/main/ui/Launch.cpp`, and `projects/APPLaunch/main/ui/page_app/ui_app_setup.hpp`.
 
 ## 1. Resource System Overview
 
@@ -22,7 +22,7 @@ cp0_lvgl_file.cpp / sdl_lvgl_file.cpp
         +-- Special paths such as keyboard_device / keyboard_map / lock_file
 ```
 
-Common wrapper functions for pages are located in `projects/APPLaunch/main/ui/components/ui_app_page.hpp`:
+Common wrapper functions for pages are located in `projects/APPLaunch/main/ui/ui_app_page.hpp`:
 
 ```cpp
 static inline std::string img_path(const char *name)

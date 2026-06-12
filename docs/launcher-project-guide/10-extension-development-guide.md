@@ -7,8 +7,8 @@ This chapter explains how to extend APPLaunch, focusing on four common change ty
 | Entry point | Purpose |
 | --- | --- |
 | `projects/APPLaunch/main/ui/Launch.cpp` | Fixed app list, dynamic `.desktop` scanning, launching built-in pages or external processes |
-| `projects/APPLaunch/main/ui/components/page_app/` | Built-in page implementation directory; pages are usually header-only `.hpp` files |
-| `projects/APPLaunch/main/ui/components/ui_app_page.hpp` | Shared page capabilities such as `AppPage`, top bar, `img_path()`, and `audio_path()` |
+| `projects/APPLaunch/main/ui/page_app/` | Built-in page implementation directory; pages are usually header-only `.hpp` files |
+| `projects/APPLaunch/main/ui/ui_app_page.hpp` | Shared page capabilities such as `AppPage`, top bar, `img_path()`, and `audio_path()` |
 | `projects/APPLaunch/main/ui/components/generate_page_app_includes.py` | Automatically generates `page_app.h` before build and includes every `page_app/*.hpp` file |
 | `projects/APPLaunch/APPLaunch/` | Runtime asset tree; after packaging it maps to `/usr/share/APPLaunch/` on the device |
 | `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_file.cpp` | Device-side `cp0_file_path()` path rules |
@@ -26,7 +26,7 @@ Built-in pages are suitable for features that run in the same process as Launche
 
 ### 2.1 Create the Page File
 
-Create a new `.hpp` under `projects/APPLaunch/main/ui/components/page_app/`. The recommended naming style is `ui_app_xxx.hpp`. The page class should inherit from `AppPage`; set the title, create the UI, and bind key events in the constructor.
+Create a new `.hpp` under `projects/APPLaunch/main/ui/page_app/`. The recommended naming style is `ui_app_xxx.hpp`. The page class should inherit from `AppPage`; set the title, create the UI, and bind key events in the constructor.
 
 Minimal skeleton:
 
@@ -80,7 +80,7 @@ private:
 Notes:
 
 - The page must inherit from `AppPage` so it can reuse mechanisms such as `screen()`, `input_group()`, and `navigate_home`.
-- Prefer calling `navigate_home()` to return to the home page. Do not call `lv_disp_load_scr(ui_Screen1)` directly, or `LaunchImpl` will not be able to release the current page object correctly.
+- Prefer calling `navigate_home()` to return to the home page. Do not load the home screen directly, or `LaunchImpl` will not be able to release the current page object correctly.
 - If the page creates LVGL timers, file descriptors, threads, or peripheral handles, release them in the destructor.
 - Use 320x170 as the baseline page size. A common layout is a 20 px top bar and a 320x150 body.
 - Do not hard-code absolute asset paths. Use `img_path("xxx.png")` for images and `audio_path("xxx.wav")` for audio.
@@ -93,7 +93,7 @@ Notes:
 ui/components/generate_page_app_includes.py
 ```
 
-The script scans `projects/APPLaunch/main/ui/components/page_app/*.hpp` and generates `projects/APPLaunch/main/ui/components/page_app.h`. In most cases, as long as the file suffix is `.hpp`, it will be included automatically during the build.
+The script scans `projects/APPLaunch/main/ui/page_app/*.hpp` and generates `projects/APPLaunch/main/ui/page_app.h`. In most cases, as long as the file suffix is `.hpp`, it will be included automatically during the build.
 
 If you check manually, `page_app.h` should contain:
 
@@ -270,7 +270,7 @@ Type=Application
 
 Returning from non-terminal external apps depends on these behaviors:
 
-- If the child process exits normally, APPLaunch restores `ui_Screen1`.
+- If the child process exits normally, APPLaunch calls `launch_page_->show_home_screen()` to restore the home screen and input group.
 - On the device, holding ESC for about 3 seconds sends SIGTERM to the external app process group; if it still has not exited after another 3 seconds, SIGKILL is sent.
 - `cp0_process_exec_blocking()` pauses the Launcher keyboard thread so the external program can read evdev input directly.
 
@@ -356,7 +356,7 @@ After adding a font, verify that FreeType is enabled in both SDL2 and device bui
 
 ## 5. Changing Settings Toggles
 
-The Settings page is centralized in `projects/APPLaunch/main/ui/components/page_app/ui_app_setup.hpp`. Current settings include Launcher app visibility toggles, Boot, Screen, WiFi, Speaker, Camera, Info, About, Help, ExtPort, and others.
+The Settings page is centralized in `projects/APPLaunch/main/ui/page_app/ui_app_setup.hpp`. Current settings include Launcher app visibility toggles, Boot, Screen, WiFi, Speaker, Camera, Info, About, Help, ExtPort, and others.
 
 ### 5.1 Add a Launcher App Toggle
 
@@ -411,7 +411,7 @@ If you add many configuration items, remember that the current maximum is 32 ent
 
 | Check item | Method |
 | --- | --- |
-| Files are placed only in the correct directories | Built-in pages in `main/ui/components/page_app/`, assets in `APPLaunch/share/`, `.desktop` files in `APPLaunch/applications/` |
+| Files are placed only in the correct directories | Built-in pages in `main/ui/page_app/`, assets in `APPLaunch/share/`, `.desktop` files in `APPLaunch/applications/` |
 | SDL2 builds successfully | `CONFIG_DEFAULT_FILE=linux_x86_sdl2_config_defaults.mk scons -j8 --implicit-deps-changed` |
 | Device cross build succeeds | `CONFIG_DEFAULT_FILE=linux_x86_cross_cp0_config_defaults.mk scons -j8 --implicit-deps-changed` |
 | Icons display correctly | Check logs for `set panel icon missing/unreadable` |

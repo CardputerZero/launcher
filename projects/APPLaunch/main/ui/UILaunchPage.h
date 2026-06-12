@@ -51,6 +51,7 @@ public:
     void update_right_slot(lv_obj_t *panel, lv_obj_t *label);
     void launch_selected_app();
 
+protected:
     static std::array<lv_obj_t *, kLauncherCarouselElementCount> carousel_elements;
 
 private:
@@ -68,6 +69,10 @@ private:
     void handle_home_key(lv_event_t *event);
     void handle_startup_gif_event(lv_event_t *event);
 
+    static void rotate_carousel_left(size_t start, size_t end);
+    static void rotate_carousel_right(size_t start, size_t end);
+    static void switchpanleEnable(int obj_index, int enable);
+    static void switchpanleEnableClick(int obj_index, int enable);
     static void on_left_arrow_clicked(lv_event_t *event);
     static void on_right_arrow_clicked(lv_event_t *event);
     static void on_app_clicked(lv_event_t *event);

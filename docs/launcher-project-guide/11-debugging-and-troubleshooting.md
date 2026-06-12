@@ -324,7 +324,7 @@ External apps usually fail to return because the child process does not exit, th
 3. Unbinds the LVGL input group.
 4. Calls `lv_timer_enable(false)` to pause the LVGL timer.
 5. Calls `cp0_process_exec_blocking(exec, &LVGL_HOME_KEY_FLAG, keep_root)`.
-6. After the child process exits, re-enables the timer, binds the home input group, loads `ui_Screen1`, and hides Loading.
+6. After the child process exits, re-enables the timer, binds the home input group, calls `launch_page_->show_home_screen()` to restore the home screen, and hides Loading.
 
 ### 6.2 First Confirm Whether the Child Process Is Still Running
 

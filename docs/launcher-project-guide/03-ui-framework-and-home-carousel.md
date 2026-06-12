@@ -4,23 +4,25 @@ This chapter explains how the APPLaunch home UI is organized, how data flows thr
 
 ## 1. UI Framework Overview
 
-APPLaunch does not use a traditional desktop framework. Instead, it builds the UI directly from an LVGL object tree:
+APPLaunch does not use a traditional desktop framework. Instead, it builds the home page from the shared LVGL page base plus a carousel content area:
 
 ```text
-ui_Screen1
-├── Top status bar create_top()
-│   ├── ZERO / logo
-│   ├── WiFi signal bars
-│   ├── Time panel
-│   └── Battery panel
-└── ui_APP_Container create_app_container()
+UILaunchPage : home_base
+├── home_base/AppPageRoot root screen
+│   ├── home_base::creat_Top_UI()
+│   │   ├── ZERO / logo
+│   │   ├── WiFi signal bars
+│   │   ├── Time panel
+│   │   └── Battery panel
+│   └── content_container()
+└── Home carousel inside content_container()
     ├── 5 carousel card panels
     ├── 5 title labels
     ├── Left/right arrow buttons
     └── 5 page dots
 ```
 
-The global entry points for home objects come from declarations in `ui_obj.h`, such as `ui_Screen1`, `ui_APP_Container`, `ui_timeLabel`, and `ui_Bar1`. Actual creation and styling are concentrated in `UILaunchPage.cpp`.
+Home uses the common `home_base` / `AppPageRoot` page framework for the root screen, status bar, and input group. `UILaunchPage.cpp` fills the inherited content container with the carousel and wires the LVGL callbacks.
 
 ## 2. Key Source Paths
 
@@ -31,7 +33,6 @@ The global entry points for home objects come from declarations in `ui_obj.h`, s
 | `projects/APPLaunch/main/ui/Animation/ui_launcher_animation.cpp` | Carousel left/right switch animation |
 | `projects/APPLaunch/main/ui/Launch.cpp` | Fills new card content after switching, launches the current application, and refreshes the status bar |
 | `projects/APPLaunch/main/ui/ui.h` | Home layout constants such as `LABEL_Y_CENTER` and `BORDER_COLOR_CENTER` |
-| `projects/APPLaunch/main/ui/ui_obj.h` | Global LVGL object declarations |
 
 ## 3. Responsibilities of `UILaunchPage`
 
@@ -41,11 +42,15 @@ The global entry points for home objects come from declarations in `ui_obj.h`, s
 class UILaunchPage : public home_base
 {
 public:
-    static void load_home_screen();
-    static void start_startup_gif();
-    static void create_screen();
+    explicit UILaunchPage(std::shared_ptr<Launch> launch);
+    ~UILaunchPage();
 
-    static void init_input_group();
+    void show_home_screen();
+    void load_home_screen();
+    void start_startup_gif();
+    void create_screen();
+    void init_input_group();
+
     static void bind_home_input_group();
     static lv_group_t *home_input_group();
     static lv_obj_t *panel(size_t slot);
@@ -55,28 +60,58 @@ public:
     void update_right_slot(lv_obj_t *panel, lv_obj_t *label);
     void launch_selected_app();
 
-    static std::array<lv_obj_t *, kLauncherCarouselElementCount> carousel_elements;
+private:
+    enum class PendingSwitch { None, Left, Right };
+
+    void switch_left();
+    void switch_right();
+    void finish_switch_animation();
+    void run_pending_switch();
+    void handle_home_key(lv_event_t *event);
+    void handle_startup_gif_event(lv_event_t *event);
+
+    static void on_left_arrow_clicked(lv_event_t *event);
+    static void on_right_arrow_clicked(lv_event_t *event);
+    static void on_app_clicked(lv_event_t *event);
+    static void on_home_key(lv_event_t *event);
+    static void on_startup_gif_event(lv_event_t *event);
+
+    bool is_animating_ = false;
+    PendingSwitch pending_switch_ = PendingSwitch::None;
+    int switch_current_pos_ = kPageDot2;
 };
 ```
 
 It has two categories of responsibilities:
 
-- Static responsibilities: create the screen, maintain the home input group, and provide `panel()` / `label()` accessors.
-- Instance responsibilities: hold the `Launch` pointer and forward carousel updates and application launch operations to `LaunchImpl`.
+- Static compatibility responsibilities: keep the shared `carousel_elements` array, maintain the home input group bridge, and provide `panel()` / `label()` accessors used by `Launch.cpp`.
+- Instance responsibilities: hold the `Launch` pointer, own per-page UI state, handle LVGL events, and forward carousel updates / app launches to `LaunchImpl`.
 
-The current code stores the active home page instance in `active_launch_page` so static event callbacks can call it:
+LVGL still requires C-style static callbacks, but the current code no longer relies on global state for normal event dispatch. Each callback receives the owning page instance through LVGL user data:
 
 ```cpp
-namespace {
-UILaunchPage *active_launch_page = nullptr;
+static UILaunchPage *page_from_event(lv_event_t *event)
+{
+    return event ? static_cast<UILaunchPage *>(lv_event_get_user_data(event)) : nullptr;
 }
 
-UILaunchPage::UILaunchPage(std::shared_ptr<Launch> launch)
-    : home_base(), launch_(std::move(launch))
+void UILaunchPage::on_left_arrow_clicked(lv_event_t *event)
 {
-    active_launch_page = this;
+    if (UILaunchPage *self = page_from_event(event))
+        self->switch_right();
 }
 ```
+
+Callbacks are registered with `this`:
+
+```cpp
+lv_obj_add_event_cb(left_arrow_button_, on_left_arrow_clicked, LV_EVENT_CLICKED, this);
+lv_obj_add_event_cb(right_arrow_button_, on_right_arrow_clicked, LV_EVENT_CLICKED, this);
+lv_obj_add_event_cb(screen(), on_home_key, (lv_event_code_t)LV_EVENT_KEYBOARD, this);
+lv_obj_add_event_cb(startup_gif_, on_startup_gif_event, LV_EVENT_ALL, this);
+```
+
+`active_launch_page` is kept only as a compatibility bridge for static external accessors such as `UILaunchPage::panel()`, `UILaunchPage::label()`, and `UILaunchPage::home_input_group()`.
 
 ## 4. Carousel Element Array
 
@@ -172,20 +207,21 @@ The hidden far-side slots are animation buffers: before switching, the card that
 
 ## 6. Home Creation Flow
 
-`create_screen()` creates the root screen:
+`home_base` constructs the root screen, top status bar, and content container. `UILaunchPage::create_screen()` only fills the home content area, and it avoids rebuilding the carousel if it already exists:
 
 ```cpp
-ui_Screen1 = lv_obj_create(NULL);
-lv_obj_clear_flag(ui_Screen1, LV_OBJ_FLAG_SCROLLABLE);
-lv_obj_set_style_bg_color(ui_Screen1, lv_color_hex(0x000000), LV_PART_MAIN);
+void UILaunchPage::create_screen()
+{
+    if (carousel_elements[kCardCenter])
+        return;
 
-create_top(ui_Screen1);
-create_app_container(ui_Screen1);
+    create_app_container(content_container());
+}
 ```
 
 ### 6.1 Top Status Bar
 
-`create_top()` contains:
+The top status bar comes from `home_base::creat_Top_UI()` and contains:
 
 - The top-left `ZERO` text or `launcher_brand_logo.png`.
 - `ui_wifiPanel` and `ui_wifiBar1..4`, hidden by default and shown by signal strength during status refresh.
@@ -208,14 +244,16 @@ status_timer = lv_timer_create(home_status_timer_cb, 5000, this);
 
 ### 6.2 Carousel Container
 
-`create_app_container()` creates `ui_APP_Container`:
+`create_app_container()` uses the inherited `content_container()` as the carousel container:
 
 ```cpp
-ui_APP_Container = lv_obj_create(parent);
-lv_obj_remove_style_all(ui_APP_Container);
-lv_obj_set_width(ui_APP_Container, 320);
-lv_obj_set_height(ui_APP_Container, 150);
-lv_obj_set_align(ui_APP_Container, LV_ALIGN_CENTER);
+lv_obj_t *app_container = parent;
+if (!app_container)
+    return;
+
+lv_obj_set_size(app_container, 320, 150);
+lv_obj_clear_flag(app_container,
+                  (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
 ```
 
 It then creates, in order:
@@ -233,24 +271,26 @@ Carousel switching is split into two parts: UI animation and application data up
 
 ### 7.1 Switching Right with `switch_right()`
 
-`switch_right()` means the cards move right as a group, and the current selection becomes the previous application in the list:
+`UILaunchPage::switch_right()` means the cards move right as a group, and the current selection becomes the previous application in the list:
 
 ```cpp
-void switch_right(lv_event_t *e)
+void UILaunchPage::switch_right()
 {
-    if (is_animating) {
-        pending_switch = &switch_right;
+    if (is_animating_) {
+        pending_switch_ = PendingSwitch::Right;
         return;
     }
 
-    is_animating = true;
+    is_animating_ = true;
     lv_obj_clear_flag(carousel_elements[0], LV_OBJ_FLAG_HIDDEN);
-    launcher_home_animation::animate_right(carousel_elements.data(), snap_all_panels);
+    launcher_home_animation::animate_right(
+        carousel_elements.data(),
+        [this]() { finish_switch_animation(); });
 
     snap_panel_to_slot(carousel_elements[4], 0);
     snap_label_to_slot(carousel_elements[9], 5);
 
-    active_launch_page->update_right_slot(carousel_elements[4], carousel_elements[9]);
+    update_right_slot(carousel_elements[4], carousel_elements[9]);
     rotate_carousel_right(0, 4);
     rotate_carousel_right(5, 9);
 }
@@ -258,33 +298,35 @@ void switch_right(lv_event_t *e)
 
 Key steps:
 
-1. If an animation is already running, store this request in `pending_switch` and execute it after the current animation finishes.
+1. If an animation is already running, store `PendingSwitch::Right`; only the latest pending direction is kept.
 2. Show the far-left hidden card as the side entering the viewport during the animation.
-3. Call `launcher_home_animation::animate_right()` to start the animation.
+3. Call `launcher_home_animation::animate_right()` and pass a lambda that captures `this`.
 4. Pre-snap the far-right object to the far-left slot and fill it with the new application content that will enter.
 5. Rotate `carousel_elements[0..4]` and `[5..9]` so the array order matches the new visual order.
 6. Update page dot highlighting.
 
 ### 7.2 Switching Left with `switch_left()`
 
-`switch_left()` means the cards move left as a group, and the current selection becomes the next application in the list:
+`UILaunchPage::switch_left()` means the cards move left as a group, and the current selection becomes the next application in the list:
 
 ```cpp
-void switch_left(lv_event_t *e)
+void UILaunchPage::switch_left()
 {
-    if (is_animating) {
-        pending_switch = &switch_left;
+    if (is_animating_) {
+        pending_switch_ = PendingSwitch::Left;
         return;
     }
 
-    is_animating = true;
+    is_animating_ = true;
     lv_obj_clear_flag(carousel_elements[4], LV_OBJ_FLAG_HIDDEN);
-    launcher_home_animation::animate_left(carousel_elements.data(), snap_all_panels);
+    launcher_home_animation::animate_left(
+        carousel_elements.data(),
+        [this]() { finish_switch_animation(); });
 
     snap_panel_to_slot(carousel_elements[0], 4);
     snap_label_to_slot(carousel_elements[5], 9);
 
-    active_launch_page->update_left_slot(carousel_elements[0], carousel_elements[5]);
+    update_left_slot(carousel_elements[0], carousel_elements[5]);
     rotate_carousel_left(0, 4);
     rotate_carousel_left(5, 9);
 }
@@ -294,10 +336,10 @@ It is symmetric with `switch_right()`: the far-right side enters the viewport, w
 
 ## 8. Snapping Back After Animation
 
-The animation completion callback is `snap_all_panels()`:
+The animation completion path is `UILaunchPage::finish_switch_animation()`:
 
 ```cpp
-static void snap_all_panels()
+void UILaunchPage::finish_switch_animation()
 {
     for (int i = 0; i < 5; i++)
         snap_panel_to_slot(carousel_elements[i], i);
@@ -305,20 +347,30 @@ static void snap_all_panels()
     for (int i = 5; i < 10; i++)
         snap_label_to_slot(carousel_elements[i], i);
 
-    is_animating = false;
+    is_animating_ = false;
+    run_pending_switch();
+}
+```
 
-    if (pending_switch) {
-        switch_cb_t cb = pending_switch;
-        pending_switch = NULL;
-        cb(NULL);
-    }
+`run_pending_switch()` consumes the enum state and invokes the corresponding instance method:
+
+```cpp
+void UILaunchPage::run_pending_switch()
+{
+    PendingSwitch pending = pending_switch_;
+    pending_switch_ = PendingSwitch::None;
+
+    if (pending == PendingSwitch::Left)
+        switch_left();
+    else if (pending == PendingSwitch::Right)
+        switch_right();
 }
 ```
 
 It solves two problems:
 
 - Animation interpolation may introduce small errors, so objects are force-snapped to the standard slots after the animation ends.
-- If the user repeatedly presses direction keys during the animation, only one pending switch is kept and executed after the animation completes.
+- If the user repeatedly presses direction keys during the animation, only one pending switch enum is kept and executed after the animation completes.
 
 ## 9. How Application Data Is Written into the Carousel
 
@@ -371,14 +423,14 @@ Press LEFT:
 
 ## 10. Input Events and Sound Effects
 
-The home keyboard event is bound at the end of `create_app_container()`:
+The home keyboard event is bound at the end of `create_app_container()` through the LVGL callback bridge:
 
 ```cpp
-lv_obj_add_event_cb(ui_Screen1, main_key_switch,
-                    (lv_event_code_t)LV_EVENT_KEYBOARD, NULL);
+lv_obj_add_event_cb(screen(), on_home_key,
+                    (lv_event_code_t)LV_EVENT_KEYBOARD, this);
 ```
 
-`main_key_switch()` logic:
+`on_home_key()` calls `handle_home_key()` on the owning `UILaunchPage` instance. Its logic is:
 
 ```text
 Press LEFT/Z
@@ -391,7 +443,7 @@ Press RIGHT/C
 
 Release ENTER
   -> audio_play_enter()
-  -> app_launch()
+  -> launch_selected_app()
 
 Release F12
   -> Toggle green test background lvping_lock
@@ -422,10 +474,11 @@ cp0_signal_audio_api_play_asset("startup.mp3");
 ## 11. Home Sequence Text
 
 ```text
-UILaunchPage::create_screen()
-  -> create_top()
+UILaunchPage constructed as home_base
+  -> home_base::creat_Top_UI()
       -> Create logo / WiFi / time / battery objects
-  -> create_app_container()
+UILaunchPage::create_screen()
+  -> create_app_container(content_container())
       -> Create page dots
       -> Create labels
       -> Create cards
@@ -433,7 +486,7 @@ UILaunchPage::create_screen()
       -> Bind click and keyboard callbacks
 
 User presses RIGHT
-  -> main_key_switch()
+  -> on_home_key() -> handle_home_key()
   -> audio_play_switch()
   -> switch_left()
       -> is_animating=true
@@ -441,15 +494,14 @@ User presses RIGHT
       -> update_left_slot()
       -> rotate cards / labels
       -> Update page dot
-  -> snap_all_panels()
+  -> finish_switch_animation()
       -> Snap objects to standard slots
       -> is_animating=false
-      -> If pending_switch exists, continue executing it
+      -> If pending_switch_ exists, continue executing it
 
 User presses ENTER
-  -> main_key_switch()
+  -> on_home_key() -> handle_home_key()
   -> audio_play_enter()
-  -> app_launch()
   -> UILaunchPage::launch_selected_app()
   -> Launch::launch_app()
 ```
@@ -458,7 +510,7 @@ User presses ENTER
 
 - `carousel_elements` stores LVGL object pointers; carousel switching rotates the pointer array instead of destroying and recreating objects.
 - The names `switch_left()` / `switch_right()` describe animation direction and are not necessarily identical to user key direction. Currently, `KEY_LEFT` calls `switch_right()`, and `KEY_RIGHT` calls `switch_left()`.
-- During animation, only one `pending_switch` is recorded, so rapid repeated key presses do not create an unbounded queue.
-- Home card click events are all bound to `app_launch()`, but normal interaction mainly uses center selection + Enter launch. If mouse/touch interaction is enabled, confirm whether clicking a non-center card matches expectations.
+- During animation, only one `pending_switch_` enum value is recorded, so rapid repeated key presses do not create an unbounded queue.
+- Home card click events are bound to `on_app_clicked()`, which bridges to `launch_selected_app()`, but normal interaction mainly uses center selection + Enter launch. If mouse/touch interaction is enabled, confirm whether clicking a non-center card matches expectations.
 - Status bar objects are created by `UILaunchPage`, but the refresh timer is created during `LaunchImpl` construction. If the home screen is created without executing `Launch::bind_ui()`, the application list and status bar refresh will not start.
 - When adding or adjusting carousel slots, update `CAROUSEL_SLOTS`, the initial positions in `create_app_container()`, and the slot definitions in the animation file together to avoid jumps after animation completion.

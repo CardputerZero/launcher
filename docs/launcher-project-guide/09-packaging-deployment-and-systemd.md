@@ -233,17 +233,17 @@ The same clean commands accept `--project`, `--project-dir`, `--app-name`, and `
 
 ### 6.1 Main Program Lookup
 
-The script looks for the main program under `src_folder`, which defaults to `../dist`.
+The script looks for the main program under `src_folder`, which defaults to `dist` relative to `projects/APPLaunch` for the default APPLaunch target.
 
 Lookup order:
 
-1. `../dist/M5CardputerZero-APPLaunch`
-2. `../dist/bin/M5CardputerZero-APPLaunch`
+1. `projects/APPLaunch/dist/M5CardputerZero-APPLaunch`
+2. `projects/APPLaunch/dist/bin/M5CardputerZero-APPLaunch`
 
 If neither exists, it raises:
 
 ```text
-FileNotFoundError: Binary M5CardputerZero-APPLaunch not found in ../dist
+PackError: binary M5CardputerZero-APPLaunch not found in <project>/dist or <project>/dist/bin
 ```
 
 ### 6.2 Additional Apps and Backends
@@ -251,9 +251,9 @@ FileNotFoundError: Binary M5CardputerZero-APPLaunch not found in ../dist
 The script attempts to include these optional files:
 
 ```text
-../dist/bin/M5CardputerZero-AppStore
-../dist/bin/appstore.py
-../dist/bin/M5CardputerZero-Calculator
+projects/APPLaunch/dist/bin/M5CardputerZero-AppStore
+projects/APPLaunch/dist/bin/appstore.py
+projects/APPLaunch/dist/bin/M5CardputerZero-Calculator
 ```
 
 If present, they are copied to:
@@ -281,7 +281,7 @@ usr/share/APPLaunch
 If the source resource tree does not exist, it tries:
 
 ```text
-../dist/APPLaunch
+projects/APPLaunch/dist/APPLaunch
 ```
 
 This means packaging usually does not rely only on `dist/APPLaunch`; it also copies the `APPLaunch/` resource tree from the project source directory.

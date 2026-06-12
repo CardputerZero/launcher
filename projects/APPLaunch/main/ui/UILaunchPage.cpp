@@ -18,17 +18,70 @@
 
 std::array<lv_obj_t *, UILaunchPage::kLauncherCarouselElementCount> UILaunchPage::carousel_elements = {};
 
-static void rotate_carousel_left(size_t start, size_t end)
+void UILaunchPage::rotate_carousel_left(size_t start, size_t end)
 {
-    auto &items = UILaunchPage::carousel_elements;
+    auto &items = carousel_elements;
     std::rotate(items.begin() + start, items.begin() + start + 1, items.begin() + end + 1);
 }
 
-static void rotate_carousel_right(size_t start, size_t end)
+void UILaunchPage::rotate_carousel_right(size_t start, size_t end)
 {
-    auto &items = UILaunchPage::carousel_elements;
+    auto &items = carousel_elements;
     std::rotate(items.begin() + start, items.begin() + end, items.begin() + end + 1);
 }
+
+// ============================================================
+// switch panel style
+// ============================================================
+
+void UILaunchPage::switchpanleEnable(int obj_index, int enable)
+{
+    lv_obj_t *obj = carousel_elements[obj_index];
+
+    if (enable)
+    {
+        lv_obj_set_width(obj, 10);
+        lv_obj_set_height(obj, 10);
+        lv_obj_set_align(obj, LV_ALIGN_CENTER);
+        lv_obj_clear_flag(obj, LV_OBJ_FLAG_SCROLLABLE);
+
+        lv_obj_set_style_bg_color(obj, lv_color_hex(0xCCCC33), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_opa(obj, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_grad_color(obj, lv_color_hex(0x4A4C4A), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_border_color(obj, lv_color_hex(0xCCCC33), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_border_opa(obj, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+    }
+    else
+    {
+        lv_obj_set_width(obj, 5);
+        lv_obj_set_height(obj, 5);
+        lv_obj_set_align(obj, LV_ALIGN_CENTER);
+        lv_obj_clear_flag(obj, LV_OBJ_FLAG_SCROLLABLE);
+
+        lv_obj_set_style_bg_color(obj, lv_color_hex(0x4A4C4A), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_opa(obj, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_grad_color(obj, lv_color_hex(0x4A4C4A), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_border_color(obj, lv_color_hex(0x4A4C4A), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_border_opa(obj, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+    }
+}
+
+
+void UILaunchPage::switchpanleEnableClick(int obj_index, int enable)
+{
+    lv_obj_t *obj = carousel_elements[obj_index];
+
+    if (enable)
+    {
+        lv_obj_add_flag(obj, LV_OBJ_FLAG_CLICKABLE);
+    }
+    else
+    {
+        lv_obj_clear_flag(obj, LV_OBJ_FLAG_CLICKABLE);
+    }
+}
+
+
 
 namespace {
 
@@ -76,58 +129,6 @@ static void audio_play_enter(void)
 {
     audio_play_ui_asset("enter.wav");
 }
-
-// ============================================================
-// switch panel style
-// ============================================================
-
-static void switchpanleEnable(int obj_index, int enable)
-{
-    lv_obj_t *obj = UILaunchPage::carousel_elements[obj_index];
-
-    if (enable)
-    {
-        lv_obj_set_width(obj, 10);
-        lv_obj_set_height(obj, 10);
-        lv_obj_set_align(obj, LV_ALIGN_CENTER);
-        lv_obj_clear_flag(obj, LV_OBJ_FLAG_SCROLLABLE);
-
-        lv_obj_set_style_bg_color(obj, lv_color_hex(0xCCCC33), LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_opa(obj, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_grad_color(obj, lv_color_hex(0x4A4C4A), LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_border_color(obj, lv_color_hex(0xCCCC33), LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_border_opa(obj, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-    }
-    else
-    {
-        lv_obj_set_width(obj, 5);
-        lv_obj_set_height(obj, 5);
-        lv_obj_set_align(obj, LV_ALIGN_CENTER);
-        lv_obj_clear_flag(obj, LV_OBJ_FLAG_SCROLLABLE);
-
-        lv_obj_set_style_bg_color(obj, lv_color_hex(0x4A4C4A), LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_opa(obj, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_grad_color(obj, lv_color_hex(0x4A4C4A), LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_border_color(obj, lv_color_hex(0x4A4C4A), LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_border_opa(obj, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-    }
-}
-
-
-static void switchpanleEnableClick(int obj_index, int enable)
-{
-    lv_obj_t *obj = UILaunchPage::carousel_elements[obj_index];
-
-    if (enable)
-    {
-        lv_obj_add_flag(obj, LV_OBJ_FLAG_CLICKABLE);
-    }
-    else
-    {
-        lv_obj_clear_flag(obj, LV_OBJ_FLAG_CLICKABLE);
-    }
-}
-
 
 // ============================================================
 // Force the panel to the specified slot

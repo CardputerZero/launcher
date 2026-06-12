@@ -11,9 +11,9 @@ git status --short
 
 | Task | Main files/directories | Key points | Verification |
 | --- | --- | --- | --- |
-| Add a built-in page | `projects/APPLaunch/main/ui/components/page_app/` | Create `ui_app_xxx.hpp` and inherit from `AppPage` | Build with SDL2 and open the page |
+| Add a built-in page | `projects/APPLaunch/main/ui/page_app/` | Create `ui_app_xxx.hpp` and inherit from `AppPage` | Build with SDL2 and open the page |
 | Register a built-in page on home | `projects/APPLaunch/main/ui/Launch.cpp` | `app_list.emplace_back("NAME", img_path("icon.png"), page_v<PageT>)` | Icon appears in the home carousel |
-| Control built-in page visibility toggle | `projects/APPLaunch/main/ui/components/page_app/ui_app_setup.hpp`, `projects/APPLaunch/main/ui/Launch.cpp` | Settings page writes `app_Key`, Launcher reads `APP_ENABLED("Key")` | Toggle in Settings, then restart or refresh home |
+| Control built-in page visibility toggle | `projects/APPLaunch/main/ui/page_app/ui_app_setup.hpp`, `projects/APPLaunch/main/ui/Launch.cpp` | Settings page writes `app_Key`, Launcher reads `APP_ENABLED("Key")` | Toggle in Settings, then restart or refresh home |
 | Add external `.desktop` app | `projects/APPLaunch/APPLaunch/applications/` | Filename must end in `.desktop` and include `Name` and `Exec` | No skip logs; app appears on home |
 | Add icon | `projects/APPLaunch/APPLaunch/share/images/` | Built-in pages use `img_path()`, `.desktop` uses `Icon=share/images/xxx.png` | No `missing/unreadable` logs |
 | Add sound effect | `projects/APPLaunch/APPLaunch/share/audio/` | Pages use `audio_path()` and `cp0_signal_audio_api()` | Sound plays on device |
@@ -21,11 +21,11 @@ git status --short
 | Change home carousel layout | `projects/APPLaunch/main/ui/UILaunchPage.cpp`, `projects/APPLaunch/main/ui/UILaunchPage.h` | 5 slots, left/right switching, center card | Check animation and input in SDL2 |
 | Change carousel animation | `projects/APPLaunch/main/ui/Animation/ui_launcher_animation.cpp` | Card movement, scale, opacity, and other animations | Switch left/right repeatedly in SDL2 |
 | Change home status bar | `projects/APPLaunch/main/ui/Launch.cpp`, `projects/APPLaunch/main/ui/ui.c` | `update_home_status_bar()` refreshes WiFi/time/battery | Check `[HOME_STATUS]` logs |
-| Change Settings menu | `projects/APPLaunch/main/ui/components/page_app/ui_app_setup.hpp` | Add `MenuItem`/`SubItem` in `menu_init()` | Enter the SETTING page and test |
+| Change Settings menu | `projects/APPLaunch/main/ui/page_app/ui_app_setup.hpp` | Add `MenuItem`/`SubItem` in `menu_init()` | Enter the SETTING page and test |
 | Change configuration saving logic | `ext_components/cp0_lvgl/src/cp0/cp0_app_config.cpp` | Currently saves to `/var/lib/applaunch/settings`, max 32 entries | Inspect the settings file |
 | Change asset path rules | `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_file.cpp`, `ext_components/cp0_lvgl/src/sdl/sdl_lvgl_file.cpp` | Consider device and SDL2 consistently | Check assets on both SDL2 and device |
 | Change external app launch/return | `projects/APPLaunch/main/ui/Launch.cpp`, `ext_components/cp0_lvgl/src/cp0/cp0_app_process.cpp` | `launch_Exec()`, `cp0_process_exec_blocking()` | External app starts, ESC returns |
-| Change terminal apps | `projects/APPLaunch/main/ui/components/page_app/ui_app_console.hpp`, `ext_components/cp0_lvgl/src/cp0/cp0_app_pty.cpp` | PTY, command execution, input/output | Verify with a `Terminal=true` app |
+| Change terminal apps | `projects/APPLaunch/main/ui/page_app/ui_app_console.hpp`, `ext_components/cp0_lvgl/src/cp0/cp0_app_pty.cpp` | PTY, command execution, input/output | Verify with a `Terminal=true` app |
 | Change input mapping | `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_keyboard.c`, `ext_components/cp0_lvgl/src/sdl/sdl_lvgl_keyboard.c` | Device and SDL2 input differences | `evtest` + SDL2 keyboard |
 | Change startup flow | `projects/APPLaunch/main/src/main.cpp` | `lv_init()`, `cp0_lvgl_init()`, `ui_init()`, main loop | Check `[BOOT]` logs |
 | Change build dependencies | `projects/APPLaunch/main/SConstruct` | `SRCS`, `INCLUDE`, `REQUIREMENTS`, `STATIC_FILES` | scons build |
@@ -49,28 +49,28 @@ git status --short
 | `projects/APPLaunch/main/ui/ui_global_hint.cpp` | Global hint overlay |
 | `projects/APPLaunch/main/ui/zero_lvgl_os.cpp` | LVGL OS/thread helpers |
 | `projects/APPLaunch/main/ui/Animation/` | Home carousel animation implementation |
-| `projects/APPLaunch/main/ui/components/ui_app_page.hpp` | Built-in page base class, top bar, shared asset path helpers |
-| `projects/APPLaunch/main/ui/components/page_app.h` | Auto-generated built-in page include aggregate |
-| `projects/APPLaunch/main/ui/components/page_app/` | Built-in page implementation directory |
+| `projects/APPLaunch/main/ui/ui_app_page.hpp` | Built-in page base class, top bar, shared asset path helpers |
+| `projects/APPLaunch/main/ui/page_app.h` | Auto-generated built-in page include aggregate |
+| `projects/APPLaunch/main/ui/page_app/` | Built-in page implementation directory |
 | `projects/APPLaunch/main/include/` | APPLaunch private headers and compatible input headers |
 
 ## 3. Built-in Page Entry Table
 
 | Page/feature | File | Registered name or icon | Description |
 | --- | --- | --- | --- |
-| GAME | `projects/APPLaunch/main/ui/components/page_app/ui_app_game.hpp` | `GAME` / `game_100.png` | Built-in game entry |
-| SETTING | `projects/APPLaunch/main/ui/components/page_app/ui_app_setup.hpp` | `SETTING` / `setting_100.png` | Settings page, including app toggles, brightness, volume, WiFi, camera, etc. |
-| MUSIC | `projects/APPLaunch/main/ui/components/page_app/ui_app_music.hpp` | `MUSIC` / `music_100.png` | Music page |
-| Compass | `projects/APPLaunch/main/ui/components/page_app/ui_app_compass.hpp` | `Compass` / `compass_needle_80.png` | Compass page |
-| IP_PANEL | `projects/APPLaunch/main/ui/components/page_app/ui_app_IpPanel.hpp` | `IP_PANEL` / `ip_panel_100.png` | IP information panel, enabled on device |
-| FILE | `projects/APPLaunch/main/ui/components/page_app/ui_app_file.hpp` | `FILE` / `file_100.png` | File page, enabled on device |
-| SSH | `projects/APPLaunch/main/ui/components/page_app/ui_app_ssh.hpp` | `SSH` / `ssh_100.png` | SSH page, enabled on device |
-| MESH | `projects/APPLaunch/main/ui/components/page_app/ui_app_mesh.hpp` | `MESH` / `mesh_100.png` | Mesh page, enabled on device |
-| REC | `projects/APPLaunch/main/ui/components/page_app/ui_app_rec.hpp` | `REC` / `rec_100.png` | Recording page, enabled on device |
-| CAMERA | `projects/APPLaunch/main/ui/components/page_app/ui_app_camera.hpp` | `CAMERA` / `camera_100.png` | Camera page, enabled on device |
-| LORA | `projects/APPLaunch/main/ui/components/page_app/ui_app_lora.hpp` | `LORA` / `lora_100.png` | LoRa page, enabled on device |
-| TANK | `projects/APPLaunch/main/ui/components/page_app/ui_app_tank_battle.hpp` | `TANK` / `tank_100.png` | Tank game, enabled on device |
-| CLI/terminal | `projects/APPLaunch/main/ui/components/page_app/ui_app_console.hpp` | `CLI` / `cli_100.png` | `UIConsolePage`, used by bash, python, and `Terminal=true` apps |
+| GAME | `projects/APPLaunch/main/ui/page_app/ui_app_game.hpp` | `GAME` / `game_100.png` | Built-in game entry |
+| SETTING | `projects/APPLaunch/main/ui/page_app/ui_app_setup.hpp` | `SETTING` / `setting_100.png` | Settings page, including app toggles, brightness, volume, WiFi, camera, etc. |
+| MUSIC | `projects/APPLaunch/main/ui/page_app/ui_app_music.hpp` | `MUSIC` / `music_100.png` | Music page |
+| Compass | `projects/APPLaunch/main/ui/page_app/ui_app_compass.hpp` | `Compass` / `compass_needle_80.png` | Compass page |
+| IP_PANEL | `projects/APPLaunch/main/ui/page_app/ui_app_IpPanel.hpp` | `IP_PANEL` / `ip_panel_100.png` | IP information panel, enabled on device |
+| FILE | `projects/APPLaunch/main/ui/page_app/ui_app_file.hpp` | `FILE` / `file_100.png` | File page, enabled on device |
+| SSH | `projects/APPLaunch/main/ui/page_app/ui_app_ssh.hpp` | `SSH` / `ssh_100.png` | SSH page, enabled on device |
+| MESH | `projects/APPLaunch/main/ui/page_app/ui_app_mesh.hpp` | `MESH` / `mesh_100.png` | Mesh page, enabled on device |
+| REC | `projects/APPLaunch/main/ui/page_app/ui_app_rec.hpp` | `REC` / `rec_100.png` | Recording page, enabled on device |
+| CAMERA | `projects/APPLaunch/main/ui/page_app/ui_app_camera.hpp` | `CAMERA` / `camera_100.png` | Camera page, enabled on device |
+| LORA | `projects/APPLaunch/main/ui/page_app/ui_app_lora.hpp` | `LORA` / `lora_100.png` | LoRa page, enabled on device |
+| TANK | `projects/APPLaunch/main/ui/page_app/ui_app_tank_battle.hpp` | `TANK` / `tank_100.png` | Tank game, enabled on device |
+| CLI/terminal | `projects/APPLaunch/main/ui/page_app/ui_app_console.hpp` | `CLI` / `cli_100.png` | `UIConsolePage`, used by bash, python, and `Terminal=true` apps |
 
 Fixed registration entry in `LaunchImpl::LaunchImpl()`:
 

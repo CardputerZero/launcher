@@ -1,6 +1,6 @@
 # 05 - Built-in Page Framework
 
-This chapter explains the class hierarchy, lifecycle, page list, page registration method, and conventions for adding built-in APPLaunch pages. Key source files are `projects/APPLaunch/main/ui/components/ui_app_page.hpp`, `projects/APPLaunch/main/ui/components/page_app/*.hpp`, `projects/APPLaunch/main/ui/Launch.cpp`, and `projects/APPLaunch/main/ui/UILaunchPage.cpp`.
+This chapter explains the class hierarchy, lifecycle, page list, page registration method, and conventions for adding built-in APPLaunch pages. Key source files are `projects/APPLaunch/main/ui/ui_app_page.hpp`, `projects/APPLaunch/main/ui/page_app/*.hpp`, `projects/APPLaunch/main/ui/Launch.cpp`, and `projects/APPLaunch/main/ui/UILaunchPage.cpp`.
 
 ## 1. What a Built-in Page Is
 
@@ -9,7 +9,7 @@ A built-in page is an LVGL page class compiled into the APPLaunch process. It is
 - A built-in page directly creates an `lv_obj_t *root_screen_` and switches to its own screen through `lv_disp_load_scr(page->screen())`.
 - The page object is stored in `LaunchImpl::app_Page`, and is released asynchronously by the `navigate_home` callback when exiting.
 - The page shares the APPLaunch process, LVGL main loop, input thread, resource resolution, and `cp0_lvgl_app.h` system interfaces with the home screen.
-- Pages are usually header-only and placed under `projects/APPLaunch/main/ui/components/page_app/`, then aggregated by `components/page_app.h`.
+- Pages are usually header-only and placed under `projects/APPLaunch/main/ui/page_app/`, then aggregated by `components/page_app.h`.
 
 Simplified relationship:
 
@@ -31,7 +31,7 @@ LaunchImpl::launch_app()
 
 ### 2.1 `AppPageRoot`
 
-`AppPageRoot` is the root base class for all built-in pages. It is located in `projects/APPLaunch/main/ui/components/ui_app_page.hpp`. It creates an independent screen and an LVGL input group.
+`AppPageRoot` is the root base class for all built-in pages. It is located in `projects/APPLaunch/main/ui/ui_app_page.hpp`. It creates an independent screen and an LVGL input group.
 
 ```cpp
 class AppPageRoot
@@ -60,7 +60,7 @@ public:
 
 Key points:
 
-- `root_screen_` is the page's own top-level screen, not a child of the home `ui_Screen1`.
+- `root_screen_` is the page's own top-level screen, not a child of the home `UILaunchPage::screen()`.
 - By default, `input_group_` only contains `root_screen_`. When the page is launched, it is bound to the current `lv_indev_t`.
 - `navigate_home` is injected by `LaunchImpl`; a page calls it to return home after ESC or after finishing a task.
 - The destructor deletes `root_screen_` and `input_group_`, so LVGL child objects created inside the page are released with the screen.
@@ -106,7 +106,7 @@ The common top bar is implemented by `UIAppTopBar` and contains:
 
 Key source paths:
 
-- `projects/APPLaunch/main/ui/components/ui_app_page.hpp`: `UIAppTopBar`, `AppTopBarRegion`.
+- `projects/APPLaunch/main/ui/ui_app_page.hpp`: `UIAppTopBar`, `AppTopBarRegion`.
 - `ext_components/cp0_lvgl/include/cp0_lvgl_app.h`: declarations for interfaces such as `cp0_wifi_get_status()`, `cp0_time_str()`, and `cp0_battery_read()`.
 
 Top-bar resources use `cp0_file_path_c()`:
@@ -142,7 +142,7 @@ app::app(std::string name, std::string icon, page_t<PageT>)
 
 In the actual code in `projects/APPLaunch/main/ui/Launch.cpp`, the core flow is:
 
-1. After the user presses ENTER on the home screen, `cpp_app_launch()` is called.
+1. After the user releases ENTER on the home screen, `UILaunchPage::handle_home_key()` calls `launch_selected_app()`.
 2. `UILaunchPage::launch_selected_app()` forwards to `Launch::launch_app()`.
 3. `LaunchImpl::launch_app()` finds the current app and executes that app's `launch` function.
 4. The built-in page object is created, the screen is loaded, and the input group is switched.
@@ -162,7 +162,7 @@ if (navigate_home)
 
 - `lv_timer_enable(true)` to restore LVGL timers.
 - `UILaunchPage::bind_home_input_group()` to bind the home input group.
-- `lv_disp_load_scr(ui_Screen1)` to load the home screen.
+- `launch_page_->show_home_screen()` to load the home screen and bind the home input group.
 - `app_Page.reset()` to release the current page object.
 
 Notes:
@@ -173,7 +173,7 @@ Notes:
 
 ## 5. Current Built-in Page List
 
-Page implementations are concentrated in `projects/APPLaunch/main/ui/components/page_app/`.
+Page implementations are concentrated in `projects/APPLaunch/main/ui/page_app/`.
 
 | Page class | File | Launcher name | Inheritance | Description |
 | --- | --- | --- | --- | --- |
@@ -319,7 +319,7 @@ The home carousel itself is managed by `UILaunchPage.cpp`:
 
 - `carousel_elements` stores 5 cards, 5 titles, and 5 page dots.
 - When switching left/right, `switch_left()` / `switch_right()` are called. After the animation finishes, the array is rotated and `LaunchImpl` updates the far-side slot content.
-- ENTER triggers `app_launch()`, which ultimately calls the current app's `launch()`.
+- ENTER triggers `UILaunchPage::launch_selected_app()`, which ultimately calls the current app's `launch()`.
 
 Built-in pages do not directly manipulate the home carousel. After returning home, the carousel state is preserved by `LaunchImpl`.
 

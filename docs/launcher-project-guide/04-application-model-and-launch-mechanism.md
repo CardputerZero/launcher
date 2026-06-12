@@ -1,6 +1,6 @@
 # 04 - Application Model and Launch Mechanism
 
-This chapter explains how APPLaunch unifies built-in pages, terminal commands, and external standalone programs into one application list, and how an application is launched after the user presses Enter. Key references are `projects/APPLaunch/main/ui/Launch.cpp`, `projects/APPLaunch/main/ui/Launch.h`, `projects/APPLaunch/main/ui/UILaunchPage.cpp`, and `projects/APPLaunch/main/ui/components/page_app/*`.
+This chapter explains how APPLaunch unifies built-in pages, terminal commands, and external standalone programs into one application list, and how an application is launched after the user presses Enter. Key references are `projects/APPLaunch/main/ui/Launch.cpp`, `projects/APPLaunch/main/ui/Launch.h`, `projects/APPLaunch/main/ui/UILaunchPage.cpp`, and `projects/APPLaunch/main/ui/page_app/*`.
 
 ## 1. Application Model Overview
 
@@ -33,8 +33,8 @@ Home center card
 | `projects/APPLaunch/main/ui/Launch.h` | Public facade for `Launch`, hiding `LaunchImpl` |
 | `projects/APPLaunch/main/ui/Launch.cpp` | `app`, `LaunchImpl`, application list, launch logic, `.desktop` scanning |
 | `projects/APPLaunch/main/ui/UILaunchPage.cpp` | Forwards Enter / click events to `Launch::launch_app()` |
-| `projects/APPLaunch/main/ui/components/page_app/ui_app_console.hpp` | Terminal page `UIConsolePage` |
-| `projects/APPLaunch/main/ui/components/page_app/*.hpp` | Built-in pages such as settings, music, file, camera, and LoRa |
+| `projects/APPLaunch/main/ui/page_app/ui_app_console.hpp` | Terminal page `UIConsolePage` |
+| `projects/APPLaunch/main/ui/page_app/*.hpp` | Built-in pages such as settings, music, file, camera, and LoRa |
 | `projects/APPLaunch/APPLaunch/applications/` | Runtime `.desktop` application descriptor directory |
 | `ext_components/cp0_lvgl` | Lower-level capabilities such as process launch, PTY, directory watching, and path resolution |
 
@@ -269,8 +269,9 @@ void launch_Exec(const std::string &exec, bool keep_root = false)
     lv_timer_enable(true);
     if (indev)
         lv_indev_set_group(indev, UILaunchPage::home_input_group());
-    lv_disp_load_scr(ui_Screen1);
-    ui_loading_hide();
+    if (launch_page_)
+        launch_page_->show_home_screen();
+    ui_loading::hide();
     lv_obj_invalidate(lv_screen_active());
     lv_refr_now(disp);
     LVGL_RUN_FLAGE = 1;
@@ -283,7 +284,7 @@ Key points:
 - Clears the APPLaunch input group so the home screen does not keep processing keys while the external process is running.
 - `lv_timer_enable(false)` pauses LVGL timers while the external program takes the foreground.
 - `cp0_process_exec_blocking()` blocks until the external program exits.
-- After the external program exits, it restores the timer, input group, home screen, and `LVGL_RUN_FLAGE`.
+- After the external program exits, it restores the timer, calls `launch_page_->show_home_screen()`, and restores `LVGL_RUN_FLAGE`.
 
 Sequence text:
 
@@ -299,8 +300,7 @@ Enter external app
       -> APPLaunch main rendering is paused
       -> Wait for the external program to exit
   -> lv_timer_enable(true)
-  -> Bind home input group
-  -> lv_disp_load_scr(ui_Screen1)
+  -> launch_page_->show_home_screen()
   -> ui_loading_hide()
   -> lv_refr_now()
   -> LVGL_RUN_FLAGE=1
@@ -333,8 +333,8 @@ static void lv_go_back_home(void *arg)
 {
     auto self = (LaunchImpl *)arg;
     lv_timer_enable(true);
-    UILaunchPage::bind_home_input_group();
-    lv_disp_load_scr(ui_Screen1);
+    if (self->launch_page_)
+        self->launch_page_->show_home_screen();
     lv_refr_now(NULL);
     if (self->app_Page)
         self->app_Page.reset();
@@ -469,13 +469,11 @@ Fixed applications generally use `img_path("xxx.png")`. The `Icon` field of dyna
 
 ```text
 User releases ENTER
-  -> LV_EVENT_KEYBOARD is delivered to ui_Screen1
-  -> main_key_switch()
+  -> LV_EVENT_KEYBOARD is delivered to UILaunchPage::screen()
+  -> UILaunchPage::on_home_key()
+      -> handle_home_key()
       -> code == KEY_ENTER and key_state == 0
       -> audio_play_enter()
-      -> app_launch(NULL)
-  -> app_launch()
-      -> active_launch_page->launch_selected_app()
   -> UILaunchPage::launch_selected_app()
       -> launch_->launch_app()
   -> Launch::launch_app()

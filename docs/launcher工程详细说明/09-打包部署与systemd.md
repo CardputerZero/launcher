@@ -233,17 +233,17 @@ python3 scripts/debian_packager.py distclean
 
 ### 6.1 主程序查找
 
-脚本从 `src_folder` 查找主程序，默认 `src_folder='../dist'`。
+脚本从 `src_folder` 查找主程序；默认 APPLaunch 目标下，`src_folder` 是相对 `projects/APPLaunch` 的 `dist`。
 
 查找顺序：
 
-1. `../dist/M5CardputerZero-APPLaunch`
-2. `../dist/bin/M5CardputerZero-APPLaunch`
+1. `projects/APPLaunch/dist/M5CardputerZero-APPLaunch`
+2. `projects/APPLaunch/dist/bin/M5CardputerZero-APPLaunch`
 
 如果两个位置都不存在，会抛出：
 
 ```text
-FileNotFoundError: Binary M5CardputerZero-APPLaunch not found in ../dist
+PackError: binary M5CardputerZero-APPLaunch not found in <project>/dist or <project>/dist/bin
 ```
 
 ### 6.2 附加应用和后端
@@ -251,9 +251,9 @@ FileNotFoundError: Binary M5CardputerZero-APPLaunch not found in ../dist
 脚本会尝试包含以下可选文件：
 
 ```text
-../dist/bin/M5CardputerZero-AppStore
-../dist/bin/appstore.py
-../dist/bin/M5CardputerZero-Calculator
+projects/APPLaunch/dist/bin/M5CardputerZero-AppStore
+projects/APPLaunch/dist/bin/appstore.py
+projects/APPLaunch/dist/bin/M5CardputerZero-Calculator
 ```
 
 如果存在则复制到：
@@ -281,7 +281,7 @@ usr/share/APPLaunch
 如果源码资源树不存在，则尝试使用：
 
 ```text
-../dist/APPLaunch
+projects/APPLaunch/dist/APPLaunch
 ```
 
 这意味着打包时通常不只依赖 `dist/APPLaunch`，也会把工程源码目录中的 `APPLaunch/` 资源树复制进去。

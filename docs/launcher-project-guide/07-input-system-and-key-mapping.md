@@ -1,6 +1,6 @@
 # 07 - Input System and Key Mapping
 
-This chapter explains APPLaunch's keyboard input thread, the `key_item` event structure, LVGL event dispatch, key mappings on the home screen and built-in pages, terminal input escaping, and debugging notes. The key source files are `projects/APPLaunch/main/include/keyboard_input.h`, `projects/APPLaunch/main/ui/ui.h`, `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_keyboard.c`, `ext_components/cp0_lvgl/src/sdl/sdl_lvgl_keyboard.c`, `projects/APPLaunch/main/ui/UILaunchPage.cpp`, and `projects/APPLaunch/main/ui/components/page_app/*.hpp`.
+This chapter explains APPLaunch's keyboard input thread, the `key_item` event structure, LVGL event dispatch, key mappings on the home screen and built-in pages, terminal input escaping, and debugging notes. The key source files are `projects/APPLaunch/main/include/keyboard_input.h`, `projects/APPLaunch/main/ui/ui.h`, `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_keyboard.c`, `ext_components/cp0_lvgl/src/sdl/sdl_lvgl_keyboard.c`, `projects/APPLaunch/main/ui/UILaunchPage.cpp`, and `projects/APPLaunch/main/ui/page_app/*.hpp`.
 
 ## 1. Input System Overview
 
@@ -230,7 +230,7 @@ If a page handles `LV_EVENT_KEYBOARD` directly, it usually uses the raw `KEY_*` 
 
 ## 6. Home Screen Key Mapping
 
-Home screen key handling is in `projects/APPLaunch/main/ui/UILaunchPage.cpp::main_key_switch()`.
+Home screen key handling is in `UILaunchPage::handle_home_key()`; the LVGL C callback entry is `UILaunchPage::on_home_key()` in `projects/APPLaunch/main/ui/UILaunchPage.cpp`.
 
 First, the commonly used `F/X/Z/C` keys on CardputerZero are mapped to arrow keys:
 
@@ -257,7 +257,7 @@ Home screen behavior:
 | `KEY_F12` | released | Toggle the green full-screen debug overlay and set `lvping_lock` |
 | `KEY_UP` / `KEY_DOWN` or `F` / `X` | pressed/repeat | No action is currently defined on the home screen |
 
-Note: `main_key_switch()` handles left/right keys on press, so a long press may generate repeat events and switch continuously. ENTER launches on release to avoid repeated launches while the key is held down.
+Note: `handle_home_key()` handles left/right keys on press, so a long press may generate repeat events and switch continuously. ENTER launches on release to avoid repeated launches while the key is held down. The log tag still contains `main_key_switch` for compatibility with older debugging output.
 
 ## 7. Built-In Page Key Mapping Overview
 
@@ -346,8 +346,7 @@ lv_timer_enable(false);
 int ret = cp0_process_exec_blocking(exec.c_str(), &LVGL_HOME_KEY_FLAG, keep_root ? 1 : 0);
 
 lv_timer_enable(true);
-lv_indev_set_group(indev, UILaunchPage::home_input_group());
-lv_disp_load_scr(ui_Screen1);
+launch_page_->show_home_screen();
 LVGL_RUN_FLAGE = 1;
 ```
 
@@ -377,9 +376,10 @@ lv_indev_set_group(lv_indev_get_next(NULL), p->input_group());
 Returning to the home screen:
 
 ```cpp
-UILaunchPage::bind_home_input_group();
-lv_disp_load_scr(ui_Screen1);
+launch_page_->show_home_screen();
 ```
+
+`show_home_screen()` loads the home screen and calls `UILaunchPage::bind_home_input_group()`.
 
 If the screen has switched but the group still points to the old page, the following can occur:
 

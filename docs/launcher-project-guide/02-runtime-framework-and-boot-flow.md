@@ -199,39 +199,33 @@ void zero_lvgl_os::create_launcher_home()
 
 ### 6.1 Home Screen Creation
 
-`UILaunchPage::create_screen()` creates the screen only once:
+`UILaunchPage` inherits `home_base`, so the root screen, top status bar, content container, and input group are prepared by the shared page framework. `UILaunchPage::create_screen()` only fills the home content container and runs once:
 
 ```cpp
 void UILaunchPage::create_screen()
 {
-    if (ui_Screen1)
+    if (carousel_elements[kCardCenter])
         return;
 
-    ui_Screen1 = lv_obj_create(NULL);
-    lv_obj_clear_flag(ui_Screen1, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_bg_color(ui_Screen1, lv_color_hex(0x000000), LV_PART_MAIN);
-
-    create_top(ui_Screen1);
-    create_app_container(ui_Screen1);
+    create_app_container(content_container());
 }
 ```
 
-It creates two areas:
-
-- `create_top()`: top-left logo plus WiFi, time, and battery status bar.
-- `create_app_container()`: home carousel container, 5 cards, 5 titles, 5 page dots, and left/right arrows.
+It creates the home carousel area: 5 cards, 5 titles, 5 page dots, and left/right arrows. The top-left logo, WiFi indicator, time label, and battery bar are created by `home_base::creat_Top_UI()`.
 
 ### 6.2 Input Group Binding
 
-The home input group is created in `UILaunchPage::init_input_group()`:
+The home input group comes from `AppPageRoot::input_group()`. `UILaunchPage::init_input_group()` stores it in the compatibility bridge and binds the active keyboard input device:
 
 ```cpp
-home_input_group = lv_group_create();
-lv_group_add_obj(home_input_group, ui_Screen1);
-lv_indev_set_group(indev, home_input_group);
+void UILaunchPage::init_input_group()
+{
+    ::home_input_group = input_group();
+    bind_home_input_group();
+}
 ```
 
-This allows keyboard events to be delivered to `ui_Screen1`, where `main_key_switch()` handles left/right switching and Enter launch.
+This allows keyboard events to be delivered to `screen()`, where the LVGL callback `on_home_key()` dispatches to `handle_home_key()` for left/right switching and Enter launch.
 
 ### 6.3 Startup GIF and Home Display
 
@@ -243,31 +237,30 @@ Check cp0_file_path_c("logo_output.gif")
   -> file does not exist: UILaunchPage::load_home_screen()
 ```
 
-`start_startup_gif()` creates an independent GIF screen:
+`start_startup_gif()` creates an independent GIF screen and binds the callback with `this`:
 
 ```cpp
-startup_gif = lv_gif_create(NULL);
-lv_gif_set_src(startup_gif, gif_path);
-lv_obj_center(startup_gif);
-lv_obj_add_event_cb(startup_gif, ui_event_logo_over, LV_EVENT_ALL, NULL);
-lv_disp_load_scr(startup_gif);
+startup_gif_ = lv_gif_create(NULL);
+lv_gif_set_src(startup_gif_, startup_gif_path_.data());
+lv_obj_center(startup_gif_);
+lv_obj_add_event_cb(startup_gif_, on_startup_gif_event, LV_EVENT_ALL, this);
+lv_disp_load_scr(startup_gif_);
 ```
 
-When GIF playback finishes, it receives `LV_EVENT_READY`. The callback `ui_event_logo_over()` pauses the GIF and loads the home screen:
+When GIF playback finishes, it receives `LV_EVENT_READY`. `on_startup_gif_event()` returns to the owning `UILaunchPage` instance and `handle_startup_gif_event()` pauses the GIF and loads the home screen once:
 
 ```cpp
-if (event_code == LV_EVENT_READY && !done) {
-    if (startup_gif) lv_gif_pause(startup_gif);
-    UILaunchPage::load_home_screen();
+if (event_code == LV_EVENT_READY && !startup_gif_done_) {
+    startup_gif_done_ = true;
+    if (startup_gif_) lv_gif_pause(startup_gif_);
+    load_home_screen();
 }
 ```
 
 Responsibilities of `load_home_screen()`:
 
 ```cpp
-ui____initial_actions0 = lv_obj_create(NULL);
-lv_disp_load_scr(ui_Screen1);
-UILaunchPage::bind_home_input_group();
+show_home_screen();
 cp0_signal_audio_api_play_asset("startup.mp3");
 ```
 
@@ -291,8 +284,8 @@ main()
           -> create_launcher_home()
               -> register LV_EVENT_GET_COMP_CHILD
               -> launch_page_->create_screen()
-                  -> create_top()
-                  -> create_app_container()
+                  -> home_base::creat_Top_UI()
+                  -> create_app_container(content_container())
               -> launch_->bind_ui()
                   -> new LaunchImpl
                   -> Register fixed/dynamic applications and write them into home slots

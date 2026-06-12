@@ -162,22 +162,17 @@ projects/APPLaunch/main/
 
 ```text
 main/ui/
-├── ui.c
-├── ui.cpp
-├── ui.h
-├── ui_obj.h
-├── Launch.cpp
-├── Launch.h
-├── UILaunchPage.cpp
-├── UILaunchPage.h
-├── ui_loading.cpp
-├── ui_loading.h
-├── ui_global_hint.cpp
-├── ui_global_hint.h
-├── zero_lvgl_os.cpp
-├── zero_lvgl_os.h
+├── ui.cpp / ui.h
+├── Launch.cpp / Launch.h
+├── UILaunchPage.cpp / UILaunchPage.h
+├── ui_app_page.hpp
+├── page_app.h
+├── generate_page_app_includes.py
+├── ui_loading.*
+├── ui_global_hint.*
+├── zero_lvgl_os.*
 ├── Animation/
-└── components/
+└── page_app/
 ```
 
 | File/Directory | Role |
@@ -194,7 +189,7 @@ main/ui/
 ### 2.5 `components/page_app/` Built-In Page Directory
 
 ```text
-main/ui/components/page_app/
+main/ui/page_app/
 ├── ui_app_camera.hpp
 ├── ui_app_compass.hpp
 ├── ui_app_console.hpp
@@ -244,7 +239,7 @@ LaunchImpl
 APPLaunch currently has several clear code style characteristics:
 
 - Mixed C and C++: LVGL-generated/compatibility code is often C, while most business pages are C++.
-- C/C++ bridge functions are exposed through `extern "C"`, such as `cpp_app_launch()`.
+- LVGL callbacks remain C-style static functions, but page dispatch uses `lv_event_get_user_data()` to recover the owning C++ page instance.
 - Page classes usually construct LVGL objects directly without using an additional UI framework.
 - Hardware capabilities are preferably accessed through the unified interfaces wrapped by `cp0_lvgl`.
 - Resource access should preferably use `cp0_file_path()` to avoid path differences between the device and SDL environments.
