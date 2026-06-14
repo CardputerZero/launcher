@@ -232,15 +232,22 @@ int hal_volume_write(int val)
     return val;
 }
 
-hal_wifi_status_t hal_wifi_get_status(void)
+// ── Async WiFi status: background thread polls nmcli, main thread reads cache ──
+#include <pthread.h>
+
+static hal_wifi_status_t s_wifi_cache;
+static pthread_mutex_t s_wifi_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_t s_wifi_thread;
+static int s_wifi_thread_running = 0;
+
+static void wifi_poll_once(hal_wifi_status_t *out)
 {
     hal_wifi_status_t st;
     memset(&st, 0, sizeof(st));
     char line[256];
 
-    // Use nmcli to check active wifi connection
-    FILE *p = popen("nmcli -t -f TYPE,NAME dev status 2>/dev/null", "r");
-    if (!p) return st;
+    FILE *p = popen("nmcli -t -f TYPE,CONNECTION dev status 2>/dev/null", "r");
+    if (!p) { *out = st; return; }
     while (fgets(line, sizeof(line), p)) {
         line[strcspn(line, "\n")] = 0;
         if (strncmp(line, "wifi:", 5) == 0) {
@@ -255,8 +262,7 @@ hal_wifi_status_t hal_wifi_get_status(void)
     pclose(p);
 
     if (st.connected) {
-        // Get signal strength
-        p = popen("nmcli -t -f IN-USE,SIGNAL dev wifi list 2>/dev/null", "r");
+        p = popen("nmcli -t -f IN-USE,SIGNAL dev wifi list --rescan no 2>/dev/null", "r");
         if (p) {
             while (fgets(line, sizeof(line), p)) {
                 line[strcspn(line, "\n")] = 0;
@@ -268,7 +274,6 @@ hal_wifi_status_t hal_wifi_get_status(void)
             pclose(p);
         }
 
-        // Get IP from ip addr (most reliable)
         p = popen("ip -4 -o addr show wlan0 2>/dev/null", "r");
         if (p) {
             if (fgets(line, sizeof(line), p)) {
@@ -285,6 +290,39 @@ hal_wifi_status_t hal_wifi_get_status(void)
             pclose(p);
         }
     }
+    *out = st;
+}
+
+static void *wifi_poll_thread(void *arg)
+{
+    (void)arg;
+    while (1) {
+        hal_wifi_status_t st;
+        wifi_poll_once(&st);
+        pthread_mutex_lock(&s_wifi_mutex);
+        s_wifi_cache = st;
+        pthread_mutex_unlock(&s_wifi_mutex);
+        usleep(3000000); // poll every 3s
+    }
+    return NULL;
+}
+
+static void ensure_wifi_thread(void)
+{
+    if (!s_wifi_thread_running) {
+        s_wifi_thread_running = 1;
+        pthread_create(&s_wifi_thread, NULL, wifi_poll_thread, NULL);
+        pthread_detach(s_wifi_thread);
+    }
+}
+
+hal_wifi_status_t hal_wifi_get_status(void)
+{
+    ensure_wifi_thread();
+    hal_wifi_status_t st;
+    pthread_mutex_lock(&s_wifi_mutex);
+    st = s_wifi_cache;
+    pthread_mutex_unlock(&s_wifi_mutex);
     return st;
 }
 
@@ -317,7 +355,9 @@ int hal_wifi_scan(hal_wifi_ap_t *out, int max_aps)
         if (ptr[0] == 0) continue;
         strncpy(tmp.ssid, ptr, WIFI_SSID_MAX - 1);
 
-        /* Dedup: if same SSID already exists, keep the stronger signal */
+        /* Dedup: if same SSID already exists, keep the stronger signal,
+         * but always preserve in_use flag (the connected AP might not be
+         * the strongest among same-SSID roaming APs). */
         int dup_idx = -1;
         for (int i = 0; i < count; i++) {
             if (strcmp(out[i].ssid, tmp.ssid) == 0) {
@@ -326,8 +366,12 @@ int hal_wifi_scan(hal_wifi_ap_t *out, int max_aps)
             }
         }
         if (dup_idx >= 0) {
-            if (tmp.signal > out[dup_idx].signal)
+            if (tmp.in_use) out[dup_idx].in_use = 1;
+            if (tmp.signal > out[dup_idx].signal) {
+                int saved_in_use = out[dup_idx].in_use;
                 out[dup_idx] = tmp;
+                out[dup_idx].in_use = saved_in_use;
+            }
         } else {
             out[count] = tmp;
             count++;
@@ -345,6 +389,20 @@ int hal_wifi_connect(const char *ssid, const char *password)
     else
         snprintf(cmd, sizeof(cmd), "nmcli con up id '%s' 2>&1", ssid);
     FILE *p = popen(cmd, "r");
+    if (!p) return -1;
+    char buf[256]; int ok = 0;
+    while (fgets(buf, sizeof(buf), p)) { if (strstr(buf, "successfully")) ok = 1; }
+    pclose(p);
+    return ok ? 0 : -1;
+}
+
+int hal_wifi_disconnect(void)
+{
+    // Use "nmcli con down" (deactivate connection) rather than "nmcli dev
+    // disconnect" (which marks the device unmanaged and prevents autoconnect
+    // until reboot). With "con down", NM may re-autoconnect another profile
+    // shortly after — that's usually what the user wants.
+    FILE *p = popen("nmcli con down id \"$(nmcli -t -f NAME con show --active | grep -v lo | head -1)\" 2>&1", "r");
     if (!p) return -1;
     char buf[256]; int ok = 0;
     while (fgets(buf, sizeof(buf), p)) { if (strstr(buf, "successfully")) ok = 1; }

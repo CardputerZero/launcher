@@ -21,29 +21,29 @@
 #include "miniaudio.h"
 
 // ============================================================
-//  音乐播放器 UIMusicPage
-//  屏幕分辨率: 320 x 170  顶栏20px, ui_APP_Container 320x150
+//  Music player UIMusicPage
+//  Screen resolution: 320 x 170  top bar20px, ui_APP_Container 320x150
 //
-//  功能:
-//    1. 选择文件夹
-//    2. 扫描当前文件夹下 mp3 / wav 文件
-//    3. 显示播放列表
-//    4. 使用 miniaudio + PulseAudio 播放
+//  Features:
+//    1. Select a folder
+//    2. Scan mp3 / wav files in the current folder
+//    3. Show the playlist
+//    4. Play via miniaudio + PulseAudio
 //
-//  视图状态:
-//    VIEW_MAIN       — 主播放界面
-//    VIEW_FOLDER_SEL — 'i'(Tab) 弹出的目录浏览器
-//    VIEW_PLAYLIST   — 'p' 弹出的播放列表
+//  View state:
+//    VIEW_MAIN       — main playback screen
+//    VIEW_FOLDER_SEL — 'i'(Tab) directory browser popup
+//    VIEW_PLAYLIST   — 'p' playlist popup
 //
-//  按键映射:
-//    LV_KEY_UP    → 播放 / 列表上移
-//    LV_KEY_DOWN  → 暂停 / 列表下移
-//    LV_KEY_LEFT  → 上一首 / 返回上级目录
-//    LV_KEY_RIGHT → 下一首 / 进入子目录
-//    'i'(Tab)     → 弹出目录浏览器
-//    'p'          → 弹出播放列表
-//    LV_KEY_ENTER → 目录浏览器：载入当前目录音频 / 播放列表：播放选中曲目
-//    LV_KEY_ESC   → 返回主界面 / 退出App
+//  Key mapping:
+//    LV_KEY_UP    -> play / move up in the list
+//    LV_KEY_DOWN  -> pause / move down in the list
+//    LV_KEY_LEFT  -> previous track / go to parent directory
+//    LV_KEY_RIGHT -> next track / enter subdirectory
+//    'i'(Tab)     -> open directory browser
+//    'p'          -> open playlist
+//    LV_KEY_ENTER -> directory browser: load audio from current directory / playlist: play selected track
+//    LV_KEY_ESC   -> return to main screen / exit app
 // ============================================================
 
 class UIMusicPage : public app_base
@@ -85,7 +85,7 @@ public:
         uninit_audio();
     }
 
-    // ==================== 对外接口 ====================
+    // ==================== Public API ====================
 
     void prev_track()
     {
@@ -143,7 +143,7 @@ public:
             return;
         }
 
-        // 如果当前只是暂停，则继续播放
+        // If currently paused, resume playback
         if (play_state_ == PlayState::PAUSED &&
             sound_loaded_ &&
             loaded_track_ == current_track_)
@@ -165,7 +165,7 @@ public:
             return;
         }
 
-        // 否则重新开始当前曲目
+        // Otherwise restart the current track
         if (start_playback())
             play_state_ = PlayState::PLAYING;
         else
@@ -189,7 +189,7 @@ public:
     }
 
 private:
-    // ==================== 数据成员 ====================
+    // ==================== Data members ====================
 
     std::unordered_map<std::string, lv_obj_t *> ui_obj_;
 
@@ -220,7 +220,7 @@ private:
     lv_timer_t *audio_timer_ = nullptr;
 
 private:
-    // ==================== POSIX 路径工具 ====================
+    // ==================== POSIX path utilities ====================
 
     static std::string path_parent(const std::string &path)
     {
@@ -278,7 +278,7 @@ private:
     }
 
 private:
-    // ==================== UI 构建 ====================
+    // ==================== UI construction ====================
 
     void creat_UI()
     {
@@ -384,7 +384,7 @@ private:
     }
 
 private:
-    // ==================== 事件绑定 ====================
+    // ==================== Event binding ====================
 
     void event_handler_init()
     {
@@ -460,7 +460,7 @@ private:
 
 private:
     // ================================================================
-    //  主界面按键
+    //  Main screen keys
     // ================================================================
 
     void handle_main_key(uint32_t key)
@@ -503,7 +503,7 @@ private:
 
 private:
     // ================================================================
-    //  目录浏览器按键
+    //  Directory browser keys
     // ================================================================
 
     void handle_folder_key(uint32_t key)
@@ -564,7 +564,7 @@ private:
 
         case LV_KEY_ENTER:
         {
-            // ENTER 表示选择当前目录并扫描音频文件
+            // ENTER selects the current directory and scans audio files
             load_music_from_folder(browse_dir_);
             close_folder_browser();
             break;
@@ -581,7 +581,7 @@ private:
 
 private:
     // ================================================================
-    //  播放列表按键
+    //  Playlist keys
     // ================================================================
 
     void handle_playlist_key(uint32_t key)
@@ -648,7 +648,7 @@ private:
 
 private:
     // ================================================================
-    //  目录浏览器
+    //  Directory browser
     // ================================================================
 
     void open_folder_browser()
@@ -800,7 +800,7 @@ private:
 
 private:
     // ================================================================
-    //  播放列表弹窗
+    //  Playlist popup
     // ================================================================
 
     void open_playlist()
@@ -891,7 +891,7 @@ private:
 
 private:
     // ================================================================
-    //  扫描指定目录中的 mp3 / wav 文件
+    //  Scan mp3 / wav files in the specified directory
     // ================================================================
 
     void load_music_from_folder(const std::string &dir)
@@ -952,7 +952,7 @@ private:
 
 private:
     // ================================================================
-    //  miniaudio 初始化：PulseAudio 后端
+    //  miniaudio initialization: PulseAudio backend
     // ================================================================
 
     void init_audio()
@@ -1004,8 +1004,8 @@ private:
 
 private:
     // ================================================================
-    //  播放结束回调
-    //  注意：该回调运行在音频线程，不要直接操作 LVGL
+    //  Playback completion callback
+    //  Note:This callback runs on the audio thread; do not operate LVGL directly
     // ================================================================
 
     static void static_sound_end_cb(void *pUserData, ma_sound *pSound)
@@ -1056,7 +1056,7 @@ private:
 
 private:
     // ================================================================
-    //  播放控制：miniaudio + PulseAudio
+    //  Playback control: miniaudio + PulseAudio
     // ================================================================
 
     bool start_playback()
@@ -1140,7 +1140,7 @@ private:
 
 private:
     // ================================================================
-    //  刷新主界面标签
+    //  Refresh main screen labels
     // ================================================================
 
     void update_main_ui()

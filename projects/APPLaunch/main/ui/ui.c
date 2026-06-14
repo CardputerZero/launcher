@@ -33,8 +33,8 @@ int Animation_time = 200;
 const char *ui_img_zero_png;
 const char *ui_img_time_png;
 const char *ui_img_battery_bg_png;
-const char *ui_img_zuo_png;
-const char *ui_img_you_png;
+const char *ui_img_left_png;
+const char *ui_img_right_png;
 
 const char *ui_img_store_logo_png;
 const char *ui_img_cli_logo_png;
@@ -43,8 +43,8 @@ const char *ui_img_setting_logo_png;
 const char *ui_img_python_logo_png;
 
 const char *ui_img_zero_logo_w_png;
-const char *ui_img_zuo_logo_png;
-const char *ui_img_you_logo_png;
+const char *ui_img_left_logo_png;
+const char *ui_img_right_logo_png;
 const char *ui_img_detail_info_png;
 const char *ui_img_down_logo_png;
 const char *ui_img_up_logo_png;
@@ -58,11 +58,11 @@ static void ui_images_init(void)
         { &ui_img_zero_png,       "zero.png" },
         { &ui_img_time_png,       "time_bg.png" },
         { &ui_img_battery_bg_png, "battery_bg.png" },
-        { &ui_img_zuo_png,        "zuo.png" },
-        { &ui_img_you_png,        "you.png" },
+        { &ui_img_left_png,        "left.png" },
+        { &ui_img_right_png,        "right.png" },
         { &ui_img_zero_logo_w_png,"zero_logo_w.png" },
-        { &ui_img_zuo_logo_png,   "zuo_logo.png" },
-        { &ui_img_you_logo_png,   "you_logo.png" },
+        { &ui_img_left_logo_png,   "left_logo.png" },
+        { &ui_img_right_logo_png,   "right_logo.png" },
         { &ui_img_detail_info_png,"detail_info.png" },
         { &ui_img_down_logo_png,  "down_logo.png" },
         { &ui_img_up_logo_png,    "up_logo.png" },
@@ -92,9 +92,10 @@ static uint32_t EVT_TERM_KEY;
 lv_font_t *g_font_cn_20 = NULL;
 lv_font_t *g_font_cn_14 = NULL;
 lv_font_t *g_font_cn_12 = NULL;
-lv_font_t *g_font_mono_12 = NULL;   /* 终端专用等宽字体 */
-lv_font_t *g_font_bold_14 = NULL;   /* App名称加粗字体 - 中间 */
-lv_font_t *g_font_bold_12 = NULL;   /* App名称加粗字体 - 侧面 */
+lv_font_t *g_font_mono_12 = NULL;   /* terminal-only monospaced font */
+lv_font_t *g_font_bold_20 = NULL;   /* bold font for selected settings item */
+lv_font_t *g_font_bold_14 = NULL;   /* bold app-name font - center */
+lv_font_t *g_font_bold_12 = NULL;   /* bold app-name font - side */
 
 // // EVENTS
 
@@ -112,7 +113,7 @@ lv_font_t *g_font_bold_12 = NULL;   /* App名称加粗字体 - 侧面 */
 
 // ==================== Label Animations ====================
 // Labels only animate x and y (no width/height change)
-// 2you direction: labels slide right (pos5→6→7→8→9)
+// rightward direction: labels slide right (pos5→6→7→8→9)
 
 #include "Animation/Animation_lable.h"
 
@@ -154,6 +155,9 @@ void font_manager_init(void)
     {
         static char bold_path[512];
         snprintf(bold_path, sizeof(bold_path), "%s/Montserrat-Bold.ttf", hal_path_font_dir());
+        g_font_bold_20 = lv_freetype_font_create(
+            bold_path, LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 18,
+            LV_FREETYPE_FONT_STYLE_BOLD);
         g_font_bold_14 = lv_freetype_font_create(
             bold_path, LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 16,
             LV_FREETYPE_FONT_STYLE_BOLD);
@@ -167,6 +171,7 @@ void font_manager_init(void)
     if (!g_font_cn_14)  g_font_cn_14  = (lv_font_t *)&lv_font_montserrat_14;
     if (!g_font_cn_12)  g_font_cn_12  = (lv_font_t *)&lv_font_montserrat_12;
     if (!g_font_mono_12) g_font_mono_12 = (lv_font_t *)&lv_font_montserrat_12;
+    if (!g_font_bold_20) g_font_bold_20 = (lv_font_t *)&lv_font_montserrat_18;
     if (!g_font_bold_14) g_font_bold_14 = (lv_font_t *)&lv_font_montserrat_14;
     if (!g_font_bold_12) g_font_bold_12 = (lv_font_t *)&lv_font_montserrat_12;
 }
@@ -198,14 +203,14 @@ void ui_event_logo_over(lv_event_t * e) {
 
 
         /*
-        * 这里会在程序运行时执行一次。
-        * 所以在这里初始化音频最合适。
+        * This runs once while the program is running.
+        * This is therefore the best place to initialize audio.
         *
         * audio_system_init():
-        *   打开 ALSA 设备，并保持打开。
+        *   Open the ALSA device and keep it open.
         *
         * audio_load_sounds():
-        *   预加载 switch.wav / enter.wav。
+        *   Preload switch.wav / enter.wav.
         */
         audio_system_init();
         audio_load_sounds();
@@ -240,17 +245,17 @@ void ui_init(void)
                                                false, LV_FONT_DEFAULT);
     lv_disp_set_theme(dispp, theme);
 
-    // 初始化各个界面
+    // Initialize each screen
     ui_Screen1_screen_init();
 
-    // 界面信息绑定
+    // Bind screen metadata
     ui_info_bind();
     launch_circle_init();
 
-    // 初始化输入组
+    // Initialize the input group
     input_group_init();
 
-    // 显示开机动画（需要 share/images/logo_output.gif）
+    // Show the boot animation (requires share/images/logo_output.gif)
 #ifndef APPLAUNCH_STARTUP_ANIMATION
     home_screen_load();
 #else

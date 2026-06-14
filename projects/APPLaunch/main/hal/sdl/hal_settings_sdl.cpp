@@ -53,6 +53,8 @@ int hal_wifi_connect(const char *ssid, const char *password)
     (void)ssid; (void)password; return 0;
 }
 
+int hal_wifi_disconnect(void) { return 0; }
+
 hal_bt_status_t hal_bt_get_status(void)
 {
     hal_bt_status_t st;

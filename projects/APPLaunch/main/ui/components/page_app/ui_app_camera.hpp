@@ -161,30 +161,6 @@ private:
         lv_img_set_src(img, &img_dsc_);
         ui_obj_["img"] = img;
 
-        // // top overlay
-        // lv_obj_t *top = lv_obj_create(bg);
-        // lv_obj_set_size(top, 320, 24);
-        // lv_obj_set_pos(top, 0, 0);
-        // lv_obj_set_style_radius(top, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-        // lv_obj_set_style_bg_color(top, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
-        // lv_obj_set_style_bg_opa(top, 150, LV_PART_MAIN | LV_STATE_DEFAULT);
-        // lv_obj_set_style_border_width(top, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-        // lv_obj_set_style_pad_all(top, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-        // lv_obj_clear_flag(top, LV_OBJ_FLAG_SCROLLABLE);
-
-        // lv_obj_t *lbl_title = lv_label_create(top);
-        // lv_label_set_text(lbl_title, "IMX219 Stream");
-        // lv_obj_set_pos(lbl_title, 6, 4);
-        // lv_obj_set_style_text_color(lbl_title, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
-        // lv_obj_set_style_text_font(lbl_title, &lv_font_montserrat_12, LV_PART_MAIN | LV_STATE_DEFAULT);
-
-        // lv_obj_t *lbl_status = lv_label_create(top);
-        // lv_label_set_text(lbl_status, "Opening...");
-        // lv_obj_set_pos(lbl_status, 220, 4);
-        // lv_obj_set_style_text_color(lbl_status, lv_color_hex(0xF1C40F), LV_PART_MAIN | LV_STATE_DEFAULT);
-        // lv_obj_set_style_text_font(lbl_status, &lv_font_montserrat_12, LV_PART_MAIN | LV_STATE_DEFAULT);
-        // ui_obj_["lbl_status"] = lbl_status;
-
         lv_obj_t *photo_frame = lv_obj_create(bg);
         lv_obj_set_size(photo_frame, 186, 118);
         lv_obj_center(photo_frame);

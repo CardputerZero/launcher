@@ -9,22 +9,22 @@
 #include "hal/hal_network.h"
 
 // ============================================================
-//  IP面板界面  UIIpPanelPage
-//  屏幕分辨率: 320 x 170  (顶栏20px, ui_APP_Container 320x150)
+//  IP panel screen  UIIpPanelPage
+//  Screen resolution: 320 x 170  (top bar20px, ui_APP_Container 320x150)
 //
-//  视图状态:
-//    VIEW_MAIN    — 列表（每秒自动刷新，将网口信息显示在列表中）
+//  View state:
+//    VIEW_MAIN    — list (auto-refresh every second and show interface information)
 // ============================================================
 
 class UIIpPanelPage : public app_base
 {
-    // ==================== 单条网口信息 ====================
+    // ==================== Single network interface info ====================
     struct NetIfInfo
     {
-        std::string iface;   // 网口名称，如 eth0 / wlan0
-        std::string ip;      // IPv4 地址，无地址时为 "N/A"
-        std::string mask;    // 子网掩码
-        bool        up;      // 是否 UP
+        std::string iface;   // interface name, e.g. eth0 / wlan0
+        std::string ip;      // IPv4 address, or "N/A" when absent
+        std::string mask;    // subnet mask
+        bool        up;      // whether it is UP
     };
 
 public:
@@ -37,21 +37,21 @@ public:
     ~UIIpPanelPage() {}
 
 private:
-    // ==================== 数据成员 ====================
+    // ==================== Data members ====================
     std::unordered_map<std::string, lv_obj_t *> ui_obj_;
-    std::vector<NetIfInfo> iface_list_;   // 当前网口列表
-    int selected_idx_ = 0;               // 当前高亮行
+    std::vector<NetIfInfo> iface_list_;   // current network interface list
+    int selected_idx_ = 0;               // currently highlighted row
 
-    // 布局常量（内容区 320x150，标题栏22px，剩余 128px）
-    static constexpr int ITEM_H       = 32;   // 每行高度
-    static constexpr int VISIBLE_ROWS = 4;    // 可见行数（128/32 = 4）
-    static constexpr int TITLE_H      = 22;   // 标题栏高度
-    static constexpr int LIST_H       = 128;  // 列表区域高度
+    // Layout constants (content area 320x150, title bar 22px, remaining 128px)
+    static constexpr int ITEM_H       = 32;   // row height
+    static constexpr int VISIBLE_ROWS = 4;    // visible row count (128/32 = 4)
+    static constexpr int TITLE_H      = 22;   // title bar height
+    static constexpr int LIST_H       = 128;  // list area height
 
-    // 定时器句柄
+    // timer handle
     lv_timer_t *refresh_timer_ = nullptr;
 
-    // ==================== 读取系统网口信息 ====================
+    // ==================== Read system network interface information ====================
     void fetch_iface_list()
     {
         iface_list_.clear();
@@ -71,21 +71,21 @@ private:
             iface_list_.push_back(info);
         }
 
-        // 按接口名排序，保证顺序稳定
+        // Sort by interface name for stable ordering
         std::sort(iface_list_.begin(), iface_list_.end(),
                   [](const NetIfInfo &a, const NetIfInfo &b) {
                       return a.iface < b.iface;
                   });
 
-        // 选中索引越界保护
+        // Out-of-range protection for selected index
         if (selected_idx_ >= (int)iface_list_.size())
             selected_idx_ = iface_list_.empty() ? 0 : (int)iface_list_.size() - 1;
     }
 
-    // ==================== UI 构建 ====================
+    // ==================== UI construction ====================
     void creat_UI()
     {
-        // ---- 背景 ----
+        // ---- Background ----
         lv_obj_t *bg = lv_obj_create(ui_APP_Container);
         lv_obj_set_size(bg, 320, 150);
         lv_obj_set_pos(bg, 0, 0);
@@ -97,7 +97,7 @@ private:
         lv_obj_clear_flag(bg, LV_OBJ_FLAG_SCROLLABLE);
         ui_obj_["bg"] = bg;
 
-        // ---- 标题栏 ----
+        // ---- Title bar ----
         lv_obj_t *title_bar = lv_obj_create(bg);
         lv_obj_set_size(title_bar, 320, TITLE_H);
         lv_obj_set_pos(title_bar, 0, 0);
@@ -108,14 +108,14 @@ private:
         lv_obj_set_style_pad_left(title_bar, 8, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_clear_flag(title_bar, LV_OBJ_FLAG_SCROLLABLE);
 
-        // 标题文字
+        // Title text
         lv_obj_t *lbl_title = lv_label_create(title_bar);
         lv_label_set_text(lbl_title, LV_SYMBOL_WIFI "  IP Panel");
         lv_obj_set_align(lbl_title, LV_ALIGN_LEFT_MID);
         lv_obj_set_style_text_color(lbl_title, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_text_font(lbl_title, &lv_font_montserrat_14, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-        // 右侧操作提示
+        // right-side control hint
         lv_obj_t *lbl_hint = lv_label_create(title_bar);
         lv_label_set_text(lbl_hint, "UP/DN:select  ESC:back");
         lv_obj_set_align(lbl_hint, LV_ALIGN_RIGHT_MID);
@@ -123,7 +123,7 @@ private:
         lv_obj_set_style_text_color(lbl_hint, lv_color_hex(0x7EA8D8), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_text_font(lbl_hint, &lv_font_montserrat_10, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-        // ---- 列表容器 ----
+        // ---- list container ----
         lv_obj_t *list_cont = lv_obj_create(bg);
         lv_obj_set_size(list_cont, 320, LIST_H);
         lv_obj_set_pos(list_cont, 0, TITLE_H);
@@ -134,15 +134,15 @@ private:
         lv_obj_clear_flag(list_cont, LV_OBJ_FLAG_SCROLLABLE);
         ui_obj_["list_cont"] = list_cont;
 
-        // 首次刷新并渲染
+        // Initial refresh and render
         fetch_iface_list();
         build_list_rows();
 
-        // ---- 每秒自动刷新定时器 ----
+        // ---- Timer for automatic refresh every second ----
         refresh_timer_ = lv_timer_create(UIIpPanelPage::static_timer_cb, 1000, this);
     }
 
-    // ==================== 构建列表行 ====================
+    // ==================== Build list rows ====================
     void build_list_rows()
     {
         lv_obj_t *list_cont = ui_obj_["list_cont"];
@@ -150,7 +150,7 @@ private:
 
         if (iface_list_.empty())
         {
-            // 无网口时显示提示
+            // Show a hint when there are no interfaces
             lv_obj_t *lbl = lv_label_create(list_cont);
             lv_label_set_text(lbl, "No network interface found.");
             lv_obj_set_pos(lbl, 10, 50);
@@ -162,7 +162,7 @@ private:
         int item_count = (int)iface_list_.size();
         int visible    = LIST_H / ITEM_H;
 
-        // 计算滚动偏移使选中项尽量居中
+        // Calculate the scroll offset to keep the selected item centered when possible
         int offset = selected_idx_ - visible / 2;
         if (offset < 0) offset = 0;
         if (offset > item_count - visible) offset = item_count - visible;
@@ -176,12 +176,12 @@ private:
         }
     }
 
-    // ==================== 创建单行 ====================
+    // ==================== Create one row ====================
     void create_row(lv_obj_t *parent, int visual_row, int idx, bool selected)
     {
         const NetIfInfo &info = iface_list_[idx];
 
-        // 行背景
+        // Row background
         lv_obj_t *row = lv_obj_create(parent);
         lv_obj_set_size(row, 318, ITEM_H - 2);
         lv_obj_set_pos(row, 1, visual_row * ITEM_H + 1);
@@ -194,7 +194,7 @@ private:
         {
             lv_obj_set_style_bg_color(row, lv_color_hex(0x1F3A5F), LV_PART_MAIN | LV_STATE_DEFAULT);
             lv_obj_set_style_bg_opa(row, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-            // 左侧高亮竖条
+            // left highlight bar
             lv_obj_t *sel_bar = lv_obj_create(row);
             lv_obj_set_size(sel_bar, 3, ITEM_H - 8);
             lv_obj_set_pos(sel_bar, 2, 3);
@@ -210,7 +210,7 @@ private:
             lv_obj_set_style_bg_opa(row, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
         }
 
-        // 分割线（非最后可见行）
+        // separator line (except the last visible row)
         if (idx < (int)iface_list_.size() - 1)
         {
             lv_obj_t *div = lv_obj_create(parent);
@@ -223,7 +223,7 @@ private:
             lv_obj_clear_flag(div, LV_OBJ_FLAG_SCROLLABLE);
         }
 
-        // 状态圆点（绿=UP，灰=DOWN）
+        // status dot (green=UP, gray=DOWN)
         lv_obj_t *dot = lv_obj_create(row);
         lv_obj_set_size(dot, 6, 6);
         lv_obj_set_pos(dot, 8, (ITEM_H - 2 - 6) / 2);
@@ -235,7 +235,7 @@ private:
         lv_obj_set_style_border_width(dot, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_clear_flag(dot, LV_OBJ_FLAG_SCROLLABLE);
 
-        // 接口名（左侧）
+        // interface name (left)
         lv_obj_t *lbl_iface = lv_label_create(row);
         lv_label_set_text(lbl_iface, info.iface.c_str());
         lv_obj_set_pos(lbl_iface, 20, 2);
@@ -246,7 +246,7 @@ private:
             LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_text_font(lbl_iface, &lv_font_montserrat_12, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-        // IP 地址（中间）
+        // IP address (middle)
         lv_obj_t *lbl_ip = lv_label_create(row);
         lv_label_set_text(lbl_ip, info.ip.c_str());
         lv_obj_set_pos(lbl_ip, 96, 2);
@@ -257,7 +257,7 @@ private:
             LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_text_font(lbl_ip, &lv_font_montserrat_12, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-        // 子网掩码（右侧，小字）
+        // subnet mask (right, small text)
         lv_obj_t *lbl_mask = lv_label_create(row);
         lv_label_set_text(lbl_mask, info.mask.c_str());
         lv_obj_set_pos(lbl_mask, 96, 17);
@@ -268,7 +268,7 @@ private:
             LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_text_font(lbl_mask, &lv_font_montserrat_10, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-        // UP/DOWN 状态文字（右侧）
+        // UP/DOWN status text (right)
         lv_obj_t *lbl_state = lv_label_create(row);
         lv_label_set_text(lbl_state, info.up ? "UP" : "DOWN");
         lv_obj_set_pos(lbl_state, 266, 2);
@@ -278,7 +278,7 @@ private:
         lv_obj_set_style_text_font(lbl_state, &lv_font_montserrat_10, LV_PART_MAIN | LV_STATE_DEFAULT);
     }
 
-    // ==================== 定时刷新回调 ====================
+    // ==================== Periodic refresh callback ====================
     static void static_timer_cb(lv_timer_t *timer)
     {
         UIIpPanelPage *self = static_cast<UIIpPanelPage *>(lv_timer_get_user_data(timer));
@@ -290,7 +290,7 @@ private:
         build_list_rows();
     }
 
-    // ==================== 事件绑定 ====================
+    // ==================== Event binding ====================
     void event_handler_init()
     {
         lv_obj_add_event_cb(ui_root, UIIpPanelPage::static_lvgl_handler, LV_EVENT_ALL, this);
@@ -336,7 +336,7 @@ private:
             break;
 
         case LV_KEY_ESC:
-            // 销毁定时器后返回主页
+            // Destroy the timer and return to the home screen
             if (refresh_timer_)
             {
                 lv_timer_del(refresh_timer_);

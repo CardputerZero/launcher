@@ -16,7 +16,6 @@
 #include "hal/hal_process.h"
 #include "hal/hal_settings.h"
 #include "hal/hal_config.h"
-// #include "ui/inter_process_comms.h"
 #include "global_config.h"
 #if CONFIG_BACKWARD_CPP_ENABLED
 #define BACKWARD_HAS_DW 1
@@ -56,7 +55,7 @@ int get_st7789v_fbdev(char *dev_path, size_t buf_size)
     char line[256];
     int  fb_num = -1;
 
-    /* 逐行读取，查找包含 fb_st7789v 的行，格式如：0 fb_st7789v */
+    /* Read line by line and find the line containing fb_st7789v, e.g. 0 fb_st7789v */
     while (fgets(line, sizeof(line), fp) != NULL) {
         if (strstr(line, "fb_st7789v") != NULL) {
             if (sscanf(line, "%d", &fb_num) == 1) {
@@ -117,11 +116,10 @@ static void keypad_read_cb(lv_indev_t *indev, lv_indev_data_t *data)
 {
     (void)indev;
 
-    /* 每次 LVGL 调用，输出队列里一个事件 */
-    // kp_evt_t e;
+    /* Output one queued event for each LVGL call */
     data->state = LV_INDEV_STATE_RELEASED;
     data->continue_reading = false;
-    // 出队列
+    // Dequeue
     {
         pthread_mutex_lock(&keyboard_mutex);
         if (!STAILQ_EMPTY(&keyboard_queue))
@@ -148,7 +146,6 @@ static void keypad_read_cb(lv_indev_t *indev, lv_indev_data_t *data)
             if (root) {
                 lv_obj_send_event(root, (lv_event_code_t)LV_EVENT_KEYBOARD, elm);
             }
-            // printf("lv_obj_send_event event to root object over\n");
 
             /* Global on-screen hint overlay (ESC / Shift / SYM).
              * Called after the page has had a chance to react, and only
@@ -174,30 +171,23 @@ static void lv_linux_indev_init(void)
     const char *mouse_device = getenv_default("LV_LINUX_MOUSE_DEVICE", NULL);
     const char *keyboard_device = getenv_default("LV_LINUX_KEYBOARD_DEVICE", hal_path_keyboard_device());
     const char *keyboard_map = getenv_default("LV_LINUX_KEYBOARD_MAP", hal_path_keyboard_map());
-    // /home/nihao/w2T/github/m5stack-linux-dtoverlays/modules/tca8418-1.0/tca8418_keypad_m5stack_keymap.map
     setenv("APPLAUNCH_LINUX_KEYBOARD_DEVICE", keyboard_device, 1);
     setenv("APPLAUNCH_LINUX_KEYBOARD_MAP", keyboard_map, 1);
  
     {
         pthread_t keyboard_read_thread_id;
-        pthread_create(&keyboard_read_thread_id,       // 线程ID（输出）
-                                    NULL,       // 线程属性（NULL=默认）
-                                    keyboard_read_thread,// 线程函数
-                                    NULL);      // 传给线程函数的参数
+        pthread_create(&keyboard_read_thread_id,       // thread ID (output)
+                                    NULL,       // thread attributes (NULL=default)
+                                    keyboard_read_thread,// thread function
+                                    NULL);      // argument passed to the thread function
         pthread_detach(keyboard_read_thread_id);
     }
  
  
  
-    lv_indev_t * touch = NULL;
     if (mouse_device)
-        touch = lv_evdev_create(LV_INDEV_TYPE_POINTER, mouse_device);
+        lv_evdev_create(LV_INDEV_TYPE_POINTER, mouse_device);
 
-    lv_indev_t * keyboard = NULL;
-    // if (keyboard_device)
-    //     keyboard = tca8418_keypad_init(keyboard_device, keyboard_map);
-    // if (keyboard_device)
-    //     keyboard = lv_evdev_create(LV_INDEV_TYPE_KEYPAD, keyboard_device);
     lv_indev_t *indev = lv_indev_create();
     lv_indev_set_type(indev, LV_INDEV_TYPE_KEYPAD);
     lv_indev_set_read_cb(indev, keypad_read_cb);
@@ -208,7 +198,6 @@ static void lv_linux_indev_init(void)
 #if LV_USE_LINUX_FBDEV
 static void lv_linux_disp_init(void)
 {
-    // export LV_LINUX_FBDEV_DEVICE="/dev/fb$(grep 'fb_st7789v' /proc/fb | awk '{print $1}')"
     const char *device = NULL;
     char fbdev[64] = {0};
     device = getenv_default("LV_LINUX_FBDEV_DEVICE", NULL);
@@ -225,7 +214,12 @@ static void lv_linux_disp_init(void)
 
     lv_linux_fbdev_set_file(disp, device);
 
-    // 打印获取到的分辨率
+    // Force the fbdev driver to ioctl(FBIOPUT_VSCREENINFO) after every flush,
+    // which makes fbtft push the buffer to the SPI LCD immediately. Without
+    // this, fbtft may batch/delay updates causing tearing.
+    lv_linux_fbdev_set_force_refresh(disp, true);
+
+    // Print the detected resolution
     lv_coord_t w = lv_display_get_horizontal_resolution(disp);
     lv_coord_t h = lv_display_get_vertical_resolution(disp);
     printf("Framebuffer resolution: %dx%d\n", w, h);
@@ -284,7 +278,7 @@ void APPLaunch_lock()
             lv_obj_invalidate(lv_scr_act());
         }
     } else {
-        if (LVGL_HOME_KEY_FLAGE) {
+        if (LVGL_HOME_KEY_FLAG) {
             if (home_back_status == 0) {
                 home_back_status = 1;
                 start_time = std::chrono::steady_clock::now();
@@ -313,11 +307,16 @@ int main(void)
     lock_file = hal_path_lock_file();
     g_launch_thread_pool = thpool_init(3);
     lv_init();
+    printf("[BOOT] lv_init() done\n");
 
     /*Linux display device init*/
+    printf("[BOOT] lv_linux_disp_init() starting...\n");
     lv_linux_disp_init();
+    printf("[BOOT] lv_linux_disp_init() done\n");
 
+    printf("[BOOT] lv_linux_indev_init() starting...\n");
     lv_linux_indev_init();
+    printf("[BOOT] lv_linux_indev_init() done\n");
 
     LV_EVENT_KEYBOARD = lv_event_register_id();
     LV_EVENT_BATTERY = lv_event_register_id();
@@ -338,15 +337,20 @@ int main(void)
     }
 
     ui_init();
-    // lv_demo_widgets(); // 用LVGL自带demo测试
+
+    // Force full-screen refresh immediately after init
+    printf("[BOOT] ui_init done, forcing full refresh...\n");
+    lv_obj_invalidate(lv_scr_act());
+    lv_refr_now(NULL);
+    printf("[BOOT] First frame flushed to fb0.\n");
+
     /*Handle LVGL tasks*/
-    printf("Entering main loop...\n");
+    printf("Entering main loop (FULL render mode)...\n");
     while(1) {
         APPLaunch_lock();
         lv_timer_handler();
-        usleep(1000);
+        usleep(5000);
     }
 
     return 0;
 }
-

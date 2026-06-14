@@ -52,7 +52,7 @@ public:
 
 private:
     /* ================================================================== */
-    /*  UI 构建                                                             */
+    /*  UI construction                                                             */
     /* ================================================================== */
     void creat_base_UI()
     {
@@ -67,21 +67,6 @@ private:
         key_group = lv_group_create();
         lv_group_add_obj(key_group, ui_root);
     }
-
-    // static void static_event_handler(lv_event_t * e)
-    // {
-    //     app_base *instance = static_cast<app_base *>(lv_event_get_user_data(e));
-    //     if (instance)
-    //     {
-    //         instance->event_handler(e);
-    //     }
-    // }
-
-    // virtual void event_handler(lv_event_t * e)
-    // {
-
-    // }
-
 };
 
 
@@ -155,7 +140,7 @@ public:
 
 private:
     /* ================================================================== */
-    /*  UI 构建                                                             */
+    /*  UI construction                                                             */
     /* ================================================================== */
     void creat_Top_UI()
     {
@@ -284,6 +269,9 @@ public:
         int sig = ws.connected ? ws.signal : 0;
         uint32_t on_color  = 0x00CCFF;
         uint32_t off_color = 0x4D4D4D;
+        fprintf(stderr, "[STATUS_BAR] connected=%d sig=%d ssid=%s ip=%s bars=%d%d%d%d\n",
+                ws.connected, sig, ws.ssid, ws.ip,
+                sig > 0 ? 1 : 0, sig >= 30 ? 1 : 0, sig >= 60 ? 1 : 0, sig >= 80 ? 1 : 0);
         lv_obj_set_style_bg_color(ui_TOP_SignalStrength_one,
             lv_color_hex(sig > 0 ? on_color : off_color), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_color(ui_TOP_SignalStrength_two,
@@ -313,7 +301,7 @@ public:
 
 private:
     /* ================================================================== */
-    /*  UI 构建                                                             */
+    /*  UI construction                                                             */
     /* ================================================================== */
     void creat_Top_UI()
     {
