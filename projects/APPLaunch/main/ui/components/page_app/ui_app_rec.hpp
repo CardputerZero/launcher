@@ -362,7 +362,7 @@ private:
 
         char cmd[256];
         snprintf(cmd, sizeof(cmd), "arecord -f cd -t wav %s", fname);
-        active_pid_ = hal_process_spawn(cmd);
+        active_pid_ = hal_process_spawn(cmd, 0);
 
         state_ = RecState::RECORDING;
         start_elapsed_timer();
@@ -409,7 +409,7 @@ private:
         const std::string &file = recordings_[selected_idx_];
         char cmd[256];
         snprintf(cmd, sizeof(cmd), "aplay %s", file.c_str());
-        active_pid_ = hal_process_spawn(cmd);
+        active_pid_ = hal_process_spawn(cmd, 0);
 
         current_file_ = file;
         state_ = RecState::PLAYING;

@@ -8,6 +8,7 @@
 #include "hal/hal_filesystem.h"
 #include "hal/hal_process.h"
 #include "hal/hal_settings.h"
+#include "hal/hal_config.h"
 #include "hal/hal_audio.h"
 #include <unordered_map>
 #include <list>
@@ -17,7 +18,6 @@
 #include <chrono>
 #include <fstream>
 #include <sstream>
-#include "ui_launch_page.hpp"
 #include "../ui_loading.h"
 #include "page_app.h"
 
@@ -44,7 +44,7 @@ static void panel_set_icon(lv_obj_t *panel, const char *src)
 }
 
 // ============================================================
-// 启动快捷方式示例
+// Launch shortcut examples
 // ============================================================
 /*
 root@pi:/home/pi# cat /usr/share/APPLaunch/applications/vim.desktop
@@ -56,11 +56,11 @@ Terminal=true
 Icon=share/images/e-Mail_80.png
 */
 
-// 前向声明
+// Forward declarations
 class app_launch_S;
 
 // ============================================================
-// 类型标签
+// Type tag
 // ============================================================
 template <class PageT>
 struct page_t
@@ -72,7 +72,7 @@ template <class PageT>
 inline constexpr page_t<PageT> page_v{};
 
 // ============================================================
-// app:统一的应用描述 + 发射器
+// app:unified app descriptor + launcher
 // ============================================================
 struct app
 {
@@ -82,20 +82,28 @@ struct app
 
     std::function<void(app_launch_S *)> launch;
 
-    // ① 外部命令
+    // ① External command
     app(std::string name,
         std::string icon,
         std::string exec,
         bool terminal);
 
-    // ① 外部命令
+    // ① External command
     app(std::string name,
         std::string icon,
         std::string exec,
         bool terminal,
         bool sysplause);
 
-    // ② 内置 UI 页面
+    // ① External command (with run_as_root)
+    app(std::string name,
+        std::string icon,
+        std::string exec,
+        bool terminal,
+        bool sysplause,
+        bool run_as_root);
+
+    // ② Built-in UI page
     template <class PageT>
     app(std::string name,
         std::string icon,
@@ -110,8 +118,8 @@ class app_launch_S
 private:
     int current_app = 2;
     hal_watcher_t dir_watcher = NULL;
-    lv_timer_t *watch_timer = nullptr;  // LVGL 3s 定时器
-    lv_timer_t *status_timer = nullptr; // 状态栏刷新定时器
+    lv_timer_t *watch_timer = nullptr;  // LVGL 3s timer
+    lv_timer_t *status_timer = nullptr; // status-bar refresh timer
     int fixed_count;
 
 public:
@@ -121,29 +129,30 @@ public:
 public:
     app_launch_S()
     {
-        // 固定图标，不允许用户修改
+        // Fixed icon; users cannot modify it
         app_list.emplace_back("Python",
                               img_path("python_100.png"), "python3", true, false);
         app_list.emplace_back("STORE",
                               img_path("store_100.png"),
-                              "/usr/share/APPLaunch/bin/M5CardputerZero-AppStore", false);
+                              "/usr/share/APPLaunch/bin/M5CardputerZero-AppStore", false, true, true);
         app_list.emplace_back("CLI",
                               img_path("cli_100.png"), "bash", true, false);
-        app_list.emplace_back("CLAW",
-                              img_path("claw_100.png"), "/home/pi/zeroclaw agent", true);
+        app_list.emplace_back("GAME",
+                              img_path("game_100.png"), page_v<UIGamePage>);
+
         app_list.emplace_back("SETTING",
                               img_path("setting_100.png"), page_v<UISetupPage>);
 
         {
             auto it = std::next(app_list.begin(), 0);
-            lv_label_set_text(ui_zuoLabelout, it->Name.c_str());
-            panel_set_icon(ui_outPanelzuo, it->Icon.c_str());
+            lv_label_set_text(ui_leftOuterLabel, it->Name.c_str());
+            panel_set_icon(ui_leftOuterPanel, it->Icon.c_str());
         }
 
         {
             auto it = std::next(app_list.begin(), 1);
-            lv_label_set_text(ui_zuoLabel, it->Name.c_str());
-            panel_set_icon(ui_zuoPanel, it->Icon.c_str());
+            lv_label_set_text(ui_leftLabel, it->Name.c_str());
+            panel_set_icon(ui_leftPanel, it->Icon.c_str());
         }
 
         {
@@ -154,77 +163,65 @@ public:
 
         {
             auto it = std::next(app_list.begin(), 3);
-            lv_label_set_text(ui_youLabel, it->Name.c_str());
-            panel_set_icon(ui_youPanel, it->Icon.c_str());
+            lv_label_set_text(ui_rightLabel, it->Name.c_str());
+            panel_set_icon(ui_rightPanel, it->Icon.c_str());
         }
 
         {
             auto it = std::next(app_list.begin(), 4);
-            lv_label_set_text(ui_youLabelout, it->Name.c_str());
-            panel_set_icon(ui_outPanelyou, it->Icon.c_str());
+            lv_label_set_text(ui_rightOuterLabel, it->Name.c_str());
+            panel_set_icon(ui_rightOuterPanel, it->Icon.c_str());
         }
 
-        // 动态图标，允许用户自定义
+        // Dynamic icons filtered by Settings configuration
+        #define APP_ENABLED(key) (hal_config_get_int("app_" key, 1) != 0)
+
+        if (APP_ENABLED("Music"))
         app_list.emplace_back("MUSIC",
                               img_path("music_100.png"), page_v<UIMusicPage>);
-        app_list.emplace_back("AUDIO",
-                              img_path("audio_player_100.png"),
-                              "tinyplay -D1 -d0 /home/pi/zhou.wav",
-                              true);
-        app_list.emplace_back("HACK",
-                              img_path("hack_100.png"), page_v<UIHackPage>);
-        app_list.emplace_back("GAME",
-                              img_path("game_100.png"), page_v<UIGamePage>);
 
+        if (APP_ENABLED("Math"))
         app_list.emplace_back("MATH",
                               img_path("math_100.png"),
                               "/usr/share/APPLaunch/bin/M5CardputerZero-Calculator", false);
 
 #if defined(__linux__) && !defined(HAL_PLATFORM_SDL)
+        if (APP_ENABLED("IP_Panel"))
         app_list.emplace_back("IP_PANEL",
                               img_path("ip_panel_100.png"), page_v<UIIpPanelPage>);
-        app_list.emplace_back("STOCKS",
-                              img_path("stocks_100.png"), page_v<UIStockPage>);
-        app_list.emplace_back("CHAT",
-                              img_path("chat_100.png"), page_v<UIchatPage>);
-        app_list.emplace_back("e-Mail",
-                              img_path("e_mail_100.png"), page_v<UIEmailPage>);
+        if (APP_ENABLED("File"))
         app_list.emplace_back("FILE",
                               img_path("file_100.png"), page_v<UIFilePage>);
-        app_list.emplace_back("AICli", img_path("aicli_100.png"), page_v<UIAICliPage>);
+        if (APP_ENABLED("SSH"))
         app_list.emplace_back("SSH",
                               img_path("ssh_100.png"), page_v<UISSHPage>);
+        if (APP_ENABLED("Mesh"))
         app_list.emplace_back("MESH",
                               img_path("mesh_100.png"), page_v<UIMeshPage>);
+        if (APP_ENABLED("Rec"))
         app_list.emplace_back("REC",
                               img_path("rec_100.png"), page_v<UIRecPage>);
+        if (APP_ENABLED("Camera"))
         app_list.emplace_back("CAMERA",
                               img_path("camera_100.png"), page_v<UICameraPage>);
-        app_list.emplace_back("UnitEnv",
-                              img_path("unitenv_100.png"), page_v<UIUnitEnvPage>);
-        app_list.emplace_back("Midi",
-                              img_path("midi_100.png"), page_v<UIMidiPage>);
-        app_list.emplace_back("Gpio",
-                              img_path("gpio_100.png"), page_v<UIGpioPage>);
+        if (APP_ENABLED("LoRa"))
         app_list.emplace_back("LORA", img_path("lora_100.png"), page_v<UILoraPage>);
-        app_list.emplace_back("GALLERY", img_path("gallery_100.png"), page_v<UIGalleryPage>);
-        app_list.emplace_back("HIKEPOD", img_path("hikepod_100.png"), page_v<UIHikePodPage>);
+        if (APP_ENABLED("Tank"))
         app_list.emplace_back("TANK", img_path("tank_100.png"), page_v<UITankBattlePage>);
-        app_list.emplace_back("Love",
-                                    img_path("game_100.png"), page_v<UILovyanPage>);
 #endif
+        #undef APP_ENABLED
 
         fixed_count = app_list.size();
 
         applications_load();
 
-        // 初始化 inotify，监听 applications 目录
+        // Initialize inotify and watch the applications directory
         inotify_init_watch();
 
-        // 创建 LVGL 3s 定时器，周期性检查目录变化
+        // Create a 3s LVGL timer to periodically check directory changes
         watch_timer = lv_timer_create(app_dir_watch_cb, 3000, this);
 
-        // 状态栏定时刷新（时间 + 电量），每5秒更新一次
+        // Refresh the status bar (time + battery) every 5 seconds
         update_home_status_bar();
         status_timer = lv_timer_create(home_status_timer_cb, 5000, this);
     }
@@ -254,7 +251,7 @@ public:
         lv_async_call(lv_go_back_home, this);
     }
 
-    // 改为接收 std::string，不再依赖 app::Exec 成员
+    // Changed to accept std::string and no longer depend on app::Exec
     void launch_Exec_in_terminal(const std::string &exec, bool sysplause = true)
     {
         printf("Launching terminal app: %s\n", exec.c_str());
@@ -275,9 +272,9 @@ public:
         p->exec(exec);
     }
 
-    void launch_Exec(const std::string &exec)
+    void launch_Exec(const std::string &exec, bool keep_root = false)
     {
-        printf("Launching external app: %s\n", exec.c_str());
+        printf("Launching external app: %s (keep_root=%d)\n", exec.c_str(), keep_root);
         /* Show overlay BEFORE we tear down LVGL input/timers so the user
          * gets immediate feedback when ENTER was pressed. The overlay
          * stays drawn on the framebuffer right up until the child takes
@@ -291,7 +288,7 @@ public:
         lv_timer_enable(false);
         lv_refr_now(disp);
 
-        int ret = hal_process_exec_blocking(exec.c_str(), &LVGL_HOME_KEY_FLAGE);
+        int ret = hal_process_exec_blocking(exec.c_str(), &LVGL_HOME_KEY_FLAG, keep_root ? 1 : 0);
         printf("App %s exited with code %d\n", exec.c_str(), ret);
         lv_timer_enable(true);
         if (indev)
@@ -305,7 +302,7 @@ public:
         LVGL_RUN_FLAGE = 1;
     }
 
-    void zuo(lv_obj_t *panel, lv_obj_t *label)
+    void update_left_slot(lv_obj_t *panel, lv_obj_t *label)
     {
         current_app = current_app == (int)app_list.size() - 1 ? 0 : current_app + 1;
         int next_app = current_app;
@@ -316,7 +313,7 @@ public:
         panel_set_icon(panel, it->Icon.c_str());
     }
 
-    void you(lv_obj_t *panel, lv_obj_t *label)
+    void update_right_slot(lv_obj_t *panel, lv_obj_t *label)
     {
         current_app = current_app == 0 ? (int)app_list.size() - 1 : current_app - 1;
         int next_app = current_app;
@@ -340,7 +337,7 @@ public:
         struct dirent *entry;
         while ((entry = readdir(dir)) != NULL)
         {
-            // 仅处理 *.desktop 文件
+            // Process only *.desktop files
             const char *name = entry->d_name;
             size_t len = strlen(name);
             if (len <= 8 || strcmp(name + len - 8, ".desktop") != 0)
@@ -354,7 +351,7 @@ public:
                 continue;
             }
 
-            // 解析 INI 文件
+            // Parse the INI file
             std::string app_name, app_icon, app_exec;
             bool app_terminal = false;
             bool app_sysplause = true;
@@ -363,15 +360,15 @@ public:
             std::string line;
             while (std::getline(ifs, line))
             {
-                // 去除行尾的 \r（Windows 换行符）
+                // Remove trailing \r (Windows newline)
                 if (!line.empty() && line.back() == '\r')
                     line.pop_back();
 
-                // 跳过空行和注释
+                // Skip empty lines and comments
                 if (line.empty() || line[0] == '#' || line[0] == ';')
                     continue;
 
-                // 检测节头
+                // Detect section headers
                 if (line[0] == '[')
                 {
                     in_desktop_entry = (line == "[Desktop Entry]");
@@ -381,7 +378,7 @@ public:
                 if (!in_desktop_entry)
                     continue;
 
-                // 解析 key=value
+                // Parse key=value
                 auto eq = line.find('=');
                 if (eq == std::string::npos)
                     continue;
@@ -389,7 +386,7 @@ public:
                 std::string key = line.substr(0, eq);
                 std::string value = line.substr(eq + 1);
 
-                // 去除 key 首尾空格
+                // Trim leading/trailing spaces from the key
                 auto ltrim = [](std::string &s)
                 {
                     size_t i = 0;
@@ -419,7 +416,7 @@ public:
                     app_sysplause = (value == "true" || value == "True" || value == "1");
             }
 
-            // 必须有 Name 和 Exec 才能注册
+            // Name and Exec are required for registration
             if (app_name.empty() || app_exec.empty())
             {
                 fprintf(stderr, "applications_load: skip %s (missing Name or Exec)\n", filepath.c_str());
@@ -447,7 +444,7 @@ public:
     }
 
     // ============================================================
-    // inotify 初始化：以非阻塞模式监听 applications 目录
+    // Initialize inotify in non-blocking mode and watch the applications directory
     // ============================================================
     void inotify_init_watch()
     {
@@ -455,7 +452,7 @@ public:
     }
 
     // ============================================================
-    // 刷新 UI 面板（根据当前 current_app 更新 5 个槽位）
+    // Refresh UI panels (update 5 slots from current_app)
     // ============================================================
     void refresh_ui_panels()
     {
@@ -463,7 +460,7 @@ public:
         if (sz == 0)
             return;
 
-        // 确保 current_app 在合法范围内
+        // Ensure current_app is in range
         if (current_app >= sz)
             current_app = sz - 1;
 
@@ -473,41 +470,41 @@ public:
             return *std::next(app_list.begin(), idx);
         };
 
-        // 最左外（隐藏）
+        // far left outside (hidden)
         {
             auto &a = app_at(current_app - 2);
-            lv_label_set_text(ui_zuoLabelout, a.Name.c_str());
-            panel_set_icon(ui_outPanelzuo, a.Icon.c_str());
+            lv_label_set_text(ui_leftOuterLabel, a.Name.c_str());
+            panel_set_icon(ui_leftOuterPanel, a.Icon.c_str());
         }
-        // 左
+        // left
         {
             auto &a = app_at(current_app - 1);
-            lv_label_set_text(ui_zuoLabel, a.Name.c_str());
-            panel_set_icon(ui_zuoPanel, a.Icon.c_str());
+            lv_label_set_text(ui_leftLabel, a.Name.c_str());
+            panel_set_icon(ui_leftPanel, a.Icon.c_str());
         }
-        // 中心
+        // center
         {
             auto &a = app_at(current_app);
             lv_label_set_text(ui_switchLabel, a.Name.c_str());
             panel_set_icon(ui_switchPanel, a.Icon.c_str());
         }
-        // 右
+        // right
         {
             auto &a = app_at(current_app + 1);
-            lv_label_set_text(ui_youLabel, a.Name.c_str());
-            panel_set_icon(ui_youPanel, a.Icon.c_str());
+            lv_label_set_text(ui_rightLabel, a.Name.c_str());
+            panel_set_icon(ui_rightPanel, a.Icon.c_str());
         }
-        // 最右外（隐藏）
+        // far right outside (hidden)
         {
             auto &a = app_at(current_app + 2);
-            lv_label_set_text(ui_youLabelout, a.Name.c_str());
-            panel_set_icon(ui_outPanelyou, a.Icon.c_str());
+            lv_label_set_text(ui_rightOuterLabel, a.Name.c_str());
+            panel_set_icon(ui_rightOuterPanel, a.Icon.c_str());
         }
 
     }
 
     // ============================================================
-    // 重新加载动态应用列表（保留固定条目，重扫描 applications 目录）
+    // Reload the dynamic app list (keep fixed entries and rescan applications directory)
     // ============================================================
     void applications_reload()
     {
@@ -522,7 +519,7 @@ public:
     }
 
     // ============================================================
-    // 主页状态栏刷新：时间 + 电量（BQ27220）
+    // Home status-bar refresh: time + battery (BQ27220)
     // ============================================================
     static void home_status_timer_cb(lv_timer_t *timer)
     {
@@ -535,6 +532,8 @@ public:
     {
         // WiFi signal bars: show/hide + color by strength
         hal_wifi_status_t wifi = hal_wifi_get_status();
+        fprintf(stderr, "[HOME_STATUS] connected=%d sig=%d ssid=%s\n",
+                wifi.connected, wifi.signal, wifi.ssid);
         if (wifi.connected) {
             lv_obj_clear_flag(ui_wifiPanel, LV_OBJ_FLAG_HIDDEN);
             int sig = wifi.signal;
@@ -571,20 +570,11 @@ public:
                 lv_obj_set_style_text_font(ui_powerLabel, &lv_font_montserrat_10, LV_PART_MAIN | LV_STATE_DEFAULT);
             else
                 lv_obj_set_style_text_font(ui_powerLabel, LV_FONT_DEFAULT, LV_PART_MAIN | LV_STATE_DEFAULT);
-
-        //     uint32_t color = 0x66CC33;
-        //     if (soc <= 20)
-        //         color = 0xE74C3C;
-        //     else if (soc <= 50)
-        //         color = 0xF39C12;
-        //     lv_obj_set_style_bg_color(ui_Bar1, lv_color_hex(color),
-        //                               LV_PART_INDICATOR | LV_STATE_DEFAULT);
-        // }
         }
     }
 
     // ============================================================
-    // LVGL 定时器回调：检测 inotify 事件，有变化则刷新列表
+    // LVGL timer callback: check inotify events and refresh the list on changes
     // ============================================================
     static void app_dir_watch_cb(lv_timer_t *timer)
     {
@@ -603,7 +593,7 @@ public:
 };
 
 // ============================================================
-// app 构造函数的实现(放到 app_launch_S 定义之后)
+// app constructor implementation (placed after app_launch_S definition)
 // ============================================================
 inline app::app(std::string name,
                 std::string icon,
@@ -631,6 +621,22 @@ inline app::app(std::string name,
             ctx->launch_Exec_in_terminal(exec, sysplause);
         else
             ctx->launch_Exec(exec);
+    };
+}
+
+inline app::app(std::string name,
+                std::string icon,
+                std::string exec,
+                bool terminal,
+                bool sysplause,
+                bool run_as_root)
+    : Name(std::move(name)), Icon(std::move(icon)){
+    launch = [exec = std::move(exec), terminal, sysplause, run_as_root](app_launch_S *ctx)
+    {
+        if (terminal)
+            ctx->launch_Exec_in_terminal(exec, sysplause);
+        else
+            ctx->launch_Exec(exec, run_as_root);
     };
 }
 
@@ -662,7 +668,7 @@ app::app(std::string name,
 }
 
 // ============================================================
-// app_launch_S 析构函数实现
+// app_launch_S destructor implementation
 // ============================================================
 app_launch_S::~app_launch_S()
 {
@@ -693,13 +699,13 @@ extern "C"
     {
         app_launch_Ser = std::make_unique<app_launch_S>();
     }
-    void cpp_app_zuo(lv_obj_t *panel, lv_obj_t *label)
+    void cpp_app_left(lv_obj_t *panel, lv_obj_t *label)
     {
-        app_launch_Ser->zuo(panel, label);
+        app_launch_Ser->update_left_slot(panel, label);
     }
-    void cpp_app_you(lv_obj_t *panel, lv_obj_t *label)
+    void cpp_app_right(lv_obj_t *panel, lv_obj_t *label)
     {
-        app_launch_Ser->you(panel, label);
+        app_launch_Ser->update_right_slot(panel, label);
     }
     void cpp_app_launch()
     {

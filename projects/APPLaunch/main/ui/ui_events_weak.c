@@ -5,12 +5,12 @@
 
 #include "ui.h"
 
-__attribute__((weak)) void switchzuo(lv_event_t * e)
+__attribute__((weak)) void switch_left(lv_event_t * e)
 {
 	// Your code here
 }
 
-__attribute__((weak)) void switchyou(lv_event_t * e)
+__attribute__((weak)) void switch_right(lv_event_t * e)
 {
 	// Your code here
 }
