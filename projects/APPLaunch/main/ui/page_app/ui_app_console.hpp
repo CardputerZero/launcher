@@ -20,6 +20,7 @@
 #include <errno.h>
 #include <vector>
 #include <sstream>
+#include <utility>
 #include <keyboard_input.h>
 #include "cp0_lvgl_app.h"
 
@@ -106,7 +107,7 @@ public:
      */
     void exec(std::string cmd)
     {
-        if (pty_handle != NULL)
+        if (!pty_handle.empty())
             stop_pty();
 
         terminal_active = true;
@@ -222,7 +223,7 @@ private:
     bool vt100_skip_until_st = false;
 
     /* ── PTY ──────────────────────────────────────────────── */
-    cp0_pty_t pty_handle = NULL;
+    std::string pty_handle;
 
     lv_timer_t *poll_timer = nullptr;
     lv_timer_t *cursor_timer = nullptr;
@@ -339,7 +340,7 @@ private:
             }
             else
             {
-                if (pty_handle != NULL && terminal_active)
+                if (!pty_handle.empty() && terminal_active)
                 {
                     if (elm->key_state) {
                         SLOGI("[CONSOLE] -> PTY write (state=%s)", kbd_state_name(elm->key_state));
@@ -686,8 +687,8 @@ private:
             case 'c': /* Secondary Device Attributes */
                 /* Reply: VT100 (type 0), firmware v10, no options */
                 fprintf(stderr, "[VT100-DBG] SDA reply: \\033[>0;10;0c\n");
-                if (pty_handle != NULL)
-                    cp0_pty_write(pty_handle, "\033[>0;10;0c", 10);
+                if (!pty_handle.empty())
+                    pty_write( "\033[>0;10;0c", 10);
                 break;
             case 'm': /* xterm set-modifyOtherKeys — ignore */
                 fprintf(stderr, "[VT100-DBG] SDA: set-modifyOtherKeys ignored\n");
@@ -816,16 +817,16 @@ private:
 
         /* ── Device control ────────────────────── */
         case 'c': /* DA — Device Attributes: reply with \033[?1;0c (VT100) */
-            if (pty_handle != NULL) {
+            if (!pty_handle.empty()) {
                 const char *reply = "\033[?1;0c";
-                cp0_pty_write(pty_handle, reply, strlen(reply));
+                pty_write( reply, strlen(reply));
             }
             break;
         case 'n': /* DSR — Device Status Report */
             fprintf(stderr, "[VT100-DBG] DSR query param[0]=%d\n", vt100_params[0]);
             if (vt100_params[0] == 5) {
                 fprintf(stderr, "[VT100-DBG] DSR 5: reply \\033[0n (OK)\n");
-                if (pty_handle != NULL) cp0_pty_write(pty_handle, "\033[0n", 4);
+                if (!pty_handle.empty()) pty_write( "\033[0n", 4);
             } else if (vt100_params[0] == 6) {
                 /* Cursor Position Report */
                 char buf[32];
@@ -833,7 +834,7 @@ private:
                                    vt100_cur_row + 1, vt100_cur_col + 1);
                 fprintf(stderr, "[VT100-DBG] DSR 6: cursor=(%d,%d) reply=%s\n",
                         vt100_cur_row + 1, vt100_cur_col + 1, buf);
-                if (pty_handle != NULL) cp0_pty_write(pty_handle, buf, len);
+                if (!pty_handle.empty()) pty_write( buf, len);
             }
             break;
 
@@ -1059,22 +1060,78 @@ private:
     /* ================================================================== */
     /*  PTY management                                                            */
     /* ================================================================== */
+    std::string pty_open(const std::string &cmd, const std::vector<std::string> &args)
+    {
+        int code = -1;
+        std::string handle;
+        std::list<std::string> api_args = {
+            "Open",
+            cmd,
+            std::to_string(COLS),
+            std::to_string(ROWS),
+            cmd,
+        };
+        for (const auto &arg : args)
+            api_args.push_back(arg);
+
+        cp0_signal_pty_api(std::move(api_args), [&](int c, std::string data) {
+            code = c;
+            if (code == 0) handle = std::move(data);
+        });
+        return handle;
+    }
+
+    int pty_read(char *buf, size_t buf_size)
+    {
+        int code = -1;
+        std::string data;
+        cp0_signal_pty_api({"Read", pty_handle, std::to_string(buf_size)}, [&](int c, std::string d) {
+            code = c;
+            data = std::move(d);
+        });
+        if (code < 0) return -1;
+
+        size_t n = data.size() < buf_size ? data.size() : buf_size;
+        if (n > 0 && buf)
+            memcpy(buf, data.data(), n);
+        return (int)n;
+    }
+
+    int pty_write(const char *buf, size_t len)
+    {
+        if (pty_handle.empty() || !buf) return -1;
+        int code = -1;
+        cp0_signal_pty_api({"Write", pty_handle, std::string(buf, len)}, [&](int c, std::string) {
+            code = c;
+        });
+        return code;
+    }
+
+    int pty_check_child(int *status)
+    {
+        int code = -1;
+        std::string data;
+        cp0_signal_pty_api({"CheckChild", pty_handle}, [&](int c, std::string d) {
+            code = c;
+            data = std::move(d);
+        });
+        if (status) *status = atoi(data.c_str());
+        return code;
+    }
+
     bool start_pty(const std::string &cmd, const std::vector<std::string> &args = {})
     {
-        std::vector<const char *> argv;
-        argv.push_back(cmd.c_str());
-        for (const auto &a : args)
-            argv.push_back(a.c_str());
-        argv.push_back(nullptr);
-        pty_handle = cp0_pty_open(cmd.c_str(), argv.data(), COLS, ROWS);
-        return pty_handle != NULL;
+        stop_pty();
+        pty_handle = pty_open(cmd, args);
+        return !pty_handle.empty();
     }
 
     void stop_pty()
     {
-        if (pty_handle) {
-            cp0_pty_close(pty_handle);
-            pty_handle = NULL;
+        if (!pty_handle.empty())
+        {
+            cp0_signal_pty_api({"Close", pty_handle}, nullptr);
+            pty_handle.clear();
         }
     }
 
@@ -1084,14 +1141,14 @@ private:
     void vt100_poll_cb(lv_timer_t *t)
     {
         (void)t;
-        if (pty_handle == NULL || !terminal_active)
+        if (pty_handle.empty() || !terminal_active)
             return;
 
         char buf[1024];
         int n;
         bool changed = false;
 
-        while ((n = cp0_pty_read(pty_handle, buf, sizeof(buf))) > 0)
+        while ((n = pty_read( buf, sizeof(buf))) > 0)
         {
             vt100_process_bytes(buf, n);
             changed = true;
@@ -1105,10 +1162,10 @@ private:
         {
             child_exited = true;
         }
-        else if (pty_handle != NULL)
+        else if (!pty_handle.empty())
         {
             int status = 0;
-            if (cp0_pty_check_child(pty_handle, &status) == 1)
+            if (pty_check_child( &status) == 1)
                 child_exited = true;
         }
 
@@ -1119,8 +1176,7 @@ private:
             vt100_process_bytes(hint, (int)strlen(hint));
             vt100_render_all();
             waiting_key_to_exit = true;
-            cp0_pty_close(pty_handle);
-            pty_handle = NULL;
+            stop_pty();
         }
     }
 
@@ -1160,7 +1216,7 @@ private:
      */
     void write_key_to_pty(uint32_t evdev_key, const char *utf8_str)
     {
-        if (!terminal_active || pty_handle == NULL)
+        if (!terminal_active || pty_handle.empty())
             return;
         char buf[8];
         int len = 0;
@@ -1217,7 +1273,7 @@ private:
             for (int ki = 0; ki < len; ki++)
                 fprintf(stderr, "%02X ", (unsigned char)buf[ki]);
             fprintf(stderr, "\n");
-            cp0_pty_write(pty_handle, buf, (size_t)len);
+            pty_write( buf, (size_t)len);
         }
     }
 

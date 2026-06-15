@@ -62,18 +62,22 @@ private:
     void launch_Exec(const std::string &exec, bool keep_root = false);
     void applications_load();
     void inotify_init_watch();
+    void release_dir_watcher();
+    void release_watch_timer();
     void refresh_home_carousel();
     void applications_reload();
+    void rebuild_builtin_apps();
     int normalized_app_index(int index) const;
     const app *app_at_index(int index) const;
 
     static void lv_go_back_home(void *arg);
     static void app_dir_watch_cb(lv_timer_t *timer);
+    static void app_registry_changed_cb(void *user_data);
 
-    std::shared_ptr<UILaunchPage> launch_page_;
+    std::weak_ptr<UILaunchPage> launch_page_;
     int current_app = 2;
-    cp0_watcher_t dir_watcher = NULL;
-    lv_timer_t *watch_timer = nullptr;
+    cp0_watcher_t dir_watcher_ = NULL;
+    lv_timer_t *watch_timer_ = nullptr;
     int fixed_count = 0;
     bool bound_ = false;
     std::list<app> app_list;

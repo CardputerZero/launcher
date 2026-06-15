@@ -5,13 +5,8 @@
  */
 
 #pragma once
-// Note: this file used to be wrapped in `#if !defined(HAL_PLATFORM_SDL)` to
-// exclude it from the emulator build, but ui_app_launch.cpp references
-// UISetupPage unconditionally. The class body is cp0_lvgl-clean (uses cp0_wifi_*,
-// cp0_battery_*, cp0_volume_*); residual raw syscalls (i2c ioctl, popen for
-// IP/whoami, sudo date) are either already inside #ifdef __linux__ or only
-// triggered by user actions that the emulator never performs. Keeping the
-// class compiled on every platform lets the emulator open the SETTING page.
+// Keep this page platform-neutral: system and hardware operations go through
+// cp0_lvgl's cp0_* service interfaces so the SDL build can compile the page.
 #define _STRINGIFY(x) #x
 #define STRINGIFY(x) _STRINGIFY(x)
 #ifndef LAUNCHER_GIT_COMMIT_RAW
@@ -32,13 +27,10 @@
 #include <unistd.h>
 #endif
 #include <dirent.h>
-#ifdef __linux__
-#include <sys/ioctl.h>
-#include <linux/i2c.h>
-#include <linux/i2c-dev.h>
-#endif
+#include "APPLaunch_api.h"
 #include "cp0_lvgl_app.h"
 #include "hal_lvgl_bsp.h"
+#include "../AppRegistry.h"
 
 // ============================================================
 //  System settings screen  UISetupPage  (Carousel Design)
@@ -127,6 +119,26 @@ private:
     void play_enter() { play_audio_file(snd_enter_); }
     void play_back()  { play_audio_file(snd_back_); }
 
+    static int config_get_int(const char *key, int default_val)
+    {
+        int val = default_val;
+        cp0_signal_config_api({"GetInt", key ? std::string(key) : std::string(), std::to_string(default_val)},
+                              [&](int code, std::string data) {
+                                  if (code == 0) val = std::atoi(data.c_str());
+                              });
+        return val;
+    }
+
+    static void config_set_int(const char *key, int val)
+    {
+        cp0_signal_config_api({"SetInt", key ? std::string(key) : std::string(), std::to_string(val)}, nullptr);
+    }
+
+    static void config_save()
+    {
+        cp0_signal_config_api({"Save"}, nullptr);
+    }
+
     void play_audio_file(const std::string &path)
     {
         if (!path.empty()) cp0_signal_audio_api({"PlayFile", path}, nullptr);
@@ -150,29 +162,15 @@ private:
         {
             MenuItem m;
             m.label = "Launcher";
-            static const char *app_keys[] = {
-                "Python", "Store", "CLI", "Game", "Setting",
-                "Music", "Math",
-                "IP_Panel", "File",
-                "SSH", "Mesh", "Rec", "Camera",
-                "LoRa", "Tank"
-            };
-            static const char *app_labels[] = {
-                "Python", "Store", "CLI", "Game", "Setting",
-                "Music", "Math",
-                "IP Panel", "File",
-                "SSH", "Mesh", "Rec", "Camera",
-                "LoRa", "Tank"
-            };
-            // Always-on apps (cannot be disabled)
-            static const char *always_on[] = {"Store", "CLI", "Game", "Setting"};
-
-            for (int i = 0; i < (int)(sizeof(app_keys) / sizeof(app_keys[0])); ++i) {
-                char cfg_key[64];
-                snprintf(cfg_key, sizeof(cfg_key), "app_%s", app_keys[i]);
-                bool enabled = cp0_config_get_int(cfg_key, 1) != 0;
-                m.sub_items.push_back({app_labels[i], true, enabled,
-                    [this, i]() { save_app_toggle(i); }});
+            std::size_t app_count = 0;
+            const AppDescriptor *apps = launcher_app_registry_entries(&app_count);
+            for (std::size_t i = 0; i < app_count; ++i) {
+                const AppDescriptor &desc = apps[i];
+                if (!desc.configurable)
+                    continue;
+                bool enabled = launcher_app_registry_is_enabled(desc);
+                m.sub_items.push_back({desc.label, true, enabled,
+                    [this, key = std::string(desc.config_key)]() { save_app_toggle(key); }});
             }
             menu_items_.push_back(m);
         }
@@ -263,18 +261,18 @@ private:
         {
             MenuItem m;
             m.label = "ExtPort";
-            bool usb_en = cp0_config_get_int("extport_usb", 1) != 0;
-            bool vout_en = cp0_config_get_int("extport_5vout", 1) != 0;
+            bool usb_en = config_get_int("extport_usb", 1) != 0;
+            bool vout_en = config_get_int("extport_5vout", 1) != 0;
             m.sub_items = {
                 {"USB",   true, usb_en, [this]() {
                     bool en = menu_items_[7].sub_items[0].toggle_state;
-                    cp0_config_set_int("extport_usb", en ? 1 : 0);
-                    cp0_config_save();
+                    config_set_int("extport_usb", en ? 1 : 0);
+                    config_save();
                 }},
                 {"5VOUT", true, vout_en, [this]() {
                     bool en = menu_items_[7].sub_items[1].toggle_state;
-                    cp0_config_set_int("extport_5vout", en ? 1 : 0);
-                    cp0_config_save();
+                    config_set_int("extport_5vout", en ? 1 : 0);
+                    config_save();
                 }},
             };
             menu_items_.push_back(m);
@@ -366,7 +364,7 @@ private:
     {
         val_title_ = "Volume";
         val_options_ = {"100%", "75%", "50%", "25%", "0%"};
-        vol_val_ = cp0_config_get_int("volume", cp0_volume_read());
+        vol_val_ = config_get_int("volume", APPLaunch_volume_read());
         int pct = vol_val_ * 100 / 63;
         if (pct >= 87) val_sel_idx_ = 0;
         else if (pct >= 62) val_sel_idx_ = 1;
@@ -390,7 +388,7 @@ private:
     {
         val_title_ = "Startup";
         val_options_ = {"Launcher", "CLI"};
-        val_sel_idx_ = cp0_config_get_int("startup_mode", 0);
+        val_sel_idx_ = config_get_int("startup_mode", 0);
         view_state_ = ViewState::VALUE_SELECT;
         transition_enter_level();
     }
@@ -413,10 +411,10 @@ private:
         // Title + current connection status
         lv_obj_t *title = lv_label_create(cont);
         {
-            cp0_wifi_status_t ws = cp0_wifi_get_status();
+            cp0_wifi_status_t ws = launcher_wifi::get_status();
             static char title_buf[128];
             if (ws.connected)
-                snprintf(title_buf, sizeof(title_buf), "Connected WiFi: %s  %s", ws.ssid, ws.ip);
+                snprintf(title_buf, sizeof(title_buf), "Connected WiFi: %.64s  %.40s", ws.ssid, ws.ip);
             else
                 snprintf(title_buf, sizeof(title_buf), "WiFi: Not connected");
             lv_label_set_text(title, title_buf);
@@ -626,37 +624,31 @@ private:
     {
         int new_val = atoi(val_options_[val_sel_idx_].c_str());
         rtc_values_[rtc_field_] = new_val;
-        // Apply to system via date command
-        char cmd[128];
-        snprintf(cmd, sizeof(cmd), "sudo date -s '%04d-%02d-%02d %02d:%02d:%02d' >/dev/null 2>&1",
+        char timestamp[32];
+        snprintf(timestamp, sizeof(timestamp), "%04d-%02d-%02d %02d:%02d:%02d",
                  rtc_values_[0], rtc_values_[1], rtc_values_[2],
                  rtc_values_[3], rtc_values_[4], rtc_values_[5]);
-        system(cmd);
+        cp0_time_set(timestamp);
     }
 
-    void save_app_toggle(int idx)
+    void save_app_toggle(const std::string &config_key)
     {
-        static const char *app_keys[] = {
-            "Python", "Store", "CLI", "Game", "Setting",
-            "Music", "Math",
-            "IP_Panel", "File",
-            "SSH", "Mesh", "Rec", "Camera",
-            "LoRa", "Tank"
-        };
-        // Enforce always-on apps
-        static const char *always_on[] = {"Store", "CLI", "Game", "Setting"};
-        for (auto *ao : always_on) {
-            if (strcmp(app_keys[idx], ao) == 0) {
-                // Force back to enabled
-                menu_items_[0].sub_items[idx].toggle_state = true;
+        std::size_t app_count = 0;
+        const AppDescriptor *apps = launcher_app_registry_entries(&app_count);
+        int visible_idx = 0;
+        for (std::size_t i = 0; i < app_count; ++i) {
+            const AppDescriptor &desc = apps[i];
+            if (!desc.configurable)
+                continue;
+            if (config_key == desc.config_key) {
+                bool enabled = menu_items_[0].sub_items[visible_idx].toggle_state;
+                launcher_app_registry_set_enabled(desc, enabled);
+                config_save();
+                launcher_app_registry_notify_changed();
                 return;
             }
+            ++visible_idx;
         }
-        char cfg_key[64];
-        snprintf(cfg_key, sizeof(cfg_key), "app_%s", app_keys[idx]);
-        bool enabled = menu_items_[0].sub_items[idx].toggle_state;
-        cp0_config_set_int(cfg_key, enabled ? 1 : 0);
-        cp0_config_save();
     }
 
     // ==================== Bluetooth ====================
@@ -692,42 +684,11 @@ private:
     {
         for (auto &m : menu_items_) {
             if (m.label != "Ethernet") continue;
-            // Read IP info via system commands
-            char buf[128];
-            FILE *fp;
-            // IP address
-            fp = popen("ip -4 addr show eth0 2>/dev/null | grep inet | awk '{print $2}' | head -1", "r");
-            if (fp) {
-                if (fgets(buf, sizeof(buf), fp)) {
-                    buf[strcspn(buf, "\n")] = 0;
-                    m.sub_items[0].label = std::string("IP: ") + (buf[0] ? buf : "N/A");
-                } else {
-                    m.sub_items[0].label = "IP: N/A";
-                }
-                pclose(fp);
-            }
-            // Gateway
-            fp = popen("ip route | grep default | grep eth0 | awk '{print $3}' | head -1", "r");
-            if (fp) {
-                if (fgets(buf, sizeof(buf), fp)) {
-                    buf[strcspn(buf, "\n")] = 0;
-                    m.sub_items[1].label = std::string("GW: ") + (buf[0] ? buf : "N/A");
-                } else {
-                    m.sub_items[1].label = "GW: N/A";
-                }
-                pclose(fp);
-            }
-            // MAC
-            fp = popen("cat /sys/class/net/eth0/address 2>/dev/null", "r");
-            if (fp) {
-                if (fgets(buf, sizeof(buf), fp)) {
-                    buf[strcspn(buf, "\n")] = 0;
-                    m.sub_items[2].label = std::string("MAC: ") + (buf[0] ? buf : "N/A");
-                } else {
-                    m.sub_items[2].label = "MAC: N/A";
-                }
-                pclose(fp);
-            }
+            cp0_eth_info_t info;
+            cp0_network_default_info_read(&info);
+            m.sub_items[0].label = std::string("IP: ") + info.ipv4;
+            m.sub_items[1].label = std::string("GW: ") + info.gateway;
+            m.sub_items[2].label = std::string("MAC: ") + info.mac;
             break;
         }
     }
@@ -737,24 +698,11 @@ private:
     {
         for (auto &m : menu_items_) {
             if (m.label != "Account") continue;
-            char buf[128];
-            FILE *fp = popen("whoami", "r");
-            if (fp) {
-                if (fgets(buf, sizeof(buf), fp)) {
-                    buf[strcspn(buf, "\n")] = 0;
-                    m.sub_items[0].label = std::string("User: ") + buf;
-                }
-                pclose(fp);
-            }
+            cp0_account_info_t info;
+            cp0_account_info_read(&info);
+            m.sub_items[0].label = std::string("User: ") + info.user;
             m.sub_items[1].label = "Password: ****";
-            fp = popen("hostname", "r");
-            if (fp) {
-                if (fgets(buf, sizeof(buf), fp)) {
-                    buf[strcspn(buf, "\n")] = 0;
-                    m.sub_items[2].label = std::string("Host: ") + buf;
-                }
-                pclose(fp);
-            }
+            m.sub_items[2].label = std::string("Host: ") + info.hostname;
             break;
         }
     }
@@ -772,17 +720,13 @@ private:
     void check_system_update()
     {
         // Run apt update check in background
-        system("apt update >/dev/null 2>&1 &");
+        cp0_system_apt_update_background();
         // TODO: show result in UI
     }
 
     void update_launcher()
     {
-        // Pull latest from GitHub and rebuild
-        system("cd /usr/share/APPLaunch && "
-               "wget -q https://github.com/CardputerZero/M5CardputerZero-Launcher/releases/latest/download/applaunch_*.deb -O /tmp/launcher_update.deb 2>/dev/null && "
-               "dpkg -i /tmp/launcher_update.deb >/dev/null 2>&1 && "
-               "systemctl restart APPLaunch &");
+        cp0_system_update_launcher_background();
     }
 
     // ==================== Confirm action (Reboot/Shutdown) ====================
@@ -827,21 +771,7 @@ private:
 
     void apply_bq_calibrate()
     {
-#ifdef __linux__
-        static constexpr const char *BQ_DEV = "/dev/i2c-1";
-        static constexpr int BQ_ADDR = 0x55;
-        int cmds[] = {0x0081, 0x000A, 0x0009, 0x0080}; // Enter/CC/Board/Exit
-        int fd = open(BQ_DEV, O_RDWR);
-        if (fd < 0) return;
-        struct i2c_msg msg;
-        struct i2c_rdwr_ioctl_data data;
-        unsigned char buf[3] = {0x00, (unsigned char)(cmds[val_sel_idx_] & 0xFF),
-                                      (unsigned char)((cmds[val_sel_idx_] >> 8) & 0xFF)};
-        msg.addr = BQ_ADDR; msg.flags = 0; msg.len = 3; msg.buf = buf;
-        data.msgs = &msg; data.nmsgs = 1;
-        ioctl(fd, I2C_RDWR, &data);
-        close(fd);
-#endif
+        cp0_bq27220_calibrate(val_sel_idx_);
     }
 
     // ==================== About ====================
@@ -914,7 +844,7 @@ private:
     // ==================== WiFi functions ====================
     void wifi_do_scan()
     {
-        wifi_ap_count_ = cp0_wifi_scan(wifi_aps_, CP0_WIFI_AP_MAX);
+        wifi_ap_count_ = launcher_wifi::scan(wifi_aps_, CP0_WIFI_AP_MAX);
     }
 
     void wifi_toggle_enable()
@@ -938,10 +868,10 @@ private:
         int ret = -1;
         if (strcmp(ap->security, "Open") == 0 || ap->security[0] == 0) {
             wifi_show_connecting(ap->ssid);
-            ret = cp0_wifi_connect(ap->ssid, NULL);
+            ret = launcher_wifi::connect(ap->ssid, NULL);
         } else if (wifi_has_saved_profile(ap->ssid)) {
             wifi_show_connecting(ap->ssid);
-            ret = cp0_wifi_connect(ap->ssid, NULL);
+            ret = launcher_wifi::connect(ap->ssid, NULL);
         } else {
             needs_password = true;
             wifi_pw_ssid_ = ap->ssid;
@@ -1021,13 +951,11 @@ private:
         // Override: next KEY_ENTER in pw handler will do the delete
         // Actually — simpler: just do it immediately (user already pressed F
         // which is intentional). Delete + refresh.
-        char del_cmd[256];
-        snprintf(del_cmd, sizeof(del_cmd), "nmcli con delete id '%s' 2>/dev/null", ap->ssid);
-        system(del_cmd);
+        launcher_wifi::profile_forget(ap->ssid);
 
         // If currently connected to this SSID, disconnect
         if (ap->in_use) {
-            system("nmcli con down id 'active' 2>/dev/null");
+            launcher_wifi::profile_disconnect_active();
         }
 
         // Show success briefly
@@ -1048,9 +976,7 @@ private:
 
     bool wifi_has_saved_profile(const char *ssid)
     {
-        char cmd[256];
-        snprintf(cmd, sizeof(cmd), "nmcli -t -f NAME con show 2>/dev/null | grep -qxF '%s'", ssid);
-        return system(cmd) == 0;
+        return launcher_wifi::profile_exists(ssid) != 0;
     }
 
     void show_wifi_pw_input()
@@ -1098,14 +1024,11 @@ private:
         if (key == KEY_ENTER) {
             if (pw_hint_lbl_) lv_label_set_text(pw_hint_lbl_, "Connecting...");
             lv_refr_now(NULL);
-            int ret = cp0_wifi_connect(wifi_pw_ssid_.c_str(), wifi_pw_buf_.c_str());
+            int ret = launcher_wifi::connect(wifi_pw_ssid_.c_str(), wifi_pw_buf_.c_str());
             if (ret != 0) {
                 // Connection failed — delete the broken profile that nmcli just
                 // saved with the wrong password, so next attempt won't reuse it.
-                char del_cmd[256];
-                snprintf(del_cmd, sizeof(del_cmd),
-                    "nmcli con delete id '%s' 2>/dev/null", wifi_pw_ssid_.c_str());
-                system(del_cmd);
+                launcher_wifi::profile_forget(wifi_pw_ssid_.c_str());
 
                 if (pw_hint_lbl_) {
                     lv_label_set_text(pw_hint_lbl_, "Failed! Wrong password? Try again.");
@@ -1143,18 +1066,36 @@ private:
     {
         int pcts[] = {100, 75, 50, 25, 0};
         int new_val = 63 * pcts[val_sel_idx_] / 100;
-        cp0_volume_write(new_val);
-        cp0_config_set_int("volume", new_val);
-        cp0_config_save();
+        APPLaunch_volume_write(new_val);
+        config_set_int("volume", new_val);
+        config_save();
     }
 
     // ==================== Brightness ====================
+    int settings_backlight_read()
+    {
+        int value = -1;
+        cp0_signal_settings_api({"BacklightRead"}, [&](int code, std::string data) {
+            if (code == 0) value = std::atoi(data.c_str());
+        });
+        return value;
+    }
+
+    int settings_backlight_max()
+    {
+        int value = 100;
+        cp0_signal_settings_api({"BacklightMax"}, [&](int code, std::string data) {
+            if (code == 0) value = std::atoi(data.c_str());
+        });
+        return value;
+    }
+
     void enter_brightness_adjust()
     {
         val_title_ = "Brightness";
         val_options_ = {"100%", "75%", "50%", "25%"};
-        bright_val_ = cp0_backlight_read();
-        int mx = cp0_backlight_max();
+        bright_val_ = settings_backlight_read();
+        int mx = settings_backlight_max();
         int pct = mx > 0 ? bright_val_ * 100 / mx : 100;
         if (pct >= 87) val_sel_idx_ = 0;
         else if (pct >= 62) val_sel_idx_ = 1;
@@ -1167,26 +1108,26 @@ private:
     void apply_value_selection()
     {
         if (val_title_ == "Brightness") {
-            int mx = cp0_backlight_max();
+            int mx = settings_backlight_max();
             int pcts[] = {100, 75, 50, 25};
             int new_val = mx * pcts[val_sel_idx_] / 100;
             if (new_val < 1) new_val = 1;
             cp0_backlight_write(new_val);
-            cp0_config_set_int("brightness", new_val);
-            cp0_config_save();
+            config_set_int("brightness", new_val);
+            config_save();
         } else if (val_title_ == "Volume") {
             apply_volume();
         } else if (val_title_ == "DarkTime") {
             // TODO: save dark time setting
             int times[] = {0, 10, 30, 60, 300};
-            cp0_config_set_int("dark_time", times[val_sel_idx_]);
-            cp0_config_save();
+            config_set_int("dark_time", times[val_sel_idx_]);
+            config_save();
         } else if (val_title_ == "Resolution") {
-            cp0_config_set_int("cam_resolution", val_sel_idx_);
-            cp0_config_save();
+            config_set_int("cam_resolution", val_sel_idx_);
+            config_save();
         } else if (val_title_ == "Startup") {
-            cp0_config_set_int("startup_mode", val_sel_idx_);
-            cp0_config_save();
+            config_set_int("startup_mode", val_sel_idx_);
+            config_save();
         } else if (val_title_ == "Year" || val_title_ == "Month" || val_title_ == "Day" ||
                    val_title_ == "Hour" || val_title_ == "Minute" || val_title_ == "Second") {
             apply_rtc_value();

@@ -15,7 +15,7 @@ class Launch;
 class UILaunchPage : public home_base
 {
 public:
-    explicit UILaunchPage(std::shared_ptr<Launch> launch);
+    explicit UILaunchPage(Launch *launch);
     ~UILaunchPage();
 
     void show_home_screen();
@@ -83,7 +83,7 @@ private:
     static void on_home_key(lv_event_t *event);
     static void on_startup_gif_event(lv_event_t *event);
 
-    std::shared_ptr<Launch> launch_;
+    Launch *launch_ = nullptr;
     lv_obj_t *startup_gif_ = nullptr;
     lv_obj_t *left_arrow_button_ = nullptr;
     lv_obj_t *right_arrow_button_ = nullptr;
