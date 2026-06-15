@@ -167,27 +167,27 @@ projects/APPLaunch/main/
 ```text
 main/ui/
 ├── ui.cpp / ui.h
-├── Launch.cpp / Launch.h
-├── UILaunchPage.cpp / UILaunchPage.h
+├── launch.cpp / launch.h
+├── ui_launch_page.cpp / ui_launch_page.h
 ├── ui_app_page.hpp
-├── page_app.h
+├── generated/page_app.h
 ├── generate_page_app_includes.py
 ├── ui_loading.*
 ├── ui_global_hint.*
-├── zero_lvgl_os.*
-├── Animation/
+├── LauncherUiRuntime.*
+├── animation/
 └── page_app/
 ```
 
 | File/Directory | Role |
 | --- | --- |
 | `ui.c` / `ui.cpp` / `ui.h` | UI initialization, global objects, and the C/C++ bridge |
-| `Launch.cpp` | Application manager; implements application list, launch, status bar refresh, and directory watching |
-| `UILaunchPage.cpp` | Home UI creation, carousel slots, key handling, and startup animation |
+| `launch.cpp` | Application manager; implements application list, launch, status bar refresh, and directory watching |
+| `ui_launch_page.cpp` | Home UI creation, carousel slots, key handling, and startup animation |
 | `ui_loading.cpp` | Loading overlay |
 | `ui_global_hint.cpp` | Global hints |
-| `zero_lvgl_os.cpp` | LVGL OS/thread-related helpers |
-| `Animation/` | Home carousel animation implementation |
+| `LauncherUiRuntime.cpp` | LVGL OS/thread-related helpers |
+| `animation/` | Home carousel animation implementation |
 | `components/` | Page base classes, components, and custom pages |
 
 ### 2.5 `components/page_app/` Built-In Page Directory
@@ -201,12 +201,12 @@ main/ui/page_app/
 ├── ui_app_game.hpp
 ├── ui_app_lora.hpp
 ├── ui_app_mesh.hpp
-├── ui_app_music.hpp
+├── ui_app_game.hpp
 ├── ui_app_rec.hpp
 ├── ui_app_setup.hpp
 ├── ui_app_ssh.hpp
 ├── ui_app_tank_battle.hpp
-└── ui_app_IpPanel.hpp
+└── ui_app_ip_panel.hpp
 ```
 
 These pages are usually implemented header-only so they can be automatically included by `generate_page_app_includes.py`.
@@ -228,7 +228,7 @@ ui_init()
   ├── ui_loading
   └── page_app/*
 
-LaunchImpl
+Launch
   ├── UILaunchPage::panel()/label()
   ├── page_v<PageT>
   ├── cp0_file_path()

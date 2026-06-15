@@ -68,8 +68,8 @@ If you only want to complete a specific task:
 | --- | --- |
 | `projects/APPLaunch` | Main launcher project |
 | `projects/APPLaunch/main/src/main.cpp` | APPLaunch entry point and LVGL main loop |
-| `projects/APPLaunch/main/ui/Launch.cpp` | Application list, launch logic, status bar refresh |
-| `projects/APPLaunch/main/ui/UILaunchPage.cpp` | Home UI, carousel, home key handling |
+| `projects/APPLaunch/main/ui/launch.cpp` | Application list, launch logic, status bar refresh |
+| `projects/APPLaunch/main/ui/ui_launch_page.cpp` | Home UI, carousel, home key handling |
 | `projects/APPLaunch/main/ui/page_app` | Built-in page implementations |
 | `projects/APPLaunch/APPLaunch` | Resource tree packaged into the runtime environment |
 | `ext_components/cp0_lvgl` | Platform adaptation layer that wraps file, process, input, and system interfaces |

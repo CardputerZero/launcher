@@ -1,6 +1,6 @@
 # 07 - Input System and Key Mapping
 
-This chapter explains APPLaunch's keyboard input thread, the `key_item` event structure, LVGL event dispatch, key mappings on the home screen and built-in pages, terminal input escaping, and debugging notes. The key source files are `projects/APPLaunch/main/include/keyboard_input.h`, `projects/APPLaunch/main/ui/ui.h`, `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_keyboard.c`, `ext_components/cp0_lvgl/src/sdl/sdl_lvgl_keyboard.c`, `projects/APPLaunch/main/ui/UILaunchPage.cpp`, and `projects/APPLaunch/main/ui/page_app/*.hpp`.
+This chapter explains APPLaunch's keyboard input thread, the `key_item` event structure, LVGL event dispatch, key mappings on the home screen and built-in pages, terminal input escaping, and debugging notes. The key source files are `ext_components/cp0_lvgl/include/keyboard_input.h`, `projects/APPLaunch/main/ui/ui.h`, `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_keyboard.c`, `ext_components/cp0_lvgl/src/sdl/sdl_lvgl_keyboard.c`, `projects/APPLaunch/main/ui/ui_launch_page.cpp`, and `projects/APPLaunch/main/ui/page_app/*.hpp`.
 
 ## 1. Input System Overview
 
@@ -43,7 +43,7 @@ if (LV_EVENT_KEYBOARD == 0)
 
 ## 2. `key_item` Data Structure
 
-`projects/APPLaunch/main/include/keyboard_input.h` defines input events:
+`ext_components/cp0_lvgl/include/keyboard_input.h` defines input events:
 
 ```c
 struct key_item {
@@ -226,11 +226,11 @@ Note: `elm` is freed after the callback returns, so pages must not keep the poin
 
 If a page handles `LV_EVENT_KEYBOARD` directly, it usually uses the raw `KEY_*` values. If a page delegates to LVGL's widget focus mechanism, it relies on `data->key`.
 
-`projects/APPLaunch/main/include/compat/input_keys.h` includes `<linux/input.h>` on Linux and provides common compatible `KEY_*` definitions on non-Linux platforms, so SDL/desktop builds can also compile page code.
+`ext_components/cp0_lvgl/include/compat/input_keys.h` includes `<linux/input.h>` on Linux and provides common compatible `KEY_*` definitions on non-Linux platforms, so SDL/desktop builds can also compile page code.
 
 ## 6. Home Screen Key Mapping
 
-Home screen key handling is in `UILaunchPage::handle_home_key()`; the LVGL C callback entry is `UILaunchPage::on_home_key()` in `projects/APPLaunch/main/ui/UILaunchPage.cpp`.
+Home screen key handling is in `UILaunchPage::handle_home_key()`; the LVGL C callback entry is `UILaunchPage::on_home_key()` in `projects/APPLaunch/main/ui/ui_launch_page.cpp`.
 
 First, the commonly used `F/X/Z/C` keys on CardputerZero are mapped to arrow keys:
 
@@ -268,8 +268,8 @@ Each page independently binds `LV_EVENT_KEYBOARD` on its `root_screen_`. Common 
 | `UIConsolePage` | `ui_app_console.hpp` | ESC/arrow/Enter/Backspace are converted to PTY control sequences; HOME-related state is used for exit/external locks |
 | `UIGamePage` | `ui_app_game.hpp` | Arrow keys move, ENTER starts/restarts, ESC returns |
 | `UISetupPage` | `ui_app_setup.hpp` | UP/DOWN or F/X selects, ENTER/RIGHT or C enters/confirms, ESC/LEFT or Z returns, some pages support R/D |
-| `UIMusicPage` | `ui_app_music.hpp` | F/X/Z/C map to LV_KEY_UP/DOWN/LEFT/RIGHT; ENTER plays/loads; ESC returns |
-| `UIIpPanelPage` | `ui_app_IpPanel.hpp` | F/X/Z/C map to LV_KEY_*; UP/DOWN selects; ESC returns |
+| `UIGamePage` | `ui_app_game.hpp` | uses the common page key handling; ESC returns |
+| `UIIpPanelPage` | `ui_app_ip_panel.hpp` | F/X/Z/C map to LV_KEY_*; UP/DOWN selects; ESC returns |
 | `UIFilePage` | `ui_app_file.hpp` | UP/DOWN selects; RIGHT/ENTER enters; LEFT goes to parent; ESC returns home or to the parent |
 | `UISSHPage` | `ui_app_ssh.hpp` | UP/DOWN switches Host/Port/User; character input; BACKSPACE deletes; ENTER connects; ESC returns |
 | `UIMeshPage` | `ui_app_mesh.hpp` | S opens input; R refreshes; UP/DOWN browses; ENTER sends; BACKSPACE deletes; ESC cancels/returns |
@@ -283,8 +283,8 @@ Each page independently binds `LV_EVENT_KEYBOARD` on its `root_screen_`. Common 
 
 On the CardputerZero keyboard, `F/X/Z/C` are commonly used as arrow-key substitutes. The codebase uses three patterns:
 
-1. Home screen `UILaunchPage.cpp`: `fzxc_to_arrow()` converts `F/X/Z/C` to `KEY_UP/DOWN/LEFT/RIGHT`.
-2. Page-local conversion to LVGL keys, for example in `UIMusicPage` and `UIIpPanelPage`:
+1. Home screen `ui_launch_page.cpp`: `fzxc_to_arrow()` converts `F/X/Z/C` to `KEY_UP/DOWN/LEFT/RIGHT`.
+2. Page-local conversion to LVGL keys, for example in `UIGamePage` and `UIIpPanelPage`:
 
 ```cpp
 switch (key) {
@@ -336,7 +336,7 @@ The terminal page also handles child-process exit, screen refresh, cursor blinki
 
 ## 10. Input Handling While External Apps Are Running
 
-External apps are launched through `LaunchImpl::launch_Exec()`:
+External apps are launched through `Launch::launch_Exec()`:
 
 ```cpp
 LVGL_RUN_FLAGE = 0;

@@ -35,7 +35,7 @@ APPLaunch 的设备端运行依赖两类文件：
 systemd 服务文件安装到：
 
 ```text
-/lib/systemd/system/APPLaunch.service
+/usr/lib/systemd/user/APPLaunch.service
 ```
 
 服务启动命令是：
@@ -49,6 +49,8 @@ systemd 服务文件安装到：
 ```text
 /usr/share/APPLaunch
 ```
+
+当前包把 APPLaunch 安装为 UID 1000 用户的 systemd user service。手动检查服务时，可以以该用户登录后执行 `systemctl --user ...`，或在 `runuser`/SSH 自动化中设置 `XDG_RUNTIME_DIR=/run/user/1000`。
 
 ## 2. 打包前必须先完成设备目标构建
 
@@ -122,11 +124,11 @@ projects/APPLaunch/tools/debian-APPLaunch/
 │   ├── control
 │   ├── postinst
 │   └── prerm
-├── lib/
-│   └── systemd/
-│       └── system/
-│           └── APPLaunch.service
 └── usr/
+    ├── lib/
+    │   └── systemd/
+    │       └── user/
+    │           └── APPLaunch.service
     └── share/
         └── APPLaunch/
             ├── applications/
@@ -331,9 +333,17 @@ Description: M5CardputerZero APPLaunch
 
 ```sh
 mkdir -p /var/cache/APPLaunch
-ln -s /var/cache/APPLaunch /usr/share/APPLaunch/cache
-[ -f "/lib/systemd/system/APPLaunch.service" ] && systemctl enable APPLaunch.service
-[ -f "/lib/systemd/system/APPLaunch.service" ] && systemctl start APPLaunch.service
+ln -sfn /var/cache/APPLaunch /usr/share/APPLaunch/cache
+APP_UID=1000
+APP_USER="$(getent passwd "$APP_UID" | cut -d: -f1)"
+loginctl enable-linger "$APP_USER" || true
+systemctl start "user@$APP_UID.service" || true
+runuser -u "$APP_USER" -- env XDG_RUNTIME_DIR="/run/user/$APP_UID" \
+  DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$APP_UID/bus" \
+  systemctl --user enable APPLaunch.service || true
+runuser -u "$APP_USER" -- env XDG_RUNTIME_DIR="/run/user/$APP_UID" \
+  DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$APP_UID/bus" \
+  systemctl --user restart APPLaunch.service || true
 exit 0
 ```
 
@@ -341,7 +351,7 @@ exit 0
 
 - 创建可写缓存目录 `/var/cache/APPLaunch`。
 - 在只读/系统资源目录下建立 `cache` 软链接。
-- 启用并启动 systemd 服务。
+- 为 UID 1000 用户启用 linger，并启用/启动 systemd user service。
 
 注意：当前通用打包脚本使用 `ln -sfn`，重复安装时可以安全刷新缓存链接。
 
@@ -350,8 +360,14 @@ exit 0
 卸载前脚本执行：
 
 ```sh
-[ -f "/lib/systemd/system/APPLaunch.service" ] && systemctl stop APPLaunch.service
-[ -f "/lib/systemd/system/APPLaunch.service" ] && systemctl disable APPLaunch.service
+APP_UID=1000
+APP_USER="$(getent passwd "$APP_UID" | cut -d: -f1)"
+runuser -u "$APP_USER" -- env XDG_RUNTIME_DIR="/run/user/$APP_UID" \
+  DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$APP_UID/bus" \
+  systemctl --user stop APPLaunch.service || true
+runuser -u "$APP_USER" -- env XDG_RUNTIME_DIR="/run/user/$APP_UID" \
+  DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$APP_UID/bus" \
+  systemctl --user disable APPLaunch.service || true
 rm -rf /var/cache/APPLaunch
 exit 0
 ```
@@ -371,6 +387,8 @@ exit 0
 ```ini
 [Unit]
 Description=APPLaunch Service
+After=pipewire-pulse.service
+Wants=pipewire-pulse.service
 
 [Service]
 ExecStart=/usr/share/APPLaunch/bin/M5CardputerZero-APPLaunch
@@ -380,7 +398,7 @@ RestartSec=1
 StartLimitInterval=0
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target
 ```
 
 字段说明：
@@ -392,9 +410,10 @@ WantedBy=multi-user.target
 | `Restart=always` | 进程退出后总是重启 |
 | `RestartSec=1` | 退出 1 秒后重启 |
 | `StartLimitInterval=0` | 关闭默认启动频率限制，避免频繁崩溃后 systemd 停止重启 |
-| `WantedBy=multi-user.target` | enable 后随多用户目标启动 |
+| `After` / `Wants` | 在可用时等待 PipeWire PulseAudio 支持 |
+| `WantedBy=default.target` | enable 后随用户默认 target 启动 |
 
-当前服务文件没有显式设置用户，默认以 systemd system service 的 root 身份运行。这通常有利于访问 framebuffer、evdev、GPIO、音频和相机设备，但也意味着程序权限较高。
+当前包安装的是 `/usr/lib/systemd/user` 下的用户服务，不是 root 身份的 system service。`postinst` 会为 UID 1000 用户启用该服务；framebuffer、evdev、GPIO、音频和相机访问权限需由系统镜像的用户/用户组规则提供。
 
 ## 9. 安装到设备
 
@@ -432,9 +451,9 @@ sudo dpkg -i /home/pi/applaunch_0.2.1-m5stack1_arm64.deb
 如果服务正在运行，`postinst` 会尝试 enable/start。为了减少安装期间 framebuffer 或输入设备占用问题，可以手动先停服务：
 
 ```bash
-sudo systemctl stop APPLaunch.service || true
+systemctl --user stop APPLaunch.service || true
 sudo dpkg -i /home/pi/applaunch_0.2.1-m5stack1_arm64.deb
-sudo systemctl restart APPLaunch.service
+systemctl --user restart APPLaunch.service
 ```
 
 ## 10. 使用 `scons push` 快速部署
@@ -457,8 +476,8 @@ remote_host = 192.168.28.177
 remote_port = 22
 username = pi
 password = pi
-; before_cmd = 'echo pi |  sudo -S systemctl stop APPLaunch.service'
-; after_cmd = 'echo pi |  sudo -S systemctl stop APPLaunch.service; echo pi |  sudo -S cp /home/pi/dist/M5CardputerZero-APPLaunch /usr/share/APPLaunch/bin ; echo pi |  sudo -S systemctl start APPLaunch.service'
+; before_cmd = 'echo pi |  sudo -S systemctl --user stop APPLaunch.service'
+; after_cmd = 'echo pi |  sudo -S systemctl --user stop APPLaunch.service; echo pi |  sudo -S cp /home/pi/dist/M5CardputerZero-APPLaunch /usr/share/APPLaunch/bin ; echo pi |  sudo -S systemctl --user start APPLaunch.service'
 ```
 
 执行：
@@ -505,17 +524,17 @@ scp -r dist/APPLaunch pi@192.168.28.177:/home/pi/APPLaunch-new
 在设备上安装：
 
 ```bash
-sudo systemctl stop APPLaunch.service || true
+systemctl --user stop APPLaunch.service || true
 sudo mkdir -p /usr/share/APPLaunch/bin
 sudo install -m 0755 /home/pi/M5CardputerZero-APPLaunch /usr/share/APPLaunch/bin/M5CardputerZero-APPLaunch
 sudo rsync -a --delete /home/pi/APPLaunch-new/ /usr/share/APPLaunch/
 sudo mkdir -p /var/cache/APPLaunch
 sudo ln -sfn /var/cache/APPLaunch /usr/share/APPLaunch/cache
-sudo systemctl daemon-reload
-sudo systemctl restart APPLaunch.service
+systemctl --user daemon-reload
+systemctl --user restart APPLaunch.service
 ```
 
-如果服务文件尚未安装，可以手动创建 `/lib/systemd/system/APPLaunch.service`，内容参考第 8 节。
+如果服务文件尚未安装，可以手动创建 `/usr/lib/systemd/user/APPLaunch.service`，内容参考第 8 节。
 
 ## 12. 部署验证命令
 
@@ -582,46 +601,46 @@ ldd /usr/share/APPLaunch/bin/M5CardputerZero-APPLaunch | grep 'not found' || tru
 ### 12.4 systemd 状态
 
 ```bash
-systemctl status APPLaunch.service --no-pager
-systemctl is-enabled APPLaunch.service
-systemctl is-active APPLaunch.service
+systemctl --user status APPLaunch.service --no-pager
+systemctl --user is-enabled APPLaunch.service
+systemctl --user is-active APPLaunch.service
 ```
 
 查看日志：
 
 ```bash
-journalctl -u APPLaunch.service -b --no-pager
-journalctl -u APPLaunch.service -b -f
+journalctl --user -u APPLaunch.service -b --no-pager
+journalctl --user -u APPLaunch.service -b -f
 ```
 
 重启：
 
 ```bash
-sudo systemctl restart APPLaunch.service
+systemctl --user restart APPLaunch.service
 ```
 
 停止：
 
 ```bash
-sudo systemctl stop APPLaunch.service
+systemctl --user stop APPLaunch.service
 ```
 
 开机自启动：
 
 ```bash
-sudo systemctl enable APPLaunch.service
+systemctl --user enable APPLaunch.service
 ```
 
 取消开机自启动：
 
 ```bash
-sudo systemctl disable APPLaunch.service
+systemctl --user disable APPLaunch.service
 ```
 
 重新读取服务文件：
 
 ```bash
-sudo systemctl daemon-reload
+systemctl --user daemon-reload
 ```
 
 ### 12.5 手动前台运行
@@ -629,7 +648,7 @@ sudo systemctl daemon-reload
 排查 systemd 前，建议先前台运行：
 
 ```bash
-sudo systemctl stop APPLaunch.service || true
+systemctl --user stop APPLaunch.service || true
 cd /usr/share/APPLaunch
 sudo ./bin/M5CardputerZero-APPLaunch
 ```
@@ -680,28 +699,28 @@ sudo dpkg -P applaunch
 ### 13.2 安装旧包回滚
 
 ```bash
-sudo systemctl stop APPLaunch.service || true
+systemctl --user stop APPLaunch.service || true
 sudo dpkg -i /home/pi/applaunch_旧版本-m5stack1_arm64.deb
-sudo systemctl restart APPLaunch.service
+systemctl --user restart APPLaunch.service
 ```
 
 验证：
 
 ```bash
 dpkg -s applaunch | grep Version
-systemctl status APPLaunch.service --no-pager
+systemctl --user status APPLaunch.service --no-pager
 ```
 
 ### 13.3 临时禁用 launcher
 
 ```bash
-sudo systemctl disable --now APPLaunch.service
+systemctl --user disable --now APPLaunch.service
 ```
 
 恢复：
 
 ```bash
-sudo systemctl enable --now APPLaunch.service
+systemctl --user enable --now APPLaunch.service
 ```
 
 ## 14. 常见部署错误
@@ -745,8 +764,8 @@ scons -j8
 检查：
 
 ```bash
-systemctl status APPLaunch.service --no-pager
-journalctl -u APPLaunch.service -b --no-pager | tail -n 100
+systemctl --user status APPLaunch.service --no-pager
+journalctl --user -u APPLaunch.service -b --no-pager | tail -n 100
 ```
 
 常见原因：
@@ -775,7 +794,7 @@ ls /dev/fb0
 sudo rm -rf /usr/share/APPLaunch/cache
 sudo mkdir -p /var/cache/APPLaunch
 sudo ln -sfn /var/cache/APPLaunch /usr/share/APPLaunch/cache
-sudo systemctl restart APPLaunch.service
+systemctl --user restart APPLaunch.service
 ```
 
 当前通用打包脚本已经写入 `ln -sfn`；重新打包并安装即可持久修复。
@@ -820,12 +839,12 @@ python3 scripts/debian_packager.py
 命令：
 
 ```bash
-sudo systemctl stop APPLaunch.service || true
+systemctl --user stop APPLaunch.service || true
 cd /usr/share/APPLaunch
 sudo ./bin/M5CardputerZero-APPLaunch
 ls -l /dev/fb0
 sudo fuser -v /dev/fb0 2>/dev/null || true
-journalctl -u APPLaunch.service -b --no-pager | tail -n 100
+journalctl --user -u APPLaunch.service -b --no-pager | tail -n 100
 ```
 
 ### 14.8 外部应用无法启动
@@ -870,11 +889,11 @@ dpkg-deb -c projects/APPLaunch/tools/applaunch_0.2.1-m5stack1_arm64.deb | head -
 
 ```bash
 dpkg -s applaunch | grep -E 'Package|Version|Architecture'
-systemctl status APPLaunch.service --no-pager
-systemctl is-enabled APPLaunch.service
+systemctl --user status APPLaunch.service --no-pager
+systemctl --user is-enabled APPLaunch.service
 ldd /usr/share/APPLaunch/bin/M5CardputerZero-APPLaunch | grep 'not found' || true
 ls -l /usr/share/APPLaunch/cache
-journalctl -u APPLaunch.service -b --no-pager | tail -n 100
+journalctl --user -u APPLaunch.service -b --no-pager | tail -n 100
 ```
 
 功能验证：
@@ -900,7 +919,7 @@ file dist/M5CardputerZero-APPLaunch
 cd /home/nihao/w2T/github/launcher
 python3 scripts/debian_packager.py
 scp projects/APPLaunch/tools/applaunch_0.2.1-m5stack1_arm64.deb pi@192.168.28.177:/home/pi/
-ssh pi@192.168.28.177 'sudo dpkg -i /home/pi/applaunch_0.2.1-m5stack1_arm64.deb && systemctl status APPLaunch.service --no-pager'
+ssh pi@192.168.28.177 'sudo dpkg -i /home/pi/applaunch_0.2.1-m5stack1_arm64.deb && systemctl --user status APPLaunch.service --no-pager'
 ```
 
 开发阶段快速替换建议使用：

@@ -1,6 +1,6 @@
 # 08 - Build and Compilation Guide
 
-This chapter explains the complete build process for `projects/APPLaunch`, covering Linux SDL2 native simulation, native device builds, Linux x86 cross-compilation, macOS cross-compilation, dependency installation, environment variables, key SCons logic, and common error handling.
+This chapter explains the complete build process for `projects/APPLaunch`, covering Linux SDL2 native simulation, native device builds, Linux x86 cross-compilation, macOS cross-compilation, Windows SDL2/cross builds, dependency installation, environment variables, key SCons logic, and common error handling.
 
 All commands are assumed to start from the repository root by default:
 
@@ -19,6 +19,8 @@ APPLaunch can be built in several forms. The core difference is determined by th
 | Linux x86 cross-compilation | Linux x86_64 development machine, output runs on the device | `linux_x86_cross_cp0_config_defaults.mk` | Linux framebuffer + evdev | Recommended way to build official device artifacts |
 | macOS cross-compilation | macOS development machine, output runs on the device | `mac_cross_cp0_config_defaults.mk` | Linux framebuffer + evdev | Generate arm64 device artifacts on macOS |
 | macOS SDL/Darwin configuration | macOS development machine | `darwin_config_defaults.mk` | SDL-related configuration | Base configuration for native SDL work |
+| Windows SDL2 native simulation | Windows x86_64 development machine | `win_x86_sdl2_config_defaults.mk` | SDL2 window + SDL input | UI debugging on Windows |
+| Windows x86 cross-compilation | Windows x86_64 development machine, output runs on the device | `win_x86_cross_config_defaults.mk` | Linux framebuffer + evdev | Generate arm64 device artifacts on Windows |
 
 Build artifacts usually appear in:
 
@@ -578,9 +580,86 @@ file dist/M5CardputerZero-APPLaunch
 
 The expected result is an `ARM aarch64` Linux ELF, not Mach-O.
 
-## 10. Key SCons Logic
+## 10. Windows Builds
 
-### 10.1 Top-Level `projects/APPLaunch/SConstruct`
+Windows builds use the same SCons entry point under `projects/APPLaunch`, but the configuration sets `CONFIG_TOOLCHAIN_SYSTEM_WIN=y` and `CONFIG_TOOLCHAIN_GCCSUFFIX=".exe"` so the SDK build system invokes Windows toolchain executables.
+
+### 10.1 Windows SDL2 Native Build and Run
+
+Use an MSYS2 MinGW shell so `gcc`, `g++`, `pkg-config`, SDL2, and FreeType are all available in `PATH`.
+
+MSYS2 UCRT64 example:
+
+```bash
+pacman -S --needed \
+  mingw-w64-ucrt-x86_64-gcc \
+  mingw-w64-ucrt-x86_64-pkgconf \
+  mingw-w64-ucrt-x86_64-SDL2 \
+  mingw-w64-ucrt-x86_64-freetype \
+  mingw-w64-ucrt-x86_64-python-pip
+
+python -m pip install parse scons requests tqdm setuptools-rust paramiko scp
+```
+
+Build and run:
+
+```bash
+cd /path/to/launcher/projects/APPLaunch
+scons distclean
+export CONFIG_DEFAULT_FILE=win_x86_sdl2_config_defaults.mk
+scons -j8
+cd dist
+./M5CardputerZero-APPLaunch.exe
+```
+
+Key entries in `win_x86_sdl2_config_defaults.mk`:
+
+```make
+CONFIG_TOOLCHAIN_GCCSUFFIX=".exe"
+CONFIG_TOOLCHAIN_SYSTEM_WIN=y
+CONFIG_V9_5_LV_USE_SDL=y
+CONFIG_V9_5_LV_FS_POSIX_PATH="./"
+CONFIG_APPLAUNCH_WIN_X86_SDL2=y
+```
+
+The SDL2 output is `dist/M5CardputerZero-APPLaunch.exe`.
+
+### 10.2 Windows Cross-Compilation to the Device
+
+Install the SysGCC Raspberry64 Windows AArch64 Linux cross toolchain from `https://sysprogs.com/getfile/2542/raspberry64-gcc14.2.0.exe`. The default configuration expects:
+
+```make
+CONFIG_TOOLCHAIN_PATH="D:\\app\\SysGCC\\bin"
+CONFIG_TOOLCHAIN_PREFIX="aarch64-linux-gnu-"
+CONFIG_TOOLCHAIN_GCCSUFFIX=".exe"
+CONFIG_GCC_DUMPMACHINE="aarch64-linux-gnu"
+```
+
+If the toolchain is installed elsewhere, update `CONFIG_TOOLCHAIN_PATH` in `projects/APPLaunch/win_x86_cross_config_defaults.mk` before building.
+
+Build:
+
+```bash
+cd /path/to/launcher/projects/APPLaunch
+scons distclean
+export CONFIG_DEFAULT_FILE=win_x86_cross_config_defaults.mk
+scons -j8
+```
+
+Key entries in `win_x86_cross_config_defaults.mk`:
+
+```make
+CONFIG_V9_5_LV_USE_LINUX_FBDEV=y
+CONFIG_V9_5_LV_USE_EVDEV=y
+CONFIG_V9_5_LV_FS_POSIX_PATH="/usr/share/APPLaunch/"
+CONFIG_APPLAUNCH_WIN_X86_CROSS_CP0=y
+```
+
+The cross-build output is `dist/M5CardputerZero-APPLaunch` with no `.exe` suffix because the target is Linux AArch64. The first cross-build may download the SDK sysroot package into `SDK/github_source/static_lib_v0.0.4`.
+
+## 11. Key SCons Logic
+
+### 11.1 Top-Level `projects/APPLaunch/SConstruct`
 
 This file is responsible for the build entry point and global environment preparation:
 
@@ -614,7 +693,7 @@ SConscript(str(sdk_path / "tools" / "scons" / "project.py"), variant_dir=os.getc
 
 6. Checks and downloads `static_lib_v0.0.4` during cross-compilation.
 
-### 10.2 SDK `project.py`
+### 11.2 SDK `project.py`
 
 The SDK build system does the following:
 
@@ -627,22 +706,22 @@ The SDK build system does the following:
 7. Builds static libraries, shared libraries, and executables.
 8. Copies the executable and `STATIC_FILES` to `dist`.
 
-### 10.3 `projects/APPLaunch/main/SConstruct`
+### 11.3 `projects/APPLaunch/main/SConstruct`
 
 This file registers the APPLaunch main-program component:
 
-- Runs `ui/components/generate_page_app_includes.py` to generate the built-in page include aggregation file.
+- Runs `ui/generate_page_app_includes.py` to generate the built-in page include aggregation file.
 - Reads the current short git hash and injects compile macro `LAUNCHER_GIT_COMMIT_RAW`.
 - Collects `src/*.c*` and all source files under the `ui` directory.
 - Adds includes: `main`, `main/include`, `ext_components/cp0_lvgl/include`, and `SDK/components/utilities/include`.
 - Depends on components: `cp0_lvgl`, `eventpp`, `lvgl_component`, `pthread`, `Miniaudio`, and `RadioLib`.
 - Optional dependency: `Backward_cpp`.
-- Adds SDL2, FreeType, libinput, xkbcommon, udev, libcamera, jpeg, and other dependencies according to different configuration files.
+- Adds SDL2, FreeType, libinput, xkbcommon, udev, libcamera, jpeg, and other dependencies according to different configuration files; Windows SDL2 shares the same SDL2/FreeType `pkg-config` flag handling as Linux SDL2.
 - Uses `ext_components/RadioLib` as a static component; the RadioLib component owns the `wget_github('https://github.com/jgromes/RadioLib.git')` source cache and SX1262-related source list.
 - Adds the `../APPLaunch` runtime resource tree to `STATIC_FILES`; this tree includes `bin/store_cache_sync.py`.
 - Registers project target: `M5CardputerZero-APPLaunch`.
 
-## 11. Common SCons Commands
+## 12. Common SCons Commands
 
 | Command | Purpose |
 | --- | --- |
@@ -663,7 +742,7 @@ scons -j8
 
 Do not simply change `CONFIG_DEFAULT_FILE` and immediately run `scons -j8`, because the old `build/config/global_config.mk` may already exist and the SDK build system will not automatically regenerate the configuration.
 
-## 12. `menuconfig` Recommendations
+## 13. `menuconfig` Recommendations
 
 Run:
 
@@ -688,9 +767,9 @@ scons save
 
 Note: `scons save` writes back to the configuration file. In multi-person collaboration, do not casually save to shared `*_config_defaults.mk` files unless this task explicitly requires that change.
 
-## 13. Common Errors and Fixes
+## 14. Common Errors and Fixes
 
-### 13.1 `scons: command not found`
+### 14.1 `scons: command not found`
 
 Cause: SCons is not installed, or the Python user bin directory is not in `PATH`.
 
@@ -707,7 +786,7 @@ If `python3 -m scons` works, you can also build this way:
 python3 -m scons -j8
 ```
 
-### 13.2 `ModuleNotFoundError: No module named 'parse'`
+### 14.2 `ModuleNotFoundError: No module named 'parse'`
 
 Cause: missing Python package.
 
@@ -719,7 +798,7 @@ python3 -m pip install --user parse requests tqdm paramiko scp
 
 In a virtual environment, run `source .venv/bin/activate` first.
 
-### 13.3 `Package sdl2 was not found in the pkg-config search path`
+### 14.3 `Package sdl2 was not found in the pkg-config search path`
 
 Cause: Linux SDL2 simulation dependencies are not installed, or `PKG_CONFIG_PATH` does not include the directory containing SDL2 `.pc` files.
 
@@ -737,7 +816,14 @@ brew install sdl2 pkg-config
 pkg-config --cflags sdl2
 ```
 
-### 13.4 `Package freetype2 was not found`
+Windows/MSYS2:
+
+```bash
+pacman -S --needed mingw-w64-ucrt-x86_64-pkgconf mingw-w64-ucrt-x86_64-SDL2
+pkg-config --cflags sdl2
+```
+
+### 14.4 `Package freetype2 was not found`
 
 Fix:
 
@@ -753,7 +839,14 @@ brew install freetype pkg-config
 pkg-config --cflags freetype2
 ```
 
-### 13.5 `aarch64-linux-gnu-gcc: not found`
+Windows/MSYS2:
+
+```bash
+pacman -S --needed mingw-w64-ucrt-x86_64-freetype
+pkg-config --cflags freetype2
+```
+
+### 14.5 `aarch64-linux-gnu-gcc: not found`
 
 Cause: Linux cross toolchain is not installed, or `PATH` does not include the toolchain.
 
@@ -766,7 +859,9 @@ aarch64-linux-gnu-gcc --version
 
 macOS cross-compilation should use `aarch64-unknown-linux-gnu-gcc`; the corresponding configuration file is `mac_cross_cp0_config_defaults.mk`.
 
-### 13.6 Failed to Download `sdk_bsp.tar.gz`
+Windows cross-compilation should use `aarch64-linux-gnu-gcc.exe`; check `CONFIG_TOOLCHAIN_PATH` and `CONFIG_TOOLCHAIN_PREFIX` in `win_x86_cross_config_defaults.mk`.
+
+### 14.6 Failed to Download `sdk_bsp.tar.gz`
 
 Cause: the first cross-compilation needs to download `static_lib_v0.0.4`, but the network is unavailable or GitHub access failed.
 
@@ -783,7 +878,7 @@ SDK/github_source/static_lib_v0.0.4/
 
 If the directory exists but the version does not match, the top-level `SConstruct` still tries to update it.
 
-### 13.7 `libcamera` Headers or Libraries Not Found
+### 14.7 `libcamera` Headers or Libraries Not Found
 
 In cross-compilation configurations, `main/SConstruct` adds:
 
@@ -801,7 +896,7 @@ ls SDK/github_source/static_lib_v0.0.4/usr/lib/aarch64-linux-gnu | grep camera
 
 If they are missing, update the sysroot package or install device-side development libraries and rebuild the sysroot.
 
-### 13.8 Link Errors: `cannot find -linput`, `-lxkbcommon`, or `-ludev`
+### 14.8 Link Errors: `cannot find -linput`, `-lxkbcommon`, or `-ludev`
 
 Native SDL2 build: install development packages.
 
@@ -817,7 +912,7 @@ ls SDK/github_source/static_lib_v0.0.4/usr/lib/aarch64-linux-gnu/libxkbcommon.*
 ls SDK/github_source/static_lib_v0.0.4/usr/lib/aarch64-linux-gnu/libudev.*
 ```
 
-### 13.9 Old Backend Still Used After Switching Configuration
+### 14.9 Old Backend Still Used After Switching Configuration
 
 Cause: `build/config/global_config.mk` already exists, and the build system will not automatically regenerate the configuration just because the environment variable changed.
 
@@ -835,7 +930,7 @@ Check the final configuration:
 grep -E 'LV_USE_SDL|LV_USE_LINUX_FBDEV|LV_USE_EVDEV|FS_POSIX_PATH' build/config/global_config.mk
 ```
 
-### 13.10 SDL2 Runs to a Black Screen or Missing Resources
+### 14.10 SDL2 Runs to a Black Screen or Missing Resources
 
 Common cause: the program was not run from the `dist` directory, so `CONFIG_V9_5_LV_FS_POSIX_PATH="./"` points to the wrong location.
 
@@ -847,7 +942,7 @@ ls APPLaunch/share/images
 ./M5CardputerZero-APPLaunch
 ```
 
-### 13.11 Device Reports Missing Resource Files
+### 14.11 Device Reports Missing Resource Files
 
 The device configuration resource path is:
 
@@ -864,7 +959,7 @@ ls /usr/share/APPLaunch/bin/M5CardputerZero-APPLaunch
 
 For manual deployment, make sure you copied the contents of `dist/APPLaunch`, not only the executable.
 
-### 13.12 RadioLib Download Failure
+### 14.12 RadioLib Download Failure
 
 `ext_components/RadioLib/SConstruct` uses `wget_github('https://github.com/jgromes/RadioLib.git')` to fetch RadioLib when `CONFIG_RADIOLIB_COMPONENT_ENABLED=y`. The first build may need network access.
 
@@ -874,9 +969,9 @@ Fix:
 - Check whether a RadioLib cache already exists under `SDK/github_source`.
 - Prepare the corresponding source cache in advance for offline environments.
 
-## 14. Recommended Build Flows
+## 15. Recommended Build Flows
 
-### 14.1 Daily UI Development
+### 15.1 Daily UI Development
 
 ```bash
 cd /home/nihao/w2T/github/launcher/projects/APPLaunch
@@ -887,7 +982,7 @@ cd dist
 ./M5CardputerZero-APPLaunch
 ```
 
-### 14.2 Generate Formal Device Artifacts
+### 15.2 Generate Formal Device Artifacts
 
 ```bash
 cd /home/nihao/w2T/github/launcher/projects/APPLaunch
@@ -899,7 +994,7 @@ file dist/M5CardputerZero-APPLaunch
 
 Then follow Chapter 09 for `.deb` packaging, installation, and systemd verification.
 
-### 14.3 Quickly Confirm the Build Target
+### 15.3 Quickly Confirm the Build Target
 
 ```bash
 grep CONFIG_DEFAULT_FILE /proc/$$/environ 2>/dev/null || true

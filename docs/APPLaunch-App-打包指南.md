@@ -18,9 +18,10 @@
 <!-- SECTION: overview -->
 ## 1. 概述
 
-M5CardputerZero APPLaunch 是运行在设备上的应用启动器。它在启动时会扫描目录
+M5CardputerZero APPLaunch 是运行在设备上的应用启动器。它会扫描目录
 `/usr/share/APPLaunch/applications/` 下所有以 `.desktop` 结尾的文件，并将其
-作为可选 App 添加到主界面的滑动列表中。
+作为可选 App 添加到主界面的滑动列表中。启动后 APPLaunch 还会通过目录 watcher
+约每 3 秒检查一次变化，新增、删除或修改 `.desktop` 后通常会自动刷新列表。
 
 因此，**为 APPLaunch 添加一个新 App 有两种方式**：
 
@@ -57,6 +58,10 @@ APPLaunch 使用类 XDG Desktop Entry 格式的 `.desktop` 文件来描述一个
 
 > **注意：** 字段解析时会自动去除 key 和 value 两端的空格/Tab；
 > 空行和以 `#` 或 `;` 开头的行作为注释被跳过。
+
+> **Exec 安全限制：** APPLaunch 会校验 `Exec`。包含 shell 元字符的命令会被拒绝；
+> 带 `/` 的路径必须指向可执行文件；不带路径的命令目前仅允许 `bash`、`sh`、
+> `python3`、`vim`、`vi`、`nano` 等内置白名单命令。
 
 #### `Terminal` 与 `Sysplause` 的行为说明
 
@@ -125,10 +130,11 @@ Type=Application
 
 ```bash
 # 在开发机上执行
-scp myapp.desktop pi@<device-ip>:/usr/share/APPLaunch/applications/
+scp myapp.desktop pi@<device-ip>:/tmp/
+ssh pi@<device-ip> "sudo install -m 0644 /tmp/myapp.desktop /usr/share/APPLaunch/applications/"
 
-# 重启 APPLaunch 服务使其生效
-ssh pi@<device-ip> "sudo systemctl restart APPLaunch.service"
+# 通常 3 秒内会自动刷新；如需强制刷新，可重启用户服务
+ssh pi@<device-ip> "systemctl --user restart APPLaunch.service"
 ```
 
 **方式 B：在设备上直接创建**
@@ -143,7 +149,8 @@ Icon=share/images/email.png
 Type=Application
 EOF
 
-sudo systemctl restart APPLaunch.service
+# 通常 3 秒内会自动刷新；如需强制刷新：
+systemctl --user restart APPLaunch.service
 ```
 
 <!-- SECTION: deb_structure -->
@@ -240,7 +247,6 @@ APPLaunch UI 使用的字体文件（随主程序一起发布）。
 ```bash
 PKG=debian-myapp
 mkdir -p $PKG/DEBIAN
-mkdir -p $PKG/lib/systemd/system
 mkdir -p $PKG/usr/share/APPLaunch/bin
 mkdir -p $PKG/usr/share/APPLaunch/lib
 mkdir -p $PKG/usr/share/APPLaunch/share/font
@@ -274,11 +280,11 @@ EOF
 
 ```bash
 cat > $PKG/DEBIAN/control << 'EOF'
-Package: MyApp
+Package: myapp
 Version: 0.1
 Architecture: arm64
 Maintainer: yourname <you@example.com>
-Section: MyApp
+Section: APPLaunch
 Priority: optional
 Homepage: https://www.m5stack.com
 Description: M5CardputerZero MyApp
@@ -328,16 +334,17 @@ Icon=share/images/email.png
 Type=Application
 EOF
 
-# 3. 可选：上传自定义图标
+# 3. 可选：上传自定义图标（普通用户通常没有 /usr/share 写权限，先传 /tmp 再安装）
 # （在开发机执行）
-scp myapp_icon.png pi@<device-ip>:/usr/share/APPLaunch/share/images/
+scp myapp_icon.png pi@<device-ip>:/tmp/
+ssh pi@<device-ip> "sudo install -m 0644 /tmp/myapp_icon.png /usr/share/APPLaunch/share/images/"
 
-# 4. 重启 APPLaunch 使新 App 生效
-sudo systemctl restart APPLaunch.service
+# 4. 通常 3 秒内会自动刷新；如需强制刷新：
+systemctl --user restart APPLaunch.service
 ```
 
-> **提示：** APPLaunch 每次启动时才扫描 `applications/` 目录，
-> 因此也可以不重启服务，直接重启设备或重启 APPLaunch 进程来加载新 App。
+> **提示：** APPLaunch 启动后会约每 3 秒检查一次 `applications/` 目录变化，
+> 因此新增、删除或修改 `.desktop` 后通常不需要重启服务。
 
 ---
 
@@ -348,8 +355,8 @@ sudo systemctl restart APPLaunch.service
 
 - 检查文件名是否以 `.desktop` 结尾（如 `myapp.desktop`，不能是 `myapp.desktop.temple`）。
 - 检查文件是否包含 `[Desktop Entry]` 节头，且 `Name` 和 `Exec` 字段均不为空。
-- 执行 `sudo systemctl restart APPLaunch.service` 重启服务后再观察。
-- 查看日志：`sudo journalctl -u APPLaunch.service -f`
+- 等待目录 watcher 自动刷新，或执行 `systemctl --user restart APPLaunch.service` 后再观察。
+- 查看日志：`journalctl --user -u APPLaunch.service -f`
 
 **Q2：图标显示为空白或默认图标。**
 

@@ -1,13 +1,13 @@
 # 06 - Resources and Configuration System
 
-This chapter explains APPLaunch runtime resource directories, path resolution rules, `.desktop` dynamic application files, configuration APIs, settings-page configuration keys, and resource usage notes. Key source files are `ext_components/cp0_lvgl/include/cp0_lvgl_app.h`, `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_file.cpp`, `ext_components/cp0_lvgl/src/sdl/sdl_lvgl_file.cpp`, `projects/APPLaunch/main/ui/Launch.cpp`, and `projects/APPLaunch/main/ui/page_app/ui_app_setup.hpp`.
+This chapter explains APPLaunch runtime resource directories, path resolution rules, `.desktop` dynamic application files, configuration APIs, settings-page configuration keys, and resource usage notes. Key source files are `ext_components/cp0_lvgl/include/cp0_lvgl_app.h`, `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_file.cpp`, `ext_components/cp0_lvgl/src/sdl/sdl_lvgl_file.cpp`, `projects/APPLaunch/main/ui/launch.cpp`, and `projects/APPLaunch/main/ui/page_app/ui_app_setup.hpp`.
 
 ## 1. Resource System Overview
 
 APPLaunch pages should not manually concatenate runtime paths. Instead, use `cp0_file_path()` / `cp0_file_path_c()` for unified resolution.
 
 ```text
-Page code / Launch.cpp
+Page code / launch.cpp
         |
         v
 img_path(), audio_path(), cp0_file_path_c()
@@ -66,7 +66,7 @@ After installation on a device, it usually maps to:
 
 | Directory | Contents | Used by |
 | --- | --- | --- |
-| `applications/` | `.desktop` application descriptors | `LaunchImpl::applications_load()` |
+| `applications/` | `.desktop` application descriptors | `Launch::applications_load()` |
 | `share/images/` | Icons, status-bar backgrounds, page images, GIFs | Home screen, top bar, built-in pages |
 | `share/audio/` | `startup.mp3`, `switch.wav`, `enter.wav`, page key sounds | Home sound effects, settings page, page sound effects |
 | `share/font/` | TTF/OTF fonts | `LauncherFonts`, page custom fonts |
@@ -145,14 +145,14 @@ Therefore, the returned `const char *` is stable within the thread and can be pa
 Common home-screen and built-in-page usage:
 
 ```cpp
-app_list.emplace_back("MUSIC", img_path("music_100.png"), page_v<UIMusicPage>);
+app_list.emplace_back("GAME", img_path("game_100.png"), page_v<UIGamePage>);
 
 lv_obj_set_style_bg_img_src(time_panel_,
     cp0_file_path_c("status_time_background.png"),
     LV_PART_MAIN | LV_STATE_DEFAULT);
 ```
 
-Home card icons are set by `Launch.cpp::panel_set_icon()`:
+Home card icons are set by `launch.cpp::panel_set_icon()`:
 
 ```cpp
 static void panel_set_icon(lv_obj_t *panel, const char *src)
@@ -203,7 +203,7 @@ Font paths are ultimately resolved by `cp0_file_path()` into `share/font/`. If f
 
 ## 5. `.desktop` Dynamic Applications
 
-Dynamic application files are placed in the directory pointed to by `cp0_file_path("applications")`. `LaunchImpl::applications_load()` only processes `*.desktop` files and parses the `[Desktop Entry]` section.
+Dynamic application files are placed in the directory pointed to by `cp0_file_path("applications")`. `Launch::applications_load()` only processes `*.desktop` files and parses the `[Desktop Entry]` section.
 
 Supported keys:
 
@@ -273,13 +273,13 @@ The `Launcher` menu in `UISetupPage` saves `app_<Name>`:
 
 | Configuration key | Default | Meaning | Notes |
 | --- | --- | --- | --- |
-| `app_Python` | `1` | Python entry display toggle | Visible in settings, but Python is fixed in `Launch.cpp`; currently this toggle does not affect fixed entries |
+| `app_Python` | `1` | Python entry display toggle | Visible in settings, but Python is fixed in `launch.cpp`; currently this toggle does not affect fixed entries |
 | `app_Store` | `1` | Store entry | always-on, cannot be disabled |
 | `app_CLI` | `1` | CLI entry | always-on, cannot be disabled |
 | `app_Game` | `1` | GAME entry | always-on, cannot be disabled |
 | `app_Setting` | `1` | SETTING entry | always-on, cannot be disabled |
-| `app_Music` | `1` | MUSIC built-in page | Read by `Launch.cpp` |
-| `app_Math` | `1` | Calculator external application | Read by `Launch.cpp` |
+| `app_Game` | `1` | GAME built-in page | Read by `launch.cpp` |
+| `app_Math` | `1` | Calculator external application | Read by `launch.cpp` |
 | `app_IP_Panel` | `1` | IP_PANEL built-in page | Read under Linux non-SDL builds |
 | `app_File` | `1` | FILE built-in page | Read under Linux non-SDL builds |
 | `app_SSH` | `1` | SSH built-in page | Read under Linux non-SDL builds |
@@ -289,7 +289,7 @@ The `Launcher` menu in `UISetupPage` saves `app_<Name>`:
 | `app_LoRa` | `1` | LORA built-in page | Read under Linux non-SDL builds |
 | `app_Tank` | `1` | TANK built-in page | Read under Linux non-SDL builds |
 
-Note: `Compass` currently has no corresponding `app_Compass` setting and is added unconditionally by `Launch.cpp`.
+Note: `Compass` currently has no corresponding `app_Compass` setting and is added unconditionally by `launch.cpp`.
 
 ### 7.2 System and Page Configuration
 
@@ -339,12 +339,12 @@ When changing configuration keys, check all of the following in sync:
 
 - `app_keys` / `app_labels` in `UISetupPage::menu_init()`.
 - The `app_keys` and always-on list in `UISetupPage::save_app_toggle()`.
-- `APP_ENABLED("...")` in `Launch.cpp`.
+- `APP_ENABLED("...")` in `launch.cpp`.
 - Documentation and default configuration.
 
 ## 9. Resource Naming Recommendations
 
-- Name home icons as `<app>_100.png`, such as `music_100.png` and `setting_100.png`.
+- Name home icons as `<app>_100.png`, such as `game_100.png` and `setting_100.png`.
 - Name small icons or status backgrounds by function, such as `status_time_background.png` and `status_battery_background.png`.
 - Use a page prefix for page-specific resources, such as `setting_ok.png` and `setting_cross.png`.
 - Use short names for sound effects, such as `switch.wav`, `enter.wav`, and `key_back.wav`.
@@ -357,5 +357,5 @@ When changing configuration keys, check all of the following in sync:
 - The `.desktop` `Icon` value does not automatically call `cp0_file_path()`; use a path that LVGL can read directly, or keep it consistent with existing templates.
 - If a new resource is used on the device side, confirm that packaging scripts include `projects/APPLaunch/APPLaunch/share/...` in the install package.
 - If `cp0_config_save()` is forgotten after writing configuration, the value will be lost after reboot.
-- `app_*` toggles affect the list the next time `LaunchImpl` is constructed; changing them at runtime may not immediately update the fixed home list, depending on whether a rebuild/restart is triggered.
+- `app_*` toggles affect the list the next time `Launch` is constructed; changing them at runtime may not immediately update the fixed home list, depending on whether a rebuild/restart is triggered.
 - `run_as_user` affects the execution identity of external processes and PTY commands. Check this setting when debugging permission issues.

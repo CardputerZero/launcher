@@ -6,10 +6,10 @@ This chapter explains how to extend APPLaunch, focusing on four common change ty
 
 | Entry point | Purpose |
 | --- | --- |
-| `projects/APPLaunch/main/ui/Launch.cpp` | Fixed app list, dynamic `.desktop` scanning, launching built-in pages or external processes |
+| `projects/APPLaunch/main/ui/launch.cpp` | Fixed app list, dynamic `.desktop` scanning, launching built-in pages or external processes |
 | `projects/APPLaunch/main/ui/page_app/` | Built-in page implementation directory; pages are usually header-only `.hpp` files |
 | `projects/APPLaunch/main/ui/ui_app_page.hpp` | Shared page capabilities such as `AppPage`, top bar, `img_path()`, and `audio_path()` |
-| `projects/APPLaunch/main/ui/components/generate_page_app_includes.py` | Automatically generates `page_app.h` before build and includes every `page_app/*.hpp` file |
+| `projects/APPLaunch/main/ui/generate_page_app_includes.py` | Automatically generates `generated/page_app.h` before build and includes every `page_app/*.hpp` file |
 | `projects/APPLaunch/APPLaunch/` | Runtime asset tree; after packaging it maps to `/usr/share/APPLaunch/` on the device |
 | `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_file.cpp` | Device-side `cp0_file_path()` path rules |
 | `ext_components/cp0_lvgl/src/sdl/sdl_lvgl_file.cpp` | SDL2 development-host `cp0_file_path()` path rules |
@@ -22,7 +22,7 @@ APPLaunch has two kinds of app sources:
 
 ## 2. Adding a Built-in Page
 
-Built-in pages are suitable for features that run in the same process as Launcher, use LVGL directly, and need to share the input group, top bar, or status bar. Examples include Settings, Music, Files, Camera, and LoRa pages.
+Built-in pages are suitable for features that run in the same process as Launcher, use LVGL directly, and need to share the input group, top bar, or status bar. Examples include Settings, Game, File, Camera, and LoRa pages.
 
 ### 2.1 Create the Page File
 
@@ -80,7 +80,7 @@ private:
 Notes:
 
 - The page must inherit from `AppPage` so it can reuse mechanisms such as `screen()`, `input_group()`, and `navigate_home`.
-- Prefer calling `navigate_home()` to return to the home page. Do not load the home screen directly, or `LaunchImpl` will not be able to release the current page object correctly.
+- Prefer calling `navigate_home()` to return to the home page. Do not load the home screen directly, or `Launch` will not be able to release the current page object correctly.
 - If the page creates LVGL timers, file descriptors, threads, or peripheral handles, release them in the destructor.
 - Use 320x170 as the baseline page size. A common layout is a 20 px top bar and a 320x150 body.
 - Do not hard-code absolute asset paths. Use `img_path("xxx.png")` for images and `audio_path("xxx.wav")` for audio.
@@ -90,12 +90,12 @@ Notes:
 `projects/APPLaunch/main/SConstruct` runs this script before building:
 
 ```python
-ui/components/generate_page_app_includes.py
+ui/generate_page_app_includes.py
 ```
 
-The script scans `projects/APPLaunch/main/ui/page_app/*.hpp` and generates `projects/APPLaunch/main/ui/page_app.h`. In most cases, as long as the file suffix is `.hpp`, it will be included automatically during the build.
+The script scans `projects/APPLaunch/main/ui/page_app/*.hpp` and generates `projects/APPLaunch/build/generated/include/generated/page_app.h`. In most cases, as long as the file suffix is `.hpp`, it will be included automatically during the build.
 
-If you check manually, `page_app.h` should contain:
+If you check manually, `generated/page_app.h` should contain:
 
 ```cpp
 #include "page_app/ui_app_my_tool.hpp"
@@ -103,7 +103,7 @@ If you check manually, `page_app.h` should contain:
 
 ### 2.3 Register the Page in the Home App List
 
-Open `projects/APPLaunch/main/ui/Launch.cpp` and find `LaunchImpl::LaunchImpl()`. Register a built-in page like this:
+Open `projects/APPLaunch/main/ui/launch.cpp` and find `Launch::Launch()`. Register a built-in page like this:
 
 ```cpp
 app_list.emplace_back("MYTOOL", img_path("mytool_100.png"), page_v<UIMyToolPage>);
@@ -136,16 +136,16 @@ Example:
 ```cpp
 static const char *app_keys[] = {
     "Python", "Store", "CLI", "Game", "Setting",
-    "Music", "Math", "MyTool"
+    "Game", "Math", "MyTool"
 };
 
 static const char *app_labels[] = {
     "Python", "Store", "CLI", "Game", "Setting",
-    "Music", "Math", "My Tool"
+    "Game", "Math", "My Tool"
 };
 ```
 
-`save_app_toggle()` stores the switch as `app_<key>`, for example `app_MyTool=0`. Read the same key in `Launch.cpp`:
+`save_app_toggle()` stores the switch as `app_<key>`, for example `app_MyTool=0`. Read the same key in `launch.cpp`:
 
 ```cpp
 cp0_config_get_int("app_MyTool", 1)
@@ -263,7 +263,7 @@ Type=Application
 
 ### 3.3 External App Launch Behavior
 
-`Launch.cpp` supports two external-app launch modes:
+`launch.cpp` supports two external-app launch modes:
 
 - `Terminal=true`: creates `UIConsolePage`, displays a PTY terminal inside the APPLaunch process, and executes `Exec`.
 - `Terminal=false`: calls `cp0_process_exec_blocking()` to start an external process. APPLaunch pauses the LVGL timer and input group, waits for the child process to exit, and then restores the home page.
@@ -283,7 +283,7 @@ If it does not refresh:
 ```bash
 # Device side
 ls -l /usr/share/APPLaunch/applications
-journalctl -u APPLaunch.service -f
+journalctl --user -u APPLaunch.service -f
 
 # SDL2 development host: confirm APPLaunch/applications exists near the run directory
 find projects/APPLaunch -path '*APPLaunch/applications*' -maxdepth 5 -type f
@@ -364,9 +364,9 @@ Steps:
 
 1. Add an internal key such as `MyTool` to `app_keys` in `UISetupPage::menu_init()`.
 2. Add a display label such as `My Tool` to `app_labels` in the same location.
-3. Use the same key when registering the app in `Launch.cpp`: `APP_ENABLED("MyTool")`.
+3. Use the same key when registering the app in `launch.cpp`: `APP_ENABLED("MyTool")`.
 4. Open the Settings page, enter the `Launcher` menu, and toggle O/X.
-5. If the list does not refresh after returning to the home page, restart APPLaunch. The current fixed/built-in list reads configuration when `LaunchImpl` is constructed.
+5. If the list does not refresh after returning to the home page, restart APPLaunch. The current fixed/built-in list reads configuration when `Launch` is constructed.
 
 ### 5.2 Add a Regular Setting
 
@@ -401,8 +401,8 @@ Common commands:
 
 ```bash
 sudo cat /var/lib/applaunch/settings
-sudo sed -i 's/^app_Music=.*/app_Music=1/' /var/lib/applaunch/settings
-sudo systemctl restart APPLaunch.service
+sudo sed -i 's/^app_Game=.*/app_Game=1/' /var/lib/applaunch/settings
+systemctl --user restart APPLaunch.service
 ```
 
 If you add many configuration items, remember that the current maximum is 32 entries. After that limit, `cp0_config_set_*` returns directly and the setting will not be saved.

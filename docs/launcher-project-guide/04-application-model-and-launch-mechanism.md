@@ -1,6 +1,6 @@
 # 04 - Application Model and Launch Mechanism
 
-This chapter explains how APPLaunch unifies built-in pages, terminal commands, and external standalone programs into one application list, and how an application is launched after the user presses Enter. Key references are `projects/APPLaunch/main/ui/Launch.cpp`, `projects/APPLaunch/main/ui/Launch.h`, `projects/APPLaunch/main/ui/UILaunchPage.cpp`, and `projects/APPLaunch/main/ui/page_app/*`.
+This chapter explains how APPLaunch unifies built-in pages, terminal commands, and external standalone programs into one application list, and how an application is launched after the user presses Enter. Key references are `projects/APPLaunch/main/ui/launch.cpp`, `projects/APPLaunch/main/ui/launch.h`, `projects/APPLaunch/main/ui/ui_launch_page.cpp`, and `projects/APPLaunch/main/ui/page_app/*`.
 
 ## 1. Application Model Overview
 
@@ -11,7 +11,7 @@ app
 ├── Name  display title
 ├── Icon  icon path
 ├── Exec  external command; can be empty for built-in pages
-└── launch(LaunchImpl*)  launch action
+└── launch(Launch*)  launch action
 ```
 
 After this unification, the home carousel does not need to care about application type. It only displays `Name` and `Icon`; when Enter is pressed, it simply calls the current `app.launch()`.
@@ -19,7 +19,7 @@ After this unification, the home carousel does not need to care about applicatio
 ```text
 Home center card
   -> Launch::launch_app()
-  -> LaunchImpl::launch_app()
+  -> Launch::launch_app()
   -> app.launch(this)
       ├── Built-in page: new PageT + lv_disp_load_scr()
       ├── Terminal app: UIConsolePage + PTY exec()
@@ -30,67 +30,34 @@ Home center card
 
 | Path | Description |
 | --- | --- |
-| `projects/APPLaunch/main/ui/Launch.h` | Public facade for `Launch`, hiding `LaunchImpl` |
-| `projects/APPLaunch/main/ui/Launch.cpp` | `app`, `LaunchImpl`, application list, launch logic, `.desktop` scanning |
-| `projects/APPLaunch/main/ui/UILaunchPage.cpp` | Forwards Enter / click events to `Launch::launch_app()` |
+| `projects/APPLaunch/main/ui/launch.h` | Public `Launch` interface and app model declarations |
+| `projects/APPLaunch/main/ui/launch.cpp` | `app`, `Launch`, application list, launch logic, `.desktop` scanning |
+| `projects/APPLaunch/main/ui/ui_launch_page.cpp` | Forwards Enter / click events to `Launch::launch_app()` |
 | `projects/APPLaunch/main/ui/page_app/ui_app_console.hpp` | Terminal page `UIConsolePage` |
-| `projects/APPLaunch/main/ui/page_app/*.hpp` | Built-in pages such as settings, music, file, camera, and LoRa |
+| `projects/APPLaunch/main/ui/page_app/*.hpp` | Built-in pages such as settings, game, file, camera, and LoRa |
 | `projects/APPLaunch/APPLaunch/applications/` | Runtime `.desktop` application descriptor directory |
 | `ext_components/cp0_lvgl` | Lower-level capabilities such as process launch, PTY, directory watching, and path resolution |
 
-## 3. `Launch` and `LaunchImpl` Layers
+## 3. `Launch` Runtime State
 
-`Launch.h` exposes only a small public surface:
+`launch.h` exposes the `Launch` class directly. Current code no longer has a separate `LaunchImpl` layer; the application list, directory watcher, current page holder, and carousel helpers all live in `Launch`.
 
-```cpp
-class Launch
-{
-public:
-    void bind_ui();
-    void set_launch_page(std::shared_ptr<UILaunchPage> launch_page);
-    void update_left_slot(lv_obj_t *panel, lv_obj_t *label);
-    void update_right_slot(lv_obj_t *panel, lv_obj_t *label);
-    void launch_app();
-
-private:
-    std::unique_ptr<LaunchImpl> impl_;
-    std::shared_ptr<UILaunchPage> launch_page_;
-};
-```
-
-The real logic lives in `LaunchImpl`:
-
-```cpp
-class LaunchImpl
-{
-private:
-    int current_app = 2;
-    cp0_watcher_t dir_watcher = NULL;
-    lv_timer_t *watch_timer = nullptr;
-    lv_timer_t *status_timer = nullptr;
-    int fixed_count;
-
-public:
-    std::list<app> app_list;
-    std::shared_ptr<void> app_Page;
-    std::shared_ptr<void> home_Page;
-};
-```
-
-Field meanings:
+Important private state includes:
 
 | Field | Description |
 | --- | --- |
+| `launch_page_` | Weak reference to the home `UILaunchPage` |
 | `current_app` | Application index corresponding to the current center card. Defaults to `2`, so the initial center card is CLI |
-| `app_list` | All fixed applications and dynamic `.desktop` applications |
-| `fixed_count` | Number of fixed applications. Dynamic reload keeps the elements before this point |
+| `dir_watcher_` / `watch_timer_` | Watches the `applications/` directory and reloads dynamic apps |
+| `fixed_count` | Number of built-in/fixed applications. Dynamic reload keeps the elements before this point |
+| `app_list` | Built-in entries plus dynamic `.desktop` entries |
 | `app_Page` | Lifetime holder for the current built-in page or terminal page |
-| `dir_watcher` / `watch_timer` | Watches the `applications/` directory for changes and reloads dynamic apps |
-| `status_timer` | Timer that refreshes the home status bar |
+
+`Launch::bind_ui()` builds the initial list, loads dynamic `.desktop` files, starts the directory watcher timer, and registers the app-registry change callback.
 
 ## 4. `app` Structure and Three Launch Modes
 
-`app` is defined in `Launch.cpp`:
+`app` is defined in `launch.cpp`:
 
 ```cpp
 struct app
@@ -99,7 +66,7 @@ struct app
     std::string Icon;
     std::string Exec;
 
-    std::function<void(LaunchImpl *)> launch;
+    std::function<void(Launch *)> launch;
 
     app(std::string name, std::string icon, std::string exec, bool terminal);
     app(std::string name, std::string icon, std::string exec, bool terminal, bool sysplause);
@@ -114,32 +81,32 @@ Three application categories:
 
 | Type | Construction | Launch function | Examples |
 | --- | --- | --- | --- |
-| Built-in page | `page_v<PageT>` | Constructs a page and calls `lv_disp_load_scr()` | `GAME`, `SETTING`, `MUSIC` |
+| Built-in page | `page_v<PageT>` | Constructs a page and calls `lv_disp_load_scr()` | `GAME`, `SETTING`, `Compass` |
 | Terminal command | `exec, terminal=true` | `launch_Exec_in_terminal()` | `Python`, `CLI` |
 | External process | `exec, terminal=false` | `launch_Exec()` | AppStore, Calculator |
 
 ## 5. Fixed Application Registration
 
-The `LaunchImpl` constructor first registers fixed entries:
+Built-in entries are declared in `launch.cpp` as `kBuiltinApps[]`. Each entry carries an `AppDescriptor` with the label, icon, config key, whether it is configurable in Settings, and whether it is always on.
+
+Representative entries:
 
 ```cpp
-app_list.emplace_back("Python", img_path("python_100.png"), "python3", true, false);
-app_list.emplace_back("STORE", img_path("store_100.png"),
-                      "/usr/share/APPLaunch/bin/M5CardputerZero-AppStore",
-                      false, true, true);
-app_list.emplace_back("CLI", img_path("cli_100.png"), "bash", true, false);
-app_list.emplace_back("GAME", img_path("game_100.png"), page_v<UIGamePage>);
-app_list.emplace_back("SETTING", img_path("setting_100.png"), page_v<UISetupPage>);
+constexpr BuiltinAppRegistration kBuiltinApps[] = {
+    {{"Python", "python_100.png", "app_Python", false, true}, "python3", true, false, false, nullptr},
+    {{"STORE", "store_100.png", "app_Store", false, true},
+     "/usr/share/APPLaunch/bin/M5CardputerZero-AppStore", false, true, true, nullptr},
+    {{"CLI", "cli_100.png", "app_CLI", false, true}, "bash", true, false, false, nullptr},
+    {{"GAME", "game_100.png", "app_Game", false, true}, nullptr, false, true, false, append_page_app<UIGamePage>},
+    {{"SETTING", "setting_100.png", "app_Setting", false, true}, nullptr, false, true, false, append_page_app<UISetupPage>},
+    {{"MATH", "math_100.png", "app_Math", true, false},
+     "/usr/share/APPLaunch/bin/M5CardputerZero-Calculator", false, true, false, nullptr},
+};
 ```
 
-Then it writes the first 5 applications into the 5 home-screen slots:
+`Launch::rebuild_builtin_apps()` clears the list, appends enabled built-ins by calling `launcher_app_registry_is_enabled()`, and updates `fixed_count`. Settings changes are saved through `launcher_app_registry_set_enabled()` and then trigger `Launch::applications_reload()`.
 
-```cpp
-lv_label_set_text(UILaunchPage::label(0), it->Name.c_str());
-panel_set_icon(UILaunchPage::panel(0), it->Icon.c_str());
-```
-
-Initial state:
+The first five entries initialize the 5-slot home carousel:
 
 ```text
 slot 0 far-left : Python
@@ -150,23 +117,6 @@ slot 4 far-right: SETTING
 current_app     : 2
 ```
 
-After that, optional applications are appended according to settings and platform conditions:
-
-```cpp
-#define APP_ENABLED(key) (cp0_config_get_int("app_" key, 1) != 0)
-
-if (APP_ENABLED("Music"))
-    app_list.emplace_back("MUSIC", img_path("music_100.png"), page_v<UIMusicPage>);
-
-if (APP_ENABLED("Math"))
-    app_list.emplace_back("MATH", img_path("math_100.png"),
-                          "/usr/share/APPLaunch/bin/M5CardputerZero-Calculator", false);
-
-app_list.emplace_back("Compass", img_path("compass_needle_80.png"), page_v<UICompassPage>);
-```
-
-On Linux device builds, pages such as `IP_PANEL`, `FILE`, `SSH`, `MESH`, `REC`, `CAMERA`, `LORA`, and `TANK` are also appended according to configuration.
-
 ## 6. Built-in Page Launch Mechanism
 
 Built-in pages are constructed through the template constructor:
@@ -176,7 +126,7 @@ template <class PageT>
 app::app(std::string name, std::string icon, page_t<PageT>)
     : Name(std::move(name)), Icon(std::move(icon))
 {
-    launch = [](LaunchImpl *self)
+    launch = [](Launch *self)
     {
         ui_loading_show("Loading...");
         lv_refr_now(NULL);
@@ -185,7 +135,7 @@ app::app(std::string name, std::string icon, page_t<PageT>)
         self->app_Page = p;
         lv_disp_load_scr(p->screen());
         lv_indev_set_group(lv_indev_get_next(NULL), p->input_group());
-        p->navigate_home = std::bind(&LaunchImpl::go_back_home, self);
+        p->navigate_home = std::bind(&Launch::go_back_home, self);
 
         ui_loading_hide();
     };
@@ -203,14 +153,14 @@ Launch sequence:
 
 ```text
 Enter
-  -> app.launch(LaunchImpl*)
+  -> app.launch(Launch*)
   -> ui_loading_show("Loading...")
   -> lv_refr_now(NULL)
   -> make_shared<PageT>()
   -> app_Page = p keeps the lifetime
   -> lv_disp_load_scr(p->screen())
   -> Input device switches to p->input_group()
-  -> p->navigate_home = LaunchImpl::go_back_home
+  -> p->navigate_home = Launch::go_back_home
   -> ui_loading_hide()
 ```
 
@@ -228,7 +178,7 @@ void launch_Exec_in_terminal(const std::string &exec, bool sysplause = true)
     app_Page = p;
     lv_disp_load_scr(p->screen());
     lv_indev_set_group(lv_indev_get_next(NULL), p->input_group());
-    p->navigate_home = std::bind(&LaunchImpl::go_back_home, this);
+    p->navigate_home = std::bind(&Launch::go_back_home, this);
     p->terminal_sysplause = sysplause;
 
     ui_loading_hide();
@@ -331,7 +281,7 @@ void go_back_home()
 
 static void lv_go_back_home(void *arg)
 {
-    auto self = (LaunchImpl *)arg;
+    auto self = (Launch *)arg;
     lv_timer_enable(true);
     if (self->launch_page_)
         self->launch_page_->show_home_screen();
@@ -406,7 +356,7 @@ Note: dynamic applications are deduplicated by `Exec`; if `Exec` matches a fixed
 
 ## 11. Dynamic Application Directory Watching and Reloading
 
-At the end of the `LaunchImpl` constructor:
+At the end of the `Launch` constructor:
 
 ```cpp
 fixed_count = app_list.size();
@@ -478,7 +428,7 @@ User releases ENTER
       -> launch_->launch_app()
   -> Launch::launch_app()
       -> impl_->launch_app()
-  -> LaunchImpl::launch_app()
+  -> Launch::launch_app()
       -> auto it = std::next(app_list.begin(), current_app)
       -> it->launch(this)
   -> Enter built-in page / terminal page / external process based on app type
@@ -486,7 +436,7 @@ User releases ENTER
 
 ## 14. Notes
 
-- `Launch::bind_ui()` must be called before `LaunchImpl` is created. Otherwise, the home screen may be displayed, but application list updates, the status-bar timer, directory watching, and launch logic will not work.
+- `Launch::bind_ui()` must be called before `Launch` is created. Otherwise, the home screen may be displayed, but application list updates, the status-bar timer, directory watching, and launch logic will not work.
 - `current_app` defaults to `2`. The order of the first 5 fixed entries affects the initial center card; consider the initial home experience when changing this order.
 - If built-in page construction can take a long time, keep `ui_loading_show()` + `lv_refr_now()` so the user sees immediate feedback.
 - Launching an external application pauses APPLaunch LVGL timers and input group. The external program must exit normally or respond to the HOME logic, otherwise the user will feel stuck in the external UI.

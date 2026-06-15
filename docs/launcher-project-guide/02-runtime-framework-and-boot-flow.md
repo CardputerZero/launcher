@@ -1,6 +1,6 @@
 # 02 - Runtime Framework and Boot Flow
 
-This chapter explains the full path from the APPLaunch process entry point to the first frame of the home screen. Key references are `projects/APPLaunch/main/src/main.cpp`, `projects/APPLaunch/main/ui/ui.cpp`, `projects/APPLaunch/main/ui/zero_lvgl_os.cpp`, and `projects/APPLaunch/main/ui/UILaunchPage.cpp`.
+This chapter explains the full path from the APPLaunch process entry point to the first frame of the home screen. Key references are `projects/APPLaunch/main/src/main.cpp`, `projects/APPLaunch/main/ui/ui.cpp`, `projects/APPLaunch/main/ui/launcher_ui_runtime.cpp`, and `projects/APPLaunch/main/ui/ui_launch_page.cpp`.
 
 ## 1. Runtime Framework Overview
 
@@ -18,17 +18,17 @@ APPLaunch process
 │       ├── lv_timer_handler()
 │       └── usleep(5000)
 └── ui_init()
-    └── zero_lvgl_os()
-        ├── creat_display()
+    └── LauncherUiRuntime()
+        ├── create_display()
         ├── Create Launch / UILaunchPage bound objects
-        └── create_launcher_home()
+        └── build_launcher_home()
 ```
 
 Core characteristics:
 
 - LVGL initialization and platform adaptation initialization are executed only once in `main()`.
-- The home UI is created under the control of `zero_lvgl_os`; the actual objects are created in `UILaunchPage::create_screen()`.
-- `Launch` / `LaunchImpl` is responsible for the application list, launch modes, status bar refresh, and dynamic application directory watching.
+- The home UI is created under the control of `LauncherUiRuntime`; the actual objects are created in `UILaunchPage::create_screen()`.
+- `Launch` / `Launch` is responsible for the application list, launch modes, status bar refresh, and dynamic application directory watching.
 - Immediately after `ui_init()`, the first home frame is forced to refresh through `lv_obj_invalidate()` + `lv_refr_now(NULL)`, avoiding a black screen while waiting for the next natural refresh after startup.
 
 ## 2. Entry Files and Key Source Paths
@@ -36,10 +36,10 @@ Core characteristics:
 | Path | Role |
 | --- | --- |
 | `projects/APPLaunch/main/src/main.cpp` | Process entry point, LVGL main loop, and external-application runtime lock detection |
-| `projects/APPLaunch/main/ui/ui.cpp` | `ui_init()`, creates the global `zero_lvgl_os home` |
-| `projects/APPLaunch/main/ui/zero_lvgl_os.cpp` | Sets the LVGL theme, creates the home screen, and creates Launch bound objects |
-| `projects/APPLaunch/main/ui/UILaunchPage.cpp` | Home screen, startup GIF, home loading, and input group |
-| `projects/APPLaunch/main/ui/Launch.cpp` | Application manager; launches external/terminal/built-in pages and owns the status bar timer |
+| `projects/APPLaunch/main/ui/ui.cpp` | `ui_init()`, creates the global `LauncherUiRuntime home` |
+| `projects/APPLaunch/main/ui/launcher_ui_runtime.cpp` | Sets the LVGL theme, creates the home screen, and creates Launch bound objects |
+| `projects/APPLaunch/main/ui/ui_launch_page.cpp` | Home screen, startup GIF, home loading, and input group |
+| `projects/APPLaunch/main/ui/launch.cpp` | Application manager; launches external/terminal/built-in pages and owns the status bar timer |
 | `ext_components/cp0_lvgl` | Wrappers for `cp0_lvgl_init()`, file paths, input, processes, and system capabilities |
 
 ## 3. `main()` Boot Flow
@@ -110,41 +110,41 @@ Each loop iteration
 `ui_init()` is located in `projects/APPLaunch/main/ui/ui.cpp`:
 
 ```cpp
-std::unique_ptr<zero_lvgl_os> home;
+std::unique_ptr<LauncherUiRuntime> home;
 
 void ui_init(void)
 {
-    home = std::make_unique<zero_lvgl_os>();
+    home = std::make_unique<LauncherUiRuntime>();
 }
 ```
 
-The `zero_lvgl_os` constructor continues with:
+The `LauncherUiRuntime` constructor continues with:
 
 ```cpp
-zero_lvgl_os::zero_lvgl_os()
+LauncherUiRuntime::LauncherUiRuntime()
 {
-    creat_display();
+    create_display();
 
     launch_ = std::make_shared<Launch>();
     launch_page_ = std::make_shared<UILaunchPage>(launch_);
     launch_->set_launch_page(launch_page_);
 
-    create_launcher_home();
+    build_launcher_home();
 }
 ```
 
 Pay attention to the order here:
 
-1. `creat_display()` first creates the font manager and sets the LVGL theme.
+1. `create_display()` first creates the font manager and sets the LVGL theme.
 2. It constructs `Launch` and `UILaunchPage`, then establishes the two-way collaboration relationship through `Launch::set_launch_page()`.
-3. `create_launcher_home()` creates the home screen, calls `Launch::bind_ui()` to build the application list, initializes the input group, and displays either the home screen or the startup GIF.
+3. `build_launcher_home()` creates the home screen, calls `Launch::bind_ui()` to build the application list, initializes the input group, and displays either the home screen or the startup GIF.
 
 ## 5. Display / Theme Initialization
 
-The core code of `zero_lvgl_os::creat_display()`:
+The core code of `LauncherUiRuntime::create_display()`:
 
 ```cpp
-void zero_lvgl_os::creat_display()
+void LauncherUiRuntime::create_display()
 {
     fonts_ = std::make_shared<LauncherFonts>();
 
@@ -163,14 +163,14 @@ Notes:
 
 - `LauncherFonts` is the FreeType font cache shared by the home screen and pages. Its entry function is `launcher_fonts()`.
 - `lv_disp_get_default()` depends on `cp0_lvgl_init()` having already registered the display device.
-- The theme is only the base theme. Most home controls still have their sizes, colors, background images, and fonts set manually in `UILaunchPage.cpp`.
+- The theme is only the base theme. Most home controls still have their sizes, colors, background images, and fonts set manually in `ui_launch_page.cpp`.
 
 ## 6. Home Creation and Display Flow
 
-`zero_lvgl_os::create_launcher_home()` is the main entry point for displaying the home screen:
+`LauncherUiRuntime::build_launcher_home()` is the main entry point for displaying the home screen:
 
 ```cpp
-void zero_lvgl_os::create_launcher_home()
+void LauncherUiRuntime::build_launcher_home()
 {
     LV_EVENT_GET_COMP_CHILD = lv_event_register_id();
 
@@ -273,21 +273,21 @@ main()
   -> cp0_lvgl_init()
   -> register LV_EVENT_KEYBOARD
   -> ui_init()
-      -> new zero_lvgl_os
-          -> creat_display()
+      -> new LauncherUiRuntime
+          -> create_display()
               -> new LauncherFonts
               -> lv_disp_get_default()
               -> lv_theme_default_init()
           -> new Launch
           -> new UILaunchPage(Launch)
           -> Launch::set_launch_page()
-          -> create_launcher_home()
+          -> build_launcher_home()
               -> register LV_EVENT_GET_COMP_CHILD
               -> launch_page_->create_screen()
                   -> home_base::creat_Top_UI()
                   -> create_app_container(content_container())
               -> launch_->bind_ui()
-                  -> new LaunchImpl
+                  -> new Launch
                   -> Register fixed/dynamic applications and write them into home slots
                   -> Create status bar and application directory watch timers
               -> launch_page_->init_input_group()

@@ -106,8 +106,10 @@ if 'CONFIG_APPLAUNCH_CROSS' in os.environ:
     LDFLAGS += [rootfs_path/"usr"/"lib"/"aarch64-linux-gnu"/"libstdc++.so.6"]
 
 
-# x86
-if 'CONFIG_APPLAUNCH_LINUX_X86_SDL2' in os.environ:
+# Host SDL2 builds (Linux x86_64 and Windows x86) need pkg-config flags
+# for the APPLaunch sources and for LVGL's SDL/FreeType features.
+if ('CONFIG_APPLAUNCH_LINUX_X86_SDL2' in os.environ or
+        'CONFIG_APPLAUNCH_WIN_X86_SDL2' in os.environ):
     lvgl_component['DEFINITIONS'] += pkg_config_cflags("freetype2")
     lvgl_component['REQUIREMENTS'] += pkg_config_ldflags("freetype2")
     DEFINITIONS += pkg_config_cflags("sdl2")

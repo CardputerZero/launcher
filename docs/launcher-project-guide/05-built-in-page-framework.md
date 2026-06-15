@@ -1,15 +1,15 @@
 # 05 - Built-in Page Framework
 
-This chapter explains the class hierarchy, lifecycle, page list, page registration method, and conventions for adding built-in APPLaunch pages. Key source files are `projects/APPLaunch/main/ui/ui_app_page.hpp`, `projects/APPLaunch/main/ui/page_app/*.hpp`, `projects/APPLaunch/main/ui/Launch.cpp`, and `projects/APPLaunch/main/ui/UILaunchPage.cpp`.
+This chapter explains the class hierarchy, lifecycle, page list, page registration method, and conventions for adding built-in APPLaunch pages. Key source files are `projects/APPLaunch/main/ui/ui_app_page.hpp`, `projects/APPLaunch/main/ui/page_app/*.hpp`, `projects/APPLaunch/main/ui/launch.cpp`, and `projects/APPLaunch/main/ui/ui_launch_page.cpp`.
 
 ## 1. What a Built-in Page Is
 
 A built-in page is an LVGL page class compiled into the APPLaunch process. It is different from an external `.desktop` application:
 
 - A built-in page directly creates an `lv_obj_t *root_screen_` and switches to its own screen through `lv_disp_load_scr(page->screen())`.
-- The page object is stored in `LaunchImpl::app_Page`, and is released asynchronously by the `navigate_home` callback when exiting.
+- The page object is stored in `Launch::app_Page`, and is released asynchronously by the `navigate_home` callback when exiting.
 - The page shares the APPLaunch process, LVGL main loop, input thread, resource resolution, and `cp0_lvgl_app.h` system interfaces with the home screen.
-- Pages are usually header-only and placed under `projects/APPLaunch/main/ui/page_app/`, then aggregated by `components/page_app.h`.
+- Pages are usually header-only and placed under `projects/APPLaunch/main/ui/page_app/`, then aggregated by `build/generated/include/generated/page_app.h`.
 
 Simplified relationship:
 
@@ -17,7 +17,7 @@ Simplified relationship:
 UILaunchPage home carousel
         |
         v
-LaunchImpl::launch_app()
+Launch::launch_app()
         |
         +-- External command: cp0_process_exec_blocking()
         +-- Terminal command: UIConsolePage + PTY
@@ -62,7 +62,7 @@ Key points:
 
 - `root_screen_` is the page's own top-level screen, not a child of the home `UILaunchPage::screen()`.
 - By default, `input_group_` only contains `root_screen_`. When the page is launched, it is bound to the current `lv_indev_t`.
-- `navigate_home` is injected by `LaunchImpl`; a page calls it to return home after ESC or after finishing a task.
+- `navigate_home` is injected by `Launch`; a page calls it to return home after ESC or after finishing a task.
 - The destructor deletes `root_screen_` and `input_group_`, so LVGL child objects created inside the page are released with the screen.
 
 ### 2.2 Top Bar, Content Area, and Bottom Bar Regions
@@ -123,31 +123,31 @@ Note: ordinary built-in pages have their own status refresh timer. A page must r
 
 ### 4.1 Launching a Built-in Page from Home
 
-`Launch.cpp` constructs a built-in page app descriptor through a template:
+`launch.cpp` constructs a built-in page app descriptor through a template:
 
 ```cpp
 template <class PageT>
 app::app(std::string name, std::string icon, page_t<PageT>)
     : Name(std::move(name)), Icon(std::move(icon))
 {
-    launch = [](LaunchImpl *ctx) {
+    launch = [](Launch *ctx) {
         auto p = std::make_shared<PageT>();
         ctx->app_Page = p;
-        p->navigate_home = std::bind(&LaunchImpl::go_back_home, ctx);
+        p->navigate_home = std::bind(&Launch::go_back_home, ctx);
         lv_disp_load_scr(p->screen());
         lv_indev_set_group(lv_indev_get_next(NULL), p->input_group());
     };
 }
 ```
 
-In the actual code in `projects/APPLaunch/main/ui/Launch.cpp`, the core flow is:
+In the actual code in `projects/APPLaunch/main/ui/launch.cpp`, the core flow is:
 
 1. After the user releases ENTER on the home screen, `UILaunchPage::handle_home_key()` calls `launch_selected_app()`.
 2. `UILaunchPage::launch_selected_app()` forwards to `Launch::launch_app()`.
-3. `LaunchImpl::launch_app()` finds the current app and executes that app's `launch` function.
+3. `Launch::launch_app()` finds the current app and executes that app's `launch` function.
 4. The built-in page object is created, the screen is loaded, and the input group is switched.
 5. The page calls `navigate_home()` after ESC or after completing its business logic.
-6. `LaunchImpl::go_back_home()` uses `lv_async_call()` to return to the home screen, rebinds the home input group, and resets `app_Page`.
+6. `Launch::go_back_home()` uses `lv_async_call()` to return to the home screen, rebinds the home input group, and resets `app_Page`.
 
 ### 4.2 Returning Home
 
@@ -158,7 +158,7 @@ if (navigate_home)
     navigate_home();
 ```
 
-`LaunchImpl::lv_go_back_home()` will:
+`Launch::lv_go_back_home()` will:
 
 - `lv_timer_enable(true)` to restore LVGL timers.
 - `UILaunchPage::bind_home_input_group()` to bind the home input group.
@@ -168,7 +168,7 @@ if (navigate_home)
 Notes:
 
 - A page destructor must stop any `lv_timer_t`, background thread, file watcher, PTY, or audio resource that the page created.
-- Do not directly `delete this` from a keyboard event callback stack; use `navigate_home` and let `LaunchImpl` handle it asynchronously.
+- Do not directly `delete this` from a keyboard event callback stack; use `navigate_home` and let `Launch` handle it asynchronously.
 - If a page temporarily switches to a child or nested page, it must restore the correct input group.
 
 ## 5. Current Built-in Page List
@@ -180,9 +180,9 @@ Page implementations are concentrated in `projects/APPLaunch/main/ui/page_app/`.
 | `UIConsolePage` | `ui_app_console.hpp` | `CLI` or terminal external command | `AppPage` | Terminal emulator, PTY read/write, supports ANSI/VT sequences and keyboard escape sequences |
 | `UIGamePage` | `ui_app_game.hpp` | `GAME` | `AppPageRoot` | Snake game, full-screen custom drawing, driven by an LVGL timer |
 | `UISetupPage` | `ui_app_setup.hpp` | `SETTING` | `AppPage` | System settings, application toggles, brightness, volume, WiFi, camera resolution, and more |
-| `UIMusicPage` | `ui_app_music.hpp` | `MUSIC` | `AppPage` | Music player, directory browsing, playlist, audio callbacks |
+| `UIGamePage` | `ui_app_game.hpp` | `GAME` | `AppPage` | Built-in game entry |
 | `UICompassPage` | `ui_app_compass.hpp` | `Compass` | `AppPageRoot` | Compass page, sensor thread + UI timer |
-| `UIIpPanelPage` | `ui_app_IpPanel.hpp` | `IP_PANEL` | `AppPage` | Network interface/IP information list, refreshed every second |
+| `UIIpPanelPage` | `ui_app_ip_panel.hpp` | `IP_PANEL` | `AppPage` | Network interface/IP information list, refreshed every second |
 | `UIFilePage` | `ui_app_file.hpp` | `FILE` | `AppPage` | File browser, directory list and enter/back navigation |
 | `UISSHPage` | `ui_app_ssh.hpp` | `SSH` | `AppPage` | SSH parameter input, embeds `UIConsolePage` after connection |
 | `UIMeshPage` | `ui_app_mesh.hpp` | `MESH` | `AppPage` | Mesh message list, input overlay, send/refresh |
@@ -195,7 +195,7 @@ Page implementations are concentrated in `projects/APPLaunch/main/ui/page_app/`.
 
 ## 6. Page Registration and Display Order
 
-Built-in pages are inserted into `app_list` in `LaunchImpl::LaunchImpl()`. The first 5 fixed applications initialize the 5 home carousel slots first:
+Built-in pages are inserted into `app_list` in `Launch::Launch()`. The first 5 fixed applications initialize the 5 home carousel slots first:
 
 ```cpp
 app_list.emplace_back("Python", img_path("python_100.png"), "python3", true, false);
@@ -205,22 +205,12 @@ app_list.emplace_back("GAME", img_path("game_100.png"), page_v<UIGamePage>);
 app_list.emplace_back("SETTING", img_path("setting_100.png"), page_v<UISetupPage>);
 ```
 
-Optional built-in pages are then added according to setting toggles:
-
-```cpp
-#define APP_ENABLED(key) (cp0_config_get_int("app_" key, 1) != 0)
-
-if (APP_ENABLED("Music"))
-    app_list.emplace_back("MUSIC", img_path("music_100.png"), page_v<UIMusicPage>);
-
-if (APP_ENABLED("IP_Panel"))
-    app_list.emplace_back("IP_PANEL", img_path("ip_panel_100.png"), page_v<UIIpPanelPage>);
-```
+Built-in page visibility is now driven by `kBuiltinApps[]` and `AppDescriptor.config_key`. `Launch::rebuild_builtin_apps()` calls `launcher_app_registry_is_enabled()` before appending each descriptor, and Settings changes call `launcher_app_registry_set_enabled()` followed by `Launch::applications_reload()`.
 
 Conventions:
 
 - `Store`, `CLI`, `Game`, and `Setting` are always-on in the settings page and cannot be disabled.
-- `Compass` is currently added unconditionally in `Launch.cpp` and is not controlled by the Launcher toggle list in `UISetupPage`.
+- `Compass` is currently added unconditionally in `launch.cpp` and is not controlled by the Launcher toggle list in `UISetupPage`.
 - Pages such as `IP_PANEL`, `FILE`, `SSH`, `MESH`, `REC`, `CAMERA`, `LORA`, and `TANK` are added only in Linux device builds; SDL builds are limited by `#if defined(__linux__) && !defined(HAL_PLATFORM_SDL)`.
 - Dynamic `.desktop` applications are scanned and added after built-in pages. Directory changes are checked by a watcher every 3 seconds.
 
@@ -315,13 +305,13 @@ Special care is required for this type of page:
 
 ## 10. Relationship with the Home Carousel
 
-The home carousel itself is managed by `UILaunchPage.cpp`:
+The home carousel itself is managed by `ui_launch_page.cpp`:
 
 - `carousel_elements` stores 5 cards, 5 titles, and 5 page dots.
-- When switching left/right, `switch_left()` / `switch_right()` are called. After the animation finishes, the array is rotated and `LaunchImpl` updates the far-side slot content.
+- When switching left/right, `switch_left()` / `switch_right()` are called. After the animation finishes, the array is rotated and `Launch` updates the far-side slot content.
 - ENTER triggers `UILaunchPage::launch_selected_app()`, which ultimately calls the current app's `launch()`.
 
-Built-in pages do not directly manipulate the home carousel. After returning home, the carousel state is preserved by `LaunchImpl`.
+Built-in pages do not directly manipulate the home carousel. After returning home, the carousel state is preserved by `Launch`.
 
 ## 11. Common Notes
 
@@ -330,4 +320,4 @@ Built-in pages do not directly manipulate the home carousel. After returning hom
 - Do not directly access home global objects from a page unless it is clearly a home-screen feature.
 - For page titles, call `set_page_title()` instead of modifying the internal top-bar label directly.
 - Every page that can exit should support `KEY_ESC` and call `navigate_home` or return to the previous view.
-- Page toggle keys must stay consistent with `UISetupPage::save_app_toggle()` and `APP_ENABLED()` in `Launch.cpp`.
+- Page toggle keys must stay consistent with `UISetupPage::save_app_toggle()` and `APP_ENABLED()` in `launch.cpp`.

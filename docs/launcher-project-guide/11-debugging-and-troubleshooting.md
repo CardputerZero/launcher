@@ -47,15 +47,15 @@ CONFIG_DEFAULT_FILE=config_defaults.mk scons -j4 --implicit-deps-changed
 If started by systemd:
 
 ```bash
-sudo systemctl status APPLaunch.service --no-pager
-sudo journalctl -u APPLaunch.service -b --no-pager
-sudo journalctl -u APPLaunch.service -f
+systemctl --user status APPLaunch.service --no-pager
+journalctl --user -u APPLaunch.service -b --no-pager
+journalctl --user -u APPLaunch.service -f
 ```
 
 If running the device binary manually:
 
 ```bash
-sudo systemctl stop APPLaunch.service
+systemctl --user stop APPLaunch.service
 cd /usr/share/APPLaunch
 sudo /usr/share/APPLaunch/bin/M5CardputerZero-APPLaunch 2>&1 | tee /tmp/applaunch.log
 ```
@@ -101,7 +101,7 @@ sudo cat /var/lib/applaunch/settings
 
 Common configuration keys:
 
-- `app_Music`, `app_Math`, `app_File`, `app_Camera`, etc.: Launcher page visibility toggles.
+- `app_Game`, `app_Math`, `app_File`, `app_Camera`, etc.: Launcher page visibility toggles.
 - `brightness`: brightness.
 - `volume`: volume.
 - `dark_time`: screen-off timeout.
@@ -118,16 +118,16 @@ Common configuration keys:
 | `[BOOT] cp0_lvgl_init() starting...` | `main.cpp` | Starting platform adaptation layer, display, input, audio, and other initialization |
 | `[BOOT] First frame flushed to fb0.` | `main.cpp` | First frame was forcibly flushed to the display device |
 | `Entering main loop` | `main.cpp` | Main loop has started |
-| `[LAUNCHER] set panel icon` | `Launch.cpp` | Home icon was set successfully |
-| `set panel icon missing/unreadable` | `Launch.cpp` | Icon path does not exist or is unreadable |
-| `applications_load: opendir failed` | `Launch.cpp` | applications directory does not exist or is unreadable |
-| `missing Name or Exec` | `Launch.cpp` | `.desktop` is missing required fields |
-| `duplicate Exec` | `Launch.cpp` | `.desktop` has the same Exec as an existing app |
-| `Launching terminal app` | `Launch.cpp` | Entering the built-in terminal page to run a command |
-| `Launching external app` | `Launch.cpp` | Starting a non-terminal external program |
+| `[LAUNCHER] set panel icon` | `launch.cpp` | Home icon was set successfully |
+| `set panel icon missing/unreadable` | `launch.cpp` | Icon path does not exist or is unreadable |
+| `applications_load: opendir failed` | `launch.cpp` | applications directory does not exist or is unreadable |
+| `missing Name or Exec` | `launch.cpp` | `.desktop` is missing required fields |
+| `duplicate Exec` | `launch.cpp` | `.desktop` has the same Exec as an existing app |
+| `Launching terminal app` | `launch.cpp` | Entering the built-in terminal page to run a command |
+| `Launching external app` | `launch.cpp` | Starting a non-terminal external program |
 | `[CP0-APP] ESC DOWN/UP` | `cp0_app_process.cpp` | Parent process read ESC while an external app was running |
 | `[cp0] Returned to launcher` | `cp0_app_process.cpp` | External app exited; preparing to return home |
-| `[HOME_STATUS] connected=` | `Launch.cpp` | Home status bar refreshed WiFi/battery state |
+| `[HOME_STATUS] connected=` | `launch.cpp` | Home status bar refreshed WiFi/battery state |
 
 ## 3. Black Screen Troubleshooting
 
@@ -137,8 +137,8 @@ For black screens, first determine whether the process did not start, LVGL did n
 
 ```bash
 pgrep -a M5CardputerZero-APPLaunch
-sudo systemctl status APPLaunch.service --no-pager
-sudo journalctl -u APPLaunch.service -b --no-pager | tail -120
+systemctl --user status APPLaunch.service --no-pager
+journalctl --user -u APPLaunch.service -b --no-pager | tail -120
 ```
 
 If there is no process:
@@ -150,7 +150,7 @@ If there is no process:
 If the process restarts repeatedly:
 
 ```bash
-sudo journalctl -u APPLaunch.service -b --no-pager | grep -Ei 'segfault|assert|error|failed|No such|permission'
+journalctl --user -u APPLaunch.service -b --no-pager | grep -Ei 'segfault|assert|error|failed|No such|permission'
 ```
 
 ### 3.2 Check the Startup Log Stage
@@ -265,8 +265,8 @@ Input failures include the home page not responding, a built-in page not respond
 Check whether the correct input group is bound:
 
 - Home page: `UILaunchPage::bind_home_input_group()`.
-- Built-in page: after creating the page, `Launch.cpp` calls `lv_indev_set_group(lv_indev_get_next(NULL), p->input_group())`.
-- Return home: `LaunchImpl::lv_go_back_home()` rebinds the home input group.
+- Built-in page: after creating the page, `launch.cpp` calls `lv_indev_set_group(lv_indev_get_next(NULL), p->input_group())`.
+- Return home: `Launch::lv_go_back_home()` rebinds the home input group.
 
 When adding events to a built-in page, make sure the event is attached to the correct object and that the object belongs to the page input group. Refer to existing pages' `event_handler_init()` implementations.
 
@@ -290,7 +290,7 @@ Related files:
 | File | Purpose |
 | --- | --- |
 | `ext_components/cp0_lvgl/include/compat/input_keys.h` | Compatible input key definitions |
-| `projects/APPLaunch/main/include/keyboard_input.h` | APPLaunch private input header |
+| `ext_components/cp0_lvgl/include/keyboard_input.h` | APPLaunch private input header |
 | `ext_components/cp0_lvgl/include/keyboard_input.h` | cp0_lvgl input interface |
 | `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_keyboard.c` | Device-side keyboard input implementation |
 | `ext_components/cp0_lvgl/src/sdl/sdl_lvgl_keyboard.c` | SDL2 keyboard input implementation |
@@ -317,7 +317,7 @@ External apps usually fail to return because the child process does not exit, th
 
 ### 6.1 Normal Return Path
 
-`launch_Exec()` in `Launch.cpp`:
+`launch_Exec()` in `launch.cpp`:
 
 1. Shows Loading.
 2. Sets `LVGL_RUN_FLAGE = 0`.
@@ -343,7 +343,7 @@ If the child process is still running:
 Check:
 
 ```bash
-sudo journalctl -u APPLaunch.service -f | grep -E 'CP0-APP|ESC|Returned'
+journalctl --user -u APPLaunch.service -f | grep -E 'CP0-APP|ESC|Returned'
 ```
 
 If there are no `[CP0-APP] evdev` logs:
@@ -436,14 +436,14 @@ Common causes:
 
 | Symptom | Cause | Fix |
 | --- | --- | --- |
-| `PageT not declared` | Page class name and registration name do not match, or `.hpp` was not included by `page_app.h` | Check `page_app.h` and rerun scons |
+| `PageT not declared` | Page class name and registration name do not match, or `.hpp` was not included by `generated/page_app.h` | Check `generated/page_app.h` and rerun scons |
 | SDL2 build cannot find Linux headers | Page directly includes device-only headers | Wrap device-only code with `#if defined(__linux__) && !defined(HAL_PLATFORM_SDL)` |
 | Linker cannot find symbols | Functions called by the new page were not added to component dependencies | Check `REQUIREMENTS`/`LDFLAGS` in `main/SConstruct` |
 | Duplicate definition | A header-only page defines non-inline global variables/functions | Convert them to class members, `static`, `inline`, or move them into a `.cpp` |
 
-### 7.5 `page_app.h` Auto-generation Changes the Working Tree
+### 7.5 `generated/page_app.h` Auto-generation Changes the Working Tree
 
-`generate_page_app_includes.py` generates `page_app.h` sorted by filename. After adding or deleting `page_app/*.hpp`, a build may modify this file. This is expected, but before committing, confirm that the diff only contains the intended include-list change.
+`generate_page_app_includes.py` generates `generated/page_app.h` sorted by filename. After adding or deleting `page_app/*.hpp`, a build may modify this file. This is expected, but before committing, confirm that the diff only contains the intended include-list change.
 
 ## 8. `.desktop` Load Failure Troubleshooting
 
@@ -506,7 +506,7 @@ If APPLaunch starts as root, external apps normally attempt to lower privileges 
 1. Run `git status --short` to confirm the current change scope.
 2. Build and run SDL2 to eliminate basic UI/syntax issues.
 3. Check whether assets exist in both `projects/APPLaunch/APPLaunch` and device `/usr/share/APPLaunch`.
-4. Watch `journalctl -u APPLaunch.service -f` to identify the startup stage.
+4. Watch `journalctl --user -u APPLaunch.service -f` to identify the startup stage.
 5. Use `evtest` to verify the input device and key codes.
 6. Use `ps` to inspect external apps and process groups.
 7. Check `/var/lib/applaunch/settings` to rule out settings toggles, brightness, or runtime user issues.

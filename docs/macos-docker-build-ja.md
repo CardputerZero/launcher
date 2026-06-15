@@ -1,23 +1,23 @@
-# macOS Docker 编译 & 部署指南
+# macOS Docker ビルド & デプロイガイド
 
-在 macOS (Apple Silicon) 上使用 Docker 原生 arm64 编译 APPLaunch。
+macOS (Apple Silicon) 上で Docker のネイティブ arm64 環境を使って APPLaunch をビルドします。
 
-## 前置条件
+## 前提条件
 
-1. 安装 Lima (Docker 运行环境)：
+1. Lima (Docker 実行環境) をインストールします：
 ```bash
 brew install lima
 limactl start default
 docker context use lima-default
 ```
 
-2. 验证 Docker 是 arm64 原生：
+2. Docker が arm64 ネイティブであることを確認します：
 ```bash
 docker info | grep Architecture
 # 应输出: aarch64
 ```
 
-3. 构建预缓存镜像（一次性，之后编译不用再装包）：
+3. 事前キャッシュ済みイメージをビルドします（一度だけ実行。以後のビルドではパッケージの再インストールは不要）：
 ```bash
 docker build --platform linux/arm64 -t cardputer-build -f - . <<'EOF'
 FROM --platform=linux/arm64 ubuntu:24.04
@@ -30,15 +30,15 @@ RUN apt-get update && apt-get install -y \
 EOF
 ```
 
-## 构建可执行文件
+## 実行ファイルをビルド
 
-使用预构建镜像（秒级）：
+事前ビルド済みイメージを使用します（数秒程度）：
 ```bash
 docker run --rm -v $(git rev-parse --show-toplevel):/src -w /src/projects/APPLaunch \
   cardputer-build bash -c "CardputerZero=y CONFIG_REPO_AUTOMATION=y scons -j4"
 ```
 
-不使用预构建镜像（首次需要 apt install，约 2-3 分钟）：
+事前ビルド済みイメージを使用しない場合（初回は apt install が必要。約 2〜3 分）：
 ```bash
 docker run --rm --platform linux/arm64 \
   -v $(git rev-parse --show-toplevel):/src \
@@ -54,44 +54,44 @@ docker run --rm --platform linux/arm64 \
   "
 ```
 
-产物路径：`projects/APPLaunch/dist/M5CardputerZero-APPLaunch`
+成果物のパス：`projects/APPLaunch/dist/M5CardputerZero-APPLaunch`
 
-## 构建 deb 包
+## deb パッケージをビルド
 
-编译 + 打包 deb（一条命令）：
+ビルド + deb パッケージング（1 コマンド）：
 ```bash
 docker run --rm -v $(git rev-parse --show-toplevel):/src -w /src/projects/APPLaunch \
   cardputer-build bash -c "CardputerZero=y CONFIG_REPO_AUTOMATION=y scons -j4 && cd ../.. && python3 scripts/debian_packager.py"
 ```
 
-产物路径：`projects/APPLaunch/tools/applaunch_*.deb`（约 15MB）
+成果物のパス：`projects/APPLaunch/tools/applaunch_*.deb`（約 15MB）
 
-## 部署可执行文件
+## 実行ファイルをデプロイ
 
-直接 scp 二进制到设备并重启服务（快速迭代）：
+バイナリを直接 scp でデバイスへ転送し、サービスを再起動します（高速な反復開発向け）：
 ```bash
 scp projects/APPLaunch/dist/M5CardputerZero-APPLaunch pi@192.168.50.150:/tmp/
 ssh pi@192.168.50.150 "echo pi | sudo -S install -m 0755 /tmp/M5CardputerZero-APPLaunch /usr/share/APPLaunch/bin/M5CardputerZero-APPLaunch && systemctl --user restart APPLaunch.service"
 ```
 
-或使用 scons push（需要 paramiko/scp）：
+または scons push を使用します（paramiko/scp が必要）：
 ```bash
 pip3 install paramiko scp --break-system-packages
 python3 -m SCons push
 ```
 
-scons push 会读取 `setup.ini` 中的设备 IP 和凭据，自动比较 MD5 后增量推送。
+scons push は `setup.ini` 内のデバイス IP と認証情報を読み取り、MD5 を自動比較して差分だけをプッシュします。
 
-## 部署 deb 包
+## deb パッケージをデプロイ
 
 ```bash
 scp projects/APPLaunch/tools/applaunch_*.deb pi@192.168.50.150:/tmp/
 ssh pi@192.168.50.150 "echo pi | sudo -S dpkg -i /tmp/applaunch_*.deb && systemctl --user status APPLaunch.service --no-pager"
 ```
 
-deb 包会安装完整的资源文件（字体、图片、systemd user service 等），适合正式发布。
+deb パッケージはリソースファイル一式（フォント、画像、systemd user service など）をインストールするため、正式リリースに適しています。
 
-## 一键编译 + 部署
+## ワンコマンドビルド + デプロイ
 
 ```bash
 docker run --rm -v $(git rev-parse --show-toplevel):/src -w /src/projects/APPLaunch \
@@ -100,9 +100,9 @@ scp projects/APPLaunch/dist/M5CardputerZero-APPLaunch pi@192.168.50.150:/tmp/ &&
 ssh pi@192.168.50.150 "echo pi | sudo -S install -m 0755 /tmp/M5CardputerZero-APPLaunch /usr/share/APPLaunch/bin/M5CardputerZero-APPLaunch && systemctl --user restart APPLaunch.service"
 ```
 
-## 注意事项
+## 注意事項
 
-- Lima VM 是 aarch64 原生，无需 QEMU 模拟，编译速度接近真机
-- 首次编译会从 GitHub 下载 lvgl 源码 zip（约 100MB），之后缓存在 `SDK/github_source/`
-- Docker volume mount 直接写入本地 `build/` 和 `dist/`，不需要额外拷贝
-- `setup.ini` 中配置设备 IP（默认 192.168.50.150）
+- Lima VM は aarch64 ネイティブのため、QEMU エミュレーションは不要で、ビルド速度は実機に近くなります
+- 初回ビルドでは GitHub から lvgl ソースコード zip（約 100MB）をダウンロードし、その後は `SDK/github_source/` にキャッシュされます
+- Docker volume mount はローカルの `build/` と `dist/` に直接書き込むため、追加のコピーは不要です
+- `setup.ini` でデバイス IP を設定します（デフォルトは 192.168.50.150）

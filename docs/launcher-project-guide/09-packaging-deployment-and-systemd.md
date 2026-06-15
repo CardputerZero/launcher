@@ -35,7 +35,7 @@ After formal installation, the target path is:
 The systemd service file is installed to:
 
 ```text
-/lib/systemd/system/APPLaunch.service
+/usr/lib/systemd/user/APPLaunch.service
 ```
 
 The service start command is:
@@ -49,6 +49,8 @@ The working directory is:
 ```text
 /usr/share/APPLaunch
 ```
+
+The package installs APPLaunch as a systemd user service for the UID 1000 user. When checking the service manually, either log in as that user and run `systemctl --user ...`, or set `XDG_RUNTIME_DIR=/run/user/1000` when running through `runuser`/SSH automation.
 
 ## 2. Build the Device Target Before Packaging
 
@@ -122,11 +124,11 @@ projects/APPLaunch/tools/debian-APPLaunch/
 │   ├── control
 │   ├── postinst
 │   └── prerm
-├── lib/
-│   └── systemd/
-│       └── system/
-│           └── APPLaunch.service
 └── usr/
+    ├── lib/
+    │   └── systemd/
+    │       └── user/
+    │           └── APPLaunch.service
     └── share/
         └── APPLaunch/
             ├── applications/
@@ -331,9 +333,17 @@ The post-install script runs:
 
 ```sh
 mkdir -p /var/cache/APPLaunch
-ln -s /var/cache/APPLaunch /usr/share/APPLaunch/cache
-[ -f "/lib/systemd/system/APPLaunch.service" ] && systemctl enable APPLaunch.service
-[ -f "/lib/systemd/system/APPLaunch.service" ] && systemctl start APPLaunch.service
+ln -sfn /var/cache/APPLaunch /usr/share/APPLaunch/cache
+APP_UID=1000
+APP_USER="$(getent passwd "$APP_UID" | cut -d: -f1)"
+loginctl enable-linger "$APP_USER" || true
+systemctl start "user@$APP_UID.service" || true
+runuser -u "$APP_USER" -- env XDG_RUNTIME_DIR="/run/user/$APP_UID" \
+  DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$APP_UID/bus" \
+  systemctl --user enable APPLaunch.service || true
+runuser -u "$APP_USER" -- env XDG_RUNTIME_DIR="/run/user/$APP_UID" \
+  DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$APP_UID/bus" \
+  systemctl --user restart APPLaunch.service || true
 exit 0
 ```
 
@@ -341,7 +351,7 @@ Purpose:
 
 - Creates writable cache directory `/var/cache/APPLaunch`.
 - Creates a `cache` symlink under the read-only/system resource directory.
-- Enables and starts the systemd service.
+- Enables lingering for the UID 1000 user, then enables and starts the systemd user service.
 
 Note: the current shared packager uses `ln -sfn`, so repeated installation can refresh the cache link safely.
 
@@ -350,8 +360,14 @@ Note: the current shared packager uses `ln -sfn`, so repeated installation can r
 The pre-removal script runs:
 
 ```sh
-[ -f "/lib/systemd/system/APPLaunch.service" ] && systemctl stop APPLaunch.service
-[ -f "/lib/systemd/system/APPLaunch.service" ] && systemctl disable APPLaunch.service
+APP_UID=1000
+APP_USER="$(getent passwd "$APP_UID" | cut -d: -f1)"
+runuser -u "$APP_USER" -- env XDG_RUNTIME_DIR="/run/user/$APP_UID" \
+  DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$APP_UID/bus" \
+  systemctl --user stop APPLaunch.service || true
+runuser -u "$APP_USER" -- env XDG_RUNTIME_DIR="/run/user/$APP_UID" \
+  DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$APP_UID/bus" \
+  systemctl --user disable APPLaunch.service || true
 rm -rf /var/cache/APPLaunch
 exit 0
 ```
@@ -371,6 +387,8 @@ The script generates:
 ```ini
 [Unit]
 Description=APPLaunch Service
+After=pipewire-pulse.service
+Wants=pipewire-pulse.service
 
 [Service]
 ExecStart=/usr/share/APPLaunch/bin/M5CardputerZero-APPLaunch
@@ -380,7 +398,7 @@ RestartSec=1
 StartLimitInterval=0
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target
 ```
 
 Field descriptions:
@@ -392,9 +410,10 @@ Field descriptions:
 | `Restart=always` | Always restarts after the process exits |
 | `RestartSec=1` | Restarts 1 second after exit |
 | `StartLimitInterval=0` | Disables the default start-rate limit so systemd does not stop restarting after frequent crashes |
-| `WantedBy=multi-user.target` | Starts with the multi-user target after enable |
+| `After` / `Wants` | Starts after PipeWire PulseAudio support when available |
+| `WantedBy=default.target` | Enables the service in the user's default systemd target |
 
-The current service file does not explicitly set a user, so it runs as root as a systemd system service by default. This usually helps access framebuffer, evdev, GPIO, audio, and camera devices, but it also means the program has high privileges.
+The current package installs a user service under `/usr/lib/systemd/user`, not a root-owned system service. It is enabled for the UID 1000 user by `postinst`; device permissions for framebuffer, evdev, GPIO, audio, and camera must therefore be provided by the image's user/group rules.
 
 ## 9. Install on the Device
 
@@ -432,9 +451,9 @@ sudo dpkg -i /home/pi/applaunch_0.2.1-m5stack1_arm64.deb
 If the service is running, `postinst` attempts to enable/start it. To reduce framebuffer or input-device contention during installation, you can stop the service manually first:
 
 ```bash
-sudo systemctl stop APPLaunch.service || true
+systemctl --user stop APPLaunch.service || true
 sudo dpkg -i /home/pi/applaunch_0.2.1-m5stack1_arm64.deb
-sudo systemctl restart APPLaunch.service
+systemctl --user restart APPLaunch.service
 ```
 
 ## 10. Quick Deployment with `scons push`
@@ -457,8 +476,8 @@ remote_host = 192.168.28.177
 remote_port = 22
 username = pi
 password = pi
-; before_cmd = 'echo pi |  sudo -S systemctl stop APPLaunch.service'
-; after_cmd = 'echo pi |  sudo -S systemctl stop APPLaunch.service; echo pi |  sudo -S cp /home/pi/dist/M5CardputerZero-APPLaunch /usr/share/APPLaunch/bin ; echo pi |  sudo -S systemctl start APPLaunch.service'
+; before_cmd = 'echo pi |  sudo -S systemctl --user stop APPLaunch.service'
+; after_cmd = 'echo pi |  sudo -S systemctl --user stop APPLaunch.service; echo pi |  sudo -S cp /home/pi/dist/M5CardputerZero-APPLaunch /usr/share/APPLaunch/bin ; echo pi |  sudo -S systemctl --user start APPLaunch.service'
 ```
 
 Run:
@@ -505,17 +524,17 @@ scp -r dist/APPLaunch pi@192.168.28.177:/home/pi/APPLaunch-new
 Install on the device:
 
 ```bash
-sudo systemctl stop APPLaunch.service || true
+systemctl --user stop APPLaunch.service || true
 sudo mkdir -p /usr/share/APPLaunch/bin
 sudo install -m 0755 /home/pi/M5CardputerZero-APPLaunch /usr/share/APPLaunch/bin/M5CardputerZero-APPLaunch
 sudo rsync -a --delete /home/pi/APPLaunch-new/ /usr/share/APPLaunch/
 sudo mkdir -p /var/cache/APPLaunch
 sudo ln -sfn /var/cache/APPLaunch /usr/share/APPLaunch/cache
-sudo systemctl daemon-reload
-sudo systemctl restart APPLaunch.service
+systemctl --user daemon-reload
+systemctl --user restart APPLaunch.service
 ```
 
-If the service file has not been installed, create `/lib/systemd/system/APPLaunch.service` manually, using the content in Section 8 as reference.
+If the service file has not been installed, create `/usr/lib/systemd/user/APPLaunch.service` manually, using the content in Section 8 as reference.
 
 ## 12. Deployment Verification Commands
 
@@ -582,46 +601,46 @@ If libraries are missing, install the corresponding system packages, or extend t
 ### 12.4 systemd Status
 
 ```bash
-systemctl status APPLaunch.service --no-pager
-systemctl is-enabled APPLaunch.service
-systemctl is-active APPLaunch.service
+systemctl --user status APPLaunch.service --no-pager
+systemctl --user is-enabled APPLaunch.service
+systemctl --user is-active APPLaunch.service
 ```
 
 View logs:
 
 ```bash
-journalctl -u APPLaunch.service -b --no-pager
-journalctl -u APPLaunch.service -b -f
+journalctl --user -u APPLaunch.service -b --no-pager
+journalctl --user -u APPLaunch.service -b -f
 ```
 
 Restart:
 
 ```bash
-sudo systemctl restart APPLaunch.service
+systemctl --user restart APPLaunch.service
 ```
 
 Stop:
 
 ```bash
-sudo systemctl stop APPLaunch.service
+systemctl --user stop APPLaunch.service
 ```
 
 Enable boot autostart:
 
 ```bash
-sudo systemctl enable APPLaunch.service
+systemctl --user enable APPLaunch.service
 ```
 
 Disable boot autostart:
 
 ```bash
-sudo systemctl disable APPLaunch.service
+systemctl --user disable APPLaunch.service
 ```
 
 Reload service files:
 
 ```bash
-sudo systemctl daemon-reload
+systemctl --user daemon-reload
 ```
 
 ### 12.5 Manual Foreground Run
@@ -629,7 +648,7 @@ sudo systemctl daemon-reload
 Before troubleshooting systemd, run it in the foreground first:
 
 ```bash
-sudo systemctl stop APPLaunch.service || true
+systemctl --user stop APPLaunch.service || true
 cd /usr/share/APPLaunch
 sudo ./bin/M5CardputerZero-APPLaunch
 ```
@@ -680,28 +699,28 @@ sudo dpkg -P applaunch
 ### 13.2 Roll Back by Installing an Older Package
 
 ```bash
-sudo systemctl stop APPLaunch.service || true
+systemctl --user stop APPLaunch.service || true
 sudo dpkg -i /home/pi/applaunch_old-version-m5stack1_arm64.deb
-sudo systemctl restart APPLaunch.service
+systemctl --user restart APPLaunch.service
 ```
 
 Verify:
 
 ```bash
 dpkg -s applaunch | grep Version
-systemctl status APPLaunch.service --no-pager
+systemctl --user status APPLaunch.service --no-pager
 ```
 
 ### 13.3 Temporarily Disable the Launcher
 
 ```bash
-sudo systemctl disable --now APPLaunch.service
+systemctl --user disable --now APPLaunch.service
 ```
 
 Restore:
 
 ```bash
-sudo systemctl enable --now APPLaunch.service
+systemctl --user enable --now APPLaunch.service
 ```
 
 ## 14. Common Deployment Errors
@@ -745,8 +764,8 @@ Then repackage and reinstall.
 Check:
 
 ```bash
-systemctl status APPLaunch.service --no-pager
-journalctl -u APPLaunch.service -b --no-pager | tail -n 100
+systemctl --user status APPLaunch.service --no-pager
+journalctl --user -u APPLaunch.service -b --no-pager | tail -n 100
 ```
 
 Common causes:
@@ -775,7 +794,7 @@ Fix:
 sudo rm -rf /usr/share/APPLaunch/cache
 sudo mkdir -p /var/cache/APPLaunch
 sudo ln -sfn /var/cache/APPLaunch /usr/share/APPLaunch/cache
-sudo systemctl restart APPLaunch.service
+systemctl --user restart APPLaunch.service
 ```
 
 The current shared packager already writes `ln -sfn`; rebuild and reinstall the package to make the fix persistent.
@@ -820,12 +839,12 @@ Investigation order:
 Commands:
 
 ```bash
-sudo systemctl stop APPLaunch.service || true
+systemctl --user stop APPLaunch.service || true
 cd /usr/share/APPLaunch
 sudo ./bin/M5CardputerZero-APPLaunch
 ls -l /dev/fb0
 sudo fuser -v /dev/fb0 2>/dev/null || true
-journalctl -u APPLaunch.service -b --no-pager | tail -n 100
+journalctl --user -u APPLaunch.service -b --no-pager | tail -n 100
 ```
 
 ### 14.8 External Apps Cannot Start
@@ -870,11 +889,11 @@ After installation:
 
 ```bash
 dpkg -s applaunch | grep -E 'Package|Version|Architecture'
-systemctl status APPLaunch.service --no-pager
-systemctl is-enabled APPLaunch.service
+systemctl --user status APPLaunch.service --no-pager
+systemctl --user is-enabled APPLaunch.service
 ldd /usr/share/APPLaunch/bin/M5CardputerZero-APPLaunch | grep 'not found' || true
 ls -l /usr/share/APPLaunch/cache
-journalctl -u APPLaunch.service -b --no-pager | tail -n 100
+journalctl --user -u APPLaunch.service -b --no-pager | tail -n 100
 ```
 
 Functional verification:
@@ -900,7 +919,7 @@ file dist/M5CardputerZero-APPLaunch
 cd /home/nihao/w2T/github/launcher
 python3 scripts/debian_packager.py
 scp projects/APPLaunch/tools/applaunch_0.2.1-m5stack1_arm64.deb pi@192.168.28.177:/home/pi/
-ssh pi@192.168.28.177 'sudo dpkg -i /home/pi/applaunch_0.2.1-m5stack1_arm64.deb && systemctl status APPLaunch.service --no-pager'
+ssh pi@192.168.28.177 'sudo dpkg -i /home/pi/applaunch_0.2.1-m5stack1_arm64.deb && systemctl --user status APPLaunch.service --no-pager'
 ```
 
 For fast replacement during development, use:

@@ -12,19 +12,19 @@ git status --short
 | Task | Main files/directories | Key points | Verification |
 | --- | --- | --- | --- |
 | Add a built-in page | `projects/APPLaunch/main/ui/page_app/` | Create `ui_app_xxx.hpp` and inherit from `AppPage` | Build with SDL2 and open the page |
-| Register a built-in page on home | `projects/APPLaunch/main/ui/Launch.cpp` | `app_list.emplace_back("NAME", img_path("icon.png"), page_v<PageT>)` | Icon appears in the home carousel |
-| Control built-in page visibility toggle | `projects/APPLaunch/main/ui/page_app/ui_app_setup.hpp`, `projects/APPLaunch/main/ui/Launch.cpp` | Settings page writes `app_Key`, Launcher reads `APP_ENABLED("Key")` | Toggle in Settings, then restart or refresh home |
+| Register a built-in page on home | `projects/APPLaunch/main/ui/launch.cpp` | `app_list.emplace_back("NAME", img_path("icon.png"), page_v<PageT>)` | Icon appears in the home carousel |
+| Control built-in page visibility toggle | `projects/APPLaunch/main/ui/page_app/ui_app_setup.hpp`, `projects/APPLaunch/main/ui/launch.cpp` | Settings page writes `app_Key`, Launcher reads `APP_ENABLED("Key")` | Toggle in Settings, then restart or refresh home |
 | Add external `.desktop` app | `projects/APPLaunch/APPLaunch/applications/` | Filename must end in `.desktop` and include `Name` and `Exec` | No skip logs; app appears on home |
 | Add icon | `projects/APPLaunch/APPLaunch/share/images/` | Built-in pages use `img_path()`, `.desktop` uses `Icon=share/images/xxx.png` | No `missing/unreadable` logs |
 | Add sound effect | `projects/APPLaunch/APPLaunch/share/audio/` | Pages use `audio_path()` and `cp0_signal_audio_api()` | Sound plays on device |
 | Add font | `projects/APPLaunch/APPLaunch/share/font/` | Use `launcher_fonts().get()` and confirm FreeType dependency | Page text uses the new font |
-| Change home carousel layout | `projects/APPLaunch/main/ui/UILaunchPage.cpp`, `projects/APPLaunch/main/ui/UILaunchPage.h` | 5 slots, left/right switching, center card | Check animation and input in SDL2 |
-| Change carousel animation | `projects/APPLaunch/main/ui/Animation/ui_launcher_animation.cpp` | Card movement, scale, opacity, and other animations | Switch left/right repeatedly in SDL2 |
-| Change home status bar | `projects/APPLaunch/main/ui/Launch.cpp`, `projects/APPLaunch/main/ui/ui.c` | `update_home_status_bar()` refreshes WiFi/time/battery | Check `[HOME_STATUS]` logs |
+| Change home carousel layout | `projects/APPLaunch/main/ui/ui_launch_page.cpp`, `projects/APPLaunch/main/ui/ui_launch_page.h` | 5 slots, left/right switching, center card | Check animation and input in SDL2 |
+| Change carousel animation | `projects/APPLaunch/main/ui/animation/ui_launcher_animation.cpp` | Card movement, scale, opacity, and other animations | Switch left/right repeatedly in SDL2 |
+| Change home status bar | `projects/APPLaunch/main/ui/launch.cpp`, `projects/APPLaunch/main/ui/ui.cpp` | `update_home_status_bar()` refreshes WiFi/time/battery | Check `[HOME_STATUS]` logs |
 | Change Settings menu | `projects/APPLaunch/main/ui/page_app/ui_app_setup.hpp` | Add `MenuItem`/`SubItem` in `menu_init()` | Enter the SETTING page and test |
 | Change configuration saving logic | `ext_components/cp0_lvgl/src/cp0/cp0_app_config.cpp` | Currently saves to `/var/lib/applaunch/settings`, max 32 entries | Inspect the settings file |
 | Change asset path rules | `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_file.cpp`, `ext_components/cp0_lvgl/src/sdl/sdl_lvgl_file.cpp` | Consider device and SDL2 consistently | Check assets on both SDL2 and device |
-| Change external app launch/return | `projects/APPLaunch/main/ui/Launch.cpp`, `ext_components/cp0_lvgl/src/cp0/cp0_app_process.cpp` | `launch_Exec()`, `cp0_process_exec_blocking()` | External app starts, ESC returns |
+| Change external app launch/return | `projects/APPLaunch/main/ui/launch.cpp`, `ext_components/cp0_lvgl/src/cp0/cp0_app_process.cpp` | `launch_Exec()`, `cp0_process_exec_blocking()` | External app starts, ESC returns |
 | Change terminal apps | `projects/APPLaunch/main/ui/page_app/ui_app_console.hpp`, `ext_components/cp0_lvgl/src/cp0/cp0_app_pty.cpp` | PTY, command execution, input/output | Verify with a `Terminal=true` app |
 | Change input mapping | `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_keyboard.c`, `ext_components/cp0_lvgl/src/sdl/sdl_lvgl_keyboard.c` | Device and SDL2 input differences | `evtest` + SDL2 keyboard |
 | Change startup flow | `projects/APPLaunch/main/src/main.cpp` | `lv_init()`, `cp0_lvgl_init()`, `ui_init()`, main loop | Check `[BOOT]` logs |
@@ -38,21 +38,21 @@ git status --short
 | Path | Purpose |
 | --- | --- |
 | `projects/APPLaunch/main/src/main.cpp` | APPLaunch process entry, initialization order, main loop, external app lock detection |
-| `projects/APPLaunch/main/ui/ui.c` | Creates global LVGL UI objects; most `ui_*` globals originate here |
+| `projects/APPLaunch/main/ui/ui.cpp` | Creates global LVGL UI objects; most `ui_*` globals originate here |
 | `projects/APPLaunch/main/ui/ui.cpp` | C++ UI initialization bridge |
 | `projects/APPLaunch/main/ui/ui.h` | UI global declarations and C/C++ shared interface |
-| `projects/APPLaunch/main/ui/Launch.cpp` | App model, app list, launch logic, dynamic `.desktop` loading, status bar refresh |
-| `projects/APPLaunch/main/ui/Launch.h` | Public wrapper class for `Launch` |
-| `projects/APPLaunch/main/ui/UILaunchPage.cpp` | Home screen, carousel slots, input events, home-page behavior |
-| `projects/APPLaunch/main/ui/UILaunchPage.h` | Home class interface, including panel/label/input group accessors |
+| `projects/APPLaunch/main/ui/launch.cpp` | App model, app list, launch logic, dynamic `.desktop` loading, status bar refresh |
+| `projects/APPLaunch/main/ui/launch.h` | Public wrapper class for `Launch` |
+| `projects/APPLaunch/main/ui/ui_launch_page.cpp` | Home screen, carousel slots, input events, home-page behavior |
+| `projects/APPLaunch/main/ui/ui_launch_page.h` | Home class interface, including panel/label/input group accessors |
 | `projects/APPLaunch/main/ui/ui_loading.cpp` | Loading overlay show/hide |
 | `projects/APPLaunch/main/ui/ui_global_hint.cpp` | Global hint overlay |
-| `projects/APPLaunch/main/ui/zero_lvgl_os.cpp` | LVGL OS/thread helpers |
-| `projects/APPLaunch/main/ui/Animation/` | Home carousel animation implementation |
+| `projects/APPLaunch/main/ui/launcher_ui_runtime.cpp` | LVGL OS/thread helpers |
+| `projects/APPLaunch/main/ui/animation/` | Home carousel animation implementation |
 | `projects/APPLaunch/main/ui/ui_app_page.hpp` | Built-in page base class, top bar, shared asset path helpers |
-| `projects/APPLaunch/main/ui/page_app.h` | Auto-generated built-in page include aggregate |
+| `projects/APPLaunch/build/generated/include/generated/page_app.h` | Auto-generated built-in page include aggregate |
 | `projects/APPLaunch/main/ui/page_app/` | Built-in page implementation directory |
-| `projects/APPLaunch/main/include/` | APPLaunch private headers and compatible input headers |
+| `ext_components/cp0_lvgl/include/` | Shared CP0/LVGL headers, including keyboard and compatibility input headers |
 
 ## 3. Built-in Page Entry Table
 
@@ -60,9 +60,9 @@ git status --short
 | --- | --- | --- | --- |
 | GAME | `projects/APPLaunch/main/ui/page_app/ui_app_game.hpp` | `GAME` / `game_100.png` | Built-in game entry |
 | SETTING | `projects/APPLaunch/main/ui/page_app/ui_app_setup.hpp` | `SETTING` / `setting_100.png` | Settings page, including app toggles, brightness, volume, WiFi, camera, etc. |
-| MUSIC | `projects/APPLaunch/main/ui/page_app/ui_app_music.hpp` | `MUSIC` / `music_100.png` | Music page |
+| GAME | `projects/APPLaunch/main/ui/page_app/ui_app_game.hpp` | `GAME` / `game_100.png` | Built-in game entry |
 | Compass | `projects/APPLaunch/main/ui/page_app/ui_app_compass.hpp` | `Compass` / `compass_needle_80.png` | Compass page |
-| IP_PANEL | `projects/APPLaunch/main/ui/page_app/ui_app_IpPanel.hpp` | `IP_PANEL` / `ip_panel_100.png` | IP information panel, enabled on device |
+| IP_PANEL | `projects/APPLaunch/main/ui/page_app/ui_app_ip_panel.hpp` | `IP_PANEL` / `ip_panel_100.png` | IP information panel, enabled on device |
 | FILE | `projects/APPLaunch/main/ui/page_app/ui_app_file.hpp` | `FILE` / `file_100.png` | File page, enabled on device |
 | SSH | `projects/APPLaunch/main/ui/page_app/ui_app_ssh.hpp` | `SSH` / `ssh_100.png` | SSH page, enabled on device |
 | MESH | `projects/APPLaunch/main/ui/page_app/ui_app_mesh.hpp` | `MESH` / `mesh_100.png` | Mesh page, enabled on device |
@@ -72,7 +72,7 @@ git status --short
 | TANK | `projects/APPLaunch/main/ui/page_app/ui_app_tank_battle.hpp` | `TANK` / `tank_100.png` | Tank game, enabled on device |
 | CLI/terminal | `projects/APPLaunch/main/ui/page_app/ui_app_console.hpp` | `CLI` / `cli_100.png` | `UIConsolePage`, used by bash, python, and `Terminal=true` apps |
 
-Fixed registration entry in `LaunchImpl::LaunchImpl()`:
+Fixed registration entry in `Launch::Launch()`:
 
 ```cpp
 app_list.emplace_back("Python", img_path("python_100.png"), "python3", true, false);
@@ -88,11 +88,11 @@ app_list.emplace_back("SETTING", img_path("setting_100.png"), page_v<UISetupPage
 | --- | --- | --- |
 | `.desktop` directory | `projects/APPLaunch/APPLaunch/applications/` | Development tree; packaged as `/usr/share/APPLaunch/applications/` |
 | Template | `projects/APPLaunch/APPLaunch/applications/vim.desktop.temple` | Example template; not scanned because the suffix is not `.desktop` |
-| Scan function | `LaunchImpl::applications_load()` in `projects/APPLaunch/main/ui/Launch.cpp` | Parses `[Desktop Entry]`, `Name`, `Icon`, `Exec`, `Terminal`, and `Sysplause` |
-| Directory watching | `LaunchImpl::inotify_init_watch()`, `app_dir_watch_cb()` | Watches application changes and refreshes the dynamic app list |
-| Dynamic refresh | `LaunchImpl::applications_reload()` | Keeps fixed apps, deletes dynamic apps, then rescans |
-| Terminal launch | `LaunchImpl::launch_Exec_in_terminal()` | Creates `UIConsolePage` and executes the command |
-| Non-terminal launch | `LaunchImpl::launch_Exec()` | Pauses LVGL and calls `cp0_process_exec_blocking()` |
+| Scan function | `Launch::applications_load()` in `projects/APPLaunch/main/ui/launch.cpp` | Parses `[Desktop Entry]`, `Name`, `Icon`, `Exec`, `Terminal`, and `Sysplause` |
+| Directory watching | `Launch::inotify_init_watch()`, `app_dir_watch_cb()` | Watches application changes and refreshes the dynamic app list |
+| Dynamic refresh | `Launch::applications_reload()` | Keeps fixed apps, deletes dynamic apps, then rescans |
+| Terminal launch | `Launch::launch_Exec_in_terminal()` | Creates `UIConsolePage` and executes the command |
+| Non-terminal launch | `Launch::launch_Exec()` | Pauses LVGL and calls `cp0_process_exec_blocking()` |
 | Device-side process execution | `ext_components/cp0_lvgl/src/cp0/cp0_app_process.cpp` | fork, privilege lowering, long ESC press to exit, keyboard restore |
 | PTY execution | `ext_components/cp0_lvgl/src/cp0/cp0_app_pty.cpp` | Terminal page command execution and user selection |
 
@@ -132,7 +132,7 @@ Path resolution code:
 
 | Setting item | UI entry | Configuration key | Implementation location |
 | --- | --- | --- | --- |
-| App visibility toggle | SETTING -> Launcher | `app_<Name>` | `save_app_toggle()` in `ui_app_setup.hpp`, `APP_ENABLED()` in `Launch.cpp` |
+| App visibility toggle | SETTING -> Launcher | `app_<Name>` | `save_app_toggle()` in `ui_app_setup.hpp`, `APP_ENABLED()` in `launch.cpp` |
 | Brightness | SETTING -> Screen -> Brightness | `brightness` | `ui_app_setup.hpp`, `ext_components/cp0_lvgl/src/cp0/cp0_app_settings.cpp` |
 | Screen-off timeout | SETTING -> Screen -> DarkTime | `dark_time` | `ui_app_setup.hpp` |
 | Volume | SETTING -> Speaker -> Volume | `volume` | `ui_app_setup.hpp`, `cp0_volume_read/write()` |
@@ -190,23 +190,23 @@ Configuration implementation:
 | SDL2 build | `cd projects/APPLaunch && CONFIG_DEFAULT_FILE=linux_x86_sdl2_config_defaults.mk scons -j8 --implicit-deps-changed` |
 | SDL2 run | `cd projects/APPLaunch && ./dist/M5CardputerZero-APPLaunch` |
 | Cross build | `cd projects/APPLaunch && CONFIG_DEFAULT_FILE=linux_x86_cross_cp0_config_defaults.mk scons -j8 --implicit-deps-changed` |
-| View systemd status | `sudo systemctl status APPLaunch.service --no-pager` |
-| Follow logs | `sudo journalctl -u APPLaunch.service -f` |
-| View boot logs | `sudo journalctl -u APPLaunch.service -b --no-pager` |
+| View systemd status | `systemctl --user status APPLaunch.service --no-pager` |
+| Follow logs | `journalctl --user -u APPLaunch.service -f` |
+| View boot logs | `journalctl --user -u APPLaunch.service -b --no-pager` |
 | Check assets | `find /usr/share/APPLaunch -maxdepth 3 -type f | sort` |
 | Check `.desktop` files | `find /usr/share/APPLaunch/applications -maxdepth 1 -type f -name '*.desktop' -print -exec sed -n '1,80p' {} \;` |
 | Check settings | `sudo cat /var/lib/applaunch/settings` |
 | Check input devices | `ls -l /dev/input/by-path/ && sudo evtest` |
 | Check external app processes | `ps -eo pid,ppid,pgid,stat,cmd | grep -E 'APPLaunch|sh -c|M5CardputerZero'` |
 | Check dynamic libraries | `ldd /usr/share/APPLaunch/bin/my_app` |
-| Check icon logs | `sudo journalctl -u APPLaunch.service -b --no-pager | grep 'set panel icon'` |
+| Check icon logs | `journalctl --user -u APPLaunch.service -b --no-pager | grep 'set panel icon'` |
 
 ## 10. Pre-/Post-change Checklist
 
 | Stage | Check item |
 | --- | --- |
 | Before change | Run `git status --short` and confirm which files already have changes from others |
-| After adding a page | Confirm the `.hpp` file is in `page_app/`, and the class name matches the registration in `Launch.cpp` |
+| After adding a page | Confirm the `.hpp` file is in `page_app/`, and the class name matches the registration in `launch.cpp` |
 | After adding assets | Confirm files can be found in both the source tree and device `/usr/share/APPLaunch` |
 | After adding `.desktop` | File suffix is `.desktop`, with `[Desktop Entry]`, `Name`, and `Exec` |
 | After changing settings | `/var/lib/applaunch/settings` contains the correct key and has not exceeded the configuration entry limit |

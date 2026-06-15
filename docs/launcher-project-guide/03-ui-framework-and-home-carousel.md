@@ -1,6 +1,6 @@
 # 03 - UI Framework and Home Carousel
 
-This chapter explains how the APPLaunch home UI is organized, how data flows through the carousel cards, and how key events are handled. Key references are `projects/APPLaunch/main/ui/UILaunchPage.cpp`, `projects/APPLaunch/main/ui/UILaunchPage.h`, `projects/APPLaunch/main/ui/Animation/ui_launcher_animation.cpp`, and `projects/APPLaunch/main/ui/Launch.cpp`.
+This chapter explains how the APPLaunch home UI is organized, how data flows through the carousel cards, and how key events are handled. Key references are `projects/APPLaunch/main/ui/ui_launch_page.cpp`, `projects/APPLaunch/main/ui/ui_launch_page.h`, `projects/APPLaunch/main/ui/animation/ui_launcher_animation.cpp`, and `projects/APPLaunch/main/ui/launch.cpp`.
 
 ## 1. UI Framework Overview
 
@@ -22,16 +22,16 @@ UILaunchPage : home_base
     └── 5 page dots
 ```
 
-Home uses the common `home_base` / `AppPageRoot` page framework for the root screen, status bar, and input group. `UILaunchPage.cpp` fills the inherited content container with the carousel and wires the LVGL callbacks.
+Home uses the common `home_base` / `AppPageRoot` page framework for the root screen, status bar, and input group. `ui_launch_page.cpp` fills the inherited content container with the carousel and wires the LVGL callbacks.
 
 ## 2. Key Source Paths
 
 | Path | Description |
 | --- | --- |
-| `projects/APPLaunch/main/ui/UILaunchPage.h` | Home class definition, carousel element enum, and `carousel_elements` array |
-| `projects/APPLaunch/main/ui/UILaunchPage.cpp` | Home screen creation, carousel switching, keyboard events, startup GIF, and font cache |
-| `projects/APPLaunch/main/ui/Animation/ui_launcher_animation.cpp` | Carousel left/right switch animation |
-| `projects/APPLaunch/main/ui/Launch.cpp` | Fills new card content after switching, launches the current application, and refreshes the status bar |
+| `projects/APPLaunch/main/ui/ui_launch_page.h` | Home class definition, carousel element enum, and `carousel_elements` array |
+| `projects/APPLaunch/main/ui/ui_launch_page.cpp` | Home screen creation, carousel switching, keyboard events, startup GIF, and font cache |
+| `projects/APPLaunch/main/ui/animation/ui_launcher_animation.cpp` | Carousel left/right switch animation |
+| `projects/APPLaunch/main/ui/launch.cpp` | Fills new card content after switching, launches the current application, and refreshes the status bar |
 | `projects/APPLaunch/main/ui/ui.h` | Home layout constants such as `LABEL_Y_CENTER` and `BORDER_COLOR_CENTER` |
 
 ## 3. Responsibilities of `UILaunchPage`
@@ -84,8 +84,8 @@ private:
 
 It has two categories of responsibilities:
 
-- Static compatibility responsibilities: keep the shared `carousel_elements` array, maintain the home input group bridge, and provide `panel()` / `label()` accessors used by `Launch.cpp`.
-- Instance responsibilities: hold the `Launch` pointer, own per-page UI state, handle LVGL events, and forward carousel updates / app launches to `LaunchImpl`.
+- Static compatibility responsibilities: keep the shared `carousel_elements` array, maintain the home input group bridge, and provide `panel()` / `label()` accessors used by `launch.cpp`.
+- Instance responsibilities: hold the `Launch` pointer, own per-page UI state, handle LVGL events, and forward carousel updates / app launches to `Launch`.
 
 LVGL still requires C-style static callbacks, but the current code no longer relies on global state for normal event dispatch. Each callback receives the owning page instance through LVGL user data:
 
@@ -122,7 +122,7 @@ std::array<lv_obj_t *, UILaunchPage::kLauncherCarouselElementCount>
     UILaunchPage::carousel_elements = {};
 ```
 
-The enum is defined in `UILaunchPage.h`:
+The enum is defined in `ui_launch_page.h`:
 
 ```cpp
 enum LauncherCarouselElement : size_t {
@@ -171,7 +171,7 @@ Therefore, `panel(2)` is the center card, and `label(2)` is the center title.
 
 ## 5. Standard Slot Layout
 
-`UILaunchPage.cpp` uses `CarouselSlot` to describe the static carousel layout:
+`ui_launch_page.cpp` uses `CarouselSlot` to describe the static carousel layout:
 
 ```cpp
 struct CarouselSlot {
@@ -228,7 +228,7 @@ The top status bar comes from `home_base::creat_Top_UI()` and contains:
 - `ui_Panel1`, the time background image `status_time_background.png`, and `ui_timeLabel`.
 - `ui_batteryPanel`, the battery background image `status_battery_background.png`, `ui_Bar1`, and `ui_powerLabel`.
 
-Status bar data is not refreshed in `UILaunchPage`, but in `LaunchImpl::update_home_status_bar()`:
+Status bar data is not refreshed in `UILaunchPage`, but in `Launch::update_home_status_bar()`:
 
 ```cpp
 cp0_wifi_status_t wifi = cp0_wifi_get_status();
@@ -236,7 +236,7 @@ cp0_time_str(time_buf, sizeof(time_buf));
 cp0_battery_info_t bat = cp0_battery_read();
 ```
 
-`LaunchImpl` creates a 5-second timer during construction:
+`Launch` creates a 5-second timer during construction:
 
 ```cpp
 status_timer = lv_timer_create(home_status_timer_cb, 5000, this);
@@ -263,7 +263,7 @@ It then creates, in order:
 - 5 cards: the center is 100x100, left/right are 80x80, and far-side cards are 61x61 and hidden.
 - Left/right buttons: background images `carousel_left_arrow.png` / `carousel_right_arrow.png`.
 
-The default titles are only UI placeholders. Real content is written by `LaunchImpl` after it initializes the application list.
+The default titles are only UI placeholders. Real content is written by `Launch` after it initializes the application list.
 
 ## 7. Carousel Switch Flow
 
@@ -374,7 +374,7 @@ It solves two problems:
 
 ## 9. How Application Data Is Written into the Carousel
 
-`LaunchImpl` maintains `current_app` and `app_list`. During a switch, `UILaunchPage` only passes in the panel/label to be reused; `LaunchImpl` calculates which application should be displayed.
+`Launch` maintains `current_app` and `app_list`. During a switch, `UILaunchPage` only passes in the panel/label to be reused; `Launch` calculates which application should be displayed.
 
 Fill the new right end after switching left:
 
@@ -512,5 +512,5 @@ User presses ENTER
 - The names `switch_left()` / `switch_right()` describe animation direction and are not necessarily identical to user key direction. Currently, `KEY_LEFT` calls `switch_right()`, and `KEY_RIGHT` calls `switch_left()`.
 - During animation, only one `pending_switch_` enum value is recorded, so rapid repeated key presses do not create an unbounded queue.
 - Home card click events are bound to `on_app_clicked()`, which bridges to `launch_selected_app()`, but normal interaction mainly uses center selection + Enter launch. If mouse/touch interaction is enabled, confirm whether clicking a non-center card matches expectations.
-- Status bar objects are created by `UILaunchPage`, but the refresh timer is created during `LaunchImpl` construction. If the home screen is created without executing `Launch::bind_ui()`, the application list and status bar refresh will not start.
+- Status bar objects are created by `UILaunchPage`, but the refresh timer is created during `Launch` construction. If the home screen is created without executing `Launch::bind_ui()`, the application list and status bar refresh will not start.
 - When adding or adjusting carousel slots, update `CAROUSEL_SLOTS`, the initial positions in `create_app_container()`, and the slot definitions in the animation file together to avoid jumps after animation completion.
