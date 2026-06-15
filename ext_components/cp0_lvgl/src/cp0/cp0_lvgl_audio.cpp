@@ -54,7 +54,7 @@ public:
     bool system_play_inited_ = false;
     bool system_sounds_loaded_ = false;
     std::mutex system_play_mutex_;
-    std::array<std::string, 3> system_sound_names_ = {"startup.mp3", "key_back.wav", "key_back.wav"};
+    std::array<std::string, 3> system_sound_names_ = {"startup.mp3", "switch.wav", "enter.wav"};
     bool system_sound_enabled_ = true;
 
     static constexpr int kRecWaveformSize = 128;
@@ -225,13 +225,18 @@ private:
             );
             if(result != MA_SUCCESS)
             {
-                unload_system_sounds_locked();
-                return -3;
+                printf("load system sound failed: %s\n", path.c_str());
+                continue;
             }
             system_sound_loaded_slots_[i] = true;
         }
 
-        system_sounds_loaded_ = true;
+        system_sounds_loaded_ = std::any_of(
+            system_sound_loaded_slots_.begin(),
+            system_sound_loaded_slots_.end(),
+            [](bool loaded) { return loaded; }
+        );
+        if(!system_sounds_loaded_) return -3;
         return 0;
     }
 
@@ -482,7 +487,7 @@ public:
 
         {
             std::lock_guard<std::mutex> lock(system_play_mutex_);
-            if(!system_sounds_loaded_) return;
+            if(!system_sounds_loaded_ && load_system_sounds_locked() != 0) return;
 
             for(size_t i = 0; i < system_sound_names_.size(); ++i)
             {
@@ -506,7 +511,11 @@ public:
         if(!system_sound_enabled_) return;
 
         std::lock_guard<std::mutex> lock(system_play_mutex_);
-        if(!system_sounds_loaded_ || index >= system_sounds_.size() || !system_sound_loaded_slots_[index])
+        if(!system_sounds_loaded_ && load_system_sounds_locked() != 0)
+        {
+            return;
+        }
+        if(index >= system_sounds_.size() || !system_sound_loaded_slots_[index])
         {
             return;
         }
