@@ -675,10 +675,7 @@ public:
             char pwr_buf[16];
             snprintf(pwr_buf, sizeof(pwr_buf), "%d%%", soc);
             lv_label_set_text(ui_TOP_power_Label, pwr_buf);
-            if (soc == 100)
-                lv_obj_set_style_text_font(ui_TOP_power_Label, &lv_font_montserrat_10, LV_PART_MAIN | LV_STATE_DEFAULT);
-            else
-                lv_obj_set_style_text_font(ui_TOP_power_Label, LV_FONT_DEFAULT, LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_obj_set_style_text_font(ui_TOP_power_Label, LV_FONT_DEFAULT, LV_PART_MAIN | LV_STATE_DEFAULT);
 
             uint32_t color = 0x66CC33;
             if (soc <= 20)

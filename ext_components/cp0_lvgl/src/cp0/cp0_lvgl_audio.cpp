@@ -54,7 +54,7 @@ public:
     bool system_play_inited_ = false;
     bool system_sounds_loaded_ = false;
     std::mutex system_play_mutex_;
-    std::array<std::string, 3> system_sound_names_ = {"startup.mp3", "switch.wav", "enter.wav"};
+    std::array<std::string, 3> system_sound_names_ = {"startup.mp3", "key_back.wav", "key_back.wav"};
     bool system_sound_enabled_ = true;
 
     static constexpr int kRecWaveformSize = 128;
@@ -506,24 +506,24 @@ public:
         if(!file.empty()) play(file);
     }
 
-    void system_play_index(size_t index)
+    bool system_play_index(size_t index)
     {
-        if(!system_sound_enabled_) return;
+        if(!system_sound_enabled_) return false;
 
         std::lock_guard<std::mutex> lock(system_play_mutex_);
         if(!system_sounds_loaded_ && load_system_sounds_locked() != 0)
         {
-            return;
+            return false;
         }
         if(index >= system_sounds_.size() || !system_sound_loaded_slots_[index])
         {
-            return;
+            return false;
         }
 
         ma_sound* sound = &system_sounds_[index];
-        if(ma_sound_is_playing(sound)) return;
-        ma_sound_seek_to_pcm_frame(sound, 0);
-        ma_sound_start(sound);
+        if(ma_sound_is_playing(sound)) return true;
+        if(ma_sound_seek_to_pcm_frame(sound, 0) != MA_SUCCESS) return false;
+        return ma_sound_start(sound) == MA_SUCCESS;
     }
 
     void SetSystemSoundNames(arg_t arg, callback_t callback)
@@ -560,8 +560,8 @@ public:
             report(callback, 0, "system sound disabled\n");
             return;
         }
-        system_play_index(static_cast<size_t>(index));
-        report(callback, 0, "system sound play\n");
+        bool played = system_play_index(static_cast<size_t>(index));
+        report(callback, played ? 0 : -2, played ? "system sound play\n" : "system sound play failed\n");
     }
 
     void SystemSoundEnable(arg_t arg, callback_t callback)
