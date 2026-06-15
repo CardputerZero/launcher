@@ -142,6 +142,7 @@ int cp0_system_update_launcher_background(void);
 int cp0_time_set(const char *timestamp);
 int cp0_bq27220_calibrate(int command_index);
 int cp0_compass_read(cp0_compass_read_cb_t callback, void *user);
+int cp0_compass_calibrate(void);
 cp0_battery_info_t cp0_battery_read(void);
 int cp0_backlight_read(void);
 int cp0_backlight_max(void);

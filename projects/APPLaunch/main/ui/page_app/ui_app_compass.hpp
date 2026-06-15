@@ -28,8 +28,8 @@
  *  Screen: 320 x 170
  *
  *  Keys:
- *    F4      Reserved for the calibration interface
- *    F6/ESC  Return home
+ *    F6/6  Start magnetometer calibration
+ *    ESC   Return home
  * ============================================================
  */
 class UICompassPage : public AppPageRoot
@@ -52,6 +52,8 @@ class UICompassPage : public AppPageRoot
     static constexpr uint32_t kColorIconList = 0x33CC33;
     static constexpr uint32_t kColorIconExit = 0xFF0000;
     static constexpr uint32_t kColorSensorWarn = 0xFF0000;
+    static constexpr uint32_t kColorCalibrateBg = 0x111827;
+    static constexpr uint32_t kColorCalibrateBorder = 0x33CC33;
 
     static constexpr const char* ICON_EXIT = "\uEA01"; // .svgfont-exit
     static constexpr const char* ICON_LIST = "\uEA04"; // .svgfont-list
@@ -108,6 +110,8 @@ private:
     lv_obj_t* lbl_gyr_ = nullptr;
     lv_obj_t* sensor_missing_box_ = nullptr;
     lv_obj_t* sensor_missing_label_ = nullptr;
+    lv_obj_t* calibration_box_ = nullptr;
+    lv_obj_t* calibration_label_ = nullptr;
     std::array<lv_obj_t*, 5> lbl_bottom_btns_{};
     std::array<lv_obj_t*, 5> lbl_bottom_indicators_{};
 
@@ -136,6 +140,7 @@ private:
         create_imu_panel(root_screen_);
         create_bottom_bar(root_screen_);
         create_sensor_missing_overlay(root_screen_);
+        create_calibration_overlay(root_screen_);
 
         update_from_state(CompassUiState{});
         sensor_timer_ = lv_timer_create(&UICompassPage::sensor_timer_cb, 50, this);
@@ -293,6 +298,45 @@ private:
         lv_obj_move_foreground(sensor_missing_box_);
     }
 
+    void create_calibration_overlay(lv_obj_t* parent)
+    {
+        calibration_box_ = lv_obj_create(parent);
+        lv_obj_remove_style_all(calibration_box_);
+        lv_obj_set_size(calibration_box_, 230, 78);
+        lv_obj_center(calibration_box_);
+        lv_obj_set_style_bg_color(calibration_box_, color(kColorCalibrateBg), 0);
+        lv_obj_set_style_bg_opa(calibration_box_, LV_OPA_90, 0);
+        lv_obj_set_style_border_width(calibration_box_, 2, 0);
+        lv_obj_set_style_border_color(calibration_box_, color(kColorCalibrateBorder), 0);
+        lv_obj_set_style_radius(calibration_box_, 6, 0);
+        lv_obj_set_style_pad_all(calibration_box_, 0, 0);
+        lv_obj_clear_flag(calibration_box_, LV_OBJ_FLAG_SCROLLABLE);
+
+        calibration_label_ = lv_label_create(calibration_box_);
+        lv_obj_set_size(calibration_label_, 214, 62);
+        lv_obj_center(calibration_label_);
+        lv_obj_set_style_text_font(calibration_label_, &lv_font_montserrat_12, 0);
+        lv_obj_set_style_text_color(calibration_label_, color(kColorText), 0);
+        lv_obj_set_style_text_align(calibration_label_, LV_TEXT_ALIGN_CENTER, 0);
+        lv_label_set_long_mode(calibration_label_, LV_LABEL_LONG_WRAP);
+        lv_label_set_text(calibration_label_, "8-figure calibration\nMove device in a figure-8\nuntil this dialog closes");
+
+        lv_obj_add_flag(calibration_box_, LV_OBJ_FLAG_HIDDEN);
+    }
+
+    void set_calibration_overlay_visible(bool visible)
+    {
+        if (!calibration_box_)
+            return;
+
+        if (visible) {
+            lv_obj_clear_flag(calibration_box_, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_move_foreground(calibration_box_);
+        } else {
+            lv_obj_add_flag(calibration_box_, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+
     void set_bottom_btn(int idx, const char* text, bool icon, uint32_t hex)
     {
         lv_obj_set_style_text_font(lbl_bottom_btns_[idx],
@@ -333,6 +377,24 @@ private:
         cp0_compass_read(&UICompassPage::compass_read_cb, this);
     }
 
+    void start_calibration()
+    {
+        int ret = cp0_compass_calibrate();
+        if (ret == 0) {
+            set_calibration_overlay_visible(true);
+            if (lbl_status_text_)
+                lv_label_set_text(lbl_status_text_, "Calibrating...");
+        } else if (ret > 0) {
+            set_calibration_overlay_visible(true);
+            if (lbl_status_text_)
+                lv_label_set_text(lbl_status_text_, "Calibration already running");
+        } else {
+            set_calibration_overlay_visible(false);
+            if (lbl_status_text_)
+                lv_label_set_text(lbl_status_text_, "Calibration failed");
+        }
+    }
+
     static void compass_read_cb(int code, const cp0_compass_info_t* info, void* user)
     {
         auto* self = static_cast<UICompassPage*>(user);
@@ -359,6 +421,8 @@ private:
         if (lbl_status_text_) {
             lv_label_set_text(lbl_status_text_, state.statusText.c_str());
         }
+
+        set_calibration_overlay_visible(state.statusText == "Calibrating...");
 
         if (sensor_missing_box_) {
             if (state.sensorReady) {
@@ -464,11 +528,11 @@ private:
     void handle_key(uint32_t key)
     {
         switch (key) {
-        case KEY_F4:
-            // TODO(compass): Trigger magnetometer/IMU calibration after the API is available.
+        case KEY_F6:
+        case KEY_6:
+            start_calibration();
             break;
 
-        case KEY_F6:
         case KEY_ESC:
             if (navigate_home) {
                 navigate_home();
