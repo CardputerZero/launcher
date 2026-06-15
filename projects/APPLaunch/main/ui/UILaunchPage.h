@@ -56,19 +56,12 @@ protected:
     std::array<lv_obj_t *, kLauncherCarouselElementCount> carousel_elements_ = {};
 
 private:
-    enum class PendingSwitch {
-        None,
-        Left,
-        Right,
-    };
-
     void create_app_container(lv_obj_t *parent);
     void switch_left();
     void switch_right();
     void fill_left_entering_slot(lv_obj_t *panel, lv_obj_t *label);
     void fill_right_entering_slot(lv_obj_t *panel, lv_obj_t *label);
     void finish_switch_animation();
-    void run_pending_switch();
     void handle_home_key(lv_event_t *event);
     void handle_startup_gif_event(lv_event_t *event);
 
@@ -92,6 +85,5 @@ private:
     bool is_animating_ = false;
     bool startup_gif_done_ = false;
     int lvping_lock_ = 0;
-    PendingSwitch pending_switch_ = PendingSwitch::None;
     int switch_current_pos_ = kPageDot2;
 };

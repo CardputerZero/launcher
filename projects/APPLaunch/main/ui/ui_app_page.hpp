@@ -455,6 +455,7 @@ public:
         UI_bind_event();
         update_datetime_status();
         update_status_bar();
+        update_battery_status(cp0_battery_read());
         status_timer_ = lv_timer_create(app_status_timer_cb, 5000, this);
     }
 

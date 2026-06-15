@@ -6,11 +6,13 @@
 
 #include "UILaunchPage.h"
 
-#include "APPLaunch_api.h"
 #include "Launch.h"
+#include "hal_lvgl_bsp.h"
 #include "lvgl/src/widgets/gif/lv_gif.h"
 #include "sample_log.h"
 #include "compat/input_keys.h"
+#include <list>
+#include <string>
 #include <utility>
 
 #include "Animation/ui_launcher_animation.h"
@@ -141,19 +143,14 @@ static const CarouselSlot CAROUSEL_SLOTS[] = {
 // audio
 // ============================================================
 
-static void audio_play_ui_asset(const char *name)
-{
-    APPLaunch_system_play_asset(name);
-}
-
 static void audio_play_switch(void)
 {
-    audio_play_ui_asset("switch.wav");
+    cp0_signal_audio_api({"SystemSoundPlay", "1"}, nullptr);
 }
 
 static void audio_play_enter(void)
 {
-    audio_play_ui_asset("enter.wav");
+    cp0_signal_audio_api({"SystemSoundPlay", "2"}, nullptr);
 }
 
 // ============================================================
@@ -317,7 +314,7 @@ void UILaunchPage::show_home_screen()
 void UILaunchPage::load_home_screen()
 {
     show_home_screen();
-    APPLaunch_audio_play_asset("startup.mp3");
+    cp0_signal_audio_api({"SystemSoundPlay", "0"}, nullptr);
 }
 
 void UILaunchPage::start_startup_gif()
@@ -419,33 +416,12 @@ void UILaunchPage::finish_switch_animation()
         lv_obj_set_style_text_font(carousel_elements_[i], launcher_fonts().get("Montserrat-Bold.ttf", 16, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN | LV_STATE_DEFAULT);
     }
 
-    run_pending_switch();
-}
-
-void UILaunchPage::run_pending_switch()
-{
-    PendingSwitch pending = pending_switch_;
-    pending_switch_ = PendingSwitch::None;
-
-    switch (pending) {
-    case PendingSwitch::Left:
-        switch_left();
-        break;
-    case PendingSwitch::Right:
-        switch_right();
-        break;
-    case PendingSwitch::None:
-        break;
-    }
 }
 
 void UILaunchPage::switch_right()
 {
     if (is_animating_)
-    {
-        pending_switch_ = PendingSwitch::Right;
         return;
-    }
 
     is_animating_ = true;
 
@@ -477,10 +453,7 @@ void UILaunchPage::switch_right()
 void UILaunchPage::switch_left()
 {
     if (is_animating_)
-    {
-        pending_switch_ = PendingSwitch::Left;
         return;
-    }
 
     is_animating_ = true;
 
@@ -538,7 +511,7 @@ void UILaunchPage::handle_home_key(lv_event_t *event)
 
         case KEY_LEFT:
         {
-            if (!lvping_lock_)
+            if (!lvping_lock_ && !is_animating_)
             {
                 audio_play_switch();
                 switch_right();
@@ -548,7 +521,7 @@ void UILaunchPage::handle_home_key(lv_event_t *event)
 
         case KEY_RIGHT:
         {
-            if (!lvping_lock_)
+            if (!lvping_lock_ && !is_animating_)
             {
                 audio_play_switch();
                 switch_left();

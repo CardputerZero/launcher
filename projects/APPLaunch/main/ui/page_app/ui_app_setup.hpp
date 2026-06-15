@@ -27,7 +27,6 @@
 #include <unistd.h>
 #endif
 #include <dirent.h>
-#include "APPLaunch_api.h"
 #include "cp0_lvgl_app.h"
 #include "hal_lvgl_bsp.h"
 #include "../AppRegistry.h"
@@ -116,7 +115,7 @@ private:
     std::string snd_enter_;
     std::string snd_back_;
 
-    void play_enter() { play_audio_file(snd_enter_); }
+    void play_enter() { cp0_signal_audio_api({"SystemSoundPlay", "2"}, nullptr); }
     void play_back()  { play_audio_file(snd_back_); }
 
     static int config_get_int(const char *key, int default_val)
@@ -137,6 +136,26 @@ private:
     static void config_save()
     {
         cp0_signal_config_api({"Save"}, nullptr);
+    }
+
+    static int audio_volume_read()
+    {
+        int volume = -1;
+        cp0_signal_audio_api({"VolumeRead"}, [&](int code, std::string data) {
+            if (code == 0)
+                volume = std::atoi(data.c_str());
+        });
+        return volume;
+    }
+
+    static int audio_volume_write(int val)
+    {
+        int volume = -1;
+        cp0_signal_audio_api({"VolumeWrite", std::to_string(val)}, [&](int code, std::string data) {
+            if (code == 0)
+                volume = std::atoi(data.c_str());
+        });
+        return volume;
     }
 
     void play_audio_file(const std::string &path)
@@ -364,8 +383,8 @@ private:
     {
         val_title_ = "Volume";
         val_options_ = {"100%", "75%", "50%", "25%", "0%"};
-        vol_val_ = config_get_int("volume", APPLaunch_volume_read());
-        int pct = vol_val_ * 100 / 63;
+        vol_val_ = config_get_int("volume", audio_volume_read());
+        int pct = vol_val_;
         if (pct >= 87) val_sel_idx_ = 0;
         else if (pct >= 62) val_sel_idx_ = 1;
         else if (pct >= 37) val_sel_idx_ = 2;
@@ -1065,8 +1084,8 @@ private:
     void apply_volume()
     {
         int pcts[] = {100, 75, 50, 25, 0};
-        int new_val = 63 * pcts[val_sel_idx_] / 100;
-        APPLaunch_volume_write(new_val);
+        int new_val = pcts[val_sel_idx_];
+        audio_volume_write(new_val);
         config_set_int("volume", new_val);
         config_save();
     }
