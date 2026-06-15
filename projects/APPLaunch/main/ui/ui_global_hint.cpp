@@ -31,6 +31,7 @@
 #include "ui.h"
 #include "keyboard_input.h"
 #include "lvgl/lvgl.h"
+#include "hal_lvgl_bsp.h"
 #include "cp0_lvgl_app.h"
 
 #include "compat/input_keys.h"
@@ -38,6 +39,7 @@
 #include <string.h>
 #include <cstdio>
 #include <cstdlib>
+#include <string>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -260,7 +262,10 @@ void on_key(const struct key_item *elm)
             if (sudo_gid) gid = (gid_t)atoi(sudo_gid);
             chown(scr_dir, uid, gid);
         }
-        int ret = cp0_screenshot_save(scr_dir);
+        int ret = -1;
+        cp0_signal_screenshot_api({"Save", scr_dir}, [&](int code, std::string) {
+            ret = code;
+        });
         show_hint(ret == 0 ? "Saved to ~/Screenshots" : "Screenshot failed");
         return;
     }

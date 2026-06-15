@@ -6,10 +6,11 @@
 
 #include "Launch.h"
 
+#include "AppRegistry.h"
 #include "ui.h"
 #include "UILaunchPage.h"
 #include "ui_loading.h"
-#include "page_app.h"
+#include "generated/page_app.h"
 #include "cp0_lvgl_app.h"
 #include "cp0_lvgl_file.hpp"
 #include "sample_log.h"
@@ -26,6 +27,85 @@
 namespace {
 constexpr size_t kHomeCarouselSlotCount = 5;
 constexpr int kHomeCarouselCenterSlot = 2;
+
+using BuiltinAppAppender = void (*)(std::list<app> &apps, const AppDescriptor &desc);
+
+struct BuiltinAppRegistration {
+    AppDescriptor desc;
+    const char *exec;
+    bool terminal;
+    bool sysplause;
+    bool run_as_root;
+    BuiltinAppAppender append;
+};
+
+template <class PageT>
+void append_page_app(std::list<app> &apps, const AppDescriptor &desc)
+{
+    apps.emplace_back(desc.label, cp0_file_path(desc.icon), page_v<PageT>);
+}
+
+void append_builtin_app(std::list<app> &apps, const BuiltinAppRegistration &registration)
+{
+    const AppDescriptor &desc = registration.desc;
+    if (registration.append) {
+        registration.append(apps, desc);
+        return;
+    }
+
+    apps.emplace_back(desc.label,
+                      cp0_file_path(desc.icon),
+                      registration.exec ? registration.exec : "",
+                      registration.terminal,
+                      registration.sysplause,
+                      registration.run_as_root);
+}
+
+constexpr BuiltinAppRegistration kBuiltinApps[] = {
+    {{"Python", "python_100.png", "app_Python", false, true}, "python3", true, false, false, nullptr},
+    {{"STORE", "store_100.png", "app_Store", false, true},
+     "/usr/share/APPLaunch/bin/M5CardputerZero-AppStore", false, true, true, nullptr},
+    {{"CLI", "cli_100.png", "app_CLI", false, true}, "bash", true, false, false, nullptr},
+    {{"GAME", "game_100.png", "app_Game", false, true}, nullptr, false, true, false, append_page_app<UIGamePage>},
+    {{"SETTING", "setting_100.png", "app_Setting", false, true}, nullptr, false, true, false, append_page_app<UISetupPage>},
+    {{"MATH", "math_100.png", "app_Math", true, false},
+     "/usr/share/APPLaunch/bin/M5CardputerZero-Calculator", false, true, false, nullptr},
+    {{"Compass", "compass_needle_80.png", "app_Compass", true, false},
+     nullptr, false, true, false, append_page_app<UICompassPage>},
+#if defined(__linux__) && !defined(HAL_PLATFORM_SDL)
+    {{"IP_PANEL", "ip_panel_100.png", "app_IP_Panel", true, false},
+     nullptr, false, true, false, append_page_app<UIIpPanelPage>},
+    {{"FILE", "file_100.png", "app_File", true, false},
+     nullptr, false, true, false, append_page_app<UIFilePage>},
+    {{"SSH", "ssh_100.png", "app_SSH", true, false},
+     nullptr, false, true, false, append_page_app<UISSHPage>},
+    {{"MESH", "mesh_100.png", "app_Mesh", true, false},
+     nullptr, false, true, false, append_page_app<UIMeshPage>},
+    {{"REC", "rec_100.png", "app_Rec", true, false},
+     nullptr, false, true, false, append_page_app<UIRecPage>},
+    {{"CAMERA", "camera_100.png", "app_Camera", true, false},
+     nullptr, false, true, false, append_page_app<UICameraPage>},
+    {{"LORA", "lora_100.png", "app_LoRa", true, false},
+     nullptr, false, true, false, append_page_app<UILoraPage>},
+    {{"TANK", "tank_100.png", "app_Tank", true, false},
+     nullptr, false, true, false, append_page_app<UITankBattlePage>},
+#endif
+};
+}
+
+const AppDescriptor *launcher_app_registry_entries(std::size_t *count)
+{
+    static AppDescriptor descriptors[sizeof(kBuiltinApps) / sizeof(kBuiltinApps[0])];
+    static bool initialized = false;
+    if (!initialized) {
+        for (std::size_t i = 0; i < sizeof(kBuiltinApps) / sizeof(kBuiltinApps[0]); ++i)
+            descriptors[i] = kBuiltinApps[i].desc;
+        initialized = true;
+    }
+
+    if (count)
+        *count = sizeof(kBuiltinApps) / sizeof(kBuiltinApps[0]);
+    return descriptors;
 }
 
 // ============================================================
@@ -52,60 +132,8 @@ void Launch::bind_ui()
         }
         bound_ = true;
 
-        // Fixed icon; users cannot modify it
-        app_list.emplace_back("Python",
-                              cp0_file_path("python_100.png"), "python3", true, false);
-        app_list.emplace_back("STORE",
-                              cp0_file_path("store_100.png"),
-                              "/usr/share/APPLaunch/bin/M5CardputerZero-AppStore", false, true, true);
-        app_list.emplace_back("CLI",
-                              cp0_file_path("cli_100.png"), "bash", true, false);
-        app_list.emplace_back("GAME",
-                              cp0_file_path("game_100.png"), page_v<UIGamePage>);
-
-        app_list.emplace_back("SETTING",
-                              cp0_file_path("setting_100.png"), page_v<UISetupPage>);
-
-
-        // Dynamic icons filtered by Settings configuration
-        #define APP_ENABLED(key) (cp0_config_get_int("app_" key, 1) != 0)
-
-        if (APP_ENABLED("Math"))
-        app_list.emplace_back("MATH",
-                              cp0_file_path("math_100.png"),
-                              "/usr/share/APPLaunch/bin/M5CardputerZero-Calculator", false);
-
-        app_list.emplace_back("Compass",
-                              cp0_file_path("compass_needle_80.png"), page_v<UICompassPage>);
-
-
-#if defined(__linux__) && !defined(HAL_PLATFORM_SDL)
-        if (APP_ENABLED("IP_Panel"))
-        app_list.emplace_back("IP_PANEL",
-                              cp0_file_path("ip_panel_100.png"), page_v<UIIpPanelPage>);
-        if (APP_ENABLED("File"))
-        app_list.emplace_back("FILE",
-                              cp0_file_path("file_100.png"), page_v<UIFilePage>);
-        if (APP_ENABLED("SSH"))
-        app_list.emplace_back("SSH",
-                              cp0_file_path("ssh_100.png"), page_v<UISSHPage>);
-        if (APP_ENABLED("Mesh"))
-        app_list.emplace_back("MESH",
-                              cp0_file_path("mesh_100.png"), page_v<UIMeshPage>);
-        if (APP_ENABLED("Rec"))
-        app_list.emplace_back("REC",
-                              cp0_file_path("rec_100.png"), page_v<UIRecPage>);
-        if (APP_ENABLED("Camera"))
-        app_list.emplace_back("CAMERA",
-                              cp0_file_path("camera_100.png"), page_v<UICameraPage>);
-        if (APP_ENABLED("LoRa"))
-        app_list.emplace_back("LORA", cp0_file_path("lora_100.png"), page_v<UILoraPage>);
-        if (APP_ENABLED("Tank"))
-        app_list.emplace_back("TANK", cp0_file_path("tank_100.png"), page_v<UITankBattlePage>);
-#endif
-        #undef APP_ENABLED
-
-        fixed_count = app_list.size();
+        launcher_app_registry_set_changed_callback(app_registry_changed_cb, this);
+        rebuild_builtin_apps();
 
         applications_load();
         refresh_home_carousel();
@@ -114,7 +142,8 @@ void Launch::bind_ui()
         inotify_init_watch();
 
         // Create a 3s LVGL timer to periodically check directory changes
-        watch_timer = lv_timer_create(app_dir_watch_cb, 3000, this);
+        release_watch_timer();
+        watch_timer_ = lv_timer_create(app_dir_watch_cb, 3000, this);
 
     }
 
@@ -130,8 +159,8 @@ void Launch::lv_go_back_home(void *arg)
         auto self = (Launch *)arg;
         SLOGI("[HOME] lv_go_back_home executing (page=%p)", self->app_Page.get());
         lv_timer_enable(true);
-        if (self->launch_page_)
-            self->launch_page_->show_home_screen();
+        if (auto page = self->launch_page_.lock())
+            page->show_home_screen();
         lv_refr_now(NULL);
         if (self->app_Page)
             self->app_Page.reset();
@@ -183,13 +212,12 @@ void Launch::launch_Exec(const std::string &exec, bool keep_root)
 
         int ret = cp0_process_exec_blocking(exec.c_str(), &LVGL_HOME_KEY_FLAG, keep_root ? 1 : 0);
         SLOGI("App %s exited with code %d", exec.c_str(), ret);
+
         lv_timer_enable(true);
         if (indev)
             lv_indev_set_group(indev, UILaunchPage::home_input_group());
-        if (launch_page_)
-            launch_page_->show_home_screen();
-        /* Child process has returned; we are back on the launcher home.
-         * Hide the overlay so it doesn't linger. */
+        if (auto page = launch_page_.lock())
+            page->show_home_screen();
         ui_loading::hide();
         lv_obj_invalidate(lv_screen_active());
         lv_refr_now(disp);
@@ -316,6 +344,13 @@ void Launch::applications_load()
                 fprintf(stderr, "applications_load: skip %s (missing Name or Exec)\n", filepath.c_str());
                 continue;
             }
+            char unsafe_reason[128] = {};
+            if (!cp0_desktop_exec_is_safe(app_exec.c_str(), unsafe_reason, sizeof(unsafe_reason)))
+            {
+                fprintf(stderr, "applications_load: skip %s (unsafe Exec: %s)\n",
+                        filepath.c_str(), unsafe_reason);
+                continue;
+            }
             bool in_list = false;
             for (const auto &it : app_list)
             {
@@ -331,7 +366,7 @@ void Launch::applications_load()
                 continue;
             }
 
-            app_list.emplace_back(page_title, app_icon, app_exec, app_terminal, app_sysplause);
+            app_list.emplace_back(page_title, cp0_file_path(app_icon), app_exec, app_terminal, app_sysplause);
         }
 
         closedir(dir);
@@ -343,7 +378,24 @@ void Launch::applications_load()
 void Launch::inotify_init_watch()
     {
         const std::string app_dir_path = cp0_file_path("applications");
-        dir_watcher = cp0_dir_watch_start(app_dir_path.c_str());
+        release_dir_watcher();
+        dir_watcher_ = cp0_dir_watch_start(app_dir_path.c_str());
+    }
+
+void Launch::release_dir_watcher()
+    {
+        if (dir_watcher_) {
+            cp0_dir_watch_stop(dir_watcher_);
+            dir_watcher_ = NULL;
+        }
+    }
+
+void Launch::release_watch_timer()
+    {
+        if (watch_timer_) {
+            lv_timer_delete(watch_timer_);
+            watch_timer_ = nullptr;
+        }
     }
 
     // ============================================================
@@ -355,8 +407,8 @@ void Launch::refresh_home_carousel()
         if (normalized < 0)
             return;
         current_app = normalized;
-        if (launch_page_)
-            launch_page_->refresh_carousel();
+        if (auto page = launch_page_.lock())
+            page->refresh_carousel();
     }
 
     // ============================================================
@@ -364,12 +416,7 @@ void Launch::refresh_home_carousel()
     // ============================================================
 void Launch::applications_reload()
     {
-        int sz = (int)app_list.size();
-        if (sz > fixed_count)
-        {
-            auto it = std::next(app_list.begin(), fixed_count);
-            app_list.erase(it, app_list.end());
-        }
+        rebuild_builtin_apps();
         applications_load();
         refresh_home_carousel();
     }
@@ -399,10 +446,10 @@ const app *Launch::app_at_index(int index) const
 void Launch::app_dir_watch_cb(lv_timer_t *timer)
     {
         auto *self = static_cast<Launch *>(lv_timer_get_user_data(timer));
-        if (!self || !self->dir_watcher)
+        if (!self || !self->dir_watcher_)
             return;
 
-        if (cp0_dir_watch_poll(self->dir_watcher) > 0)
+        if (cp0_dir_watch_poll(self->dir_watcher_) > 0)
         {
             SLOGI("app_dir_watch_cb: applications dir changed, reloading...");
             self->applications_reload();
@@ -418,6 +465,7 @@ inline app::app(std::string name,
                 std::string exec,
                 bool terminal)
     : Name(std::move(name)), Icon(std::move(icon)){
+    Exec = exec;
     launch = [exec = std::move(exec), terminal](Launch *ctx)
     {
         if (terminal)
@@ -433,6 +481,7 @@ inline app::app(std::string name,
                 bool terminal,
                 bool sysplause)
     : Name(std::move(name)), Icon(std::move(icon)){
+    Exec = exec;
     launch = [exec = std::move(exec), terminal, sysplause](Launch *ctx)
     {
         if (terminal)
@@ -449,6 +498,7 @@ inline app::app(std::string name,
                 bool sysplause,
                 bool run_as_root)
     : Name(std::move(name)), Icon(std::move(icon)){
+    Exec = exec;
     launch = [exec = std::move(exec), terminal, sysplause, run_as_root](Launch *ctx)
     {
         if (terminal)
@@ -490,16 +540,9 @@ app::app(std::string name,
 // ============================================================
 Launch::~Launch()
 {
-    if (watch_timer)
-    {
-        lv_timer_delete(watch_timer);
-        watch_timer = nullptr;
-    }
-    if (dir_watcher)
-    {
-        cp0_dir_watch_stop(dir_watcher);
-        dir_watcher = NULL;
-    }
+    launcher_app_registry_set_changed_callback(nullptr, nullptr);
+    release_watch_timer();
+    release_dir_watcher();
 }
 
 Launch::Launch() = default;
@@ -507,4 +550,26 @@ Launch::Launch() = default;
 void Launch::set_launch_page(std::shared_ptr<UILaunchPage> launch_page)
 {
     launch_page_ = std::move(launch_page);
+}
+
+
+void Launch::rebuild_builtin_apps()
+{
+    app_list.clear();
+
+    for (const auto &registration : kBuiltinApps) {
+        if (!launcher_app_registry_is_enabled(registration.desc))
+            continue;
+        append_builtin_app(app_list, registration);
+    }
+
+    fixed_count = app_list.size();
+    current_app = normalized_app_index(current_app);
+}
+
+void Launch::app_registry_changed_cb(void *user_data)
+{
+    auto *self = static_cast<Launch *>(user_data);
+    if (self)
+        self->applications_reload();
 }

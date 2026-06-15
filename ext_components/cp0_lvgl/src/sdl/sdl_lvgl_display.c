@@ -21,6 +21,10 @@ static const char *getenv_default(const char *name, const char *dflt)
 
 void init_sdl_disp(void)
 {
+    static int display_initialized = 0;
+    if (display_initialized)
+        return;
+
     int width = atoi(getenv_default("LV_SDL_VIDEO_WIDTH", "320"));
     int height = atoi(getenv_default("LV_SDL_VIDEO_HEIGHT", "170"));
     lv_display_t *disp = lv_sdl_window_create(width, height);
@@ -30,4 +34,10 @@ void init_sdl_disp(void)
     }
 
     lv_sdl_window_set_title(disp, getenv_default("LV_SDL_WINDOW_TITLE", "M5CardputerZero"));
+    display_initialized = 1;
+}
+
+void init_freambuffer_disp(void)
+{
+    init_sdl_disp();
 }

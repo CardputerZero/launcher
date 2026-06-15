@@ -11,21 +11,13 @@
 #include "compat/input_keys.h"
 #include "hal_lvgl_bsp.h"
 #include <algorithm>
-#include <atomic>
 #include <array>
 #include <cmath>
 #include <cstdio>
 #include <cstdint>
 #include <cstring>
-#include <dirent.h>
 #include <functional>
-#include <fstream>
-#include <mutex>
 #include <string>
-#include <thread>
-#include <vector>
-#include <sys/stat.h>
-#include <unistd.h>
 #include <keyboard_input.h>
 
 /*
@@ -77,7 +69,6 @@ public:
 
     ~UICompassPage()
     {
-        stop_sensor_thread();
         if (sensor_timer_) {
             lv_timer_delete(sensor_timer_);
             sensor_timer_ = nullptr;
@@ -86,17 +77,6 @@ public:
     }
 
 private:
-    struct IioDevicePaths {
-        std::string accel;
-        std::string magn;
-        bool hasGyro = false;
-
-        bool ready() const
-        {
-            return !accel.empty() && !magn.empty();
-        }
-    };
-
     struct CompassUiState {
         std::string statusText = "Compass";
         float yaw = 0.0f;
@@ -132,11 +112,6 @@ private:
     std::array<lv_obj_t*, 5> lbl_bottom_indicators_{};
 
     lv_timer_t* sensor_timer_ = nullptr;
-    std::thread sensor_thread_;
-    std::atomic<bool> sensor_running_{false};
-    std::mutex sensor_mutex_;
-    CompassUiState sensor_state_{};
-    bool sensor_state_dirty_ = false;
     CompassUiState last_state_{};
 
     static lv_color_t color(uint32_t hex)
@@ -162,14 +137,9 @@ private:
         create_bottom_bar(root_screen_);
         create_sensor_missing_overlay(root_screen_);
 
-        CompassUiState initial_state;
-        IioDevicePaths initial_paths = enumerate_iio_devices();
-        initial_state.statusText = initial_paths.ready() ? "Sensor starting" : "IIO sensor missing";
-        initial_state.sensorReady = initial_paths.ready();
-        update_from_state(initial_state);
-        start_sensor_thread();
+        update_from_state(CompassUiState{});
         sensor_timer_ = lv_timer_create(&UICompassPage::sensor_timer_cb, 50, this);
-        poll_sensor_once();
+        request_compass_render();
     }
 
     void create_status_bar(lv_obj_t* parent)
@@ -332,218 +302,49 @@ private:
         lv_label_set_text(lbl_bottom_btns_[idx], text);
     }
 
-    /*
-     * ============================================================
-     * IIO 驱动枚举与数据读取
-     * ============================================================
-     */
-    static bool file_exists(const std::string& path)
+    static CompassUiState state_from_compass_info(int code, const cp0_compass_info_t* info)
     {
-        struct stat st;
-        return stat(path.c_str(), &st) == 0;
-    }
-
-    static bool read_text_file(const std::string& path, std::string& out)
-    {
-        std::ifstream ifs(path);
-        if (!ifs.is_open()) return false;
-        std::getline(ifs, out);
-        return true;
-    }
-
-    static bool read_float_file(const std::string& path, float& out)
-    {
-        std::ifstream ifs(path);
-        if (!ifs.is_open()) return false;
-        ifs >> out;
-        return !ifs.fail();
-    }
-
-    static float read_float_file_or(const std::string& path, float fallback)
-    {
-        float v = fallback;
-        return read_float_file(path, v) ? v : fallback;
-    }
-
-    static bool has_accel_files(const std::string& dir)
-    {
-        return file_exists(dir + "/in_accel_x_raw") &&
-               file_exists(dir + "/in_accel_y_raw") &&
-               file_exists(dir + "/in_accel_z_raw");
-    }
-
-    static bool has_magn_files(const std::string& dir)
-    {
-        return file_exists(dir + "/in_magn_x_raw") &&
-               file_exists(dir + "/in_magn_y_raw") &&
-               file_exists(dir + "/in_magn_z_raw");
-    }
-
-    static bool has_gyro_files(const std::string& dir)
-    {
-        return file_exists(dir + "/in_anglvel_x_raw") &&
-               file_exists(dir + "/in_anglvel_y_raw") &&
-               file_exists(dir + "/in_anglvel_z_raw");
-    }
-
-    static IioDevicePaths enumerate_iio_devices()
-    {
-        static constexpr const char* kIioRoot = "/sys/bus/iio/devices";
-        IioDevicePaths paths;
-
-        DIR* dp = opendir(kIioRoot);
-        if (!dp) return paths;
-
-        while (dirent* ent = readdir(dp)) {
-            if (std::strncmp(ent->d_name, "iio:device", 10) != 0) continue;
-
-            std::string dir = std::string(kIioRoot) + "/" + ent->d_name;
-            if (paths.accel.empty() && has_accel_files(dir)) {
-                paths.accel = dir;
-                paths.hasGyro = has_gyro_files(dir);
-            }
-            if (paths.magn.empty() && has_magn_files(dir)) {
-                paths.magn = dir;
-            }
-        }
-
-        closedir(dp);
-        return paths;
-    }
-
-    bool read_axis_triplet(const std::string& dir, const char* prefix,
-                           float scale, float& x, float& y, float& z) const
-    {
-        float rx = 0.0f;
-        float ry = 0.0f;
-        float rz = 0.0f;
-        if (!read_float_file(dir + "/" + prefix + "_x_raw", rx)) return false;
-        if (!read_float_file(dir + "/" + prefix + "_y_raw", ry)) return false;
-        if (!read_float_file(dir + "/" + prefix + "_z_raw", rz)) return false;
-
-        x = rx * scale;
-        y = ry * scale;
-        z = rz * scale;
-        return true;
-    }
-
-    bool read_iio_state(IioDevicePaths& paths, CompassUiState& state)
-    {
-        if (!paths.ready()) {
-            paths = enumerate_iio_devices();
-        }
-
-        if (!paths.ready()) {
-            state.statusText = "IIO sensor missing";
+        CompassUiState state;
+        if (!info || code != 0 || !info->sensor_ready) {
+            state.statusText = (info && info->status[0]) ? info->status : "Compass sensor missing";
             state.sensorReady = false;
-            return false;
+            return state;
         }
 
-        const float acc_scale = read_float_file_or(paths.accel + "/in_accel_scale", 1.0f);
-        const float gyr_scale = read_float_file_or(paths.accel + "/in_anglvel_scale", 1.0f);
-        const float mag_scale = read_float_file_or(paths.magn + "/in_magn_scale", 1.0f);
-
-        float acc_x = 0.0f, acc_y = 0.0f, acc_z = 0.0f;
-        float mag_x = 0.0f, mag_y = 0.0f, mag_z = 0.0f;
-        float gyr_x = 0.0f, gyr_y = 0.0f, gyr_z = 0.0f;
-
-        if (!read_axis_triplet(paths.accel, "in_accel", acc_scale, acc_x, acc_y, acc_z) ||
-            !read_axis_triplet(paths.magn, "in_magn", mag_scale, mag_x, mag_y, mag_z)) {
-            state.statusText = "IIO read failed";
-            state.sensorReady = false;
-            return false;
-        }
-
-        if (paths.hasGyro) {
-            read_axis_triplet(paths.accel, "in_anglvel", gyr_scale, gyr_x, gyr_y, gyr_z);
-        }
-
-        float pitch = std::atan2(-acc_x, std::sqrt(acc_y * acc_y + acc_z * acc_z));
-        float roll = std::atan2(acc_y, acc_z);
-        float sin_p = std::sin(pitch);
-        float cos_p = std::cos(pitch);
-        float sin_r = std::sin(roll);
-        float cos_r = std::cos(roll);
-
-        float mag_x_h = mag_x * cos_p + mag_z * sin_p;
-        float mag_y_h = mag_x * sin_r * sin_p + mag_y * cos_r - mag_z * sin_r * cos_p;
-        float yaw = std::atan2(-mag_y_h, mag_x_h) * 180.0f / 3.1415926f;
-        if (yaw < 0.0f) yaw += 360.0f;
-
-        state.statusText = "Sensor OK";
+        state.statusText = info->status[0] ? info->status : "Sensor OK";
         state.sensorReady = true;
-        state.yaw = yaw;
-        state.pitch = pitch * 180.0f / 3.1415926f;
-        state.roll = roll * 180.0f / 3.1415926f;
-        state.accX = acc_x;
-        state.accY = acc_y;
-        state.accZ = acc_z;
-        state.gyrX = gyr_x;
-        state.gyrY = gyr_y;
-        state.gyrZ = gyr_z;
-        state.magX = mag_x;
-        state.magY = mag_y;
-        state.magZ = mag_z;
-        return true;
+        state.yaw = info->yaw;
+        state.pitch = info->pitch;
+        state.roll = info->roll;
+        state.accX = info->acc_x;
+        state.accY = info->acc_y;
+        state.accZ = info->acc_z;
+        state.gyrX = info->gyr_x;
+        state.gyrY = info->gyr_y;
+        state.gyrZ = info->gyr_z;
+        state.magX = info->mag_x;
+        state.magY = info->mag_y;
+        state.magZ = info->mag_z;
+        return state;
     }
 
-    void start_sensor_thread()
+    void request_compass_render()
     {
-        if (sensor_running_.load()) return;
-        sensor_running_ = true;
-        sensor_thread_ = std::thread(&UICompassPage::sensor_thread_func, this);
+        cp0_compass_read(&UICompassPage::compass_read_cb, this);
     }
 
-    void stop_sensor_thread()
+    static void compass_read_cb(int code, const cp0_compass_info_t* info, void* user)
     {
-        sensor_running_ = false;
-        if (sensor_thread_.joinable()) {
-            sensor_thread_.join();
-        }
-    }
-
-    void publish_sensor_state(const CompassUiState& state)
-    {
-        std::lock_guard<std::mutex> lock(sensor_mutex_);
-        sensor_state_ = state;
-        sensor_state_dirty_ = true;
-    }
-
-    void sensor_thread_func()
-    {
-        IioDevicePaths paths = enumerate_iio_devices();
-        CompassUiState state;
-
-        while (sensor_running_.load()) {
-            read_iio_state(paths, state);
-            publish_sensor_state(state);
-            usleep(50000); /* 50 ms => 20 Hz, matching the original Compass app */
-        }
-    }
-
-    void poll_sensor_once()
-    {
-        CompassUiState state;
-        bool dirty = false;
-        {
-            std::lock_guard<std::mutex> lock(sensor_mutex_);
-            dirty = sensor_state_dirty_;
-            if (dirty) {
-                state = sensor_state_;
-                sensor_state_dirty_ = false;
-            }
-        }
-
-        if (dirty) {
-            update_from_state(state);
-        }
+        auto* self = static_cast<UICompassPage*>(user);
+        if (!self) return;
+        self->update_from_state(state_from_compass_info(code, info));
     }
 
     static void sensor_timer_cb(lv_timer_t* t)
     {
         auto* self = static_cast<UICompassPage*>(lv_timer_get_user_data(t));
         if (!self) return;
-        self->poll_sensor_once();
+        self->request_compass_render();
     }
 
     /*

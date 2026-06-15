@@ -23,12 +23,13 @@ public:
 
 private:
     friend LauncherFonts &launcher_fonts();
-    void creat_display();
-    void create_launcher_home();
+    void create_display();
+    void build_launcher_home();
+    void show_initial_screen();
 
     lv_disp_t *dispp_ = nullptr;
     lv_theme_t *theme_ = nullptr;
     std::shared_ptr<UILaunchPage> launch_page_;
     std::shared_ptr<LauncherFonts> fonts_;
-    std::shared_ptr<Launch> launch_;
+    std::unique_ptr<Launch> launch_;
 };

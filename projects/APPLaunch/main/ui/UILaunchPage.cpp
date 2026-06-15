@@ -6,6 +6,7 @@
 
 #include "UILaunchPage.h"
 
+#include "APPLaunch_api.h"
 #include "Launch.h"
 #include "lvgl/src/widgets/gif/lv_gif.h"
 #include "sample_log.h"
@@ -142,7 +143,7 @@ static const CarouselSlot CAROUSEL_SLOTS[] = {
 
 static void audio_play_ui_asset(const char *name)
 {
-    cp0_signal_system_play_asset(name);
+    APPLaunch_system_play_asset(name);
 }
 
 static void audio_play_switch(void)
@@ -316,7 +317,7 @@ void UILaunchPage::show_home_screen()
 void UILaunchPage::load_home_screen()
 {
     show_home_screen();
-    cp0_signal_audio_api_play_asset("startup.mp3");
+    APPLaunch_audio_play_asset("startup.mp3");
 }
 
 void UILaunchPage::start_startup_gif()
@@ -330,8 +331,8 @@ void UILaunchPage::start_startup_gif()
     lv_disp_load_scr(startup_gif_);
 }
 
-UILaunchPage::UILaunchPage(std::shared_ptr<Launch> launch)
-    : home_base(), launch_(std::move(launch))
+UILaunchPage::UILaunchPage(Launch *launch)
+    : home_base(), launch_(launch)
 {
     active_launch_page = this;
 }

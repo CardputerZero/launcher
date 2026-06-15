@@ -62,21 +62,56 @@ typedef struct {
     int is_dir;
 } cp0_dirent_t;
 
+typedef struct {
+    char ipv4[48];
+    char gateway[48];
+    char mac[32];
+} cp0_eth_info_t;
+
+typedef struct {
+    char user[64];
+    char hostname[128];
+} cp0_account_info_t;
+
+typedef struct {
+    char status[64];
+    float yaw;
+    float pitch;
+    float roll;
+    float acc_x;
+    float acc_y;
+    float acc_z;
+    float gyr_x;
+    float gyr_y;
+    float gyr_z;
+    float mag_x;
+    float mag_y;
+    float mag_z;
+    int sensor_ready;
+} cp0_compass_info_t;
+
+typedef struct {
+    int initialized;
+    int hw_ready;
+    int tx_mode;
+    int tx_in_progress;
+    int has_sent_message;
+    int rx_event;
+    int tx_event;
+    char spi_device[64];
+    char last_rx[128];
+    char last_tx[128];
+    char diag[256];
+    char probe_summary[256];
+    char probe_display[128];
+    char pi4io_status[160];
+    float rssi;
+    float snr;
+} cp0_lora_info_t;
+
 typedef void *cp0_watcher_t;
-typedef void *cp0_pty_t;
 typedef int cp0_pid_t;
-
-void cp0_signal_audio_api_play_file(const char *path);
-void cp0_signal_audio_api_play_asset(const char *name);
-void cp0_signal_system_play_asset(const char *name);
-
-void cp0_config_init(void);
-int cp0_config_get_int(const char *key, int default_val);
-void cp0_config_set_int(const char *key, int val);
-const char *cp0_config_get_str(const char *key, const char *default_val);
-void cp0_config_set_str(const char *key, const char *val);
-void cp0_config_save(void);
-
+typedef void (*cp0_compass_read_cb_t)(int code, const cp0_compass_info_t *info, void *user);
 
 const char *cp0_file_path_c(const char *file);
 
@@ -95,24 +130,22 @@ void cp0_process_kill(int pid, int grace_ms);
 void cp0_system_shutdown(void);
 void cp0_system_reboot(void);
 
-cp0_pty_t cp0_pty_open(const char *cmd, const char *const *args, int cols, int rows);
-int cp0_pty_read(cp0_pty_t pty, char *buf, size_t buf_size);
-int cp0_pty_write(cp0_pty_t pty, const char *buf, size_t len);
-int cp0_pty_check_child(cp0_pty_t pty, int *exit_status);
-void cp0_pty_close(cp0_pty_t pty);
-
-int cp0_screenshot_save(const char *dir);
-
+int cp0_process_run_argv(const char *const *argv, int background);
+int cp0_process_capture_argv(const char *const *argv, char *out, int out_size);
+int cp0_file_read_first_line(const char *path, char *out, int out_size);
+int cp0_desktop_exec_is_safe(const char *exec, char *reason, int reason_size);
+int cp0_network_default_info_read(cp0_eth_info_t *info);
+int cp0_eth_info_read(cp0_eth_info_t *info);
+int cp0_account_info_read(cp0_account_info_t *info);
+int cp0_system_apt_update_background(void);
+int cp0_system_update_launcher_background(void);
+int cp0_time_set(const char *timestamp);
+int cp0_bq27220_calibrate(int command_index);
+int cp0_compass_read(cp0_compass_read_cb_t callback, void *user);
 cp0_battery_info_t cp0_battery_read(void);
 int cp0_backlight_read(void);
 int cp0_backlight_max(void);
 int cp0_backlight_write(int val);
-int cp0_volume_read(void);
-int cp0_volume_write(int val);
-cp0_wifi_status_t cp0_wifi_get_status(void);
-int cp0_wifi_scan(cp0_wifi_ap_t *out, int max_aps);
-int cp0_wifi_connect(const char *ssid, const char *password);
-int cp0_wifi_disconnect(void);
 cp0_bt_status_t cp0_bt_get_status(void);
 int cp0_bt_set_power(int on);
 int cp0_bt_scan(cp0_bt_device_t *out, int max_devices);

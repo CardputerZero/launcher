@@ -19,11 +19,115 @@
 #include <errno.h>
 #include <vector>
 #include <utility>
+#include <sstream>
 #include <keyboard_input.h>
 #include <functional>
 #include "cp0_lvgl_app.h"
+#include "hal_lvgl_bsp.h"
 #include "cp0_lvgl_file.hpp"
 #define APP_CONSOLE_EXIT_EVENT (lv_event_code_t)(LV_EVENT_LAST + 1)
+
+namespace launcher_wifi {
+
+inline std::vector<std::string> split_colon(const std::string &line)
+{
+    std::vector<std::string> cols;
+    std::string current;
+    for (char ch : line) {
+        if (ch == ':') {
+            cols.push_back(current);
+            current.clear();
+        } else {
+            current.push_back(ch);
+        }
+    }
+    cols.push_back(current);
+    return cols;
+}
+
+inline void copy_string(char *dst, size_t dst_size, const std::string &src)
+{
+    if (!dst || dst_size == 0)
+        return;
+    std::snprintf(dst, dst_size, "%s", src.c_str());
+}
+
+inline cp0_wifi_status_t get_status()
+{
+    cp0_wifi_status_t st{};
+    cp0_signal_wifi_api({"Status"}, [&](int code, std::string data) {
+        if (code != 0)
+            return;
+        auto cols = split_colon(data);
+        if (cols.size() < 4)
+            return;
+        st.connected = std::atoi(cols[0].c_str());
+        copy_string(st.ssid, sizeof(st.ssid), cols[1]);
+        copy_string(st.ip, sizeof(st.ip), cols[2]);
+        st.signal = std::atoi(cols[3].c_str());
+    });
+    return st;
+}
+
+inline int scan(cp0_wifi_ap_t *out, int max_aps)
+{
+    int count = 0;
+    cp0_signal_wifi_api({"Scan", std::to_string(max_aps)}, [&](int code, std::string data) {
+        if (!out || max_aps <= 0) {
+            count = code;
+            return;
+        }
+        std::istringstream lines(data);
+        std::string line;
+        while (count < max_aps && std::getline(lines, line)) {
+            if (!line.empty() && line.back() == '\r')
+                line.pop_back();
+            auto cols = split_colon(line);
+            if (cols.size() < 4 || cols[0].empty())
+                continue;
+            cp0_wifi_ap_t ap{};
+            copy_string(ap.ssid, sizeof(ap.ssid), cols[0]);
+            ap.signal = std::atoi(cols[1].c_str());
+            copy_string(ap.security, sizeof(ap.security), cols[2]);
+            ap.in_use = std::atoi(cols[3].c_str());
+            out[count++] = ap;
+        }
+    });
+    return count;
+}
+
+inline int simple(const std::list<std::string> &args)
+{
+    int result = -1;
+    cp0_signal_wifi_api(args, [&](int code, std::string) { result = code; });
+    return result;
+}
+
+inline int connect(const char *ssid, const char *password)
+{
+    if (!ssid || !ssid[0])
+        return -1;
+    if (password && password[0])
+        return simple({"Connect", ssid, password});
+    return simple({"Connect", ssid});
+}
+
+inline int profile_forget(const char *ssid)
+{
+    return (!ssid || !ssid[0]) ? -1 : simple({"ProfileForget", ssid});
+}
+
+inline int profile_exists(const char *ssid)
+{
+    return (!ssid || !ssid[0]) ? 0 : simple({"ProfileExists", ssid});
+}
+
+inline int profile_disconnect_active()
+{
+    return simple({"ProfileDisconnectActive"});
+}
+
+} // namespace launcher_wifi
 
 class UIAppTopBar
 {
@@ -87,7 +191,7 @@ public:
 
     void update_wifi()
     {
-        cp0_wifi_status_t ws = cp0_wifi_get_status();
+        cp0_wifi_status_t ws = launcher_wifi::get_status();
         set_wifi_signal(ws.connected ? ws.signal : 0);
         if (!wifi_panel_)
             return;
@@ -734,7 +838,7 @@ private:
         if (!ui_TOP_wifiPanel)
             return;
 
-        cp0_wifi_status_t ws = cp0_wifi_get_status();
+        cp0_wifi_status_t ws = launcher_wifi::get_status();
         static const int thresholds[4] = {1, 30, 60, 80};
 
         for (int i = 0; i < 4; ++i)

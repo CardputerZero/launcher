@@ -30,17 +30,28 @@ LDFLAGS = []
 LINK_SEARCH_PATH = []
 STATIC_FILES = []
 
-# run generate_page_app_includes.py to generate the header file for including app pages in the UI.
-def run_python_script(script_rel_path):
+# Generate page_app includes into build output so builds do not rewrite source files.
+def run_python_script(script_rel_path, args=None):
     script_path = script_rel_path.get_abspath()
     script_dir = os.path.dirname(script_path)
-    subprocess.run(
-        [sys.executable, script_path],
+    cmd = [sys.executable, script_path]
+    if args:
+        cmd += args
+    result = subprocess.run(
+        cmd,
         cwd=script_dir,
         capture_output=True,
         text=True
     )
-run_python_script(AFile('ui/generate_page_app_includes.py'))
+    if result.stdout:
+        print(result.stdout, end='')
+    if result.stderr:
+        print(result.stderr, end='', file=sys.stderr)
+    result.check_returncode()
+
+_generated_include_dir = Path(os.getcwd()) / 'build' / 'generated' / 'include'
+run_python_script(AFile('ui/generate_page_app_includes.py'),
+                  ['--output', str(_generated_include_dir / 'generated' / 'page_app.h')])
 
 # Get git commit short hash for version display
 try:
@@ -62,7 +73,7 @@ print('-- Launcher git commit: %s' % _git_commit)
 SRCS += Glob('src/*.c*')
 SRCS += append_srcs_dir(ADir('ui'))
 # add includes
-INCLUDE += [ADir('.'), ADir('include')]
+INCLUDE += [ADir('.'), ADir('include'), ADir('ui'), str(_generated_include_dir)]
 
 
 # Inject git commit hash as a compile-time macro

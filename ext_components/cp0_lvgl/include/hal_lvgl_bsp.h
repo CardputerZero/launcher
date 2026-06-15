@@ -33,6 +33,7 @@ const char *hal_path_audio_dir(void);
 // #include <sigslot/signal.hpp>
 #include "eventpp/callbacklist.h"
 #include "eventpp/eventqueue.h"
+#include <list>
 #include <string>
 #include <functional>
 

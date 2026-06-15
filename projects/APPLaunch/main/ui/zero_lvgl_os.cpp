@@ -11,7 +11,7 @@
 
 #include <cstdio>
 
-void zero_lvgl_os::creat_display()
+void zero_lvgl_os::create_display()
 {
     fonts_ = std::make_shared<LauncherFonts>();
 
@@ -21,12 +21,15 @@ void zero_lvgl_os::creat_display()
     lv_disp_set_theme(dispp_, theme_);
 }
 
-void zero_lvgl_os::create_launcher_home()
+void zero_lvgl_os::build_launcher_home()
 {
     launch_page_->create_screen();
     launch_->bind_ui();
     launch_page_->init_input_group();
+}
 
+void zero_lvgl_os::show_initial_screen()
+{
 #ifndef APPLAUNCH_STARTUP_ANIMATION
     launch_page_->load_home_screen();
 #else
@@ -47,10 +50,10 @@ void zero_lvgl_os::create_launcher_home()
 
 zero_lvgl_os::zero_lvgl_os()
 {
-    creat_display();
+    create_display();
 
-    launch_ = std::make_shared<Launch>();
-    launch_page_ = std::make_shared<UILaunchPage>(launch_);
+    launch_ = std::make_unique<Launch>();
+    launch_page_ = std::make_shared<UILaunchPage>(launch_.get());
     launch_->set_launch_page(launch_page_);
 }
 
@@ -58,5 +61,6 @@ zero_lvgl_os::~zero_lvgl_os() = default;
 
 void zero_lvgl_os::start()
 {
-    create_launcher_home();
+    build_launcher_home();
+    show_initial_screen();
 }

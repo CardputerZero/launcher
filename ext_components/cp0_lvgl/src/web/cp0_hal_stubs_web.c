@@ -1,11 +1,8 @@
 #include "hal/hal_audio.h"
-#include "hal/hal_config.h"
 #include "hal/hal_filesystem.h"
 #include "hal/hal_network.h"
 #include "hal/hal_paths.h"
 #include "hal/hal_process.h"
-#include "hal/hal_pty.h"
-#include "hal/hal_screenshot.h"
 #include "hal/hal_settings.h"
 
 #include <stdio.h>
@@ -17,13 +14,6 @@ void hal_audio_play(const char *path) { (void)path; }
 void hal_audio_play_sync(const char *path) { (void)path; }
 void hal_audio_stop(void) {}
 void hal_audio_deinit(void) {}
-
-void hal_config_init(void) {}
-int hal_config_get_int(const char *key, int default_val) { (void)key; return default_val; }
-void hal_config_set_int(const char *key, int val) { (void)key; (void)val; }
-const char *hal_config_get_str(const char *key, const char *default_val) { (void)key; return default_val; }
-void hal_config_set_str(const char *key, const char *val) { (void)key; (void)val; }
-void hal_config_save(void) {}
 
 int hal_dir_list(const char *path, hal_dirent_t *entries, int max_entries, int *out_count)
 { (void)path; (void)entries; (void)max_entries; *out_count = 0; return -1; }
@@ -58,19 +48,6 @@ int hal_process_check_lock(const char *lock_path, int *holder_pid)
 void hal_process_kill(int pid, int grace_ms) { (void)pid; (void)grace_ms; }
 void hal_system_shutdown(void) {}
 void hal_system_reboot(void) {}
-
-hal_pty_t hal_pty_open(const char *cmd, const char *const *args, int cols, int rows)
-{ (void)cmd; (void)args; (void)cols; (void)rows; return 0; }
-int hal_pty_read(hal_pty_t pty, char *buf, size_t buf_size)
-{ (void)pty; (void)buf; (void)buf_size; return -1; }
-int hal_pty_write(hal_pty_t pty, const char *buf, size_t len)
-{ (void)pty; (void)buf; (void)len; return -1; }
-int hal_pty_check_child(hal_pty_t pty, int *exit_status)
-{ (void)pty; (void)exit_status; return -1; }
-void hal_pty_close(hal_pty_t pty) { (void)pty; }
-
-int hal_screenshot_save(const char *dir)
-{ (void)dir; return -1; }
 
 hal_battery_info_t hal_battery_read(void)
 { hal_battery_info_t info; memset(&info, 0, sizeof(info)); return info; }

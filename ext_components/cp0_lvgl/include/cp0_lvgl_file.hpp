@@ -1,5 +1,3 @@
 #pragma once
 
-#include <string>
-
-std::string cp0_file_path(std::string file);
+#include "cp0_lvgl_filesystem.hpp"
