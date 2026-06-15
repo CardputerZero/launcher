@@ -70,10 +70,6 @@ void Launch::bind_ui()
         // Dynamic icons filtered by Settings configuration
         #define APP_ENABLED(key) (cp0_config_get_int("app_" key, 1) != 0)
 
-        if (APP_ENABLED("Music"))
-        app_list.emplace_back("MUSIC",
-                              cp0_file_path("music_100.png"), page_v<UIMusicPage>);
-
         if (APP_ENABLED("Math"))
         app_list.emplace_back("MATH",
                               cp0_file_path("math_100.png"),

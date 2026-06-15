@@ -16,8 +16,7 @@ cross_package_enabled = False
 version = "v0.0.4"
 local_path = Path(os.getcwd())
 sdk_path = local_path.parent.parent / "SDK"
-static_lib_path = os.path.join(sdk_path, "github_source", f"static_lib_{version}")
-
+static_lib_path = sdk_path / "github_source" / f"static_lib_{version}"
 
 if os.environ.get("CardputerZero", '') == 'y':
     os.environ["CONFIG_DEFAULT_FILE"] = "linux_x86_cross_cp0_config_defaults.mk"
@@ -28,11 +27,14 @@ if os.environ.get("CONFIG_DEFAULT_FILE") == None:
 
 if "cross" in os.environ.get("CONFIG_DEFAULT_FILE", ''):
     cross_package_enabled = True
-    if not os.path.exists("build/config"):
-        os.makedirs("build/config")
-        with open("build/config/config_tmp.mk", "w") as f:
-            f.write(f'CONFIG_TOOLCHAIN_SYSROOT="{static_lib_path}"\n')
-            f.write(f'CONFIG_TOOLCHAIN_FLAGS="-I{static_lib_path}/usr/include/aarch64-linux-gnu"\n')
+    config_tmp_path = Path("build") / "config" / "config_tmp.mk"
+    sysroot_path_str = static_lib_path.as_posix().replace('"', r'\"')
+    config_tmp_content = (
+        f'CONFIG_TOOLCHAIN_SYSROOT="{sysroot_path_str}"\n'
+    )
+    if not config_tmp_path.exists() or config_tmp_path.read_text() != config_tmp_content:
+        config_tmp_path.parent.mkdir(parents=True, exist_ok=True)
+        config_tmp_path.write_text(config_tmp_content)
 
 os.environ["SDK_PATH"] = str(sdk_path)
 os.environ["EXT_COMPONENTS_PATH"] = str(sdk_path.parent / "ext_components")
@@ -46,11 +48,11 @@ env = SConscript(
 # static_lib is only needed for cross-compilation, skip in SDL mode.
 if cross_package_enabled:
     update = False
-    if not os.path.exists(static_lib_path):
+    if not static_lib_path.exists():
         update = True
     else:
         try:
-            with open(str(Path(static_lib_path) / "version"), "r") as f:
+            with open(str(static_lib_path / "version"), "r") as f:
                 if version != f.read().strip():
                     update = True
         except Exception:

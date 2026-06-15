@@ -8,18 +8,19 @@ import platform
 import subprocess
 import shutil
 import parse as _parse
+from pathlib import Path
 # iomport env and tools from the SDK's scons project.py
 Import('env')
 with open(env['PROJECT_TOOL_S']) as f:
     exec(f.read())
 
-rootfs_path=os.environ.get("CONFIG_TOOLCHAIN_SYSROOT", "")
+rootfs_path=Path(os.environ.get("CONFIG_TOOLCHAIN_SYSROOT", ""))
 
 # define the project's environment
 SRCS = []
 INCLUDE = []
 PRIVATE_INCLUDE = []
-REQUIREMENTS = ['cp0_lvgl', 'eventpp']
+REQUIREMENTS = ['cp0_lvgl', 'eventpp', 'utilities', 'lvgl_component', 'freetype', 'pthread', 'RadioLib']
 # REQUIREMENTS = []
 STATIC_LIB = []
 DYNAMIC_LIB = []
@@ -30,14 +31,16 @@ LINK_SEARCH_PATH = []
 STATIC_FILES = []
 
 # run generate_page_app_includes.py to generate the header file for including app pages in the UI.
-script_path = os.path.abspath(str(AFile('ui/generate_page_app_includes.py')))
-script_dir = os.path.dirname(script_path)
-subprocess.run(
-    [sys.executable, script_path],
-    cwd=script_dir,
-    capture_output=True,
-    text=True
-)
+def run_python_script(script_rel_path):
+    script_path = script_rel_path.get_abspath()
+    script_dir = os.path.dirname(script_path)
+    subprocess.run(
+        [sys.executable, script_path],
+        cwd=script_dir,
+        capture_output=True,
+        text=True
+    )
+run_python_script(AFile('ui/generate_page_app_includes.py'))
 
 # Get git commit short hash for version display
 try:
@@ -60,11 +63,7 @@ SRCS += Glob('src/*.c*')
 SRCS += append_srcs_dir(ADir('ui'))
 # add includes
 INCLUDE += [ADir('.'), ADir('include')]
-INCLUDE += [os.path.join(os.environ['EXT_COMPONENTS_PATH'], 'cp0_lvgl', 'include')]
-INCLUDE += [os.path.join(os.environ['SDK_PATH'], 'components', 'utilities', 'include')]
 
-# add requirements
-REQUIREMENTS += ['lvgl_component', 'pthread']
 
 # Inject git commit hash as a compile-time macro
 DEFINITIONS += ['-DLAUNCHER_GIT_COMMIT_RAW=%s' % _git_commit]
@@ -73,12 +72,11 @@ DEFINITIONS += ['-DLAUNCHER_GIT_COMMIT_RAW=%s' % _git_commit]
 if os.environ.get('APPLAUNCH_STARTUP_ANIMATION', '0') == '1':
     DEFINITIONS += ['-DAPPLAUNCH_STARTUP_ANIMATION']
 
-# add miniaudio
-REQUIREMENTS += ['Miniaudio']
 
-# add 
+# add debug
 if 'CONFIG_BACKWARD_CPP_ENABLED' in os.environ:
     REQUIREMENTS += ['Backward_cpp']
+
 
 # custom lvgl component
 lvgl_component = list(filter(lambda x: x['target'] == 'lvgl_component', env['COMPONENTS']))[0]
@@ -87,33 +85,27 @@ lvgl_component['SRCS'] = list(filter(
     lvgl_component['SRCS']
 ))
 
+
+if 'CONFIG_APPLAUNCH_CROSS' in os.environ:
+    lvgl_component['DEFINITIONS'] += ['-D_REENTRANT']
+    lvgl_component['INCLUDE'] += [rootfs_path/"usr"/"include"/"freetype2",
+                                  rootfs_path/"usr"/"include"/"libpng16",
+                                  rootfs_path/"usr"/"include"/"libcamera",
+                                  ]
+    LDFLAGS += [rootfs_path/"usr"/"lib"/"aarch64-linux-gnu"/"libstdc++.so.6"]
+
+
 # x86
 if 'CONFIG_APPLAUNCH_LINUX_X86_SDL2' in os.environ:
     lvgl_component['DEFINITIONS'] += pkg_config_cflags("freetype2")
     lvgl_component['REQUIREMENTS'] += pkg_config_ldflags("freetype2")
-
-    REQUIREMENTS += ['cp0_lvgl']
     DEFINITIONS += pkg_config_cflags("sdl2")
     REQUIREMENTS += pkg_config_ldflags("sdl2")
-    REQUIREMENTS += ['input', 'xkbcommon', 'udev']
 
-# x86 cross
-if 'CONFIG_APPLAUNCH_LINUX_X86_CROSS_CP0' in os.environ:
-    lvgl_component['DEFINITIONS'] += ['-D_REENTRANT']
-    lvgl_component['INCLUDE'] += [f'{rootfs_path}/usr/include/freetype2', 
-                                  f'{rootfs_path}/usr/include/libpng16',
-                                  f'{rootfs_path}/usr/include/libcamera',
-                                  ]
-
-    REQUIREMENTS += ['cp0_lvgl']
-    REQUIREMENTS += ['input', 'xkbcommon', 'udev', 'freetype']
-    REQUIREMENTS += ['camera', 'camera-base', 'jpeg']
-    LDFLAGS += [f'{rootfs_path}/usr/lib/aarch64-linux-gnu/libstdc++.so.6']
-    DEFINITIONS += ['-Wno-format-truncation']
 
 if 'CONFIG_APPLAUNCH_LINUX_CP0' in os.environ:
     REQUIREMENTS += ['cp0_lvgl']
-    REQUIREMENTS += ['input', 'xkbcommon', 'udev', 'freetype']
+    REQUIREMENTS += ['input', 'xkbcommon', 'udev']
 
 if 'CONFIG_APPLAUNCH_MAC_CROSS_CP0' in os.environ:
     lvgl_component['DEFINITIONS'] += ['-D_REENTRANT']
@@ -155,10 +147,15 @@ if 'CONFIG_APPLAUNCH_DARWIN_SDL' in os.environ:
 #     lvgl_component['DEFINITIONS'] += pkg_config_cflags("freetype2")
 #     REQUIREMENTS += pkg_config_ldflags("freetype2")
 
+if 'CONFIG_APPLAUNCH_WIN_X86_CROSS_CP0' in os.environ:
+    rootfs_lib_path = rootfs_path/"lib"/"aarch64-linux-gnu"
+    rootfs_usr_lib_path = rootfs_path/"usr"/"lib"/"aarch64-linux-gnu"
 
-# RadioLib is provided by ext_components/RadioLib.
-REQUIREMENTS += ['RadioLib']
-
+    LDFLAGS += [rootfs_usr_lib_path/'libstdc++.so.6',
+                f'-Wl,-rpath-link,{rootfs_lib_path}',
+                f'-Wl,-rpath-link,{rootfs_usr_lib_path}',
+                f'-B{rootfs_usr_lib_path}']
+    DEFINITIONS += ['-Wno-format-truncation']
 
 # add static files
 STATIC_FILES += [ADir('../APPLaunch')]
