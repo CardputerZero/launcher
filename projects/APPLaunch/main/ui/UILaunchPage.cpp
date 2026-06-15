@@ -115,6 +115,8 @@ namespace {
 
 UILaunchPage *active_launch_page = nullptr;
 lv_group_t *home_input_group = nullptr;
+constexpr int kStartupSoundRetryMax = 10;
+constexpr uint32_t kStartupSoundRetryMs = 500;
 
 // ==================== standard layout for carousel slots ====================
 
@@ -314,7 +316,35 @@ void UILaunchPage::show_home_screen()
 void UILaunchPage::load_home_screen()
 {
     show_home_screen();
-    cp0_signal_audio_api({"SystemSoundPlay", "0"}, nullptr);
+    play_startup_sound_with_retry();
+}
+
+void UILaunchPage::play_startup_sound_with_retry()
+{
+    int play_result = -1;
+    cp0_signal_audio_api({"SystemSoundPlay", "0"}, [&](int code, std::string) {
+        play_result = code;
+    });
+
+    if (play_result == 0) {
+        stop_startup_sound_timer();
+        startup_sound_retry_count_ = 0;
+        return;
+    }
+
+    if (startup_sound_timer_)
+        return;
+
+    startup_sound_retry_count_ = 0;
+    startup_sound_timer_ = lv_timer_create(startup_sound_timer_cb, kStartupSoundRetryMs, this);
+}
+
+void UILaunchPage::stop_startup_sound_timer()
+{
+    if (startup_sound_timer_) {
+        lv_timer_delete(startup_sound_timer_);
+        startup_sound_timer_ = nullptr;
+    }
 }
 
 void UILaunchPage::start_startup_gif()
@@ -336,6 +366,7 @@ UILaunchPage::UILaunchPage(Launch *launch)
 
 UILaunchPage::~UILaunchPage()
 {
+    stop_startup_sound_timer();
     if (green_bg_) {
         lv_obj_del(green_bg_);
         green_bg_ = nullptr;
@@ -607,6 +638,21 @@ void UILaunchPage::on_startup_gif_event(lv_event_t *event)
 {
     if (UILaunchPage *self = page_from_event(event))
         self->handle_startup_gif_event(event);
+}
+
+void UILaunchPage::startup_sound_timer_cb(lv_timer_t *timer)
+{
+    UILaunchPage *self = static_cast<UILaunchPage *>(lv_timer_get_user_data(timer));
+    if (!self)
+        return;
+
+    ++self->startup_sound_retry_count_;
+    if (self->startup_sound_retry_count_ > kStartupSoundRetryMax) {
+        self->stop_startup_sound_timer();
+        return;
+    }
+
+    self->play_startup_sound_with_retry();
 }
 
 void UILaunchPage::create_screen()
