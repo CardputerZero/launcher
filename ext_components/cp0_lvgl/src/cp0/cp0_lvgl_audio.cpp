@@ -30,7 +30,7 @@ public:
 
     AudioSystem()
     {
-        // initialize();
+        init_system_sounds();
     }
 
     ~AudioSystem()
@@ -49,11 +49,13 @@ public:
 
     ma_context system_play_context_{};
     ma_engine system_play_engine_{};
-    ma_sound system_sound_switch_{};
-    ma_sound system_sound_enter_{};
+    std::array<ma_sound, 3> system_sounds_{};
+    std::array<bool, 3> system_sound_loaded_slots_{};
     bool system_play_inited_ = false;
     bool system_sounds_loaded_ = false;
     std::mutex system_play_mutex_;
+    std::array<std::string, 3> system_sound_names_ = {"startup.mp3", "key_back.wav", "key_back.wav"};
+    bool system_sound_enabled_ = true;
 
     static constexpr int kRecWaveformSize = 128;
     std::array<float, kRecWaveformSize> rec_waveform_{};
@@ -208,45 +210,48 @@ private:
         int ret = init_system_play_locked();
         if(ret != 0) return ret;
 
-        std::string switch_path = resolve_play_file("switch.wav", true);
-        std::string enter_path = resolve_play_file("enter.wav", true);
-
-        ma_result result = ma_sound_init_from_file(
-            &system_play_engine_,
-            switch_path.c_str(),
-            MA_SOUND_FLAG_DECODE,
-            NULL,
-            NULL,
-            &system_sound_switch_
-        );
-        if(result != MA_SUCCESS) return -3;
-
-        result = ma_sound_init_from_file(
-            &system_play_engine_,
-            enter_path.c_str(),
-            MA_SOUND_FLAG_DECODE,
-            NULL,
-            NULL,
-            &system_sound_enter_
-        );
-        if(result != MA_SUCCESS)
+        for(size_t i = 0; i < system_sound_names_.size(); ++i)
         {
-            ma_sound_uninit(&system_sound_switch_);
-            return -4;
+            std::string path = resolve_play_file(system_sound_names_[i], true);
+            if(path.empty()) continue;
+
+            ma_result result = ma_sound_init_from_file(
+                &system_play_engine_,
+                path.c_str(),
+                MA_SOUND_FLAG_DECODE,
+                NULL,
+                NULL,
+                &system_sounds_[i]
+            );
+            if(result != MA_SUCCESS)
+            {
+                unload_system_sounds_locked();
+                return -3;
+            }
+            system_sound_loaded_slots_[i] = true;
         }
 
         system_sounds_loaded_ = true;
         return 0;
     }
 
-    ma_sound* system_sound_for_name(const std::string& name)
+    void unload_system_sounds_locked()
     {
-        size_t pos = name.find_last_of("/\\");
-        std::string base = (pos == std::string::npos) ? name : name.substr(pos + 1);
+        for(size_t i = 0; i < system_sounds_.size(); ++i)
+        {
+            if(system_sound_loaded_slots_[i])
+            {
+                ma_sound_uninit(&system_sounds_[i]);
+                system_sound_loaded_slots_[i] = false;
+            }
+        }
+        system_sounds_loaded_ = false;
+    }
 
-        if(base == "switch.wav") return &system_sound_switch_;
-        if(base == "enter.wav") return &system_sound_enter_;
-        return nullptr;
+    int reload_system_sounds_locked()
+    {
+        unload_system_sounds_locked();
+        return load_system_sounds_locked();
     }
 
     void uninit_system_play()
@@ -255,9 +260,7 @@ private:
 
         if(system_sounds_loaded_)
         {
-            ma_sound_uninit(&system_sound_switch_);
-            ma_sound_uninit(&system_sound_enter_);
-            system_sounds_loaded_ = false;
+            unload_system_sounds_locked();
         }
 
         if(system_play_inited_)
@@ -467,18 +470,101 @@ private:
         }
     }
 public:
-    void system_play(std::string name)
+    int init_system_sounds()
     {
         std::lock_guard<std::mutex> lock(system_play_mutex_);
+        return load_system_sounds_locked();
+    }
 
-        if(load_system_sounds_locked() != 0) return;
+    void system_play(std::string name)
+    {
+        if(!system_sound_enabled_) return;
 
-        ma_sound* sound = system_sound_for_name(name);
-        if(sound == nullptr) return;
+        {
+            std::lock_guard<std::mutex> lock(system_play_mutex_);
+            if(!system_sounds_loaded_) return;
 
-        ma_sound_stop(sound);
+            for(size_t i = 0; i < system_sound_names_.size(); ++i)
+            {
+                if(system_sound_names_[i] != name) continue;
+                if(!system_sound_loaded_slots_[i]) return;
+
+                ma_sound* sound = &system_sounds_[i];
+                if(ma_sound_is_playing(sound)) return;
+                ma_sound_seek_to_pcm_frame(sound, 0);
+                ma_sound_start(sound);
+                return;
+            }
+        }
+
+        std::string file = resolve_play_file(name, true);
+        if(!file.empty()) play(file);
+    }
+
+    void system_play_index(size_t index)
+    {
+        if(!system_sound_enabled_) return;
+
+        std::lock_guard<std::mutex> lock(system_play_mutex_);
+        if(!system_sounds_loaded_ || index >= system_sounds_.size() || !system_sound_loaded_slots_[index])
+        {
+            return;
+        }
+
+        ma_sound* sound = &system_sounds_[index];
+        if(ma_sound_is_playing(sound)) return;
         ma_sound_seek_to_pcm_frame(sound, 0);
         ma_sound_start(sound);
+    }
+
+    void SetSystemSoundNames(arg_t arg, callback_t callback)
+    {
+        {
+            std::lock_guard<std::mutex> lock(system_play_mutex_);
+            auto it = arg.begin();
+            if(it != arg.end()) ++it;
+            for(size_t i = 0; i < system_sound_names_.size() && it != arg.end(); ++i, ++it)
+            {
+                if(!it->empty()) system_sound_names_[i] = *it;
+            }
+
+            int ret = reload_system_sounds_locked();
+            if(ret != 0)
+            {
+                report(callback, ret, "system sound reload failed\n");
+                return;
+            }
+        }
+        report(callback, 0, "ok");
+    }
+
+    void SystemSoundPlay(arg_t arg, callback_t callback)
+    {
+        int index = std::atoi(first_arg_after_command(arg).c_str());
+        if(index < 0 || index >= static_cast<int>(system_sound_names_.size()))
+        {
+            report(callback, -1, "invalid system sound index\n");
+            return;
+        }
+        if(!system_sound_enabled_)
+        {
+            report(callback, 0, "system sound disabled\n");
+            return;
+        }
+        system_play_index(static_cast<size_t>(index));
+        report(callback, 0, "system sound play\n");
+    }
+
+    void SystemSoundEnable(arg_t arg, callback_t callback)
+    {
+        std::string value = first_arg_after_command(arg);
+        if(arg_is_disable(value))
+            system_sound_enabled_ = false;
+        else if(value.empty() || arg_is_enable(value))
+            system_sound_enabled_ = true;
+        else
+            system_sound_enabled_ = std::atoi(value.c_str()) != 0;
+        report(callback, 0, system_sound_enabled_ ? "1" : "0");
     }
 
     void cap(bool enable)
@@ -675,7 +761,10 @@ public:
             map_fun(CapFileSave),
             map_fun(SetCallback),
             map_fun(VolumeRead),
-            map_fun(VolumeWrite)
+            map_fun(VolumeWrite),
+            map_fun(SetSystemSoundNames),
+            map_fun(SystemSoundPlay),
+            map_fun(SystemSoundEnable)
         };
 
 #undef map_fun
@@ -693,14 +782,18 @@ public:
 
     static int read_system_volume()
     {
-        FILE *p = popen("amixer -c1 sget 'Headphone Playback Volume' 2>/dev/null", "r");
+        FILE *p = popen("pactl get-sink-volume @DEFAULT_SINK@ 2>/dev/null", "r");
         if (!p) return -1;
         char buf[256];
         int val = -1;
         while (fgets(buf, sizeof(buf), p)) {
-            char *s = strstr(buf, ": values=");
-            if (s) {
-                val = atoi(s + 9);
+            char *pct = strchr(buf, '%');
+            if (pct) {
+                char *start = pct;
+                while (start > buf && start[-1] >= '0' && start[-1] <= '9') {
+                    --start;
+                }
+                val = clamp_percent(atoi(start));
                 break;
             }
         }
@@ -710,24 +803,23 @@ public:
 
     static int write_system_volume(int val)
     {
-        if (val < 0) val = 0;
-        if (val > 63) val = 63;
+        val = clamp_percent(val);
 
         char cmd[128];
-        snprintf(cmd, sizeof(cmd), "amixer -c1 sset 'Headphone Playback Volume' %d 2>/dev/null", val);
-        FILE *p = popen(cmd, "r");
-        if (!p) return -1;
-        char buf[128];
-        while (fgets(buf, sizeof(buf), p)) {}
-        pclose(p);
-        return val;
+        snprintf(cmd, sizeof(cmd), "pactl set-sink-volume @DEFAULT_SINK@ %d%%", val);
+        return system(cmd) == 0 ? val : -1;
     }
 
     static int parse_volume_arg(const arg_t& arg)
     {
         std::string value = first_arg_after_command(arg);
         if (value.empty()) return 0;
-        return std::atoi(value.c_str());
+        return clamp_percent(std::atoi(value.c_str()));
+    }
+
+    static int clamp_percent(int pct)
+    {
+        return std::max(0, std::min(100, pct));
     }
 };
 
@@ -750,4 +842,3 @@ extern "C" void init_audio(void)
                                   { audio->system_play(name); });
 
 }
-

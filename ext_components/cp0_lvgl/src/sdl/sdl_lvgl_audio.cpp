@@ -1,6 +1,7 @@
 #include "hal_lvgl_bsp.h"
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -55,7 +56,9 @@ public:
 
     void system_play(const std::string &name)
     {
-        (void)name;
+        if (!system_sound_enabled_)
+            return;
+        play(name);
     }
 
     void api_call(arg_t arg, callback_t callback)
@@ -65,36 +68,34 @@ public:
             return;
         }
 
-        const std::string &cmd = arg.front();
-        if (cmd == "PlayFile") {
-            PlayFile(arg, callback);
-        } else if (cmd == "Play") {
-            Play(arg, callback);
-        } else if (cmd == "PlayPause") {
-            PlayPause(arg, callback);
-        } else if (cmd == "PlayContinue") {
-            PlayContinue(arg, callback);
-        } else if (cmd == "PlayEnd") {
-            PlayEnd(arg, callback);
-        } else if (cmd == "Cap") {
-            Cap(arg, callback);
-        } else if (cmd == "CapPause") {
-            CapPause(arg, callback);
-        } else if (cmd == "CapContinue") {
-            CapContinue(arg, callback);
-        } else if (cmd == "CapEnd") {
-            CapEnd(arg, callback);
-        } else if (cmd == "CapFileSave") {
-            CapFileSave(arg, callback);
-        } else if (cmd == "SetCallback") {
-            SetCallback(arg, callback);
-        } else if (cmd == "VolumeRead") {
-            VolumeRead(arg, callback);
-        } else if (cmd == "VolumeWrite") {
-            VolumeWrite(arg, callback);
-        } else {
-            report(callback, -1, "unknown audio api\n");
+#define map_fun(name) {#name, std::bind(&AudioSystem::name, this, std::placeholders::_1, std::placeholders::_2)}
+        std::list<std::pair<std::string, std::function<void(arg_t, callback_t)>>> cmd_map = {
+            map_fun(PlayFile),
+            map_fun(Play),
+            map_fun(PlayPause),
+            map_fun(PlayContinue),
+            map_fun(PlayEnd),
+            map_fun(Cap),
+            map_fun(CapPause),
+            map_fun(CapContinue),
+            map_fun(CapEnd),
+            map_fun(CapFileSave),
+            map_fun(SetCallback),
+            map_fun(VolumeRead),
+            map_fun(VolumeWrite),
+            map_fun(SetSystemSoundNames),
+            map_fun(SystemSoundPlay),
+            map_fun(SystemSoundEnable),
+        };
+#undef map_fun
+
+        for (const auto &it : cmd_map) {
+            if (it.first == arg.front()) {
+                it.second(arg, callback);
+                return;
+            }
         }
+        report(callback, -1, "unknown audio api\n");
     }
 
 private:
@@ -109,6 +110,8 @@ private:
     bool cap_paused_ = false;
     bool waveform_enabled_ = false;
     int volume_ = kDefaultVolume;
+    std::array<std::string, 3> system_sound_names_ = {"startup.mp3", "switch.wav", "enter.wav"};
+    bool system_sound_enabled_ = true;
 
     void report(callback_t callback, int code, const std::string &data)
     {
@@ -313,6 +316,45 @@ private:
     {
         volume_ = std::max(0, std::min(kMaxVolume, parse_volume_arg(arg)));
         report(callback, 0, std::to_string(volume_));
+    }
+
+    void SetSystemSoundNames(arg_t arg, callback_t callback)
+    {
+        auto it = arg.begin();
+        if (it != arg.end())
+            ++it;
+        for (size_t i = 0; i < system_sound_names_.size() && it != arg.end(); ++i, ++it) {
+            if (!it->empty())
+                system_sound_names_[i] = *it;
+        }
+        report(callback, 0, "ok");
+    }
+
+    void SystemSoundPlay(arg_t arg, callback_t callback)
+    {
+        int index = std::atoi(first_arg_after_command(arg).c_str());
+        if (index < 0 || index >= static_cast<int>(system_sound_names_.size())) {
+            report(callback, -1, "invalid system sound index\n");
+            return;
+        }
+        if (!system_sound_enabled_) {
+            report(callback, 0, "system sound disabled\n");
+            return;
+        }
+        system_play(system_sound_names_[static_cast<size_t>(index)]);
+        report(callback, 0, "system sound play\n");
+    }
+
+    void SystemSoundEnable(arg_t arg, callback_t callback)
+    {
+        std::string value = first_arg_after_command(arg);
+        if (arg_is_disable(value))
+            system_sound_enabled_ = false;
+        else if (value.empty() || arg_is_enable(value))
+            system_sound_enabled_ = true;
+        else
+            system_sound_enabled_ = std::atoi(value.c_str()) != 0;
+        report(callback, 0, system_sound_enabled_ ? "1" : "0");
     }
 };
 
