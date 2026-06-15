@@ -4,9 +4,9 @@
  * SPDX-License-Identifier: MIT
  */
 
-#include "UILaunchPage.h"
+#include "ui_launch_page.h"
 
-#include "Launch.h"
+#include "launch.h"
 #include "hal_lvgl_bsp.h"
 #include "lvgl/src/widgets/gif/lv_gif.h"
 #include "sample_log.h"
@@ -15,7 +15,7 @@
 #include <string>
 #include <utility>
 
-#include "Animation/ui_launcher_animation.h"
+#include "animation/ui_launcher_animation.h"
 
 #include <algorithm>
 #include <unistd.h>

@@ -17,12 +17,12 @@ LDFLAGS = []
 LINK_SEARCH_PATH = []
 STATIC_FILES = []
 
-# 添加ui目录
+# Add the UI directory.
 SRCS += append_srcs_dir(ADir("ui"))
 INCLUDE += ["ui"]
 
 
-# 为 lvgl_component 添加 SDL2 依赖
+# Add the SDL2 dependency to lvgl_component.
 lvgl_component = list(
     filter(lambda x: x["target"] == "lvgl_component", env["COMPONENTS"])
 )[0]

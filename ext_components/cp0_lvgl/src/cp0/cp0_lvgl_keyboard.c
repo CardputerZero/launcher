@@ -1,4 +1,3 @@
-// cp0_lvgl_keyboard.c
 #define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>

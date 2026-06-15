@@ -297,12 +297,6 @@ private:
         {
             lv_obj_add_flag(but[i], LV_OBJ_FLAG_CLICKABLE);
         }
-        // lvgl_add_call(but[0], [](lv_event_code_t c, void *d){
-        //     if(c == LV_EVENT_CLICKED)
-        //     {
-        //         SLOGI("butt will be clicked");
-        //     }
-        // }, NULL);
     }
 };
 

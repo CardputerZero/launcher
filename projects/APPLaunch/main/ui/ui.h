@@ -98,9 +98,9 @@ private:
 };
 
 LauncherFonts &launcher_fonts();
-#include "Launch.h"
-#include "UILaunchPage.h"
-#include "zero_lvgl_os.h"
+#include "launch.h"
+#include "ui_launch_page.h"
+#include "launcher_ui_runtime.h"
 #endif
 
 #endif

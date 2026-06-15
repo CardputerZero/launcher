@@ -4,11 +4,11 @@
  * SPDX-License-Identifier: MIT
  */
 
-#include "Launch.h"
+#include "launch.h"
 
-#include "AppRegistry.h"
+#include "app_registry.h"
 #include "ui.h"
-#include "UILaunchPage.h"
+#include "ui_launch_page.h"
 #include "ui_loading.h"
 #include "generated/page_app.h"
 #include "cp0_lvgl_app.h"

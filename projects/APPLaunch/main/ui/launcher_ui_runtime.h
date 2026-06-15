@@ -13,11 +13,11 @@ class Launch;
 class UILaunchPage;
 class LauncherFonts;
 
-class zero_lvgl_os
+class LauncherUiRuntime
 {
 public:
-    zero_lvgl_os();
-    ~zero_lvgl_os();
+    LauncherUiRuntime();
+    ~LauncherUiRuntime();
 
     void start();
 

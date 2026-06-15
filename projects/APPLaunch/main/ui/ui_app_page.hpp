@@ -440,7 +440,6 @@ private:
     {
         input_group_ = lv_group_create();
         lv_group_add_obj(input_group_, root_screen_);
-        // lv_group_focus_obj(root_screen_);
     }
 };
 

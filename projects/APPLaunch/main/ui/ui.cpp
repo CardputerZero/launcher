@@ -25,13 +25,13 @@
     #error "LV_COLOR_16_SWAP should be 0 to match SquareLine Studio's settings"
 #endif
 
-std::unique_ptr<zero_lvgl_os> home;
+std::unique_ptr<LauncherUiRuntime> home;
 
 namespace launcher_ui {
 
 void init()
 {
-    home = std::make_unique<zero_lvgl_os>();
+    home = std::make_unique<LauncherUiRuntime>();
     home->start();
 }
 

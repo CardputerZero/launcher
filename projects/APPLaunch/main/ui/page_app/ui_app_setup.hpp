@@ -29,7 +29,7 @@
 #include <dirent.h>
 #include "cp0_lvgl_app.h"
 #include "hal_lvgl_bsp.h"
-#include "../AppRegistry.h"
+#include "../app_registry.h"
 
 // ============================================================
 //  System settings screen  UISetupPage  (Carousel Design)

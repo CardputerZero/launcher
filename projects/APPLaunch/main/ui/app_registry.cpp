@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: MIT
  */
 
-#include "AppRegistry.h"
+#include "app_registry.h"
 
 #include "cp0_lvgl_app.h"
 #include "hal_lvgl_bsp.h"

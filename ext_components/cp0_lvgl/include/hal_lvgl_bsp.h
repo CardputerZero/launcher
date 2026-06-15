@@ -30,7 +30,6 @@ void cp0_lvgl_init(void);
 const char *hal_path_audio_dir(void);
 #ifdef __cplusplus
 }
-// #include <sigslot/signal.hpp>
 #include "eventpp/callbacklist.h"
 #include "eventpp/eventqueue.h"
 #include <list>

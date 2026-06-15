@@ -617,8 +617,8 @@ public:
             stop_play_device(false);
         }
     }
-    // 录音的过程控制：开始，暂停，恢复播放，结束保存。
-    // 播放的过程控制：开始，暂停，恢复播放，播放结束。
+    // Recording control: start, pause, resume, and stop with save.
+    // Playback control: start, pause, resume, and stop.
     void PlayFile(arg_t arg, callback_t callback)
     {
         std::string file = resolve_play_file(first_arg_after_command(arg), false);

@@ -30,7 +30,7 @@ int get_st7789v_fbdev(char *dev_path, size_t buf_size)
     char line[256];
     int fb_num = -1;
 
-    /* 逐行读取，查找包含 fb_st7789v 的行，格式如：0 fb_st7789v */
+    /* Read /proc/fb line by line and find the fb_st7789v entry, e.g. "0 fb_st7789v". */
     while (fgets(line, sizeof(line), fp) != NULL)
     {
         if (strstr(line, "fb_st7789v") != NULL)
@@ -60,27 +60,16 @@ int get_st7789v_fbdev(char *dev_path, size_t buf_size)
 static void lv_linux_indev_init(void)
 {
     const char *mouse_device = getenv_default("LV_LINUX_MOUSE_DEVICE", NULL);
-    const char *keyboard_device = getenv_default("LV_LINUX_KEYBOARD_DEVICE", "/dev/input/by-path/platform-3f804000.i2c-event");
-    const char *keyboard_map = getenv_default("LV_LINUX_KEYBOARD_MAP", "/usr/share/keymaps/tca8418_keypad_m5stack_keymap.map");
-    // /home/nihao/w2T/github/m5stack-linux-dtoverlays/modules/tca8418-1.0/tca8418_keypad_m5stack_keymap.map
-
 
     lv_indev_t *touch = NULL;
     if (mouse_device)
         touch = lv_evdev_create(LV_INDEV_TYPE_POINTER, mouse_device);
-
-    lv_indev_t *keyboard = NULL;
-    // if (keyboard_device)
-    //     keyboard = tca8418_keypad_init(keyboard_device, keyboard_map);
-    // if (keyboard_device)
-    //     keyboard = lv_evdev_create(LV_INDEV_TYPE_KEYPAD, keyboard_device);
 }
 #endif
 
 #if LV_USE_LINUX_FBDEV
 static void lv_linux_disp_init(void)
 {
-    // export LV_LINUX_FBDEV_DEVICE="/dev/fb$(grep 'fb_st7789v' /proc/fb | awk '{print $1}')"
     const char *device = NULL;
     char fbdev[64] = {0};
     device = getenv_default("LV_LINUX_FBDEV_DEVICE", NULL);
@@ -98,7 +87,6 @@ static void lv_linux_disp_init(void)
 
     lv_linux_fbdev_set_file(disp, device);
 
-    // 打印获取到的分辨率
     lv_coord_t w = lv_display_get_horizontal_resolution(disp);
     lv_coord_t h = lv_display_get_vertical_resolution(disp);
     printf("Framebuffer resolution: %dx%d\n", w, h);
@@ -145,13 +133,7 @@ int main(void)
     lv_linux_disp_init();
 
     lv_linux_indev_init();
-    /*Create a Demo*/
-    // lv_demo_widgets();
-    // lv_demo_widgets_start_slideshow();
-    // lv_demo_music();
-
     ui_init();
-    // lv_demo_widgets(); // 用LVGL自带demo测试
     /*Handle LVGL tasks*/
     printf("Entering main loop...\n");
     while (1)

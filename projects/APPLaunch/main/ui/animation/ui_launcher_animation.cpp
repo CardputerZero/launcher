@@ -6,7 +6,7 @@
 
 #include "ui_launcher_animation.h"
 
-#include "Animation.hpp"
+#include "animation.hpp"
 
 #include <utility>
 

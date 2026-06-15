@@ -27,9 +27,9 @@
  *  Compass + IMU dashboard
  *  Screen: 320 x 170
  *
- *  按键：
- *    F4  预留：校准接口
- *    F6/ESC 返回主页
+ *  Keys:
+ *    F4      Reserved for the calibration interface
+ *    F6/ESC  Return home
  * ============================================================
  */
 class UICompassPage : public AppPageRoot
@@ -121,7 +121,7 @@ private:
 
     /*
      * ============================================================
-     * UI 构建
+     * UI construction
      * ============================================================
      */
     void creat_UI()
@@ -349,7 +349,7 @@ private:
 
     /*
      * ============================================================
-     * UI 状态刷新
+     * UI state refresh
      * ============================================================
      */
     void update_from_state(const CompassUiState& state)
@@ -437,7 +437,7 @@ private:
 private:
     /*
      * ============================================================
-     * 按键事件
+     * Key events
      * ============================================================
      */
     void event_handler_init()
@@ -465,7 +465,7 @@ private:
     {
         switch (key) {
         case KEY_F4:
-            // TODO(compass): 接入接口后触发磁力计/IMU 校准。
+            // TODO(compass): Trigger magnetometer/IMU calibration after the API is available.
             break;
 
         case KEY_F6:

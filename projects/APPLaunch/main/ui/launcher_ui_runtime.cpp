@@ -4,14 +4,14 @@
  * SPDX-License-Identifier: MIT
  */
 
-#include "zero_lvgl_os.h"
+#include "launcher_ui_runtime.h"
 
-#include "Launch.h"
-#include "UILaunchPage.h"
+#include "launch.h"
+#include "ui_launch_page.h"
 
 #include <cstdio>
 
-void zero_lvgl_os::create_display()
+void LauncherUiRuntime::create_display()
 {
     fonts_ = std::make_shared<LauncherFonts>();
 
@@ -21,14 +21,14 @@ void zero_lvgl_os::create_display()
     lv_disp_set_theme(dispp_, theme_);
 }
 
-void zero_lvgl_os::build_launcher_home()
+void LauncherUiRuntime::build_launcher_home()
 {
     launch_page_->create_screen();
     launch_->bind_ui();
     launch_page_->init_input_group();
 }
 
-void zero_lvgl_os::show_initial_screen()
+void LauncherUiRuntime::show_initial_screen()
 {
 #ifndef APPLAUNCH_STARTUP_ANIMATION
     launch_page_->load_home_screen();
@@ -48,7 +48,7 @@ void zero_lvgl_os::show_initial_screen()
 #endif
 }
 
-zero_lvgl_os::zero_lvgl_os()
+LauncherUiRuntime::LauncherUiRuntime()
 {
     create_display();
 
@@ -57,9 +57,9 @@ zero_lvgl_os::zero_lvgl_os()
     launch_->set_launch_page(launch_page_);
 }
 
-zero_lvgl_os::~zero_lvgl_os() = default;
+LauncherUiRuntime::~LauncherUiRuntime() = default;
 
-void zero_lvgl_os::start()
+void LauncherUiRuntime::start()
 {
     build_launcher_home();
     show_initial_screen();
