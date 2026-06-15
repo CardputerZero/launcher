@@ -3,6 +3,7 @@
 #include "cp0_lvgl_app.h"
 #include "lvgl/lvgl.h"
 #include <cstdlib>
+#include <atomic>
 #include <thread>
 #include <string>
 
@@ -11,15 +12,17 @@
 #undef def_hal_fun
 
 eventpp::EventQueue<CP0_C_EVENT_t, void(const std::list<std::string>)> cp0_task_queue;
-int queue_run_flage = 1;
+static std::atomic_bool queue_run_flage{true};
 extern "C" void init_lvgl_event_cpp()
 {
     cp0_task_queue.appendListener(CP0_C_EVENT_END, [](const std::list<std::string> args)
-                                  { queue_run_flage = 0; });
+                                  { queue_run_flage = false; });
     std::thread t([]()
                   {
-        while (queue_run_flage)
-            cp0_task_queue.process(); });
+        while (queue_run_flage.load()) {
+            cp0_task_queue.wait();
+            cp0_task_queue.process();
+        } });
     t.detach();
 }
 
