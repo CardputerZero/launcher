@@ -62,6 +62,11 @@ public:
             return;
         }
 
+        if (arg.front() == "Calibrate") {
+            report(callback, 0, "SDL simulated compass calibration\n");
+            return;
+        }
+
         report(callback, -1, "unknown imu api\n");
     }
 
@@ -96,6 +101,15 @@ extern "C" int cp0_compass_read(cp0_compass_read_cb_t callback, void *user)
     });
     if (callback)
         callback(ret, &info, user);
+    return ret;
+}
+
+extern "C" int cp0_compass_calibrate(void)
+{
+    int ret = -1;
+    cp0_signal_imu_api({"Calibrate"}, [&](int code, std::string) {
+        ret = code;
+    });
     return ret;
 }
 

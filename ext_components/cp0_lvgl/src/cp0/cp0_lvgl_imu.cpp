@@ -2,13 +2,19 @@
 #include "hal_lvgl_bsp.h"
 #include "../cp0_app_internal_utils.h"
 
+#include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstring>
 #include <fstream>
 #include <functional>
 #include <list>
+#include <limits>
 #include <memory>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <utility>
 
 #if !defined(_WIN32)
@@ -138,6 +144,11 @@ public:
             return;
         }
 
+        if (arg.front() == "Calibrate") {
+            calibrate(callback);
+            return;
+        }
+
         report(callback, -1, "unknown imu api\n");
     }
 
@@ -154,6 +165,24 @@ private:
         cp0_compass_info_t info{};
         int ret = read_info(&info);
         report(callback, ret, std::string(reinterpret_cast<const char *>(&info), sizeof(info)));
+    }
+
+    void calibrate(callback_t callback)
+    {
+#if defined(_WIN32)
+        report(callback, -1, "compass calibration unavailable\n");
+#else
+        if (calibrating_.exchange(true)) {
+            report(callback, 1, "compass calibration already running\n");
+            return;
+        }
+
+        std::thread([this]() {
+            calibrate_worker();
+            calibrating_.store(false);
+        }).detach();
+        report(callback, 0, "compass calibration started\n");
+#endif
     }
 
     int read_info(cp0_compass_info_t *info)
@@ -186,6 +215,8 @@ private:
         if (paths.has_gyro)
             read_axis_triplet(paths.accel, "in_anglvel", gyr_scale, gyr_x, gyr_y, gyr_z);
 
+        apply_mag_bias(mag_x, mag_y, mag_z);
+
         float pitch = std::atan2(-acc_x, std::sqrt(acc_y * acc_y + acc_z * acc_z));
         float roll = std::atan2(acc_y, acc_z);
         float sin_p = std::sin(pitch);
@@ -199,7 +230,7 @@ private:
         if (yaw < 0.0f)
             yaw += 360.0f;
 
-        clear_info(info, "Sensor OK", 1);
+        clear_info(info, calibrating_.load() ? "Calibrating..." : "Sensor OK", 1);
         info->yaw = yaw;
         info->pitch = pitch * 180.0f / 3.1415926f;
         info->roll = roll * 180.0f / 3.1415926f;
@@ -215,6 +246,68 @@ private:
         return 0;
 #endif
     }
+
+#if !defined(_WIN32)
+    void apply_mag_bias(float &mag_x, float &mag_y, float &mag_z)
+    {
+        std::lock_guard<std::mutex> lock(bias_mutex_);
+        if (!mag_bias_valid_)
+            return;
+
+        mag_x -= mag_bias_x_;
+        mag_y -= mag_bias_y_;
+        mag_z -= mag_bias_z_;
+    }
+
+    void calibrate_worker()
+    {
+        IioDevicePaths paths = enumerate_iio_devices();
+        if (!paths.ready())
+            return;
+
+        const float mag_scale = read_float_file_or(paths.magn + "/in_magn_scale", 1.0f);
+        float min_x = std::numeric_limits<float>::max();
+        float min_y = std::numeric_limits<float>::max();
+        float min_z = std::numeric_limits<float>::max();
+        float max_x = std::numeric_limits<float>::lowest();
+        float max_y = std::numeric_limits<float>::lowest();
+        float max_z = std::numeric_limits<float>::lowest();
+        int samples = 0;
+
+        auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        while (std::chrono::steady_clock::now() < deadline) {
+            float mag_x = 0.0f;
+            float mag_y = 0.0f;
+            float mag_z = 0.0f;
+            if (read_axis_triplet(paths.magn, "in_magn", mag_scale, mag_x, mag_y, mag_z)) {
+                min_x = std::min(min_x, mag_x);
+                min_y = std::min(min_y, mag_y);
+                min_z = std::min(min_z, mag_z);
+                max_x = std::max(max_x, mag_x);
+                max_y = std::max(max_y, mag_y);
+                max_z = std::max(max_z, mag_z);
+                samples++;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        }
+
+        if (samples < 10)
+            return;
+
+        std::lock_guard<std::mutex> lock(bias_mutex_);
+        mag_bias_x_ = (min_x + max_x) / 2.0f;
+        mag_bias_y_ = (min_y + max_y) / 2.0f;
+        mag_bias_z_ = (min_z + max_z) / 2.0f;
+        mag_bias_valid_ = true;
+    }
+#endif
+
+    std::atomic<bool> calibrating_{false};
+    std::mutex bias_mutex_;
+    bool mag_bias_valid_ = false;
+    float mag_bias_x_ = 0.0f;
+    float mag_bias_y_ = 0.0f;
+    float mag_bias_z_ = 0.0f;
 };
 
 } // namespace
@@ -231,6 +324,15 @@ extern "C" int cp0_compass_read(cp0_compass_read_cb_t callback, void *user)
     });
     if (callback)
         callback(ret, &info, user);
+    return ret;
+}
+
+extern "C" int cp0_compass_calibrate(void)
+{
+    int ret = -1;
+    cp0_signal_imu_api({"Calibrate"}, [&](int code, std::string) {
+        ret = code;
+    });
     return ret;
 }
 
