@@ -30,7 +30,7 @@ DEFAULT_REVISION = "m5stack1"
 DEFAULT_ARCHITECTURE = "arm64"
 
 INSTALL_PARENT = PurePosixPath("usr/share")
-SERVICE_PATH = PurePosixPath("lib/systemd/system")
+SERVICE_PATH = PurePosixPath("usr/lib/systemd/user")
 
 OPTIONAL_BINARIES = (
     "M5CardputerZero-AppStore",
@@ -199,25 +199,39 @@ def _control_text(config: PackageConfig) -> str:
 
 
 def _postinst_text(config: PackageConfig) -> str:
+    service_file = f"/{_posix_path(config.service_path / f'{config.app_name}.service')}"
     return f"""#!/bin/sh
 set -e
 mkdir -p /var/cache/{config.app_name}
 ln -sfn /var/cache/{config.app_name} /usr/share/{config.app_name}/cache
-if command -v systemctl >/dev/null 2>&1 && [ -f "/lib/systemd/system/{config.app_name}.service" ]; then
+APP_UID=1000
+APP_USER="$(getent passwd "$APP_UID" | cut -d: -f1)"
+if command -v systemctl >/dev/null 2>&1 && [ -n "$APP_USER" ] && [ -f "{service_file}" ]; then
+    if command -v loginctl >/dev/null 2>&1; then
+        loginctl enable-linger "$APP_USER" || true
+    fi
     systemctl daemon-reload || true
-    systemctl enable {config.app_name}.service || true
-    systemctl restart {config.app_name}.service || systemctl start {config.app_name}.service || true
+    systemctl start "user@$APP_UID.service" || true
+    runuser -u "$APP_USER" -- env XDG_RUNTIME_DIR="/run/user/$APP_UID" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$APP_UID/bus" systemctl --user daemon-reload || true
+    runuser -u "$APP_USER" -- env XDG_RUNTIME_DIR="/run/user/$APP_UID" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$APP_UID/bus" systemctl --user enable {config.app_name}.service || true
+    runuser -u "$APP_USER" -- env XDG_RUNTIME_DIR="/run/user/$APP_UID" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$APP_UID/bus" systemctl --user restart {config.app_name}.service || \
+        runuser -u "$APP_USER" -- env XDG_RUNTIME_DIR="/run/user/$APP_UID" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$APP_UID/bus" systemctl --user start {config.app_name}.service || true
+else
+    echo "{config.app_name}: UID 1000 user not found or service file missing; skip user service enable/start" >&2
 fi
 exit 0
 """
 
 
 def _prerm_text(config: PackageConfig) -> str:
+    service_file = f"/{_posix_path(config.service_path / f'{config.app_name}.service')}"
     return f"""#!/bin/sh
 set -e
-if command -v systemctl >/dev/null 2>&1 && [ -f "/lib/systemd/system/{config.app_name}.service" ]; then
-    systemctl stop {config.app_name}.service || true
-    systemctl disable {config.app_name}.service || true
+APP_UID=1000
+APP_USER="$(getent passwd "$APP_UID" | cut -d: -f1)"
+if command -v systemctl >/dev/null 2>&1 && [ -n "$APP_USER" ] && [ -f "{service_file}" ]; then
+    runuser -u "$APP_USER" -- env XDG_RUNTIME_DIR="/run/user/$APP_UID" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$APP_UID/bus" systemctl --user stop {config.app_name}.service || true
+    runuser -u "$APP_USER" -- env XDG_RUNTIME_DIR="/run/user/$APP_UID" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$APP_UID/bus" systemctl --user disable {config.app_name}.service || true
 fi
 rm -rf /var/cache/{config.app_name}
 exit 0
@@ -227,7 +241,8 @@ exit 0
 def _service_text(config: PackageConfig) -> str:
     return f"""[Unit]
 Description={config.app_name} Service
-After=multi-user.target
+After=pipewire-pulse.service
+Wants=pipewire-pulse.service
 
 [Service]
 ExecStart=/{_posix_path(config.bin_path / config.bin_name)}
@@ -237,7 +252,7 @@ RestartSec=1
 StartLimitInterval=0
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target
 """
 
 
