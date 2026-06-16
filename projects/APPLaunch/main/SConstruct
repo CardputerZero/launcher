@@ -72,10 +72,6 @@ print('-- Launcher git commit: %s' % _git_commit)
 # add srcs
 SRCS += Glob('src/*.c*')
 SRCS += append_srcs_dir(ADir('ui'))
-SRCS = list(filter(
-    lambda src: Path(str(src)).parent != Path(str(ADir('ui/lvgl'))),
-    SRCS
-))
 # add includes
 INCLUDE += [ADir('.'), ADir('include'), ADir('ui'), str(_generated_include_dir)]
 
@@ -95,7 +91,7 @@ if 'CONFIG_BACKWARD_CPP_ENABLED' in os.environ:
 
 # custom lvgl component
 lvgl_component = list(filter(lambda x: x['target'] == 'lvgl_component', env['COMPONENTS']))[0]
-local_lvgl_override_srcs = Glob('ui/lvgl/lv_freetype*.c')
+local_lvgl_override_srcs = Glob('lvgl/lv_freetype*.c')
 local_lvgl_override_names = set(Path(str(src)).name for src in local_lvgl_override_srcs)
 lvgl_component['SRCS'] = [
     src for src in lvgl_component['SRCS']
@@ -103,7 +99,7 @@ lvgl_component['SRCS'] = [
 ]
 lvgl_component['SRCS'] += local_lvgl_override_srcs
 lvgl_component['PRIVATE_INCLUDE'] = [
-    ADir('ui/lvgl'),
+    ADir('lvgl'),
     ADir('../../../SDK/github_source/lvgl/lvgl_9_5/lvgl/src/libs/freetype'),
 ] + lvgl_component['PRIVATE_INCLUDE']
 
