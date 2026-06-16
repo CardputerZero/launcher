@@ -16,6 +16,13 @@
 
 #include "lvgl/lvgl.h"
 
+/* APPLaunch's local LVGL FreeType override supports monochrome bitmap
+ * rendering. Some SDK public headers expose the render mode type but not this
+ * mode name, so keep the API name available to APPLaunch code. */
+#ifndef LV_FREETYPE_FONT_RENDER_MODE_BITMAP_MONO
+#define LV_FREETYPE_FONT_RENDER_MODE_BITMAP_MONO ((lv_freetype_font_render_mode_t)2)
+#endif
+
 #include "keyboard_input.h"
 #include "cp0_lvgl_app.h"
 
