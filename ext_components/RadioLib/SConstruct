@@ -1,0 +1,49 @@
+# component/SConstruct
+Import("env")
+import os
+
+with open(env["PROJECT_TOOL_S"]) as f:
+    exec(f.read())
+
+if "CONFIG_RADIOLIB_COMPONENT_ENABLED" in os.environ:
+    radiolib = wget_github("https://github.com/jgromes/RadioLib.git")
+
+    SRCS = [
+        os.path.join(radiolib, "src", "Hal.cpp"),
+        os.path.join(radiolib, "src", "Module.cpp"),
+        os.path.join(radiolib, "src", "utils", "CRC.cpp"),
+        os.path.join(radiolib, "src", "utils", "ConvCode.cpp"),
+        os.path.join(radiolib, "src", "utils", "Utils.cpp"),
+        os.path.join(radiolib, "src", "protocols", "PhysicalLayer", "PhysicalLayer.cpp"),
+        os.path.join(radiolib, "src", "modules", "SX126x", "SX126x.cpp"),
+        os.path.join(radiolib, "src", "modules", "SX126x", "SX126x_commands.cpp"),
+        os.path.join(radiolib, "src", "modules", "SX126x", "SX126x_config.cpp"),
+        os.path.join(radiolib, "src", "modules", "SX126x", "SX126x_LR_FHSS.cpp"),
+        os.path.join(radiolib, "src", "modules", "SX126x", "SX1262.cpp"),
+    ]
+    INCLUDE = [os.path.join(radiolib, "src")]
+    PRIVATE_INCLUDE = []
+    REQUIREMENTS = []
+    STATIC_LIB = []
+    DYNAMIC_LIB = []
+    DEFINITIONS = []
+    DEFINITIONS_PRIVATE = []
+    LDFLAGS = []
+    LINK_SEARCH_PATH = []
+
+    env["COMPONENTS"].append(
+        {
+            "target": os.path.basename(env["component_dir"]),
+            "SRCS": SRCS,
+            "INCLUDE": INCLUDE,
+            "PRIVATE_INCLUDE": PRIVATE_INCLUDE,
+            "REQUIREMENTS": REQUIREMENTS,
+            "STATIC_LIB": STATIC_LIB,
+            "DYNAMIC_LIB": DYNAMIC_LIB,
+            "DEFINITIONS": DEFINITIONS,
+            "DEFINITIONS_PRIVATE": DEFINITIONS_PRIVATE,
+            "LDFLAGS": LDFLAGS,
+            "LINK_SEARCH_PATH": LINK_SEARCH_PATH,
+            "REGISTER": "static",
+        }
+    )

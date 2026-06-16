@@ -25,8 +25,8 @@ static constexpr int SKIN_W = 1280;
 static constexpr int SKIN_H = 840;
 static constexpr int LCD_SX = 323;
 static constexpr int LCD_SY = 60;
-static constexpr int LCD_SW = 639;
-static constexpr int LCD_SH = 339;
+static constexpr int LCD_SW = 640;
+static constexpr int LCD_SH = 340;
 static constexpr int LCD_W  = 320;
 static constexpr int LCD_H  = 170;
 static constexpr float SCALE = 0.5f;
@@ -250,6 +250,57 @@ static void render()
 
 typedef void (*ui_init_fn)(void);
 
+#if !defined(_WIN32) && !defined(__APPLE__)
+extern "C" {
+void init_lvgl_env(void);
+void init_lvgl_event(void);
+void init_filesystem(void);
+void init_audio(void);
+void init_config(void);
+void init_pty(void);
+void init_process(void);
+void init_screenshot(void);
+void init_lora(void);
+void init_wifi(void);
+void init_settings(void);
+void init_osinfo(void);
+void init_bq27220(void);
+void init_battery(void);
+void init_imu(void);
+void init_lvgl_saved_settings(void);
+void init_camera(void);
+void init_input(void);
+void lv_sdl_keyboard_handler(SDL_Event *event);
+}
+
+static void emu_init_cp0_runtime()
+{
+    static bool initialized = false;
+    if (initialized) return;
+
+    init_lvgl_env();
+    init_lvgl_event();
+    init_filesystem();
+    init_config();
+    init_pty();
+    init_audio();
+    init_process();
+    init_osinfo();
+    init_screenshot();
+    init_lora();
+    init_wifi();
+    init_settings();
+    init_bq27220();
+    init_imu();
+    init_battery();
+    init_camera();
+    init_lvgl_saved_settings();
+    init_input();
+
+    initialized = true;
+}
+#endif
+
 #ifdef EMU_STATIC_APP
 extern "C" {
     void ui_init(void);
@@ -312,12 +363,13 @@ int main(int argc, char *argv[])
     IMG_Init(IMG_INIT_PNG);
 
     int win_w = (int)(SKIN_W * SCALE), win_h = (int)(SKIN_H * SCALE);
-    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "best");
+    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");
     g_win = SDL_CreateWindow("M5CardputerZero Emulator",
         SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
         win_w, win_h, SDL_WINDOW_SHOWN | SDL_WINDOW_ALLOW_HIGHDPI);
     g_ren = SDL_CreateRenderer(g_win, -1,
         SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+    SDL_RenderSetLogicalSize(g_ren, SKIN_W, SKIN_H);
 
     // On Retina, renderer output is 2x the window size
     int render_w, render_h;
@@ -334,6 +386,7 @@ int main(int argc, char *argv[])
 
     g_lcd_tex = SDL_CreateTexture(g_ren, SDL_PIXELFORMAT_ARGB8888,
         SDL_TEXTUREACCESS_STREAMING, LCD_W, LCD_H);
+    SDL_SetTextureScaleMode(g_lcd_tex, SDL_ScaleModeNearest);
     g_lcd_buf = (uint32_t *)calloc(LCD_W * LCD_H, sizeof(uint32_t));
 
     lv_init();
@@ -343,6 +396,11 @@ int main(int argc, char *argv[])
     lv_display_set_buffers(disp, draw_buf, nullptr, sizeof(draw_buf),
                            LV_DISPLAY_RENDER_MODE_PARTIAL);
     lv_display_set_color_format(disp, LV_COLOR_FORMAT_RGB565);
+
+#if !defined(_WIN32) && !defined(__APPLE__)
+    emu_init_cp0_runtime();
+    g_kbd_handler = lv_sdl_keyboard_handler;
+#endif
 
 #ifdef EMU_STATIC_APP
     // Static linked: APPLaunch overrides lv_sdl_keyboard_create/handler
@@ -358,10 +416,14 @@ int main(int argc, char *argv[])
 
     auto kbd_create = (sdl_kbd_create_fn)emu_dlsym(app, "lv_sdl_keyboard_create");
     g_kbd_handler = (sdl_kbd_handler_fn)emu_dlsym(app, "lv_sdl_keyboard_handler");
+    if (!g_kbd_handler)
+        g_kbd_handler = (sdl_kbd_handler_fn)emu_dlsym(RTLD_DEFAULT, "lv_sdl_keyboard_handler");
 
     if (kbd_create) {
         kbd_create();
         printf("[EMU] App keyboard driver loaded\n");
+    } else if (g_kbd_handler) {
+        printf("[EMU] Host cp0 keyboard driver\n");
     } else {
         lv_indev_t *kb = lv_indev_create();
         lv_indev_set_type(kb, LV_INDEV_TYPE_KEYPAD);

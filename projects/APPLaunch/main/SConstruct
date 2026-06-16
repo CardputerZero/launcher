@@ -1,45 +1,27 @@
+# SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+#
+# SPDX-License-Identifier: MIT
+
 import os
 import sys
 import platform
 import subprocess
 import shutil
 import parse as _parse
+from pathlib import Path
 # iomport env and tools from the SDK's scons project.py
 Import('env')
 with open(env['PROJECT_TOOL_S']) as f:
     exec(f.read())
 
-rootfs_path=os.environ.get("CONFIG_TOOLCHAIN_SYSROOT", "")
-
-def wget_github(url):
-    repo = _parse.parse("{}://{}/{}/{}.git", url)
-    repo_name = repo[3]
-    local_path = os.path.join(os.environ['GIT_REPO_PATH'], repo_name)
-    if not os.path.exists(local_path):
-        github_url = url[:-4] if url.endswith('.git') else url
-        down_url = github_url + "/archive/refs/heads/master.zip"
-        zip_file_name = '{}-master.zip'.format(repo_name)
-        file_path = wget_zip(down_url, zip_file_name)
-        extracted_dir = os.path.join(file_path, '{}-master'.format(repo_name))
-        if os.path.exists(extracted_dir):
-            shutil.move(extracted_dir, local_path)
-            shutil.rmtree(file_path)
-        else:
-            shutil.rmtree(file_path, ignore_errors=True)
-            down_url = github_url + "/archive/refs/heads/main.zip"
-            zip_file_name = '{}-main.zip'.format(repo_name)
-            file_path = wget_zip(down_url, zip_file_name)
-            extracted_dir = os.path.join(file_path, '{}-main'.format(repo_name))
-            if os.path.exists(extracted_dir):
-                shutil.move(extracted_dir, local_path)
-                shutil.rmtree(file_path)
-    return local_path
+rootfs_path=Path(os.environ.get("CONFIG_TOOLCHAIN_SYSROOT", ""))
 
 # define the project's environment
 SRCS = []
 INCLUDE = []
 PRIVATE_INCLUDE = []
-REQUIREMENTS = []
+REQUIREMENTS = ['cp0_lvgl', 'eventpp', 'utilities', 'lvgl_component', 'freetype', 'pthread', 'RadioLib']
+# REQUIREMENTS = []
 STATIC_LIB = []
 DYNAMIC_LIB = []
 DEFINITIONS = []
@@ -48,15 +30,28 @@ LDFLAGS = []
 LINK_SEARCH_PATH = []
 STATIC_FILES = []
 
-# run generate_page_app_includes.py to generate the header file for including app pages in the UI.
-script_path = os.path.abspath(str(AFile('ui/components/generate_page_app_includes.py')))
-script_dir = os.path.dirname(script_path)
-subprocess.run(
-    [sys.executable, script_path],
-    cwd=script_dir,
-    capture_output=True,
-    text=True
-)
+# Generate page_app includes into build output so builds do not rewrite source files.
+def run_python_script(script_rel_path, args=None):
+    script_path = script_rel_path.get_abspath()
+    script_dir = os.path.dirname(script_path)
+    cmd = [sys.executable, script_path]
+    if args:
+        cmd += args
+    result = subprocess.run(
+        cmd,
+        cwd=script_dir,
+        capture_output=True,
+        text=True
+    )
+    if result.stdout:
+        print(result.stdout, end='')
+    if result.stderr:
+        print(result.stderr, end='', file=sys.stderr)
+    result.check_returncode()
+
+_generated_include_dir = Path(os.getcwd()) / 'build' / 'generated' / 'include'
+run_python_script(AFile('ui/generate_page_app_includes.py'),
+                  ['--output', str(_generated_include_dir / 'generated' / 'page_app.h')])
 
 # Get git commit short hash for version display
 try:
@@ -78,10 +73,8 @@ print('-- Launcher git commit: %s' % _git_commit)
 SRCS += Glob('src/*.c*')
 SRCS += append_srcs_dir(ADir('ui'))
 # add includes
-INCLUDE += [ADir('.'), ADir('include')]
+INCLUDE += [ADir('.'), ADir('include'), ADir('ui'), str(_generated_include_dir)]
 
-# add requirements
-REQUIREMENTS += ['lvgl_component', 'pthread']
 
 # Inject git commit hash as a compile-time macro
 DEFINITIONS += ['-DLAUNCHER_GIT_COMMIT_RAW=%s' % _git_commit]
@@ -90,49 +83,55 @@ DEFINITIONS += ['-DLAUNCHER_GIT_COMMIT_RAW=%s' % _git_commit]
 if os.environ.get('APPLAUNCH_STARTUP_ANIMATION', '0') == '1':
     DEFINITIONS += ['-DAPPLAUNCH_STARTUP_ANIMATION']
 
-# add miniaudio
-REQUIREMENTS += ['Miniaudio']
 
-# add 
+# add debug
 if 'CONFIG_BACKWARD_CPP_ENABLED' in os.environ:
     REQUIREMENTS += ['Backward_cpp']
 
+
 # custom lvgl component
 lvgl_component = list(filter(lambda x: x['target'] == 'lvgl_component', env['COMPONENTS']))[0]
-lvgl_component['SRCS'] = list(filter(
-    lambda src: 'lv_sdl_keyboard.c' not in str(src),
-    lvgl_component['SRCS']
-))
+local_lvgl_override_srcs = Glob('lvgl/lv_freetype*.c')
+local_lvgl_override_names = set(Path(str(src)).name for src in local_lvgl_override_srcs)
+lvgl_component['SRCS'] = [
+    src for src in lvgl_component['SRCS']
+    if Path(str(src)).name not in local_lvgl_override_names
+]
+lvgl_component['SRCS'] += local_lvgl_override_srcs
+lvgl_component['PRIVATE_INCLUDE'] = [
+    ADir('lvgl'),
+    ADir('../../../SDK/github_source/lvgl/lvgl_9_5/lvgl/src/libs/freetype'),
+] + lvgl_component['PRIVATE_INCLUDE']
 
-SRCS += Glob('hal/*.c*')
-# x86
-if 'linux_x86_sdl2_config_defaults.mk' in os.environ.get("CONFIG_DEFAULT_FILE", ''):
+
+if 'CONFIG_APPLAUNCH_CROSS' in os.environ:
+    lvgl_component['DEFINITIONS'] += ['-D_REENTRANT']
+    lvgl_component['INCLUDE'] += [rootfs_path/"usr"/"include"/"freetype2",
+                                  rootfs_path/"usr"/"include"/"libpng16",
+                                  rootfs_path/"usr"/"include"/"libcamera",
+                                  ]
+    LDFLAGS += [rootfs_path/"usr"/"lib"/"aarch64-linux-gnu"/"libstdc++.so.6"]
+
+
+# Host SDL2 builds (Linux x86_64 and Windows x86) need pkg-config flags
+# for the APPLaunch sources and for LVGL's SDL/FreeType features.
+if ('CONFIG_APPLAUNCH_LINUX_X86_SDL2' in os.environ or
+        'CONFIG_APPLAUNCH_WIN_X86_SDL2' in os.environ):
     lvgl_component['DEFINITIONS'] += pkg_config_cflags("freetype2")
     lvgl_component['REQUIREMENTS'] += pkg_config_ldflags("freetype2")
-
-    SRCS += Glob('hal/sdl/*.c*')
     DEFINITIONS += pkg_config_cflags("sdl2")
     REQUIREMENTS += pkg_config_ldflags("sdl2")
+
+
+if 'CONFIG_APPLAUNCH_LINUX_CP0' in os.environ:
+    REQUIREMENTS += ['cp0_lvgl']
     REQUIREMENTS += ['input', 'xkbcommon', 'udev']
 
-# x86 cross
-if 'linux_x86_cross_cp0_config_defaults.mk' in os.environ.get("CONFIG_DEFAULT_FILE", ''):
-    lvgl_component['DEFINITIONS'] += ['-D_REENTRANT']
-    lvgl_component['INCLUDE'] += [f'{rootfs_path}/usr/include/freetype2', 
-                                  f'{rootfs_path}/usr/include/libpng16',
-                                  f'{rootfs_path}/usr/include/libcamera',
-                                  ]
-
-    SRCS += Glob('hal/linux/*.c*')
-    REQUIREMENTS += ['input', 'xkbcommon', 'udev', 'freetype']
-    REQUIREMENTS += ['camera', 'camera-base', 'jpeg']
-    LDFLAGS += [f'{rootfs_path}/usr/lib/aarch64-linux-gnu/libstdc++.so.6']
-    DEFINITIONS += ['-Wno-format-truncation']
-if 'mac_cross_cp0_config_defaults.mk' in os.environ.get("CONFIG_DEFAULT_FILE", ''):
+if 'CONFIG_APPLAUNCH_MAC_CROSS_CP0' in os.environ:
     lvgl_component['DEFINITIONS'] += ['-D_REENTRANT']
     lvgl_component['INCLUDE'] += [f'{os.environ.get("CONFIG_TOOLCHAIN_SYSROOT", "")}/usr/include/freetype2', f'{os.environ.get("CONFIG_TOOLCHAIN_SYSROOT", "")}/usr/include/libpng16']
 
-    SRCS += Glob('hal/linux/*.c*')
+    REQUIREMENTS += ['cp0_lvgl']
     REQUIREMENTS += ['input', 'xkbcommon', 'udev', 'freetype']
     # add libcamera — note: pkg-config name is 'libcamera', not 'camera'.
     # Linker still wants -lcamera but we need explicit cflags for the headers.
@@ -149,54 +148,37 @@ if 'mac_cross_cp0_config_defaults.mk' in os.environ.get("CONFIG_DEFAULT_FILE", '
     LDFLAGS += [f'{os.environ.get("CONFIG_TOOLCHAIN_SYSROOT", "")}/usr/lib/aarch64-linux-gnu/libstdc++.so.6',f'-Wl,-rpath-link,{os.environ.get("CONFIG_TOOLCHAIN_SYSROOT", "")}/usr/lib/aarch64-linux-gnu',f'-B{os.environ.get("CONFIG_TOOLCHAIN_SYSROOT", "")}/usr/lib/aarch64-linux-gnu']
     DEFINITIONS += ['-Wno-format-truncation']
 # macOS
-if 'darwin_config_defaults.mk' in os.environ.get("CONFIG_DEFAULT_FILE", ''):
+if 'CONFIG_APPLAUNCH_DARWIN_SDL' in os.environ:
     # macOS Use the SDL backend
-    SRCS += Glob('hal/sdl/*.c*')
+    REQUIREMENTS += ['cp0_lvgl']
 
-    # nlohmann_json
-    DEFINITIONS += pkg_config_cflags("nlohmann_json")
+#     # nlohmann_json
+#     DEFINITIONS += pkg_config_cflags("nlohmann_json")
 
-    # SDL2
-    DEFINITIONS += pkg_config_cflags("sdl2")
-    REQUIREMENTS += pkg_config_ldflags("sdl2")
+#     # SDL2
+#     DEFINITIONS += pkg_config_cflags("sdl2")
+#     REQUIREMENTS += pkg_config_ldflags("sdl2")
 
     # LVGL SDL driver also needs SDL2 headers/defines
     lvgl_component['DEFINITIONS'] += pkg_config_cflags("sdl2")
     lvgl_component['DEFINITIONS'] += ['-D_REENTRANT']
 
-    # FreeType
-    lvgl_component['DEFINITIONS'] += pkg_config_cflags("freetype2")
-    REQUIREMENTS += pkg_config_ldflags("freetype2")
+#     # FreeType
+#     lvgl_component['DEFINITIONS'] += pkg_config_cflags("freetype2")
+#     REQUIREMENTS += pkg_config_ldflags("freetype2")
 
+if 'CONFIG_APPLAUNCH_WIN_X86_CROSS_CP0' in os.environ:
+    rootfs_lib_path = rootfs_path/"lib"/"aarch64-linux-gnu"
+    rootfs_usr_lib_path = rootfs_path/"usr"/"lib"/"aarch64-linux-gnu"
 
-# add RadioLib
-RadioLib = wget_github('https://github.com/jgromes/RadioLib.git')
-SRCS += [
-    os.path.join(RadioLib, 'src', 'Hal.cpp'),
-    os.path.join(RadioLib, 'src', 'Module.cpp'),
-    os.path.join(RadioLib, 'src', 'utils', 'CRC.cpp'),
-    os.path.join(RadioLib, 'src', 'utils', 'ConvCode.cpp'),
-    os.path.join(RadioLib, 'src', 'utils', 'Utils.cpp'),
-    os.path.join(RadioLib, 'src', 'protocols', 'PhysicalLayer', 'PhysicalLayer.cpp'),
-    os.path.join(RadioLib, 'src', 'modules', 'SX126x', 'SX126x.cpp'),
-    os.path.join(RadioLib, 'src', 'modules', 'SX126x', 'SX126x_commands.cpp'),
-    os.path.join(RadioLib, 'src', 'modules', 'SX126x', 'SX126x_config.cpp'),
-    os.path.join(RadioLib, 'src', 'modules', 'SX126x', 'SX126x_LR_FHSS.cpp'),
-    os.path.join(RadioLib, 'src', 'modules', 'SX126x', 'SX1262.cpp'),
-]
-INCLUDE += [os.path.join(RadioLib, 'src')]
-
-# add https://github.com/Pithikos/C-Thread-Pool.git
-CThreadPool = wget_github('https://github.com/Pithikos/C-Thread-Pool.git')
-SRCS += [
-    os.path.join(CThreadPool, 'thpool.c')
-]
-INCLUDE += [CThreadPool]
-
+    LDFLAGS += [rootfs_usr_lib_path/'libstdc++.so.6',
+                f'-Wl,-rpath-link,{rootfs_lib_path}',
+                f'-Wl,-rpath-link,{rootfs_usr_lib_path}',
+                f'-B{rootfs_usr_lib_path}']
+    DEFINITIONS += ['-Wno-format-truncation']
 
 # add static files
 STATIC_FILES += [ADir('../APPLaunch')]
-STATIC_FILES += [os.path.join(env['component_dir'], '..', '..', '..', 'doc', 'store_cache_sync.py')]
 # register the component to the build system
 env['COMPONENTS'].append({'target':'M5CardputerZero-APPLaunch',
                           'SRCS':SRCS,

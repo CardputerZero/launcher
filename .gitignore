@@ -9,10 +9,11 @@ doc
 tools
 setup.ini
 pi
-projects/APPLaunch/main/ui/components/page_app.h
+projects/APPLaunch/main/ui/page_app.h
 .agents
 dist.bak
 data
 docs/*.html
 skills-lock.json
 *.bak
+projects/APPLaunch/docs/UILaunchPage_carousel_animation.html

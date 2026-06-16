@@ -1,0 +1,358 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
+#pragma once
+#include "../ui_app_page.hpp"
+#include "compat/input_keys.h"
+#include <unordered_map>
+#include <string>
+#include <vector>
+#include <functional>
+#include <algorithm>
+#include "cp0_lvgl_app.h"
+
+// ============================================================
+//  IP panel screen  UIIpPanelPage
+//  Screen resolution: 320 x 170  (top bar20px, ui_APP_Container 320x150)
+//
+//  View state:
+//    VIEW_MAIN    — list (auto-refresh every second and show interface information)
+// ============================================================
+
+class UIIpPanelPage : public AppPage
+{
+    // ==================== Single network interface info ====================
+    struct NetIfInfo
+    {
+        std::string iface;   // interface name, e.g. eth0 / wlan0
+        std::string ip;      // IPv4 address, or "N/A" when absent
+        std::string mask;    // subnet mask
+        bool        up;      // whether it is UP
+    };
+
+public:
+    UIIpPanelPage() : AppPage()
+    {
+        set_page_title("IP INFO");
+        creat_UI();
+        event_handler_init();
+    }
+    ~UIIpPanelPage() {}
+
+private:
+    // ==================== Data members ====================
+    std::unordered_map<std::string, lv_obj_t *> ui_obj_;
+    std::vector<NetIfInfo> iface_list_;   // current network interface list
+    int selected_idx_ = 0;               // currently highlighted row
+
+    // Layout constants (content area 320x150, title bar 22px, remaining 128px)
+    static constexpr int ITEM_H       = 32;   // row height
+    static constexpr int VISIBLE_ROWS = 4;    // visible row count (128/32 = 4)
+    static constexpr int TITLE_H      = 22;   // title bar height
+    static constexpr int LIST_H       = 128;  // list area height
+
+    // timer handle
+    lv_timer_t *refresh_timer_ = nullptr;
+
+    // ==================== Read system network interface information ====================
+    void fetch_iface_list()
+    {
+        iface_list_.clear();
+
+        cp0_netif_info_t entries[16];
+        int count = 0;
+        if (cp0_network_list(entries, 16, &count) != 0)
+            return;
+
+        for (int i = 0; i < count; i++)
+        {
+            NetIfInfo info;
+            info.iface = entries[i].iface;
+            info.ip    = entries[i].ipv4;
+            info.mask  = entries[i].netmask;
+            info.up    = entries[i].is_up != 0;
+            iface_list_.push_back(info);
+        }
+
+        // Sort by interface name for stable ordering
+        std::sort(iface_list_.begin(), iface_list_.end(),
+                  [](const NetIfInfo &a, const NetIfInfo &b) {
+                      return a.iface < b.iface;
+                  });
+
+        // Out-of-range protection for selected index
+        if (selected_idx_ >= (int)iface_list_.size())
+            selected_idx_ = iface_list_.empty() ? 0 : (int)iface_list_.size() - 1;
+    }
+
+    // ==================== UI construction ====================
+    void creat_UI()
+    {
+        // ---- Background ----
+        lv_obj_t *bg = lv_obj_create(ui_APP_Container);
+        lv_obj_set_size(bg, 320, 150);
+        lv_obj_set_pos(bg, 0, 0);
+        lv_obj_set_style_radius(bg, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_color(bg, lv_color_hex(0x0D1117), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_opa(bg, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_border_width(bg, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_pad_all(bg, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_clear_flag(bg, LV_OBJ_FLAG_SCROLLABLE);
+        ui_obj_["bg"] = bg;
+
+        // ---- Title bar ----
+        lv_obj_t *title_bar = lv_obj_create(bg);
+        lv_obj_set_size(title_bar, 320, TITLE_H);
+        lv_obj_set_pos(title_bar, 0, 0);
+        lv_obj_set_style_radius(title_bar, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_color(title_bar, lv_color_hex(0x1F3A5F), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_opa(title_bar, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_border_width(title_bar, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_pad_left(title_bar, 8, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_clear_flag(title_bar, LV_OBJ_FLAG_SCROLLABLE);
+
+        // Title text
+        lv_obj_t *lbl_title = lv_label_create(title_bar);
+        lv_label_set_text(lbl_title, LV_SYMBOL_WIFI "  IP Panel");
+        lv_obj_set_align(lbl_title, LV_ALIGN_LEFT_MID);
+        lv_obj_set_style_text_color(lbl_title, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_text_font(lbl_title, &lv_font_montserrat_14, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+        // right-side control hint
+        lv_obj_t *lbl_hint = lv_label_create(title_bar);
+        lv_label_set_text(lbl_hint, "UP/DN:select  ESC:back");
+        lv_obj_set_align(lbl_hint, LV_ALIGN_RIGHT_MID);
+        lv_obj_set_x(lbl_hint, -4);
+        lv_obj_set_style_text_color(lbl_hint, lv_color_hex(0x7EA8D8), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_text_font(lbl_hint, &lv_font_montserrat_10, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+        // ---- list container ----
+        lv_obj_t *list_cont = lv_obj_create(bg);
+        lv_obj_set_size(list_cont, 320, LIST_H);
+        lv_obj_set_pos(list_cont, 0, TITLE_H);
+        lv_obj_set_style_radius(list_cont, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_opa(list_cont, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_border_width(list_cont, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_pad_all(list_cont, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_clear_flag(list_cont, LV_OBJ_FLAG_SCROLLABLE);
+        ui_obj_["list_cont"] = list_cont;
+
+        // Initial refresh and render
+        fetch_iface_list();
+        build_list_rows();
+
+        // ---- Timer for automatic refresh every second ----
+        refresh_timer_ = lv_timer_create(UIIpPanelPage::static_timer_cb, 1000, this);
+    }
+
+    // ==================== Build list rows ====================
+    void build_list_rows()
+    {
+        lv_obj_t *list_cont = ui_obj_["list_cont"];
+        lv_obj_clean(list_cont);
+
+        if (iface_list_.empty())
+        {
+            // Show a hint when there are no interfaces
+            lv_obj_t *lbl = lv_label_create(list_cont);
+            lv_label_set_text(lbl, "No network interface found.");
+            lv_obj_set_pos(lbl, 10, 50);
+            lv_obj_set_style_text_color(lbl, lv_color_hex(0x555555), LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_obj_set_style_text_font(lbl, &lv_font_montserrat_12, LV_PART_MAIN | LV_STATE_DEFAULT);
+            return;
+        }
+
+        int item_count = (int)iface_list_.size();
+        int visible    = LIST_H / ITEM_H;
+
+        // Calculate the scroll offset to keep the selected item centered when possible
+        int offset = selected_idx_ - visible / 2;
+        if (offset < 0) offset = 0;
+        if (offset > item_count - visible) offset = item_count - visible;
+        if (offset < 0) offset = 0;
+
+        for (int vi = 0; vi < visible && (vi + offset) < item_count; ++vi)
+        {
+            int  mi  = vi + offset;
+            bool sel = (mi == selected_idx_);
+            create_row(list_cont, vi, mi, sel);
+        }
+    }
+
+    // ==================== Create one row ====================
+    void create_row(lv_obj_t *parent, int visual_row, int idx, bool selected)
+    {
+        const NetIfInfo &info = iface_list_[idx];
+
+        // Row background
+        lv_obj_t *row = lv_obj_create(parent);
+        lv_obj_set_size(row, 318, ITEM_H - 2);
+        lv_obj_set_pos(row, 1, visual_row * ITEM_H + 1);
+        lv_obj_set_style_radius(row, 4, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_border_width(row, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_pad_all(row, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+
+        if (selected)
+        {
+            lv_obj_set_style_bg_color(row, lv_color_hex(0x1F3A5F), LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_obj_set_style_bg_opa(row, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+            // left highlight bar
+            lv_obj_t *sel_bar = lv_obj_create(row);
+            lv_obj_set_size(sel_bar, 3, ITEM_H - 8);
+            lv_obj_set_pos(sel_bar, 2, 3);
+            lv_obj_set_style_radius(sel_bar, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_obj_set_style_bg_color(sel_bar, lv_color_hex(0x1F6FEB), LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_obj_set_style_bg_opa(sel_bar, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_obj_set_style_border_width(sel_bar, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_obj_clear_flag(sel_bar, LV_OBJ_FLAG_SCROLLABLE);
+        }
+        else
+        {
+            lv_obj_set_style_bg_color(row, lv_color_hex(0x161B22), LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_obj_set_style_bg_opa(row, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+        }
+
+        // separator line (except the last visible row)
+        if (idx < (int)iface_list_.size() - 1)
+        {
+            lv_obj_t *div = lv_obj_create(parent);
+            lv_obj_set_size(div, 310, 1);
+            lv_obj_set_pos(div, 5, (visual_row + 1) * ITEM_H);
+            lv_obj_set_style_radius(div, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_obj_set_style_bg_color(div, lv_color_hex(0x21262D), LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_obj_set_style_bg_opa(div, 200, LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_obj_set_style_border_width(div, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_obj_clear_flag(div, LV_OBJ_FLAG_SCROLLABLE);
+        }
+
+        // status dot (green=UP, gray=DOWN)
+        lv_obj_t *dot = lv_obj_create(row);
+        lv_obj_set_size(dot, 6, 6);
+        lv_obj_set_pos(dot, 8, (ITEM_H - 2 - 6) / 2);
+        lv_obj_set_style_radius(dot, LV_RADIUS_CIRCLE, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_color(dot,
+            info.up ? lv_color_hex(0x2ECC71) : lv_color_hex(0x444444),
+            LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_opa(dot, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_border_width(dot, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_clear_flag(dot, LV_OBJ_FLAG_SCROLLABLE);
+
+        // interface name (left)
+        lv_obj_t *lbl_iface = lv_label_create(row);
+        lv_label_set_text(lbl_iface, info.iface.c_str());
+        lv_obj_set_pos(lbl_iface, 20, 2);
+        lv_obj_set_width(lbl_iface, 72);
+        lv_label_set_long_mode(lbl_iface, LV_LABEL_LONG_CLIP);
+        lv_obj_set_style_text_color(lbl_iface,
+            selected ? lv_color_hex(0x58A6FF) : lv_color_hex(0x4A7ABF),
+            LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_text_font(lbl_iface, &lv_font_montserrat_12, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+        // IP address (middle)
+        lv_obj_t *lbl_ip = lv_label_create(row);
+        lv_label_set_text(lbl_ip, info.ip.c_str());
+        lv_obj_set_pos(lbl_ip, 96, 2);
+        lv_obj_set_width(lbl_ip, 130);
+        lv_label_set_long_mode(lbl_ip, LV_LABEL_LONG_CLIP);
+        lv_obj_set_style_text_color(lbl_ip,
+            selected ? lv_color_hex(0xFFFFFF) : lv_color_hex(0xCCCCCC),
+            LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_text_font(lbl_ip, &lv_font_montserrat_12, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+        // subnet mask (right, small text)
+        lv_obj_t *lbl_mask = lv_label_create(row);
+        lv_label_set_text(lbl_mask, info.mask.c_str());
+        lv_obj_set_pos(lbl_mask, 96, 17);
+        lv_obj_set_width(lbl_mask, 130);
+        lv_label_set_long_mode(lbl_mask, LV_LABEL_LONG_CLIP);
+        lv_obj_set_style_text_color(lbl_mask,
+            lv_color_hex(0x555555),
+            LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_text_font(lbl_mask, &lv_font_montserrat_10, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+        // UP/DOWN status text (right)
+        lv_obj_t *lbl_state = lv_label_create(row);
+        lv_label_set_text(lbl_state, info.up ? "UP" : "DOWN");
+        lv_obj_set_pos(lbl_state, 266, 2);
+        lv_obj_set_style_text_color(lbl_state,
+            info.up ? lv_color_hex(0x2ECC71) : lv_color_hex(0x555555),
+            LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_text_font(lbl_state, &lv_font_montserrat_10, LV_PART_MAIN | LV_STATE_DEFAULT);
+    }
+
+    // ==================== Periodic refresh callback ====================
+    static void static_timer_cb(lv_timer_t *timer)
+    {
+        UIIpPanelPage *self = static_cast<UIIpPanelPage *>(lv_timer_get_user_data(timer));
+        if (self) self->on_timer_refresh();
+    }
+    void on_timer_refresh()
+    {
+        fetch_iface_list();
+        build_list_rows();
+    }
+
+    // ==================== Event binding ====================
+    void event_handler_init()
+    {
+        lv_obj_add_event_cb(root_screen_, UIIpPanelPage::static_lvgl_handler, LV_EVENT_ALL, this);
+    }
+    static void static_lvgl_handler(lv_event_t *e)
+    {
+        UIIpPanelPage *self = static_cast<UIIpPanelPage *>(lv_event_get_user_data(e));
+        if (self) self->event_handler(e);
+    }
+    static uint32_t fzxc_to_lv_arrow(uint32_t key)
+    {
+        switch (key) {
+        case KEY_F: return LV_KEY_UP;
+        case KEY_X: return LV_KEY_DOWN;
+        case KEY_Z: return LV_KEY_LEFT;
+        case KEY_C: return LV_KEY_RIGHT;
+        default:    return key;
+        }
+    }
+
+    void event_handler(lv_event_t *e)
+    {
+        if (lv_event_get_code(e) != LV_EVENT_KEY) return;
+        uint32_t key = fzxc_to_lv_arrow(lv_event_get_key(e));
+
+        int count = (int)iface_list_.size();
+        switch (key)
+        {
+        case LV_KEY_UP:
+            if (selected_idx_ > 0)
+            {
+                --selected_idx_;
+                build_list_rows();
+            }
+            break;
+
+        case LV_KEY_DOWN:
+            if (selected_idx_ < count - 1)
+            {
+                ++selected_idx_;
+                build_list_rows();
+            }
+            break;
+
+        case LV_KEY_ESC:
+            // Destroy the timer and return to the home screen
+            if (refresh_timer_)
+            {
+                lv_timer_del(refresh_timer_);
+                refresh_timer_ = nullptr;
+            }
+            if (navigate_home) navigate_home();
+            break;
+
+        default:
+            break;
+        }
+    }
+};

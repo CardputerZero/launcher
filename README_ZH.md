@@ -1,6 +1,6 @@
 # launcher
 
-[English](./README.md)
+[English](./README.md) | [日本語](./README_JA.md)
 
 基于 [M5Stack_Linux_Libs](https://github.com/m5stack/M5Stack_Linux_Libs) SDK 开发的 M5CardputerZero 应用集合。该项目展示了如何在 M5CardputerZero（AArch64 Linux）设备上使用 **LVGL 9.5** 构建图形界面应用。
 
@@ -26,30 +26,30 @@ launcher/
 │   │   ├── SConstruct          # 项目顶层编译脚本
 │   │   ├── config_defaults.mk  # 默认编译配置（Linux Framebuffer 模式）
 │   │   ├── darwin_config_defaults.mk  # macOS 编译配置
+│   │   ├── win_x86_sdl2_config_defaults.mk  # Windows SDL2 仿真配置
+│   │   ├── win_x86_cross_config_defaults.mk # Windows 到设备交叉编译配置
 │   │   ├── setup.ini           # SSH 部署配置
 │   │   └── main/               # 主程序源码
 │   │       ├── SConstruct      # 组件编译脚本
 │   │       ├── src/
 │   │       │   └── main.cpp    # 程序入口
-│   │       ├── include/        # 公共头文件（battery、keyboard_input 等）
-│   │       ├── hal/            # 硬件抽象层
-│   │       │   ├── sdl/        # SDL2 平台实现（PC 调试）
-│   │       │   └── linux/      # Linux 平台实现（设备端）
 │   │       └── ui/             # UI 代码
-│   │           ├── ui.h / ui.c # UI 初始化
-│   │           ├── screens/    # 屏幕定义
-│   │           ├── components/ # 自定义组件（应用页面、启动器等）
-│   │           ├── widgets/    # 自定义控件（轮播组件等）
-│   │           ├── Animation/  # 动画效果
-│   │           ├── fonts/      # 字体资源
-│   │           └── images/     # 图片资源
+│   │           ├── ui.h / ui.cpp          # UI 初始化
+│   │           ├── launch.cpp / launch.h  # 应用列表与启动逻辑
+│   │           ├── app_registry.*         # 内置应用开关注册表
+│   │           ├── ui_launch_page.*       # 首页轮播 UI
+│   │           ├── launcher_ui_runtime.*  # LVGL 运行时/首页引导
+│   │           ├── animation/             # 动画效果
+│   │           └── page_app/              # 内置应用页面
 │   ├── Calculator/             # 计算器
 │   ├── AppStore/               # 应用商店
 │   └── HelloWorld/             # Hello World 示例
-├── ext_components/             # 外部组件（Miniaudio 等）
-├── doc/                        # 文档资源
+├── ext_components/             # 外部组件（Miniaudio、RadioLib 等）
+├── docs/                       # 工程文档
+├── scripts/                    # 仓库辅助工具
 ├── README.md
-└── README_ZH.md
+├── README_ZH.md
+└── README_JA.md
 ```
 
 ---
@@ -68,7 +68,7 @@ launcher/
 ### APPLaunch 特性
 
 - 应用启动器界面，支持多应用导航（轮播翻页）
-- 内置应用页面：Stock、Music、Camera、LoRa、SSH、GPIO、MIDI、Console、Mesh 等
+- 内置应用页面：CLI/ST 终端、Game、Setting、Compass、IP Panel、File、SSH、Mesh、Rec、Camera、LoRa、Tank Battle，以及 Python、Store、Math 等命令/外部进程入口
 - LoRa 通信（基于 RadioLib SX1262）
 - 音频播放（基于 Miniaudio）
 - 电池状态监控与显示
@@ -200,6 +200,47 @@ scons distclean
 scons -j8
 ```
 
+### Windows
+
+Windows 使用 `projects/APPLaunch` 下同一套 SCons 入口。编译本机 SDL2 仿真器时，建议使用 MSYS2 MinGW Shell，确保 `gcc`、`g++`、`pkg-config`、SDL2 和 FreeType 都在 `PATH` 中。
+
+#### 依赖安装（MSYS2 UCRT64 示例）
+
+```bash
+pacman -S --needed \
+  mingw-w64-ucrt-x86_64-gcc \
+  mingw-w64-ucrt-x86_64-pkgconf \
+  mingw-w64-ucrt-x86_64-SDL2 \
+  mingw-w64-ucrt-x86_64-freetype \
+  mingw-w64-ucrt-x86_64-python-pip
+
+python -m pip install parse scons requests tqdm setuptools-rust paramiko scp
+```
+
+#### 编译 APPLaunch SDL2 仿真器
+
+```bash
+cd projects/APPLaunch
+scons distclean
+export CONFIG_DEFAULT_FILE=win_x86_sdl2_config_defaults.mk
+scons -j8
+cd dist
+./M5CardputerZero-APPLaunch.exe
+```
+
+#### 交叉编译 APPLaunch 设备端程序
+
+安装 SysGCC Raspberry64 Windows AArch64 Linux 交叉工具链：`https://sysprogs.com/getfile/2542/raspberry64-gcc14.2.0.exe`。如果工具链未安装在 `D:\app\SysGCC\bin`，请同步修改 `projects/APPLaunch/win_x86_cross_config_defaults.mk` 中的 `CONFIG_TOOLCHAIN_PATH`。
+
+```bash
+cd projects/APPLaunch
+scons distclean
+export CONFIG_DEFAULT_FILE=win_x86_cross_config_defaults.mk
+scons -j8
+```
+
+交叉编译产物为 `dist/M5CardputerZero-APPLaunch`，用于在 CardputerZero 设备上运行。首次交叉编译可能会下载 SDK sysroot 到 `SDK/github_source/static_lib_v0.0.4`。
+
 
 
 ### 配置管理命令
@@ -224,35 +265,34 @@ scons push
 该程序是运行在 CardputerZero 设备上的桌面 UI 程序，为 LCD 小屏幕提供基础操作界面。
 
 ### 编译
-参考 HelloWorld 的编译
+设备端编译、SDL2 仿真器和交叉编译均使用上方平台相关命令，并进入 `projects/APPLaunch` 执行。APPLaunch 提供独立配置文件，包括 `linux_x86_sdl2_config_defaults.mk`、`linux_x86_cross_cp0_config_defaults.mk`、`mac_cross_cp0_config_defaults.mk`、`win_x86_sdl2_config_defaults.mk` 和 `win_x86_cross_config_defaults.mk`。
 
 ### 打包
 ```bash
-# brew install dpkg # mac 需要安装 dpkg 工具
-cd projects/APPLaunch/tools
-./llm_pack.py
+# 可选：安装 dpkg 后会使用 dpkg-deb；否则使用 Python 写包器。
+python3 scripts/debian_packager.py
 ```
 该命令会生成一个 DEB 安装包。将安装包通过 `scp` 传输到设备后，可使用 `sudo dpkg -i ./***.deb` 进行安装。
 
 ### 运行
 
 #### 自动运行
-使用 `dpkg` 安装 DEB 包后，程序会通过 `systemd` 服务 `APPLaunch.service` 自动启动。
+使用 `dpkg` 安装 DEB 包后，程序会通过 `systemd` 用户服务 `APPLaunch.service` 自动启动。
 
 安装后使用 `systemd` 命令进行查看和操作：
 ```bash
-pi@pi:~ $ sudo systemctl status APPLaunch.service 
+pi@pi:~ $ systemctl --user status APPLaunch.service
 ● APPLaunch.service - APPLaunch Service
-     Loaded: loaded (/usr/lib/systemd/system/APPLaunch.service; enabled; preset: enabled)
+     Loaded: loaded (/usr/lib/systemd/user/APPLaunch.service; enabled; preset: enabled)
      Active: active (running) since Mon 2026-06-08 15:58:19 CST; 23min ago
  Invocation: aa5c4e3ca94742deb2fe0dc67467e670
    Main PID: 664 (M5CardputerZero)
       Tasks: 7 (limit: 448)
         CPU: 1min 19.265s
-     CGroup: /system.slice/APPLaunch.service
+     CGroup: /user.slice/user-1000.slice/user@1000.service/app.slice/APPLaunch.service
              └─664 /usr/share/APPLaunch/bin/M5CardputerZero-APPLaunch
 
-Jun 08 15:58:19 pi systemd[1]: Started APPLaunch.service - APPLaunch Service.
+Jun 08 15:58:19 pi systemd[664]: Started APPLaunch.service - APPLaunch Service.
 ```
 
 #### 手动运行
@@ -284,11 +324,14 @@ export LV_LINUX_KEYBOARD_DEVICE=/dev/input/by-path/platform-3f804000.i2c-event
 | 主内容区 | 应用轮播页面（左右翻页导航） |
 | 全局提示 | ESC / Shift / SYM 快捷键提示覆盖层 |
 
-内置应用页面包括：Stock、Music、Camera、LoRa、SSH、GPIO、MIDI、Console、Mesh、Gallery、Email、File、Hack、Rec、Setup、Store、UnitEnv、IpPanel、LovyanGFX、HikePod、Tank Battle 等。
+内置应用页面包括：CLI/ST 终端、Game、Setting、Compass、IP Panel、File、SSH、Mesh、Rec、Camera、LoRa 和 Tank Battle。APPLaunch 也可以显示 Python、Store、Math 等命令或外部进程入口。
 
 
 ## 相关资源
 
+- [日文工程指南](./docs/launcher-project-guide-ja.md)
+- [日文 APPLaunch App 打包指南](./docs/APPLaunch-App-packaging-guide-ja.md)
+- [日文 macOS Docker 编译指南](./docs/macos-docker-build-ja.md)
 - [M5Stack_Linux_Libs SDK](https://github.com/m5stack/M5Stack_Linux_Libs)
 - [LVGL 文档](https://docs.lvgl.io/)
 - [SquareLine Studio](https://squareline.io/)

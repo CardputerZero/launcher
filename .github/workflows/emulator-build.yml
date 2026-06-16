@@ -19,6 +19,14 @@ jobs:
     runs-on: macos-latest
     steps:
     - uses: actions/checkout@v4
+    - name: Initialize SDK submodule
+      run: git submodule update --init --depth=1 SDK
+    - name: Install SDK Python dependencies
+      run: python3 -m pip install --user --break-system-packages parse requests tqdm
+    - name: Prepare SDK eventpp source
+      run: |
+        cd projects/APPLaunch
+        bash ../../.github/scripts/prepare-sdk-source.sh eventpp include/eventpp/callbacklist.h
     - name: Clone LVGL
       run: |
         git clone --depth 1 --branch v9.5.0 https://github.com/lvgl/lvgl.git projects/CardputerZero-Emulator/lib/lvgl
@@ -49,6 +57,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+    - name: Initialize SDK submodule
+      run: git submodule update --init --depth=1 SDK
+    - name: Install SDK Python dependencies
+      run: python3 -m pip install --user --break-system-packages parse requests tqdm
+    - name: Prepare SDK eventpp source
+      run: |
+        cd projects/APPLaunch
+        bash ../../.github/scripts/prepare-sdk-source.sh eventpp include/eventpp/callbacklist.h
     - name: Clone LVGL
       run: |
         git clone --depth 1 --branch v9.5.0 https://github.com/lvgl/lvgl.git projects/CardputerZero-Emulator/lib/lvgl
@@ -93,9 +109,18 @@ jobs:
           mingw-w64-x86_64-SDL2_image
           mingw-w64-x86_64-freetype
           mingw-w64-x86_64-winpthreads-git
+          mingw-w64-x86_64-python-pip
           make
           git
     - uses: actions/checkout@v4
+    - name: Initialize SDK submodule
+      run: git submodule update --init --depth=1 SDK
+    - name: Install SDK Python dependencies
+      run: python -m pip install --break-system-packages parse requests tqdm
+    - name: Prepare SDK eventpp source
+      run: |
+        cd projects/APPLaunch
+        PYTHON=python bash ../../.github/scripts/prepare-sdk-source.sh eventpp include/eventpp/callbacklist.h
     - name: Clone LVGL
       run: |
         git clone --depth 1 --branch v9.5.0 https://github.com/lvgl/lvgl.git projects/CardputerZero-Emulator/lib/lvgl
@@ -127,6 +152,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+    - name: Initialize SDK submodule
+      run: git submodule update --init --depth=1 SDK
+    - name: Install SDK Python dependencies
+      run: python3 -m pip install --user --break-system-packages parse requests tqdm
+    - name: Prepare SDK eventpp source
+      run: |
+        cd projects/APPLaunch
+        bash ../../.github/scripts/prepare-sdk-source.sh eventpp include/eventpp/callbacklist.h
     - name: Clone LVGL
       run: |
         git clone --depth 1 --branch v9.5.0 https://github.com/lvgl/lvgl.git projects/CardputerZero-Emulator/lib/lvgl

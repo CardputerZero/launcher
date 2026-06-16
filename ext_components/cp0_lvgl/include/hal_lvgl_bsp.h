@@ -9,6 +9,7 @@ typedef enum {
     CP0_C_EVENT_BATTERY,
     CP0_C_EVENT_NETWORK,
     CP0_C_EVENT_DATATIME,
+    CP0_C_EVENT_DELL_CPP_DATA,
     CP0_C_EVENT_END,
 } CP0_C_EVENT_t;
 
@@ -26,10 +27,19 @@ typedef struct {
 extern uint32_t lv_c_event[(2*CP0_C_EVENT_END)];
 
 void cp0_lvgl_init(void);
-
-
-
-
+const char *hal_path_audio_dir(void);
 #ifdef __cplusplus
 }
+#include "eventpp/callbacklist.h"
+#include "eventpp/eventqueue.h"
+#include <list>
+#include <string>
+#include <functional>
+
+#define def_hal_fun(arg, name) extern eventpp::CallbackList<arg> name;
+#include "signal_register_plan.h"
+#undef def_hal_fun
+extern eventpp::EventQueue<CP0_C_EVENT_t, void (const std::list<std::string>)> cp0_task_queue;
+
+std::string cp0_file_path(std::string file);
 #endif

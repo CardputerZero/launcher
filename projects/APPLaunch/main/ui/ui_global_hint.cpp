@@ -1,4 +1,10 @@
 /*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
+/*
  * ui_global_hint.cpp
  *
  * Transient on-screen hint/toast overlay.
@@ -25,13 +31,15 @@
 #include "ui.h"
 #include "keyboard_input.h"
 #include "lvgl/lvgl.h"
-#include "hal/hal_screenshot.h"
+#include "hal_lvgl_bsp.h"
+#include "cp0_lvgl_app.h"
 
 #include "compat/input_keys.h"
 
 #include <string.h>
 #include <cstdio>
 #include <cstdlib>
+#include <string>
 #include <sys/stat.h>
 #ifdef _WIN32
 #include <direct.h>
@@ -155,8 +163,7 @@ static void ensure_hint_created(void)
     lv_obj_set_style_text_color(s_hint_label, lv_color_hex(HINT_TEXT_COLOR), 0);
     /* Prefer the project's Chinese-capable 12pt font; it already falls
      * back to lv_font_montserrat_12 inside ui.c if freetype init failed. */
-    lv_font_t *font = g_font_cn_12 ? g_font_cn_12
-                                   : (lv_font_t *)&lv_font_montserrat_12;
+    lv_font_t *font = launcher_fonts().get("AlibabaPuHuiTi-3-55-Regular.ttf", 12, LV_FREETYPE_FONT_STYLE_BOLD);
     lv_obj_set_style_text_font(s_hint_label, font, 0);
     lv_label_set_text(s_hint_label, "");
     lv_obj_center(s_hint_label);
@@ -213,7 +220,9 @@ static void ensure_screenshot_dir(const char *scr_dir)
 #endif
 }
 
-extern "C" void ui_global_hint_on_key(const struct key_item *elm)
+namespace ui_global_hint {
+
+void on_key(const struct key_item *elm)
 {
     if (elm == NULL) return;
 
@@ -267,7 +276,10 @@ extern "C" void ui_global_hint_on_key(const struct key_item *elm)
         char scr_dir[256];
         snprintf(scr_dir, sizeof(scr_dir), "%s/Screenshots", home ? home : "/tmp");
         ensure_screenshot_dir(scr_dir);
-        int ret = hal_screenshot_save(scr_dir);
+        int ret = -1;
+        cp0_signal_screenshot_api({"Save", scr_dir}, [&](int code, std::string) {
+            ret = code;
+        });
         show_hint(ret == 0 ? "Saved to ~/Screenshots" : "Screenshot failed");
         return;
     }
@@ -297,4 +309,11 @@ extern "C" void ui_global_hint_on_key(const struct key_item *elm)
             show_hint("Double-tap to lock");
         }
     }
+}
+
+} // namespace ui_global_hint
+
+extern "C" void ui_global_hint_on_key(const struct key_item *elm)
+{
+    ui_global_hint::on_key(elm);
 }

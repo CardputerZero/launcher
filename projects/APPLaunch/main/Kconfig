@@ -1,0 +1,40 @@
+# SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+#
+# SPDX-License-Identifier: MIT
+
+menu "APPLaunch"
+
+config APPLAUNCH_CROSS
+    bool "cross compile"
+    default y if APPLAUNCH_LINUX_X86_CROSS_CP0
+    default y if APPLAUNCH_WIN_X86_CROSS_CP0
+    default y if APPLAUNCH_MAC_CROSS_CP0
+
+choice APPLAUNCH_BUILD_TARGET
+    prompt "APPLaunch build target"
+    default APPLAUNCH_LINUX_X86_SDL2
+
+config APPLAUNCH_LINUX_X86_SDL2
+    bool "Linux x86 SDL2"
+
+config APPLAUNCH_LINUX_X86_CROSS_CP0
+    bool "Linux x86 cross CP0"
+
+config APPLAUNCH_WIN_X86_SDL2
+    bool "Windows x86 SDL2"
+
+config APPLAUNCH_WIN_X86_CROSS_CP0
+    bool "Windows x86 cross CP0"
+
+config APPLAUNCH_LINUX_CP0
+    bool "Linux CP0"
+
+config APPLAUNCH_MAC_CROSS_CP0
+    bool "macOS cross CP0"
+
+config APPLAUNCH_DARWIN_SDL
+    bool "Darwin SDL"
+
+endchoice
+
+endmenu

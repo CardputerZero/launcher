@@ -1,6 +1,6 @@
 # launcher
 
-[中文](./README_ZH.md)
+[中文](./README_ZH.md) | [日本語](./README_JA.md)
 
 A collection of M5CardputerZero applications developed with the [M5Stack_Linux_Libs](https://github.com/m5stack/M5Stack_Linux_Libs) SDK. This project demonstrates how to build graphical UI applications with **LVGL 9.5** on the M5CardputerZero (AArch64 Linux) device.
 
@@ -26,30 +26,30 @@ launcher/
 │   │   ├── SConstruct          # Top-level project build script
 │   │   ├── config_defaults.mk  # Default build config (Linux Framebuffer mode)
 │   │   ├── darwin_config_defaults.mk  # macOS build config
+│   │   ├── win_x86_sdl2_config_defaults.mk  # Windows SDL2 simulator config
+│   │   ├── win_x86_cross_config_defaults.mk # Windows-to-device cross config
 │   │   ├── setup.ini           # SSH deployment config
 │   │   └── main/               # Main application source
 │   │       ├── SConstruct      # Component build script
 │   │       ├── src/
 │   │       │   └── main.cpp    # Program entry point
-│   │       ├── include/        # Public headers (battery, keyboard_input, etc.)
-│   │       ├── hal/            # Hardware abstraction layer
-│   │       │   ├── sdl/        # SDL2 platform implementation (PC debugging)
-│   │       │   └── linux/      # Linux platform implementation (device side)
 │   │       └── ui/             # UI code
-│   │           ├── ui.h / ui.c # UI initialization
-│   │           ├── screens/    # Screen definitions
-│   │           ├── components/ # Custom components (app pages, launcher, etc.)
-│   │           ├── widgets/    # Custom widgets (carousel component, etc.)
-│   │           ├── Animation/  # Animation effects
-│   │           ├── fonts/      # Font assets
-│   │           └── images/     # Image assets
+│   │           ├── ui.h / ui.cpp          # UI initialization
+│   │           ├── launch.cpp / launch.h  # App list and launch logic
+│   │           ├── app_registry.*         # Built-in app enable/disable registry
+│   │           ├── ui_launch_page.*       # Home carousel UI
+│   │           ├── launcher_ui_runtime.*  # LVGL runtime/home bootstrap
+│   │           ├── animation/             # Animation effects
+│   │           └── page_app/              # Built-in app pages
 │   ├── Calculator/             # Calculator
 │   ├── AppStore/               # App store
 │   └── HelloWorld/             # Hello World example
-├── ext_components/             # External components (Miniaudio, etc.)
-├── doc/                        # Documentation resources
+├── ext_components/             # External components (Miniaudio, RadioLib, etc.)
+├── docs/                       # Project documentation
+├── scripts/                    # Repository helper tools
 ├── README.md
-└── README_ZH.md
+├── README_ZH.md
+└── README_JA.md
 ```
 
 ---
@@ -68,7 +68,7 @@ launcher/
 ### APPLaunch Features
 
 - Application launcher UI with multi-app navigation (carousel page switching)
-- Built-in app pages: Stock, Music, Camera, LoRa, SSH, GPIO, MIDI, Console, Mesh, and more
+- Built-in app pages: CLI/ST terminal, Game, Setting, Compass, IP Panel, File, SSH, Mesh, Rec, Camera, LoRa, and Tank Battle, plus command/external entries such as Python, Store, and Math
 - LoRa communication (based on RadioLib SX1262)
 - Audio playback (based on Miniaudio)
 - Battery status monitoring and display
@@ -207,6 +207,47 @@ scons distclean
 scons -j8
 ```
 
+### Windows
+
+Windows builds use the same SCons entry point under `projects/APPLaunch`. Use an MSYS2 MinGW shell for the native SDL2 simulator build so that `gcc`, `g++`, `pkg-config`, SDL2, and FreeType are available in `PATH`.
+
+#### Install Dependencies (MSYS2 UCRT64 example)
+
+```bash
+pacman -S --needed \
+  mingw-w64-ucrt-x86_64-gcc \
+  mingw-w64-ucrt-x86_64-pkgconf \
+  mingw-w64-ucrt-x86_64-SDL2 \
+  mingw-w64-ucrt-x86_64-freetype \
+  mingw-w64-ucrt-x86_64-python-pip
+
+python -m pip install parse scons requests tqdm setuptools-rust paramiko scp
+```
+
+#### Build the APPLaunch SDL2 Simulator
+
+```bash
+cd projects/APPLaunch
+scons distclean
+export CONFIG_DEFAULT_FILE=win_x86_sdl2_config_defaults.mk
+scons -j8
+cd dist
+./M5CardputerZero-APPLaunch.exe
+```
+
+#### Cross-Compile APPLaunch for the Device
+
+Install the SysGCC Raspberry64 Windows AArch64 Linux cross toolchain from `https://sysprogs.com/getfile/2542/raspberry64-gcc14.2.0.exe`, and update `CONFIG_TOOLCHAIN_PATH` in `projects/APPLaunch/win_x86_cross_config_defaults.mk` if it is not installed at `D:\app\SysGCC\bin`.
+
+```bash
+cd projects/APPLaunch
+scons distclean
+export CONFIG_DEFAULT_FILE=win_x86_cross_config_defaults.mk
+scons -j8
+```
+
+The cross-build output is `dist/M5CardputerZero-APPLaunch` and runs on the CardputerZero device. The first cross-build may download the SDK sysroot package into `SDK/github_source/static_lib_v0.0.4`.
+
 ### Configuration Management Commands
 
 ```bash
@@ -232,14 +273,13 @@ This program is a desktop UI application running on the CardputerZero device. It
 
 ### Build
 
-Refer to the HelloWorld build instructions.
+For device builds, SDL2 simulator builds, and cross-compilation, use the platform-specific build commands above with `cd projects/APPLaunch`. APPLaunch provides its own configuration files, including `linux_x86_sdl2_config_defaults.mk`, `linux_x86_cross_cp0_config_defaults.mk`, `mac_cross_cp0_config_defaults.mk`, `win_x86_sdl2_config_defaults.mk`, and `win_x86_cross_config_defaults.mk`.
 
 ### Package
 
 ```bash
-# brew install dpkg # mac install dpkg tool.
-cd projects/APPLaunch/tools
-./llm_pack.py
+# Optional: install dpkg to use dpkg-deb; otherwise the Python builder is used.
+python3 scripts/debian_packager.py
 ```
 
 This command generates a DEB installation package. After transferring the package to the device with `scp`, install it with `sudo dpkg -i ./***.deb`.
@@ -248,23 +288,23 @@ This command generates a DEB installation package. After transferring the packag
 
 #### Auto Run
 
-After installing the DEB package with `dpkg`, the program is automatically started by the `APPLaunch.service` systemd service.
+After installing the DEB package with `dpkg`, the program is automatically started by the `APPLaunch.service` systemd user service.
 
 After installation, use `systemd` commands to view and control it:
 
 ```bash
-pi@pi:~ $ sudo systemctl status APPLaunch.service
+pi@pi:~ $ systemctl --user status APPLaunch.service
 ● APPLaunch.service - APPLaunch Service
-     Loaded: loaded (/usr/lib/systemd/system/APPLaunch.service; enabled; preset: enabled)
+     Loaded: loaded (/usr/lib/systemd/user/APPLaunch.service; enabled; preset: enabled)
      Active: active (running) since Mon 2026-06-08 15:58:19 CST; 23min ago
  Invocation: aa5c4e3ca94742deb2fe0dc67467e670
    Main PID: 664 (M5CardputerZero)
       Tasks: 7 (limit: 448)
         CPU: 1min 19.265s
-     CGroup: /system.slice/APPLaunch.service
+     CGroup: /user.slice/user-1000.slice/user@1000.service/app.slice/APPLaunch.service
              └─664 /usr/share/APPLaunch/bin/M5CardputerZero-APPLaunch
 
-Jun 08 15:58:19 pi systemd[1]: Started APPLaunch.service - APPLaunch Service.
+Jun 08 15:58:19 pi systemd[664]: Started APPLaunch.service - APPLaunch Service.
 ```
 
 #### Manual Run
@@ -296,10 +336,13 @@ The UI is designed and generated by SquareLine Studio 1.5.0, with a resolution o
 | Main content area | Application carousel pages (left/right page navigation) |
 | Global hints | ESC / Shift / SYM shortcut hint overlay |
 
-Built-in app pages include: Stock, Music, Camera, LoRa, SSH, GPIO, MIDI, Console, Mesh, Gallery, Email, File, Hack, Rec, Setup, Store, UnitEnv, IpPanel, LovyanGFX, HikePod, Tank Battle, and more.
+Built-in app pages include: CLI/ST terminal, Game, Setting, Compass, IP Panel, File, SSH, Mesh, Rec, Camera, LoRa, and Tank Battle. APPLaunch can also expose command or external-process entries such as Python, Store, and Math.
 
 ## Related Resources
 
+- [Japanese Project Guide](./docs/launcher-project-guide-ja.md)
+- [Japanese APPLaunch App Packaging Guide](./docs/APPLaunch-App-packaging-guide-ja.md)
+- [Japanese macOS Docker Build Guide](./docs/macos-docker-build-ja.md)
 - [M5Stack_Linux_Libs SDK](https://github.com/m5stack/M5Stack_Linux_Libs)
 - [LVGL Documentation](https://docs.lvgl.io/)
 - [SquareLine Studio](https://squareline.io/)

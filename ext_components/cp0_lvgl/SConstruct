@@ -1,6 +1,7 @@
 # component/SConscript
 Import("env")
 import os
+import subprocess
 
 with open(env["PROJECT_TOOL_S"]) as f:
     exec(f.read())
@@ -9,19 +10,27 @@ if "CONFIG_CP0_LVGL_COMPONENT_ENABLED" in os.environ or "CONFIG_SIGSLOT_COMPONEN
     SRCS = []
     INCLUDE = [ADir('include')]
     PRIVATE_INCLUDE = []
-    REQUIREMENTS = ['lvgl_component']
+    REQUIREMENTS = ['lvgl_component', 'eventpp', 'Miniaudio', 'RadioLib']
     STATIC_LIB = []
     DYNAMIC_LIB = []
     DEFINITIONS = []
     DEFINITIONS_PRIVATE = []
     LDFLAGS = []
     LINK_SEARCH_PATH = []
-    SRCS += [AFile('src/commount.c')]
+    SRCS += Glob('src/*.c*')
     if 'CONFIG_V9_5_LV_USE_SDL' in os.environ:
+        DEFINITIONS += ['-DHAL_PLATFORM_SDL=1']
         SRCS += Glob('src/sdl/*.c*')
     else:
         SRCS += Glob('src/cp0/*.c*')
         REQUIREMENTS += ['input', 'xkbcommon', 'udev', 'pthread']
+        REQUIREMENTS += ['camera', 'camera-base', 'jpeg']
+        try:
+            DEFINITIONS += subprocess.check_output(
+                ['pkg-config', '--cflags', 'libcamera'], text=True).split()
+        except Exception:
+            _sr = os.environ.get('CONFIG_TOOLCHAIN_SYSROOT', '')
+            DEFINITIONS += [f'-I{_sr}/usr/include/libcamera']
 
     env["COMPONENTS"].append(
         {

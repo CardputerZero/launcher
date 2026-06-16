@@ -10,17 +10,24 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(REPO_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../..)
 set(APPLAUNCH  ${REPO_ROOT}/projects/APPLaunch/main)
 set(USERDEMO   ${REPO_ROOT}/projects/UserDemo/main)
+set(CP0_LVGL   ${REPO_ROOT}/ext_components/cp0_lvgl)
+set(APPLAUNCH_LVGL_OVERRIDE ${APPLAUNCH}/lvgl)
+set(APPLAUNCH_EMU_ENTRY ${CMAKE_CURRENT_SOURCE_DIR}/src/app_launch_entry.cpp)
+
+set(APPLAUNCH_GENERATED_INCLUDE ${CMAKE_CURRENT_BINARY_DIR}/generated/include)
+set(APPLAUNCH_GENERATED_PAGE_APP ${APPLAUNCH_GENERATED_INCLUDE}/generated/page_app.h)
 
 file(GLOB PAGE_APP_HEADERS
-    RELATIVE ${APPLAUNCH}/ui/components
+    RELATIVE ${APPLAUNCH}/ui
     CONFIGURE_DEPENDS
-    ${APPLAUNCH}/ui/components/page_app/*.hpp
+    ${APPLAUNCH}/ui/page_app/*.hpp
 )
 list(SORT PAGE_APP_HEADERS)
 if(PAGE_APP_HEADERS)
-    file(WRITE ${APPLAUNCH}/ui/components/page_app.h "#pragma once\n\n")
+    file(MAKE_DIRECTORY ${APPLAUNCH_GENERATED_INCLUDE}/generated)
+    file(WRITE ${APPLAUNCH_GENERATED_PAGE_APP} "#pragma once\n\n")
     foreach(PAGE_APP_HEADER ${PAGE_APP_HEADERS})
-        file(APPEND ${APPLAUNCH}/ui/components/page_app.h "#include \"${PAGE_APP_HEADER}\"\n")
+        file(APPEND ${APPLAUNCH_GENERATED_PAGE_APP} "#include \"${PAGE_APP_HEADER}\"\n")
     endforeach()
 else()
     message(FATAL_ERROR "No APPLaunch page_app headers found")
@@ -97,6 +104,23 @@ endif()
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/lib/lvgl ${CMAKE_CURRENT_BINARY_DIR}/lvgl)
 
+file(GLOB APPLAUNCH_LVGL_FREETYPE_SRCS CONFIGURE_DEPENDS
+    ${APPLAUNCH_LVGL_OVERRIDE}/lv_freetype*.c
+)
+if(APPLAUNCH_LVGL_FREETYPE_SRCS)
+    get_target_property(LVGL_SRCS lvgl SOURCES)
+    foreach(_override_src ${APPLAUNCH_LVGL_FREETYPE_SRCS})
+        get_filename_component(_override_name ${_override_src} NAME)
+        list(FILTER LVGL_SRCS EXCLUDE REGEX ".*/src/libs/freetype/${_override_name}$")
+    endforeach()
+    set_property(TARGET lvgl PROPERTY SOURCES ${LVGL_SRCS})
+    target_sources(lvgl PRIVATE ${APPLAUNCH_LVGL_FREETYPE_SRCS})
+    target_include_directories(lvgl BEFORE PRIVATE
+        ${APPLAUNCH_LVGL_OVERRIDE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/lib/lvgl/src/libs/freetype
+    )
+endif()
+
 # ---------------------------------------------------------------------------
 # Helper: common link libraries for app targets
 # ---------------------------------------------------------------------------
@@ -129,9 +153,23 @@ option(EMU_SKIP_APPLAUNCH "Skip APPLaunch (Unix-only deps)" OFF)
 
 file(GLOB_RECURSE APPLAUNCH_UI_C   ${APPLAUNCH}/ui/*.c)
 file(GLOB_RECURSE APPLAUNCH_UI_CPP ${APPLAUNCH}/ui/*.cpp)
+list(FILTER APPLAUNCH_UI_C EXCLUDE REGEX ".*/ui/lvgl/.*")
+list(FILTER APPLAUNCH_UI_CPP EXCLUDE REGEX ".*/ui/lvgl/.*")
 file(GLOB         APPLAUNCH_KBD    ${APPLAUNCH}/hal/keyboard_input.c)
 file(GLOB APPLAUNCH_HAL_SDL_C   ${APPLAUNCH}/hal/sdl/*.c)
 file(GLOB APPLAUNCH_HAL_SDL_CPP ${APPLAUNCH}/hal/sdl/*.cpp)
+file(GLOB CP0_LVGL_SDL_SRCS CONFIGURE_DEPENDS
+    ${CP0_LVGL}/src/commount.c
+    ${CP0_LVGL}/src/commount.cpp
+    ${CP0_LVGL}/src/sdl/*.c
+    ${CP0_LVGL}/src/sdl/*.cpp
+)
+set(CP0_LVGL_WIN32_SRCS
+    src/cp0_web_runtime.cpp
+    ${CP0_LVGL}/src/commount.c
+    ${CP0_LVGL}/src/commount.cpp
+    ${CP0_LVGL}/src/win32/cp0_hal_stubs_win32.c
+)
 
 # ---------------------------------------------------------------------------
 # APP: APPLaunch shared lib (Unix only)
@@ -144,12 +182,18 @@ add_library(APPLaunch SHARED
     ${APPLAUNCH_KBD}
     ${APPLAUNCH_HAL_SDL_C}
     ${APPLAUNCH_HAL_SDL_CPP}
+    ${APPLAUNCH_EMU_ENTRY}
 )
 target_include_directories(APPLaunch PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/vendor
     ${CMAKE_CURRENT_SOURCE_DIR}/lib
+    ${CMAKE_CURRENT_SOURCE_DIR}/lib/lvgl
+    ${REPO_ROOT}/ext_components/cp0_lvgl/include
+    ${REPO_ROOT}/SDK/github_source/eventpp/include
+    ${REPO_ROOT}/SDK/components/utilities/include
     ${REPO_ROOT}/ext_components/Miniaudio/include
+    ${APPLAUNCH_GENERATED_INCLUDE}
     ${APPLAUNCH}/ui
     ${APPLAUNCH}/include
     ${APPLAUNCH}
@@ -212,11 +256,18 @@ endif()
 if(WIN32 AND NOT EMU_SKIP_APPLAUNCH)
     add_executable(cardputer-zero-emu src/main.cpp src/device_skin.cpp src/keyboard_map.cpp
         ${APPLAUNCH_UI_C} ${APPLAUNCH_UI_CPP} ${APPLAUNCH_KBD}
-        ${APPLAUNCH_HAL_SDL_C} ${APPLAUNCH_HAL_SDL_CPP})
+        ${APPLAUNCH_HAL_SDL_C} ${APPLAUNCH_HAL_SDL_CPP}
+        ${APPLAUNCH_EMU_ENTRY}
+        ${CP0_LVGL_WIN32_SRCS})
     target_include_directories(cardputer-zero-emu PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src/compat
         ${CMAKE_CURRENT_SOURCE_DIR}/vendor
+        ${CMAKE_CURRENT_SOURCE_DIR}/lib/lvgl
+        ${REPO_ROOT}/ext_components/cp0_lvgl/include
+        ${REPO_ROOT}/SDK/github_source/eventpp/include
+        ${REPO_ROOT}/SDK/components/utilities/include
         ${REPO_ROOT}/ext_components/Miniaudio/include
+        ${APPLAUNCH_GENERATED_INCLUDE}
         ${APPLAUNCH}/ui ${APPLAUNCH}/include ${APPLAUNCH} ${APPLAUNCH}/hal)
     target_compile_options(cardputer-zero-emu PRIVATE
         "SHELL:-include ${CMAKE_CURRENT_SOURCE_DIR}/src/emu_compat_win.h"
@@ -232,14 +283,28 @@ else()
     add_executable(cardputer-zero-emu src/main.cpp src/device_skin.cpp src/keyboard_map.cpp)
 endif()
 add_dependencies(cardputer-zero-emu lvgl lvgl_thorvg)
-if(APPLE)
+add_dependencies(cardputer-zero-emu UserDemo)
+if(TARGET APPLaunch)
+    add_dependencies(cardputer-zero-emu APPLaunch)
+endif()
+if(APPLE OR (UNIX AND NOT EMSCRIPTEN))
     set_target_properties(cardputer-zero-emu PROPERTIES ENABLE_EXPORTS ON)
+endif()
+if(UNIX AND NOT APPLE AND NOT WIN32)
+    target_sources(cardputer-zero-emu PRIVATE ${CP0_LVGL_SDL_SRCS})
+    target_compile_definitions(cardputer-zero-emu PRIVATE HAL_PLATFORM_SDL=1)
+    target_link_options(cardputer-zero-emu PRIVATE -Wl,--allow-multiple-definition)
 endif()
 
 target_include_directories(cardputer-zero-emu PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/lib
+    ${CMAKE_CURRENT_SOURCE_DIR}/lib/lvgl
+    ${CP0_LVGL}/include
+    ${CP0_LVGL}/src/sdl
+    ${REPO_ROOT}/SDK/github_source/eventpp/include
+    ${REPO_ROOT}/ext_components/Miniaudio/include
 )
 if(NOT MSVC)
     target_compile_options(cardputer-zero-emu PRIVATE -Wno-c++11-narrowing)
@@ -319,6 +384,8 @@ if(NOT WIN32)
     target_link_libraries(cardputer-zero-emu PRIVATE Threads::Threads)
 else()
     # ui_app_hack.hpp calls gethostname() on Windows via <winsock2.h>.
+    find_package(Threads REQUIRED)
+    target_link_libraries(cardputer-zero-emu PRIVATE Threads::Threads)
     target_link_libraries(cardputer-zero-emu PRIVATE ws2_32)
 endif()
 
@@ -331,6 +398,8 @@ add_custom_command(TARGET cardputer-zero-emu POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:cardputer-zero-emu>/applications
     COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:cardputer-zero-emu>/images
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${REPO_ROOT}/projects/APPLaunch/APPLaunch/share/images $<TARGET_FILE_DIR:cardputer-zero-emu>/images
+    COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:cardputer-zero-emu>/APPLaunch
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${REPO_ROOT}/projects/APPLaunch/APPLaunch/share $<TARGET_FILE_DIR:cardputer-zero-emu>/APPLaunch/share
     COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:cardputer-zero-emu>/assets
     COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/assets/device_skin.png $<TARGET_FILE_DIR:cardputer-zero-emu>/assets/device_skin.png
     COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/assets/startup.mp3 $<TARGET_FILE_DIR:cardputer-zero-emu>/assets/startup.mp3
@@ -354,6 +423,12 @@ if(EMSCRIPTEN)
     file(GLOB         APPLAUNCH_KBD_WEB    ${APPLAUNCH}/hal/keyboard_input.c)
     file(GLOB         APPLAUNCH_HAL_SDL_C_WEB   ${APPLAUNCH}/hal/sdl/*.c)
     file(GLOB         APPLAUNCH_HAL_SDL_CPP_WEB ${APPLAUNCH}/hal/sdl/*.cpp)
+    set(CP0_LVGL_WEB_SRCS
+        src/cp0_web_runtime.cpp
+        ${CP0_LVGL}/src/commount.c
+        ${CP0_LVGL}/src/commount.cpp
+        ${CP0_LVGL}/src/web/cp0_hal_stubs_web.c
+    )
 
     add_executable(cardputer-zero-emu-web
         src/main_web.cpp
@@ -364,6 +439,8 @@ if(EMSCRIPTEN)
         ${APPLAUNCH_KBD_WEB}
         ${APPLAUNCH_HAL_SDL_C_WEB}
         ${APPLAUNCH_HAL_SDL_CPP_WEB}
+        ${APPLAUNCH_EMU_ENTRY}
+        ${CP0_LVGL_WEB_SRCS}
     )
 
     target_include_directories(cardputer-zero-emu-web PRIVATE
@@ -373,7 +450,12 @@ if(EMSCRIPTEN)
         ${CMAKE_CURRENT_SOURCE_DIR}/src/compat_stubs
         ${CMAKE_CURRENT_SOURCE_DIR}/vendor
         ${CMAKE_CURRENT_SOURCE_DIR}/lib
+        ${CMAKE_CURRENT_SOURCE_DIR}/lib/lvgl
+        ${CP0_LVGL}/include
+        ${REPO_ROOT}/SDK/github_source/eventpp/include
+        ${REPO_ROOT}/SDK/components/utilities/include
         ${REPO_ROOT}/ext_components/Miniaudio/include
+        ${APPLAUNCH_GENERATED_INCLUDE}
         ${APPLAUNCH}/ui
         ${APPLAUNCH}/include
         ${APPLAUNCH}
