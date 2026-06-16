@@ -239,7 +239,12 @@ lv_font_t *LauncherFonts::get(const char *ttf_name, uint16_t size, lv_freetype_f
 
 lv_font_t *LauncherFonts::get_mono(const char *ttf_name, uint16_t size, lv_freetype_font_style_t style)
 {
-    return get(ttf_name, size, style, LV_FREETYPE_FONT_RENDER_MODE_BITMAP_MONO);
+    /* LV_FREETYPE_FONT_RENDER_MODE_BITMAP_MONO is provided by our local
+     * FreeType override, but older SDK headers only name BITMAP/OUTLINE.
+     * Keep the ABI value here so CI builds against either header set. */
+    constexpr lv_freetype_font_render_mode_t bitmap_mono_mode =
+        static_cast<lv_freetype_font_render_mode_t>(2);
+    return get(ttf_name, size, style, bitmap_mono_mode);
 }
 
 lv_font_t *LauncherFonts::get(const char *ttf_name, uint16_t size, lv_freetype_font_style_t style,
