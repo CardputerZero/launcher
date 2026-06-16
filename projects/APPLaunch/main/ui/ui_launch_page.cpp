@@ -234,14 +234,24 @@ LauncherFonts::~LauncherFonts()
 
 lv_font_t *LauncherFonts::get(const char *ttf_name, uint16_t size, lv_freetype_font_style_t style)
 {
-    const std::string font_key = key(ttf_name, size, style);
+    return get(ttf_name, size, style, LV_FREETYPE_FONT_RENDER_MODE_BITMAP);
+}
+
+lv_font_t *LauncherFonts::get_mono(const char *ttf_name, uint16_t size, lv_freetype_font_style_t style)
+{
+    return get(ttf_name, size, style, LV_FREETYPE_FONT_RENDER_MODE_BITMAP_MONO);
+}
+
+lv_font_t *LauncherFonts::get(const char *ttf_name, uint16_t size, lv_freetype_font_style_t style,
+                              lv_freetype_font_render_mode_t render_mode)
+{
+    const std::string font_key = key(ttf_name, size, style, render_mode);
     auto it = fonts_.find(font_key);
     if (it != fonts_.end()) {
         return it->second ? it->second : fallback(size);
     }
 
-    lv_font_t *font = lv_freetype_font_create(cp0_file_path_c(ttf_name), LV_FREETYPE_FONT_RENDER_MODE_BITMAP,
-                                              size, style);
+    lv_font_t *font = lv_freetype_font_create(cp0_file_path_c(ttf_name), render_mode, size, style);
     fonts_[font_key] = font;
     return font ? font : fallback(size);
 }
@@ -268,10 +278,11 @@ lv_font_t *LauncherFonts::fallback(uint16_t size) const
     return (lv_font_t *)&lv_font_montserrat_12;
 }
 
-std::string LauncherFonts::key(const char *ttf_name, uint16_t size, lv_freetype_font_style_t style)
+std::string LauncherFonts::key(const char *ttf_name, uint16_t size, lv_freetype_font_style_t style,
+                               lv_freetype_font_render_mode_t render_mode)
 {
     return std::string(ttf_name ? ttf_name : "") + "#" + std::to_string(size) + "#" +
-           std::to_string(static_cast<int>(style));
+           std::to_string(static_cast<int>(style)) + "#" + std::to_string(static_cast<int>(render_mode));
 }
 
 lv_group_t *UILaunchPage::home_input_group()

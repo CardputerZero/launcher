@@ -88,11 +88,15 @@ public:
     ~LauncherFonts();
 
     lv_font_t *get(const char *ttf_name, uint16_t size, lv_freetype_font_style_t style);
+    lv_font_t *get(const char *ttf_name, uint16_t size, lv_freetype_font_style_t style,
+                   lv_freetype_font_render_mode_t render_mode);
+    lv_font_t *get_mono(const char *ttf_name, uint16_t size, lv_freetype_font_style_t style);
 
 private:
     void release();
     lv_font_t *fallback(uint16_t size) const;
-    static std::string key(const char *ttf_name, uint16_t size, lv_freetype_font_style_t style);
+    static std::string key(const char *ttf_name, uint16_t size, lv_freetype_font_style_t style,
+                           lv_freetype_font_render_mode_t render_mode);
 
     std::unordered_map<std::string, lv_font_t *> fonts_;
 };
