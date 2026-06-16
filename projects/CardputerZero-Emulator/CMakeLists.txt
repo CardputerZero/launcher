@@ -164,6 +164,12 @@ file(GLOB CP0_LVGL_SDL_SRCS CONFIGURE_DEPENDS
     ${CP0_LVGL}/src/sdl/*.c
     ${CP0_LVGL}/src/sdl/*.cpp
 )
+set(CP0_LVGL_WIN32_SRCS
+    src/cp0_web_runtime.cpp
+    ${CP0_LVGL}/src/commount.c
+    ${CP0_LVGL}/src/commount.cpp
+    ${CP0_LVGL}/src/win32/cp0_hal_stubs_win32.c
+)
 
 # ---------------------------------------------------------------------------
 # APP: APPLaunch shared lib (Unix only)
@@ -251,7 +257,8 @@ if(WIN32 AND NOT EMU_SKIP_APPLAUNCH)
     add_executable(cardputer-zero-emu src/main.cpp src/device_skin.cpp src/keyboard_map.cpp
         ${APPLAUNCH_UI_C} ${APPLAUNCH_UI_CPP} ${APPLAUNCH_KBD}
         ${APPLAUNCH_HAL_SDL_C} ${APPLAUNCH_HAL_SDL_CPP}
-        ${APPLAUNCH_EMU_ENTRY})
+        ${APPLAUNCH_EMU_ENTRY}
+        ${CP0_LVGL_WIN32_SRCS})
     target_include_directories(cardputer-zero-emu PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src/compat
         ${CMAKE_CURRENT_SOURCE_DIR}/vendor
@@ -377,6 +384,8 @@ if(NOT WIN32)
     target_link_libraries(cardputer-zero-emu PRIVATE Threads::Threads)
 else()
     # ui_app_hack.hpp calls gethostname() on Windows via <winsock2.h>.
+    find_package(Threads REQUIRED)
+    target_link_libraries(cardputer-zero-emu PRIVATE Threads::Threads)
     target_link_libraries(cardputer-zero-emu PRIVATE ws2_32)
 endif()
 
