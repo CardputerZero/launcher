@@ -91,10 +91,16 @@ if 'CONFIG_BACKWARD_CPP_ENABLED' in os.environ:
 
 # custom lvgl component
 lvgl_component = list(filter(lambda x: x['target'] == 'lvgl_component', env['COMPONENTS']))[0]
+local_lvgl_override_dir = Path('ui/lvgl')
+local_lvgl_override_names = set(
+    path.name for path in local_lvgl_override_dir.iterdir()
+    if path.is_file()
+) if local_lvgl_override_dir.exists() else set()
 lvgl_component['SRCS'] = list(filter(
-    lambda src: 'lv_sdl_keyboard.c' not in str(src),
+    lambda src: Path(str(src)).name not in local_lvgl_override_names,
     lvgl_component['SRCS']
 ))
+INCLUDE += [ADir('../../../SDK/github_source/lvgl/lvgl_9_5/lvgl/src/libs/freetype')]
 
 
 if 'CONFIG_APPLAUNCH_CROSS' in os.environ:

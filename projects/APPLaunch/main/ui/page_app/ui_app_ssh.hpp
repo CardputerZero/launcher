@@ -7,7 +7,7 @@
 #pragma once
 #include "sample_log.h"
 #include "../ui_app_page.hpp"
-#include "ui_app_console.hpp"
+#include "ui_app_st.hpp"
 #include "compat/input_keys.h"
 #include <unordered_map>
 #include <string>
@@ -21,7 +21,7 @@
 //
 //  Views:
 //    VIEW_INPUT    -- Host/Port/User input fields
-//    VIEW_TERMINAL -- Embedded UIConsolePage running ssh
+//    VIEW_TERMINAL -- Embedded UISTPage running ssh
 // ============================================================
 
 class UISSHPage : public AppPage
@@ -57,7 +57,7 @@ private:
     std::vector<InputField> fields_;
     int active_field_ = 0;
     ViewState view_state_ = ViewState::INPUT;
-    std::shared_ptr<UIConsolePage> console_page_;
+    std::shared_ptr<UISTPage> console_page_;
 
     // ==================== keycode to char ====================
     static char keycode_to_char(uint32_t key)
@@ -229,8 +229,8 @@ private:
 
         SLOGI("[SSH] Launching: %s", cmd.c_str());
 
-        // Create console page
-        console_page_ = std::make_shared<UIConsolePage>();
+        // Create terminal page
+        console_page_ = std::make_shared<UISTPage>();
 
         // Restore the SSH input view when the embedded console exits.
         console_page_->navigate_home = [this]() {
@@ -265,7 +265,7 @@ private:
 
     void event_handler(lv_event_t *e)
     {
-        // Only handle input view events; terminal view is handled by UIConsolePage
+        // Only handle input view events; terminal view is handled by UISTPage
         if (view_state_ != ViewState::INPUT) return;
 
         if (launcher_ui::events::is_key_released(e))

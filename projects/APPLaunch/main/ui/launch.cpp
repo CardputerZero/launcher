@@ -65,7 +65,7 @@ constexpr BuiltinAppRegistration kBuiltinApps[] = {
     {{"Python", "python_100.png", "app_Python", false, true}, "python3", true, false, false, nullptr},
     {{"STORE", "store_100.png", "app_Store", false, true},
      "/usr/share/APPLaunch/bin/M5CardputerZero-AppStore", false, true, true, nullptr},
-    {{"CLI", "cli_100.png", "app_CLI", false, true}, "bash", true, false, false, nullptr},
+    {{"CLI", "cli_100.png", "app_CLI", false, true}, nullptr, false, true, false, append_page_app<UISTPage>},
     {{"GAME", "game_100.png", "app_Game", false, true}, nullptr, false, true, false, append_page_app<UIGamePage>},
     {{"SETTING", "setting_100.png", "app_Setting", false, true}, nullptr, false, true, false, append_page_app<UISetupPage>},
     {{"MATH", "math_100.png", "app_Math", true, false},
@@ -178,16 +178,16 @@ void Launch::launch_Exec_in_terminal(const std::string &exec, bool sysplause)
     {
         SLOGI("Launching terminal app: %s", exec.c_str());
         /* Instant visual feedback; paint before the (potentially slow)
-         * Console page construction so the user sees it right away. */
+         * ST page construction so the user sees it right away. */
         ui_loading::show("Loading...");
         lv_refr_now(NULL);
-        auto p = std::make_shared<UIConsolePage>();
+        auto p = std::make_shared<UISTPage>();
         app_Page = p;
         lv_disp_load_scr(p->screen());
         lv_indev_set_group(lv_indev_get_next(NULL), p->input_group());
         p->navigate_home = std::bind(&Launch::go_back_home, this);
         p->terminal_sysplause = sysplause;
-        /* Console page fully covers APP_Container; safe to hide now.
+        /* ST page fully covers APP_Container; safe to hide now.
          * The heavy exec() call below will still run while the terminal
          * page is on-screen — no overlay needed at that point. */
         ui_loading::hide();
