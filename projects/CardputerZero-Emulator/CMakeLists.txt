@@ -24,6 +24,7 @@ file(GLOB PAGE_APP_HEADERS
 )
 list(SORT PAGE_APP_HEADERS)
 if(PAGE_APP_HEADERS)
+    file(MAKE_DIRECTORY ${APPLAUNCH_GENERATED_INCLUDE}/generated)
     file(WRITE ${APPLAUNCH_GENERATED_PAGE_APP} "#pragma once\n\n")
     foreach(PAGE_APP_HEADER ${PAGE_APP_HEADERS})
         file(APPEND ${APPLAUNCH_GENERATED_PAGE_APP} "#include \"${PAGE_APP_HEADER}\"\n")
@@ -413,6 +414,12 @@ if(EMSCRIPTEN)
     file(GLOB         APPLAUNCH_KBD_WEB    ${APPLAUNCH}/hal/keyboard_input.c)
     file(GLOB         APPLAUNCH_HAL_SDL_C_WEB   ${APPLAUNCH}/hal/sdl/*.c)
     file(GLOB         APPLAUNCH_HAL_SDL_CPP_WEB ${APPLAUNCH}/hal/sdl/*.cpp)
+    set(CP0_LVGL_WEB_SRCS
+        src/cp0_web_runtime.cpp
+        ${CP0_LVGL}/src/commount.c
+        ${CP0_LVGL}/src/commount.cpp
+        ${CP0_LVGL}/src/web/cp0_hal_stubs_web.c
+    )
 
     add_executable(cardputer-zero-emu-web
         src/main_web.cpp
@@ -424,6 +431,7 @@ if(EMSCRIPTEN)
         ${APPLAUNCH_HAL_SDL_C_WEB}
         ${APPLAUNCH_HAL_SDL_CPP_WEB}
         ${APPLAUNCH_EMU_ENTRY}
+        ${CP0_LVGL_WEB_SRCS}
     )
 
     target_include_directories(cardputer-zero-emu-web PRIVATE
@@ -433,7 +441,12 @@ if(EMSCRIPTEN)
         ${CMAKE_CURRENT_SOURCE_DIR}/src/compat_stubs
         ${CMAKE_CURRENT_SOURCE_DIR}/vendor
         ${CMAKE_CURRENT_SOURCE_DIR}/lib
+        ${CMAKE_CURRENT_SOURCE_DIR}/lib/lvgl
+        ${CP0_LVGL}/include
+        ${REPO_ROOT}/SDK/github_source/eventpp/include
+        ${REPO_ROOT}/SDK/components/utilities/include
         ${REPO_ROOT}/ext_components/Miniaudio/include
+        ${APPLAUNCH_GENERATED_INCLUDE}
         ${APPLAUNCH}/ui
         ${APPLAUNCH}/include
         ${APPLAUNCH}

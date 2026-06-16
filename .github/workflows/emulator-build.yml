@@ -19,6 +19,8 @@ jobs:
     runs-on: macos-latest
     steps:
     - uses: actions/checkout@v4
+    - name: Initialize SDK submodule
+      run: git submodule update --init --depth=1 SDK
     - name: Clone LVGL
       run: |
         git clone --depth 1 --branch v9.5.0 https://github.com/lvgl/lvgl.git projects/CardputerZero-Emulator/lib/lvgl
@@ -49,6 +51,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+    - name: Initialize SDK submodule
+      run: git submodule update --init --depth=1 SDK
     - name: Clone LVGL
       run: |
         git clone --depth 1 --branch v9.5.0 https://github.com/lvgl/lvgl.git projects/CardputerZero-Emulator/lib/lvgl
@@ -96,6 +100,8 @@ jobs:
           make
           git
     - uses: actions/checkout@v4
+    - name: Initialize SDK submodule
+      run: git submodule update --init --depth=1 SDK
     - name: Clone LVGL
       run: |
         git clone --depth 1 --branch v9.5.0 https://github.com/lvgl/lvgl.git projects/CardputerZero-Emulator/lib/lvgl
@@ -127,6 +133,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+    - name: Initialize SDK submodule
+      run: git submodule update --init --depth=1 SDK
     - name: Clone LVGL
       run: |
         git clone --depth 1 --branch v9.5.0 https://github.com/lvgl/lvgl.git projects/CardputerZero-Emulator/lib/lvgl
