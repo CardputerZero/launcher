@@ -22,7 +22,7 @@ jobs:
     - name: Initialize SDK submodule
       run: git submodule update --init --depth=1 SDK
     - name: Install SDK Python dependencies
-      run: python3 -m pip install --user parse requests tqdm
+      run: python3 -m pip install --user --break-system-packages parse requests tqdm
     - name: Prepare SDK eventpp source
       run: |
         cd projects/APPLaunch
@@ -60,7 +60,7 @@ jobs:
     - name: Initialize SDK submodule
       run: git submodule update --init --depth=1 SDK
     - name: Install SDK Python dependencies
-      run: python3 -m pip install --user parse requests tqdm
+      run: python3 -m pip install --user --break-system-packages parse requests tqdm
     - name: Prepare SDK eventpp source
       run: |
         cd projects/APPLaunch
@@ -116,7 +116,7 @@ jobs:
     - name: Initialize SDK submodule
       run: git submodule update --init --depth=1 SDK
     - name: Install SDK Python dependencies
-      run: python -m pip install parse requests tqdm
+      run: python -m pip install --break-system-packages parse requests tqdm
     - name: Prepare SDK eventpp source
       run: |
         cd projects/APPLaunch
@@ -155,7 +155,7 @@ jobs:
     - name: Initialize SDK submodule
       run: git submodule update --init --depth=1 SDK
     - name: Install SDK Python dependencies
-      run: python3 -m pip install --user parse requests tqdm
+      run: python3 -m pip install --user --break-system-packages parse requests tqdm
     - name: Prepare SDK eventpp source
       run: |
         cd projects/APPLaunch

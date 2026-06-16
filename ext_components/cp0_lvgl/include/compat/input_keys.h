@@ -42,6 +42,7 @@
 #define KEY_K               37
 #define KEY_L               38
 #define KEY_LEFTSHIFT       42
+#define KEY_RIGHTSHIFT      54
 #define KEY_Z               44
 #define KEY_X               45
 #define KEY_C               46

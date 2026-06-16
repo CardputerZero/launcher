@@ -33,8 +33,31 @@
 #include <utility>
 #include <vector>
 
+#ifdef _WIN32
+#include <direct.h>
+#endif
+
 #include "compat/input_keys.h"
 #include "hal_lvgl_bsp.h"
+
+static inline int rec_make_dir(const char *path, int mode)
+{
+#ifdef _WIN32
+    (void)mode;
+    return _mkdir(path);
+#else
+    return mkdir(path, mode);
+#endif
+}
+
+static inline void rec_local_time(const std::time_t *time, std::tm *out)
+{
+#ifdef _WIN32
+    localtime_s(out, time);
+#else
+    localtime_r(time, out);
+#endif
+}
 
 class rec_page : public AppPage
 {
@@ -734,9 +757,9 @@ public:
 
         struct stat st;
         if (stat(music.c_str(), &st) != 0)
-            mkdir(music.c_str(), 0755);
+            rec_make_dir(music.c_str(), 0755);
         if (stat(dir.c_str(), &st) != 0)
-            mkdir(dir.c_str(), 0755);
+            rec_make_dir(dir.c_str(), 0755);
         return dir;
     }
 
@@ -766,7 +789,7 @@ public:
         auto now = std::chrono::system_clock::now();
         auto tt = std::chrono::system_clock::to_time_t(now);
         std::tm tm{};
-        localtime_r(&tt, &tm);
+        rec_local_time(&tt, &tm);
 
         std::ostringstream oss;
         oss << "rec_"

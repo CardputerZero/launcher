@@ -30,6 +30,10 @@
 #include <utility>
 #include <vector>
 
+#ifdef _WIN32
+#include <direct.h>
+#endif
+
 #include "compat/input_keys.h"
 #include "hal_lvgl_bsp.h"
 
@@ -73,6 +77,25 @@ static inline std::string home_dir()
     return home && home[0] ? std::string(home) : std::string("/home/pi");
 }
 
+static inline int make_dir(const char *path, int mode)
+{
+#ifdef _WIN32
+    (void)mode;
+    return _mkdir(path);
+#else
+    return mkdir(path, mode);
+#endif
+}
+
+static inline void local_time(const std::time_t *time, std::tm *out)
+{
+#ifdef _WIN32
+    localtime_s(out, time);
+#else
+    localtime_r(time, out);
+#endif
+}
+
 static inline void ensure_dir(const std::string &dir)
 {
     std::string current;
@@ -91,7 +114,7 @@ static inline void ensure_dir(const std::string &dir)
             current += part;
             struct stat st;
             if (stat(current.c_str(), &st) != 0)
-                mkdir(current.c_str(), 0777);
+                make_dir(current.c_str(), 0777);
             chmod(current.c_str(), 0777);
         }
         if (slash == std::string::npos)
@@ -125,7 +148,7 @@ static inline std::string make_photo_path()
 {
     std::time_t now = std::time(nullptr);
     std::tm tm_now{};
-    localtime_r(&now, &tm_now);
+    local_time(&now, &tm_now);
     char time_buf[64];
     std::strftime(time_buf, sizeof(time_buf), "%Y%m%d_%H%M%S", &tm_now);
     return pictures_dir() + "/CAM_" + time_buf + ".jpg";
@@ -137,7 +160,7 @@ static inline std::string format_file_time(const std::string &path)
     if (stat(path.c_str(), &st) != 0)
         return "Unknown";
     std::tm tm_now{};
-    localtime_r(&st.st_mtime, &tm_now);
+    local_time(&st.st_mtime, &tm_now);
     char buf[32];
     std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &tm_now);
     return buf;
