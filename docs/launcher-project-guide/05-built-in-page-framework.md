@@ -20,7 +20,7 @@ UILaunchPage home carousel
 Launch::launch_app()
         |
         +-- External command: cp0_process_exec_blocking()
-        +-- Terminal command: UIConsolePage + PTY
+        +-- Terminal command: UISTPage + PTY
         +-- Built-in page: std::make_shared<PageT>()
                          |
                          v
@@ -177,14 +177,13 @@ Page implementations are concentrated in `projects/APPLaunch/main/ui/page_app/`.
 
 | Page class | File | Launcher name | Inheritance | Description |
 | --- | --- | --- | --- | --- |
-| `UIConsolePage` | `ui_app_console.hpp` | `CLI` or terminal external command | `AppPage` | Terminal emulator, PTY read/write, supports ANSI/VT sequences and keyboard escape sequences |
+| `UISTPage` | `ui_app_st.hpp` | `CLI` or terminal external command | `AppPage` | Terminal emulator, PTY read/write, supports ANSI/VT sequences and keyboard escape sequences |
 | `UIGamePage` | `ui_app_game.hpp` | `GAME` | `AppPageRoot` | Snake game, full-screen custom drawing, driven by an LVGL timer |
 | `UISetupPage` | `ui_app_setup.hpp` | `SETTING` | `AppPage` | System settings, application toggles, brightness, volume, WiFi, camera resolution, and more |
-| `UIGamePage` | `ui_app_game.hpp` | `GAME` | `AppPage` | Built-in game entry |
 | `UICompassPage` | `ui_app_compass.hpp` | `Compass` | `AppPageRoot` | Compass page, sensor thread + UI timer |
 | `UIIpPanelPage` | `ui_app_ip_panel.hpp` | `IP_PANEL` | `AppPage` | Network interface/IP information list, refreshed every second |
 | `UIFilePage` | `ui_app_file.hpp` | `FILE` | `AppPage` | File browser, directory list and enter/back navigation |
-| `UISSHPage` | `ui_app_ssh.hpp` | `SSH` | `AppPage` | SSH parameter input, embeds `UIConsolePage` after connection |
+| `UISSHPage` | `ui_app_ssh.hpp` | `SSH` | `AppPage` | SSH parameter input, embeds `UISTPage` after connection |
 | `UIMeshPage` | `ui_app_mesh.hpp` | `MESH` | `AppPage` | Mesh message list, input overlay, send/refresh |
 | `UIRecPage` | `ui_app_rec.hpp` | `REC` | Custom `rec_page` | Recording/playback/file list with asynchronous resource management |
 | `UICameraPage` | `ui_app_camera.hpp` | `CAMERA` | `AppPage` | Camera preview, gallery, capture, status page |
@@ -195,14 +194,17 @@ Page implementations are concentrated in `projects/APPLaunch/main/ui/page_app/`.
 
 ## 6. Page Registration and Display Order
 
-Built-in pages are inserted into `app_list` in `Launch::Launch()`. The first 5 fixed applications initialize the 5 home carousel slots first:
+Built-in entries are declared in `kBuiltinApps[]` in `launch.cpp`. The first 5 enabled entries initialize the 5 home carousel slots first:
 
 ```cpp
-app_list.emplace_back("Python", img_path("python_100.png"), "python3", true, false);
-app_list.emplace_back("STORE", img_path("store_100.png"), "/usr/share/APPLaunch/bin/M5CardputerZero-AppStore", false, true, true);
-app_list.emplace_back("CLI", img_path("cli_100.png"), "bash", true, false);
-app_list.emplace_back("GAME", img_path("game_100.png"), page_v<UIGamePage>);
-app_list.emplace_back("SETTING", img_path("setting_100.png"), page_v<UISetupPage>);
+constexpr BuiltinAppRegistration kBuiltinApps[] = {
+    {{"Python", "python_100.png", "app_Python", false, true}, "python3", true, false, false, nullptr},
+    {{"STORE", "store_100.png", "app_Store", false, true},
+     "/usr/share/APPLaunch/bin/M5CardputerZero-AppStore", false, true, true, nullptr},
+    {{"CLI", "cli_100.png", "app_CLI", false, true}, nullptr, false, true, false, append_page_app<UISTPage>},
+    {{"GAME", "game_100.png", "app_Game", false, true}, nullptr, false, true, false, append_page_app<UIGamePage>},
+    {{"SETTING", "setting_100.png", "app_Setting", false, true}, nullptr, false, true, false, append_page_app<UISetupPage>},
+};
 ```
 
 Built-in page visibility is now driven by `kBuiltinApps[]` and `AppDescriptor.config_key`. `Launch::rebuild_builtin_apps()` calls `launcher_app_registry_is_enabled()` before appending each descriptor, and Settings changes call `launcher_app_registry_set_enabled()` followed by `Launch::applications_reload()`.
@@ -282,19 +284,19 @@ A new full-screen page may inherit `AppPageRoot`, but it must handle the `320x17
 
 ## 9. Nested Pages and Special Pages
 
-`UISSHPage` is a typical nested page: while entering SSH parameters, the keyboard is handled by `UISSHPage`; after connection, it creates `UIConsolePage` and switches the screen and input group.
+`UISSHPage` is a typical nested page: while entering SSH parameters, the keyboard is handled by `UISSHPage`; after connection, it creates `UISTPage` and switches the screen and input group.
 
 ```cpp
-console_page_ = std::make_shared<UIConsolePage>();
-console_page_->navigate_home = [this]() {
-    console_page_.reset();
+terminal_page_ = std::make_shared<UISTPage>();
+terminal_page_->navigate_home = [this]() {
+    terminal_page_.reset();
     view_state_ = ViewState::INPUT;
     lv_disp_load_scr(this->screen());
     lv_indev_set_group(lv_indev_get_next(NULL), this->input_group());
 };
 
-lv_disp_load_scr(console_page_->screen());
-lv_indev_set_group(lv_indev_get_next(NULL), console_page_->input_group());
+lv_disp_load_scr(terminal_page_->screen());
+lv_indev_set_group(lv_indev_get_next(NULL), terminal_page_->input_group());
 ```
 
 Special care is required for this type of page:
@@ -320,4 +322,4 @@ Built-in pages do not directly manipulate the home carousel. After returning hom
 - Do not directly access home global objects from a page unless it is clearly a home-screen feature.
 - For page titles, call `set_page_title()` instead of modifying the internal top-bar label directly.
 - Every page that can exit should support `KEY_ESC` and call `navigate_home` or return to the previous view.
-- Page toggle keys must stay consistent with `UISetupPage::save_app_toggle()` and `APP_ENABLED()` in `launch.cpp`.
+- Page toggle keys must stay consistent between `AppDescriptor.config_key`, `UISetupPage::save_app_toggle()`, and `launcher_app_registry_is_enabled()` in `launch.cpp`.

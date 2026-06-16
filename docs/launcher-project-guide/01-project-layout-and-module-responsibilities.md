@@ -196,7 +196,7 @@ main/ui/
 main/ui/page_app/
 ├── ui_app_camera.hpp
 ├── ui_app_compass.hpp
-├── ui_app_console.hpp
+├── ui_app_st.hpp
 ├── ui_app_file.hpp
 ├── ui_app_game.hpp
 ├── ui_app_lora.hpp
@@ -230,7 +230,7 @@ ui_init()
 
 Launch
   ├── UILaunchPage::panel()/label()
-  ├── page_v<PageT>
+  ├── append_page_app<PageT> / page_v<PageT>
   ├── cp0_file_path()
   ├── cp0_process_*
   ├── cp0_dir_watch_*

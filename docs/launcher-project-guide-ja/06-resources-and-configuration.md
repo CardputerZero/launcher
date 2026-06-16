@@ -145,7 +145,8 @@ extern "C" const char *cp0_file_path_c(const char *file)
 ホーム画面や組み込みページでの一般的な使用例:
 
 ```cpp
-app_list.emplace_back("GAME", img_path("game_100.png"), page_v<UIGamePage>);
+{{"GAME", "game_100.png", "app_Game", false, true},
+ nullptr, false, true, false, append_page_app<UIGamePage>},
 
 lv_obj_set_style_bg_img_src(time_panel_,
     cp0_file_path_c("status_time_background.png"),
@@ -212,7 +213,7 @@ launcher_fonts().get("Montserrat-Bold.ttf", 16, LV_FREETYPE_FONT_STYLE_BOLD)
 | `Name` | Yes | カルーセルに表示する名前 |
 | `Exec` | Yes | 起動コマンドまたは実行ファイルパス |
 | `Icon` | No | アイコンパス。`share/images/...` または LVGL が読めるパスを指定可能 |
-| `Terminal` | No | `true`/`True`/`1` の場合は `UIConsolePage` 内で実行 |
+| `Terminal` | No | `true`/`True`/`1` の場合は `UISTPage` 内で実行 |
 | `Sysplause` | No | ターミナルコマンド終了後に一時停止してユーザー確認を待つかどうか。既定は `true` |
 
 例:
@@ -253,8 +254,8 @@ void cp0_config_save(void);
 
 - 読み取り時は必ずデフォルト値を渡し、設定が欠けていてもページが動作を継続できるようにします。
 - 変更を永続化するには、書き込み後に `cp0_config_save()` を呼びます。
-- デバイス側実装は `ext_components/cp0_lvgl/src/cp0/cp0_app_config.cpp` にあります。
-- SDL 互換実装は `ext_components/cp0_lvgl/src/sdl/cp0_app_compat_sdl.cpp` にあります。
+- デバイス側実装は `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_config.cpp` にあります。
+- SDL 互換実装は `ext_components/cp0_lvgl/src/sdl/sdl_lvgl_config.cpp` にあります。
 
 典型的な使い方:
 
@@ -302,7 +303,7 @@ cp0_config_save();
 | `startup_mode` | `UISetupPage` | 起動モード。現在は `Launcher` / `CLI` |
 | `extport_usb` | `UISetupPage` | 拡張ポート USB トグル |
 | `extport_5vout` | `UISetupPage` | 拡張ポート 5V 出力トグル |
-| `run_as_user` | `cp0_app_process.cpp`, `cp0_app_pty.cpp` | 外部プロセス / PTY コマンドで権限を下げる際のユーザー設定 |
+| `run_as_user` | `cp0_lvgl_process.cpp`, `cp0_lvgl_pty.cpp` | 外部プロセス / PTY コマンドで権限を下げる際のユーザー設定 |
 
 ### 7.3 一時的な業務入力
 
@@ -327,19 +328,20 @@ cp0_config_save();
 ```cpp
 void save_app_toggle(int idx)
 {
-    char cfg_key[64];
-    snprintf(cfg_key, sizeof(cfg_key), "app_%s", app_keys[idx]);
+    std::size_t app_count = 0;
+    const AppDescriptor *apps = launcher_app_registry_entries(&app_count);
+    const AppDescriptor &desc = apps[idx];
     bool enabled = menu_items_[0].sub_items[idx].toggle_state;
-    cp0_config_set_int(cfg_key, enabled ? 1 : 0);
-    cp0_config_save();
+    launcher_app_registry_set_enabled(desc, enabled);
+    config_save();
 }
 ```
 
 設定キーを変更するときは、次のすべてを同期して確認してください。
 
-- `UISetupPage::menu_init()` の `app_keys` / `app_labels`。
-- `UISetupPage::save_app_toggle()` の `app_keys` と常時有効リスト。
-- `launch.cpp` の `APP_ENABLED("...")`。
+- `kBuiltinApps[]` の `AppDescriptor` エントリ。
+- `UISetupPage` の `launcher_app_registry_entries()` / `save_app_toggle()`。
+- `launch.cpp` の `launcher_app_registry_is_enabled()`。
 - ドキュメントとデフォルト設定。
 
 ## 9. リソース命名の推奨事項

@@ -22,7 +22,7 @@ Home center card
   -> Launch::launch_app()
   -> app.launch(this)
       ├── Built-in page: new PageT + lv_disp_load_scr()
-      ├── Terminal app: UIConsolePage + PTY exec()
+      ├── Terminal app: UISTPage + PTY exec()
       └── External app: cp0_process_exec_blocking()
 ```
 
@@ -33,7 +33,7 @@ Home center card
 | `projects/APPLaunch/main/ui/launch.h` | Public `Launch` interface and app model declarations |
 | `projects/APPLaunch/main/ui/launch.cpp` | `app`, `Launch`, application list, launch logic, `.desktop` scanning |
 | `projects/APPLaunch/main/ui/ui_launch_page.cpp` | Forwards Enter / click events to `Launch::launch_app()` |
-| `projects/APPLaunch/main/ui/page_app/ui_app_console.hpp` | Terminal page `UIConsolePage` |
+| `projects/APPLaunch/main/ui/page_app/ui_app_st.hpp` | Terminal page `UISTPage` |
 | `projects/APPLaunch/main/ui/page_app/*.hpp` | Built-in pages such as settings, game, file, camera, and LoRa |
 | `projects/APPLaunch/APPLaunch/applications/` | Runtime `.desktop` application descriptor directory |
 | `ext_components/cp0_lvgl` | Lower-level capabilities such as process launch, PTY, directory watching, and path resolution |
@@ -81,8 +81,8 @@ Three application categories:
 
 | Type | Construction | Launch function | Examples |
 | --- | --- | --- | --- |
-| Built-in page | `page_v<PageT>` | Constructs a page and calls `lv_disp_load_scr()` | `GAME`, `SETTING`, `Compass` |
-| Terminal command | `exec, terminal=true` | `launch_Exec_in_terminal()` | `Python`, `CLI` |
+| Built-in page | `page_v<PageT>` / `append_page_app<PageT>` | Constructs a page and calls `lv_disp_load_scr()` | `CLI`, `GAME`, `SETTING`, `Compass` |
+| Terminal command | `exec, terminal=true` | `launch_Exec_in_terminal()` creates `UISTPage` and calls `exec()` | `Python`, `Terminal=true` `.desktop` apps |
 | External process | `exec, terminal=false` | `launch_Exec()` | AppStore, Calculator |
 
 ## 5. Fixed Application Registration
@@ -96,7 +96,7 @@ constexpr BuiltinAppRegistration kBuiltinApps[] = {
     {{"Python", "python_100.png", "app_Python", false, true}, "python3", true, false, false, nullptr},
     {{"STORE", "store_100.png", "app_Store", false, true},
      "/usr/share/APPLaunch/bin/M5CardputerZero-AppStore", false, true, true, nullptr},
-    {{"CLI", "cli_100.png", "app_CLI", false, true}, "bash", true, false, false, nullptr},
+    {{"CLI", "cli_100.png", "app_CLI", false, true}, nullptr, false, true, false, append_page_app<UISTPage>},
     {{"GAME", "game_100.png", "app_Game", false, true}, nullptr, false, true, false, append_page_app<UIGamePage>},
     {{"SETTING", "setting_100.png", "app_Setting", false, true}, nullptr, false, true, false, append_page_app<UISetupPage>},
     {{"MATH", "math_100.png", "app_Math", true, false},
@@ -166,7 +166,7 @@ Enter
 
 ## 7. Terminal Application Launch Mechanism
 
-Terminal applications use `UIConsolePage`, and the external command runs inside a terminal page in the APPLaunch process:
+Terminal applications use `UISTPage`, and the external command runs inside a terminal page in the APPLaunch process:
 
 ```cpp
 void launch_Exec_in_terminal(const std::string &exec, bool sysplause = true)
@@ -174,7 +174,7 @@ void launch_Exec_in_terminal(const std::string &exec, bool sysplause = true)
     ui_loading_show("Loading...");
     lv_refr_now(NULL);
 
-    auto p = std::make_shared<UIConsolePage>();
+    auto p = std::make_shared<UISTPage>();
     app_Page = p;
     lv_disp_load_scr(p->screen());
     lv_indev_set_group(lv_indev_get_next(NULL), p->input_group());
@@ -190,10 +190,10 @@ Typical entries:
 
 ```text
 Python -> exec = "python3", terminal = true
-CLI    -> exec = "bash", terminal = true
+CLI    -> built-in UISTPage, starts interactive bash internally
 ```
 
-Compared with built-in pages, terminal applications add one extra step: `p->exec(exec)`. They usually interact with the command through a PTY. What the user sees is `UIConsolePage`, not a separate UI outside APPLaunch.
+Compared with built-in pages, terminal applications add one extra step: `p->exec(exec)`. They usually interact with the command through a PTY. What the user sees is `UISTPage`, not a separate UI outside APPLaunch.
 
 ## 8. External Standalone Application Launch Mechanism
 
@@ -256,15 +256,11 @@ Enter external app
   -> LVGL_RUN_FLAGE=1
 ```
 
-`STORE` is an example external application:
+`STORE` is a fixed entry that launches an external application:
 
 ```cpp
-app_list.emplace_back("STORE",
-    img_path("store_100.png"),
-    "/usr/share/APPLaunch/bin/M5CardputerZero-AppStore",
-    false,
-    true,
-    true);
+{{"STORE", "store_100.png", "app_Store", false, true},
+ "/usr/share/APPLaunch/bin/M5CardputerZero-AppStore", false, true, true, nullptr},
 ```
 
 Here `run_as_root=true` is passed to `launch_Exec(exec, run_as_root)`, and then converted to `keep_root ? 1 : 0`.
@@ -331,7 +327,7 @@ Icon=share/images/e-Mail_80.png
 | `Name` | Yes | Home-screen display title |
 | `Exec` | Yes | Launch command |
 | `Icon` | No | Icon path |
-| `Terminal` | No | `true/True/1` means launch through `UIConsolePage` |
+| `Terminal` | No | `true/True/1` means launch through `UISTPage` |
 | `Sysplause` | No | Pause policy passed to the terminal page; defaults to true |
 
 Registration logic:

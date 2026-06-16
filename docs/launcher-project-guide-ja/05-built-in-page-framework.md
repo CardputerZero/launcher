@@ -20,7 +20,7 @@ UILaunchPage home carousel
 Launch::launch_app()
         |
         +-- External command: cp0_process_exec_blocking()
-        +-- Terminal command: UIConsolePage + PTY
+        +-- Terminal command: UISTPage + PTY
         +-- Built-in page: std::make_shared<PageT>()
                          |
                          v
@@ -177,14 +177,13 @@ if (navigate_home)
 
 | Page class | File | Launcher name | Inheritance | Description |
 | --- | --- | --- | --- | --- |
-| `UIConsolePage` | `ui_app_console.hpp` | `CLI` or terminal external command | `AppPage` | 端末エミュレータ。PTY read/write、ANSI/VT シーケンス、キーボード escape sequence をサポート |
+| `UISTPage` | `ui_app_st.hpp` | `CLI` or terminal external command | `AppPage` | 端末エミュレータ。PTY read/write、ANSI/VT シーケンス、キーボード escape sequence をサポート |
 | `UIGamePage` | `ui_app_game.hpp` | `GAME` | `AppPageRoot` | Snake game。フルスクリーンのカスタム描画で LVGL timer により駆動 |
 | `UISetupPage` | `ui_app_setup.hpp` | `SETTING` | `AppPage` | システム設定、アプリ切り替え、brightness、volume、WiFi、camera resolution など |
-| `UIGamePage` | `ui_app_game.hpp` | `GAME` | `AppPage` | 組み込みゲームエントリ |
 | `UICompassPage` | `ui_app_compass.hpp` | `Compass` | `AppPageRoot` | コンパスページ。sensor thread + UI timer |
 | `UIIpPanelPage` | `ui_app_ip_panel.hpp` | `IP_PANEL` | `AppPage` | ネットワークインターフェース/IP 情報リスト。毎秒更新 |
 | `UIFilePage` | `ui_app_file.hpp` | `FILE` | `AppPage` | ファイルブラウザ。ディレクトリ一覧と enter/back navigation |
-| `UISSHPage` | `ui_app_ssh.hpp` | `SSH` | `AppPage` | SSH パラメータ入力。接続後に `UIConsolePage` を埋め込む |
+| `UISSHPage` | `ui_app_ssh.hpp` | `SSH` | `AppPage` | SSH パラメータ入力。接続後に `UISTPage` を埋め込む |
 | `UIMeshPage` | `ui_app_mesh.hpp` | `MESH` | `AppPage` | Mesh メッセージ一覧、入力 overlay、send/refresh |
 | `UIRecPage` | `ui_app_rec.hpp` | `REC` | Custom `rec_page` | 録音/再生/ファイル一覧と非同期リソース管理 |
 | `UICameraPage` | `ui_app_camera.hpp` | `CAMERA` | `AppPage` | カメラ preview、gallery、capture、status page |
@@ -195,14 +194,17 @@ if (navigate_home)
 
 ## 6. Page Registration and Display Order
 
-組み込みページは `Launch::Launch()` で `app_list` に挿入されます。最初の 5 つの固定アプリケーションが、まず 5 つのホームカルーセルスロットを初期化します。
+組み込みエントリは `launch.cpp` の `kBuiltinApps[]` で宣言されます。最初の 5 つの有効なエントリが、まず 5 つのホームカルーセルスロットを初期化します。
 
 ```cpp
-app_list.emplace_back("Python", img_path("python_100.png"), "python3", true, false);
-app_list.emplace_back("STORE", img_path("store_100.png"), "/usr/share/APPLaunch/bin/M5CardputerZero-AppStore", false, true, true);
-app_list.emplace_back("CLI", img_path("cli_100.png"), "bash", true, false);
-app_list.emplace_back("GAME", img_path("game_100.png"), page_v<UIGamePage>);
-app_list.emplace_back("SETTING", img_path("setting_100.png"), page_v<UISetupPage>);
+constexpr BuiltinAppRegistration kBuiltinApps[] = {
+    {{"Python", "python_100.png", "app_Python", false, true}, "python3", true, false, false, nullptr},
+    {{"STORE", "store_100.png", "app_Store", false, true},
+     "/usr/share/APPLaunch/bin/M5CardputerZero-AppStore", false, true, true, nullptr},
+    {{"CLI", "cli_100.png", "app_CLI", false, true}, nullptr, false, true, false, append_page_app<UISTPage>},
+    {{"GAME", "game_100.png", "app_Game", false, true}, nullptr, false, true, false, append_page_app<UIGamePage>},
+    {{"SETTING", "setting_100.png", "app_Setting", false, true}, nullptr, false, true, false, append_page_app<UISetupPage>},
+};
 ```
 
 組み込みページの表示可否は現在 `kBuiltinApps[]` と `AppDescriptor.config_key` によって駆動されます。`Launch::rebuild_builtin_apps()` は各 descriptor を追加する前に `launcher_app_registry_is_enabled()` を呼び、Settings の変更は `launcher_app_registry_set_enabled()` の後に `Launch::applications_reload()` を呼びます。
@@ -282,19 +284,19 @@ private:
 
 ## 9. Nested Pages and Special Pages
 
-`UISSHPage` は典型的な nested page です。SSH パラメータ入力中は `UISSHPage` がキーボードを処理します。接続後は `UIConsolePage` を作成し、screen と input group を切り替えます。
+`UISSHPage` は典型的な nested page です。SSH パラメータ入力中は `UISSHPage` がキーボードを処理します。接続後は `UISTPage` を作成し、screen と input group を切り替えます。
 
 ```cpp
-console_page_ = std::make_shared<UIConsolePage>();
-console_page_->navigate_home = [this]() {
-    console_page_.reset();
+terminal_page_ = std::make_shared<UISTPage>();
+terminal_page_->navigate_home = [this]() {
+    terminal_page_.reset();
     view_state_ = ViewState::INPUT;
     lv_disp_load_scr(this->screen());
     lv_indev_set_group(lv_indev_get_next(NULL), this->input_group());
 };
 
-lv_disp_load_scr(console_page_->screen());
-lv_indev_set_group(lv_indev_get_next(NULL), console_page_->input_group());
+lv_disp_load_scr(terminal_page_->screen());
+lv_indev_set_group(lv_indev_get_next(NULL), terminal_page_->input_group());
 ```
 
 この種のページには特別な注意が必要です。
@@ -320,4 +322,4 @@ lv_indev_set_group(lv_indev_get_next(NULL), console_page_->input_group());
 - 明確にホーム画面機能でない限り、ページからホームのグローバルオブジェクトへ直接アクセスしないでください。
 - ページタイトルは内部 top-bar label を直接変更せず、`set_page_title()` を呼びます。
 - 終了可能なすべてのページは `KEY_ESC` をサポートし、`navigate_home` または前の view へ戻る処理を呼ぶ必要があります。
-- ページ toggle key は `UISetupPage::save_app_toggle()` と `launch.cpp` の `APP_ENABLED()` と一貫している必要があります。
+- ページ toggle key は `AppDescriptor.config_key`、`UISetupPage::save_app_toggle()`、`launch.cpp` の `launcher_app_registry_is_enabled()` と一貫している必要があります。

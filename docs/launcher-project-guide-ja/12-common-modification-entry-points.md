@@ -12,8 +12,8 @@ git status --short
 | Task | Main files/directories | Key points | Verification |
 | --- | --- | --- | --- |
 | 組み込みページを追加 | `projects/APPLaunch/main/ui/page_app/` | `ui_app_xxx.hpp` を作成し、`AppPage` を継承 | SDL2 でビルドし、ページを開く |
-| ホームに組み込みページを登録 | `projects/APPLaunch/main/ui/launch.cpp` | `app_list.emplace_back("NAME", img_path("icon.png"), page_v<PageT>)` | ホームカルーセルにアイコンが表示される |
-| 組み込みページ表示トグルを制御 | `projects/APPLaunch/main/ui/page_app/ui_app_setup.hpp`, `projects/APPLaunch/main/ui/launch.cpp` | Settings ページが `app_Key` を書き、Launcher が `APP_ENABLED("Key")` を読む | Settings で切替後、再起動またはホーム更新 |
+| ホームに組み込みページを登録 | `projects/APPLaunch/main/ui/launch.cpp` | `kBuiltinApps[]` に `append_page_app<PageT>` エントリを追加 | ホームカルーセルにアイコンが表示される |
+| 組み込みページ表示トグルを制御 | `projects/APPLaunch/main/ui/page_app/ui_app_setup.hpp`, `projects/APPLaunch/main/ui/launch.cpp` | Settings が `AppDescriptor.config_key` を書き、Launcher が `launcher_app_registry_is_enabled()` を読む | Settings で切替後、再起動またはホーム更新 |
 | 外部 `.desktop` アプリを追加 | `projects/APPLaunch/APPLaunch/applications/` | ファイル名は `.desktop` で終わり、`Name` と `Exec` を含む必要がある | skip ログなしでホームに表示される |
 | アイコンを追加 | `projects/APPLaunch/APPLaunch/share/images/` | 組み込みページは `img_path()`、`.desktop` は `Icon=share/images/xxx.png` を使う | `missing/unreadable` ログがない |
 | 効果音を追加 | `projects/APPLaunch/APPLaunch/share/audio/` | ページは `audio_path()` と `cp0_signal_audio_api()` を使う | デバイスで音が鳴る |
@@ -22,10 +22,10 @@ git status --short
 | カルーセルアニメーションを変更 | `projects/APPLaunch/main/ui/animation/ui_launcher_animation.cpp` | カード移動、scale、opacity などのアニメーション | SDL2 で左右切替を繰り返す |
 | ホームステータスバーを変更 | `projects/APPLaunch/main/ui/launch.cpp`, `projects/APPLaunch/main/ui/ui.cpp` | `update_home_status_bar()` が WiFi/time/battery を更新 | `[HOME_STATUS]` ログを確認 |
 | Settings メニューを変更 | `projects/APPLaunch/main/ui/page_app/ui_app_setup.hpp` | `menu_init()` に `MenuItem`/`SubItem` を追加 | SETTING ページに入りテスト |
-| 設定保存ロジックを変更 | `ext_components/cp0_lvgl/src/cp0/cp0_app_config.cpp` | 現在は `/var/lib/applaunch/settings` に保存、最大 32 エントリ | settings ファイルを確認 |
+| 設定保存ロジックを変更 | `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_config.cpp` | 現在は `/var/lib/applaunch/settings` に保存、最大 32 エントリ | settings ファイルを確認 |
 | アセットパスルールを変更 | `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_file.cpp`, `ext_components/cp0_lvgl/src/sdl/sdl_lvgl_file.cpp` | デバイスと SDL2 の整合性を考慮 | SDL2 とデバイスの両方でアセット確認 |
-| 外部アプリ起動/復帰を変更 | `projects/APPLaunch/main/ui/launch.cpp`, `ext_components/cp0_lvgl/src/cp0/cp0_app_process.cpp` | `launch_Exec()`, `cp0_process_exec_blocking()` | 外部アプリ起動、ESC で戻る |
-| ターミナルアプリを変更 | `projects/APPLaunch/main/ui/page_app/ui_app_console.hpp`, `ext_components/cp0_lvgl/src/cp0/cp0_app_pty.cpp` | PTY、コマンド実行、入出力 | `Terminal=true` アプリで確認 |
+| 外部アプリ起動/復帰を変更 | `projects/APPLaunch/main/ui/launch.cpp`, `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_process.cpp` | `launch_Exec()`, `cp0_process_exec_blocking()` | 外部アプリ起動、ESC で戻る |
+| ターミナルアプリを変更 | `projects/APPLaunch/main/ui/page_app/ui_app_st.hpp`, `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_pty.cpp` | PTY、コマンド実行、入出力 | `Terminal=true` アプリで確認 |
 | 入力マッピングを変更 | `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_keyboard.c`, `ext_components/cp0_lvgl/src/sdl/sdl_lvgl_keyboard.c` | デバイスと SDL2 の入力差分 | `evtest` + SDL2 keyboard |
 | 起動フローを変更 | `projects/APPLaunch/main/src/main.cpp` | `lv_init()`、`cp0_lvgl_init()`、`ui_init()`、main loop | `[BOOT]` ログを確認 |
 | ビルド依存関係を変更 | `projects/APPLaunch/main/SConstruct` | `SRCS`, `INCLUDE`, `REQUIREMENTS`, `STATIC_FILES` | scons build |
@@ -58,7 +58,6 @@ git status --short
 
 | Page/feature | File | Registered name or icon | Description |
 | --- | --- | --- | --- |
-| GAME | `projects/APPLaunch/main/ui/page_app/ui_app_game.hpp` | `GAME` / `game_100.png` | 組み込みゲームエントリ |
 | SETTING | `projects/APPLaunch/main/ui/page_app/ui_app_setup.hpp` | `SETTING` / `setting_100.png` | Settings ページ。app toggles、brightness、volume、WiFi、camera などを含む |
 | GAME | `projects/APPLaunch/main/ui/page_app/ui_app_game.hpp` | `GAME` / `game_100.png` | 組み込みゲームエントリ |
 | Compass | `projects/APPLaunch/main/ui/page_app/ui_app_compass.hpp` | `Compass` / `compass_needle_80.png` | Compass ページ |
@@ -70,16 +69,19 @@ git status --short
 | CAMERA | `projects/APPLaunch/main/ui/page_app/ui_app_camera.hpp` | `CAMERA` / `camera_100.png` | Camera ページ。デバイスで有効 |
 | LORA | `projects/APPLaunch/main/ui/page_app/ui_app_lora.hpp` | `LORA` / `lora_100.png` | LoRa ページ。デバイスで有効 |
 | TANK | `projects/APPLaunch/main/ui/page_app/ui_app_tank_battle.hpp` | `TANK` / `tank_100.png` | Tank game。デバイスで有効 |
-| CLI/terminal | `projects/APPLaunch/main/ui/page_app/ui_app_console.hpp` | `CLI` / `cli_100.png` | `UIConsolePage`。bash、python、`Terminal=true` アプリで使用 |
+| CLI/terminal | `projects/APPLaunch/main/ui/page_app/ui_app_st.hpp` | `CLI` / `cli_100.png` | `UISTPage`。bash、python、`Terminal=true` アプリで使用 |
 
-`Launch::Launch()` の固定登録エントリ:
+固定エントリは `kBuiltinApps[]` で宣言されます:
 
 ```cpp
-app_list.emplace_back("Python", img_path("python_100.png"), "python3", true, false);
-app_list.emplace_back("STORE", img_path("store_100.png"), "/usr/share/APPLaunch/bin/M5CardputerZero-AppStore", false, true, true);
-app_list.emplace_back("CLI", img_path("cli_100.png"), "bash", true, false);
-app_list.emplace_back("GAME", img_path("game_100.png"), page_v<UIGamePage>);
-app_list.emplace_back("SETTING", img_path("setting_100.png"), page_v<UISetupPage>);
+constexpr BuiltinAppRegistration kBuiltinApps[] = {
+    {{"Python", "python_100.png", "app_Python", false, true}, "python3", true, false, false, nullptr},
+    {{"STORE", "store_100.png", "app_Store", false, true},
+     "/usr/share/APPLaunch/bin/M5CardputerZero-AppStore", false, true, true, nullptr},
+    {{"CLI", "cli_100.png", "app_CLI", false, true}, nullptr, false, true, false, append_page_app<UISTPage>},
+    {{"GAME", "game_100.png", "app_Game", false, true}, nullptr, false, true, false, append_page_app<UIGamePage>},
+    {{"SETTING", "setting_100.png", "app_Setting", false, true}, nullptr, false, true, false, append_page_app<UISetupPage>},
+};
 ```
 
 ## 4. 外部アプリ入口表
@@ -91,10 +93,10 @@ app_list.emplace_back("SETTING", img_path("setting_100.png"), page_v<UISetupPage
 | Scan function | `Launch::applications_load()` in `projects/APPLaunch/main/ui/launch.cpp` | `[Desktop Entry]`、`Name`、`Icon`、`Exec`、`Terminal`、`Sysplause` を解析 |
 | Directory watching | `Launch::inotify_init_watch()`, `app_dir_watch_cb()` | アプリケーション変更を監視し、動的アプリリストを更新 |
 | Dynamic refresh | `Launch::applications_reload()` | 固定アプリを保持し、動的アプリを削除してから再スキャン |
-| Terminal launch | `Launch::launch_Exec_in_terminal()` | `UIConsolePage` を作成してコマンドを実行 |
+| Terminal launch | `Launch::launch_Exec_in_terminal()` | `UISTPage` を作成してコマンドを実行 |
 | Non-terminal launch | `Launch::launch_Exec()` | LVGL を一時停止し、`cp0_process_exec_blocking()` を呼ぶ |
-| Device-side process execution | `ext_components/cp0_lvgl/src/cp0/cp0_app_process.cpp` | fork、権限降格、長押し ESC による終了、キーボード復元 |
-| PTY execution | `ext_components/cp0_lvgl/src/cp0/cp0_app_pty.cpp` | ターミナルページのコマンド実行とユーザー選択 |
+| Device-side process execution | `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_process.cpp` | fork、権限降格、長押し ESC による終了、キーボード復元 |
+| PTY execution | `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_pty.cpp` | ターミナルページのコマンド実行とユーザー選択 |
 
 最小 `.desktop` テンプレート:
 
@@ -132,23 +134,23 @@ Type=Application
 
 | Setting item | UI entry | Configuration key | Implementation location |
 | --- | --- | --- | --- |
-| App visibility toggle | SETTING -> Launcher | `app_<Name>` | `ui_app_setup.hpp` の `save_app_toggle()`、`launch.cpp` の `APP_ENABLED()` |
-| Brightness | SETTING -> Screen -> Brightness | `brightness` | `ui_app_setup.hpp`, `ext_components/cp0_lvgl/src/cp0/cp0_app_settings.cpp` |
+| App visibility toggle | SETTING -> Launcher | `AppDescriptor.config_key` | `ui_app_setup.hpp` の `save_app_toggle()`、`launch.cpp` の `launcher_app_registry_is_enabled()` |
+| Brightness | SETTING -> Screen -> Brightness | `brightness` | `ui_app_setup.hpp`, `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_settings.cpp` |
 | Screen-off timeout | SETTING -> Screen -> DarkTime | `dark_time` | `ui_app_setup.hpp` |
 | Volume | SETTING -> Speaker -> Volume | `volume` | `ui_app_setup.hpp`, `cp0_volume_read/write()` |
 | Camera resolution | SETTING -> Camera -> Resolution | `cam_resolution` | `ui_app_setup.hpp`。camera page が読み取る |
 | Startup mode | Settings page の関連選択 | `startup_mode` | `ui_app_setup.hpp` |
 | USB extension port | SETTING -> ExtPort | `extport_usb` | `ui_app_setup.hpp` |
 | 5V output | SETTING -> ExtPort | `extport_5vout` | `ui_app_setup.hpp` |
-| External app runtime user | 手動設定 | `run_as_user` | `cp0_app_process.cpp`, `cp0_app_pty.cpp` |
+| External app runtime user | 手動設定 | `run_as_user` | `cp0_lvgl_process.cpp`, `cp0_lvgl_pty.cpp` |
 
 設定実装:
 
 | File | Description |
 | --- | --- |
 | `ext_components/cp0_lvgl/include/cp0_lvgl_app.h` | `cp0_config_get_int/set_int/get_str/set_str/save` の宣言 |
-| `ext_components/cp0_lvgl/src/cp0/cp0_app_config.cpp` | デバイス側設定 read/write。`/var/lib/applaunch/settings` に保存 |
-| `ext_components/cp0_lvgl/src/sdl/cp0_app_compat_sdl.cpp` | SDL2 互換実装 |
+| `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_config.cpp` | デバイス側設定 read/write。`/var/lib/applaunch/settings` に保存 |
+| `ext_components/cp0_lvgl/src/sdl/sdl_lvgl_config.cpp` | SDL2 互換実装 |
 | `ext_components/cp0_lvgl/src/commount.c` | 起動時に保存済み輝度と音量を適用 |
 
 ## 7. ビルド入口表
@@ -174,12 +176,12 @@ Type=Application
 | framebuffer/display | `ext_components/cp0_lvgl/src/cp0/cp0_lvgl.h` | `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_freambuffer.c` | `ext_components/cp0_lvgl/src/sdl/sdl_lvgl_display.c` |
 | Keyboard input | `ext_components/cp0_lvgl/include/keyboard_input.h` | `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_keyboard.c` | `ext_components/cp0_lvgl/src/sdl/sdl_lvgl_keyboard.c` |
 | File paths | `ext_components/cp0_lvgl/include/cp0_lvgl_file.hpp` | `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_file.cpp` | `ext_components/cp0_lvgl/src/sdl/sdl_lvgl_file.cpp` |
-| Process | `ext_components/cp0_lvgl/include/hal/hal_process.h` | `ext_components/cp0_lvgl/src/cp0/cp0_app_process.cpp` | `ext_components/cp0_lvgl/src/sdl/cp0_hal_process_sdl.cpp` |
-| PTY | `ext_components/cp0_lvgl/include/hal/hal_pty.h` | `ext_components/cp0_lvgl/src/cp0/cp0_app_pty.cpp` | `ext_components/cp0_lvgl/src/sdl/cp0_hal_pty_sdl.cpp` |
-| Audio | `ext_components/cp0_lvgl/include/hal/hal_audio.h` | `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_audio.cpp` | `ext_components/cp0_lvgl/src/sdl/cp0_hal_audio_sdl.c` |
-| Settings/brightness/volume | `ext_components/cp0_lvgl/include/hal/hal_settings.h` | `ext_components/cp0_lvgl/src/cp0/cp0_app_settings.cpp` | `ext_components/cp0_lvgl/src/sdl/cp0_hal_settings_sdl.cpp` |
-| Network/WiFi | `ext_components/cp0_lvgl/include/hal/hal_network.h` | `ext_components/cp0_lvgl/src/cp0/cp0_app_network.cpp` | `ext_components/cp0_lvgl/src/sdl/cp0_hal_network_sdl.cpp` |
-| Screenshot | `ext_components/cp0_lvgl/include/hal/hal_screenshot.h` | `ext_components/cp0_lvgl/src/cp0/cp0_app_screenshot.cpp` | `ext_components/cp0_lvgl/src/sdl/cp0_hal_screenshot_sdl.cpp` |
+| Process | `ext_components/cp0_lvgl/include/hal/hal_process.h` | `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_process.cpp` | `ext_components/cp0_lvgl/src/sdl/sdl_lvgl_process.cpp` |
+| PTY | `ext_components/cp0_lvgl/include/hal/hal_pty.h` | `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_pty.cpp` | `ext_components/cp0_lvgl/src/sdl/sdl_lvgl_pty.cpp` |
+| Audio | `ext_components/cp0_lvgl/include/hal/hal_audio.h` | `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_audio.cpp` | `ext_components/cp0_lvgl/src/sdl/sdl_lvgl_audio.cpp` |
+| Settings/brightness/volume | `ext_components/cp0_lvgl/include/hal/hal_settings.h` | `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_settings.cpp` | `ext_components/cp0_lvgl/src/sdl/sdl_lvgl_settings.cpp` |
+| Network/WiFi | `ext_components/cp0_lvgl/include/hal/hal_network.h` | `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_network.cpp` | `ext_components/cp0_lvgl/src/sdl/sdl_lvgl_network.cpp` |
+| Screenshot | `ext_components/cp0_lvgl/include/hal/hal_screenshot.h` | `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_screenshot.cpp` | `ext_components/cp0_lvgl/src/sdl/sdl_lvgl_screenshot.cpp` |
 | Camera | `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_camera.cpp` | Device camera | `ext_components/cp0_lvgl/src/sdl/cp0_lvgl_camera.cpp` |
 
 ## 9. デバッグコマンド早見表

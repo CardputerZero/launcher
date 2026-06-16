@@ -51,7 +51,7 @@ APPLaunch は XDG Desktop Entry に似た形式の `.desktop` ファイルで Ap
 | `Name` | **必須** | 文字列 | ランチャーリストに表示される App 名 |
 | `Exec` | **必須** | 文字列 | 実行するコマンド、または実行ファイルのパス |
 | `Icon` | 任意 | 文字列 | アイコンパス（`/usr/share/APPLaunch/` からの相対パス、または絶対パス） |
-| `Terminal` | 任意 | `true`/`false` | 内蔵ターミナル（UIConsolePage）で実行するかどうか。デフォルトは `false` |
+| `Terminal` | 任意 | `true`/`false` | 内蔵ターミナル（UISTPage）で実行するかどうか。デフォルトは `false` |
 | `Sysplause` | 任意 | `true`/`false` | ターミナル実行終了後に「任意のキーで戻る」プロンプトを表示するかどうか。デフォルトは `true` |
 | `Type` | 任意 | 文字列 | `Application` を固定で指定（ツールチェーン識別用。APPLaunch 自体は検証しません） |
 | `TryExec` | 任意 | 文字列 | ドキュメント説明用のみ。APPLaunch はこのフィールドを解析しません |
@@ -68,7 +68,7 @@ APPLaunch は XDG Desktop Entry に似た形式の `.desktop` ファイルで Ap
 - `Terminal=false`（デフォルト）：APPLaunch は `fork` + `execlp` で外部プログラムを直接起動します。
   プログラム実行中、ランチャーの更新は一時停止します。プログラム終了後は自動的にメイン画面へ戻ります。
   Home キーを 5 秒間長押しすると `SIGINT` を送信し、さらに 3 秒待っても終了しない場合は `SIGKILL` を送信します。
-- `Terminal=true`：APPLaunch は内蔵ターミナル画面（UIConsolePage）でコマンドを実行し、
+- `Terminal=true`：APPLaunch は内蔵ターミナル画面（UISTPage）でコマンドを実行し、
   キーボード入力と出力表示に対応します。
 - `Sysplause=true`（デフォルト。`Terminal=true` の場合のみ有効）：コマンド終了後に
   "Press any key to return..." を表示し、ユーザーの確認を待ってからメイン画面へ戻ります。

@@ -12,8 +12,8 @@ git status --short
 | Task | Main files/directories | Key points | Verification |
 | --- | --- | --- | --- |
 | Add a built-in page | `projects/APPLaunch/main/ui/page_app/` | Create `ui_app_xxx.hpp` and inherit from `AppPage` | Build with SDL2 and open the page |
-| Register a built-in page on home | `projects/APPLaunch/main/ui/launch.cpp` | `app_list.emplace_back("NAME", img_path("icon.png"), page_v<PageT>)` | Icon appears in the home carousel |
-| Control built-in page visibility toggle | `projects/APPLaunch/main/ui/page_app/ui_app_setup.hpp`, `projects/APPLaunch/main/ui/launch.cpp` | Settings page writes `app_Key`, Launcher reads `APP_ENABLED("Key")` | Toggle in Settings, then restart or refresh home |
+| Register a built-in page on home | `projects/APPLaunch/main/ui/launch.cpp` | Add a `kBuiltinApps[]` entry with `append_page_app<PageT>` | Icon appears in the home carousel |
+| Control built-in page visibility toggle | `projects/APPLaunch/main/ui/page_app/ui_app_setup.hpp`, `projects/APPLaunch/main/ui/launch.cpp` | Settings writes `AppDescriptor.config_key`; Launcher reads `launcher_app_registry_is_enabled()` | Toggle in Settings, then restart or refresh home |
 | Add external `.desktop` app | `projects/APPLaunch/APPLaunch/applications/` | Filename must end in `.desktop` and include `Name` and `Exec` | No skip logs; app appears on home |
 | Add icon | `projects/APPLaunch/APPLaunch/share/images/` | Built-in pages use `img_path()`, `.desktop` uses `Icon=share/images/xxx.png` | No `missing/unreadable` logs |
 | Add sound effect | `projects/APPLaunch/APPLaunch/share/audio/` | Pages use `audio_path()` and `cp0_signal_audio_api()` | Sound plays on device |
@@ -22,10 +22,10 @@ git status --short
 | Change carousel animation | `projects/APPLaunch/main/ui/animation/ui_launcher_animation.cpp` | Card movement, scale, opacity, and other animations | Switch left/right repeatedly in SDL2 |
 | Change home status bar | `projects/APPLaunch/main/ui/launch.cpp`, `projects/APPLaunch/main/ui/ui.cpp` | `update_home_status_bar()` refreshes WiFi/time/battery | Check `[HOME_STATUS]` logs |
 | Change Settings menu | `projects/APPLaunch/main/ui/page_app/ui_app_setup.hpp` | Add `MenuItem`/`SubItem` in `menu_init()` | Enter the SETTING page and test |
-| Change configuration saving logic | `ext_components/cp0_lvgl/src/cp0/cp0_app_config.cpp` | Currently saves to `/var/lib/applaunch/settings`, max 32 entries | Inspect the settings file |
+| Change configuration saving logic | `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_config.cpp` | Currently saves to `/var/lib/applaunch/settings`, max 32 entries | Inspect the settings file |
 | Change asset path rules | `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_file.cpp`, `ext_components/cp0_lvgl/src/sdl/sdl_lvgl_file.cpp` | Consider device and SDL2 consistently | Check assets on both SDL2 and device |
-| Change external app launch/return | `projects/APPLaunch/main/ui/launch.cpp`, `ext_components/cp0_lvgl/src/cp0/cp0_app_process.cpp` | `launch_Exec()`, `cp0_process_exec_blocking()` | External app starts, ESC returns |
-| Change terminal apps | `projects/APPLaunch/main/ui/page_app/ui_app_console.hpp`, `ext_components/cp0_lvgl/src/cp0/cp0_app_pty.cpp` | PTY, command execution, input/output | Verify with a `Terminal=true` app |
+| Change external app launch/return | `projects/APPLaunch/main/ui/launch.cpp`, `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_process.cpp` | `launch_Exec()`, `cp0_process_exec_blocking()` | External app starts, ESC returns |
+| Change terminal apps | `projects/APPLaunch/main/ui/page_app/ui_app_st.hpp`, `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_pty.cpp` | PTY, command execution, input/output | Verify with a `Terminal=true` app |
 | Change input mapping | `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_keyboard.c`, `ext_components/cp0_lvgl/src/sdl/sdl_lvgl_keyboard.c` | Device and SDL2 input differences | `evtest` + SDL2 keyboard |
 | Change startup flow | `projects/APPLaunch/main/src/main.cpp` | `lv_init()`, `cp0_lvgl_init()`, `ui_init()`, main loop | Check `[BOOT]` logs |
 | Change build dependencies | `projects/APPLaunch/main/SConstruct` | `SRCS`, `INCLUDE`, `REQUIREMENTS`, `STATIC_FILES` | scons build |
@@ -58,7 +58,6 @@ git status --short
 
 | Page/feature | File | Registered name or icon | Description |
 | --- | --- | --- | --- |
-| GAME | `projects/APPLaunch/main/ui/page_app/ui_app_game.hpp` | `GAME` / `game_100.png` | Built-in game entry |
 | SETTING | `projects/APPLaunch/main/ui/page_app/ui_app_setup.hpp` | `SETTING` / `setting_100.png` | Settings page, including app toggles, brightness, volume, WiFi, camera, etc. |
 | GAME | `projects/APPLaunch/main/ui/page_app/ui_app_game.hpp` | `GAME` / `game_100.png` | Built-in game entry |
 | Compass | `projects/APPLaunch/main/ui/page_app/ui_app_compass.hpp` | `Compass` / `compass_needle_80.png` | Compass page |
@@ -70,16 +69,19 @@ git status --short
 | CAMERA | `projects/APPLaunch/main/ui/page_app/ui_app_camera.hpp` | `CAMERA` / `camera_100.png` | Camera page, enabled on device |
 | LORA | `projects/APPLaunch/main/ui/page_app/ui_app_lora.hpp` | `LORA` / `lora_100.png` | LoRa page, enabled on device |
 | TANK | `projects/APPLaunch/main/ui/page_app/ui_app_tank_battle.hpp` | `TANK` / `tank_100.png` | Tank game, enabled on device |
-| CLI/terminal | `projects/APPLaunch/main/ui/page_app/ui_app_console.hpp` | `CLI` / `cli_100.png` | `UIConsolePage`, used by bash, python, and `Terminal=true` apps |
+| CLI/terminal | `projects/APPLaunch/main/ui/page_app/ui_app_st.hpp` | `CLI` / `cli_100.png` | `UISTPage`, used by bash, python, and `Terminal=true` apps |
 
-Fixed registration entry in `Launch::Launch()`:
+Fixed entries are declared in `kBuiltinApps[]`:
 
 ```cpp
-app_list.emplace_back("Python", img_path("python_100.png"), "python3", true, false);
-app_list.emplace_back("STORE", img_path("store_100.png"), "/usr/share/APPLaunch/bin/M5CardputerZero-AppStore", false, true, true);
-app_list.emplace_back("CLI", img_path("cli_100.png"), "bash", true, false);
-app_list.emplace_back("GAME", img_path("game_100.png"), page_v<UIGamePage>);
-app_list.emplace_back("SETTING", img_path("setting_100.png"), page_v<UISetupPage>);
+constexpr BuiltinAppRegistration kBuiltinApps[] = {
+    {{"Python", "python_100.png", "app_Python", false, true}, "python3", true, false, false, nullptr},
+    {{"STORE", "store_100.png", "app_Store", false, true},
+     "/usr/share/APPLaunch/bin/M5CardputerZero-AppStore", false, true, true, nullptr},
+    {{"CLI", "cli_100.png", "app_CLI", false, true}, nullptr, false, true, false, append_page_app<UISTPage>},
+    {{"GAME", "game_100.png", "app_Game", false, true}, nullptr, false, true, false, append_page_app<UIGamePage>},
+    {{"SETTING", "setting_100.png", "app_Setting", false, true}, nullptr, false, true, false, append_page_app<UISetupPage>},
+};
 ```
 
 ## 4. External App Entry Table
@@ -91,10 +93,10 @@ app_list.emplace_back("SETTING", img_path("setting_100.png"), page_v<UISetupPage
 | Scan function | `Launch::applications_load()` in `projects/APPLaunch/main/ui/launch.cpp` | Parses `[Desktop Entry]`, `Name`, `Icon`, `Exec`, `Terminal`, and `Sysplause` |
 | Directory watching | `Launch::inotify_init_watch()`, `app_dir_watch_cb()` | Watches application changes and refreshes the dynamic app list |
 | Dynamic refresh | `Launch::applications_reload()` | Keeps fixed apps, deletes dynamic apps, then rescans |
-| Terminal launch | `Launch::launch_Exec_in_terminal()` | Creates `UIConsolePage` and executes the command |
+| Terminal launch | `Launch::launch_Exec_in_terminal()` | Creates `UISTPage` and executes the command |
 | Non-terminal launch | `Launch::launch_Exec()` | Pauses LVGL and calls `cp0_process_exec_blocking()` |
-| Device-side process execution | `ext_components/cp0_lvgl/src/cp0/cp0_app_process.cpp` | fork, privilege lowering, long ESC press to exit, keyboard restore |
-| PTY execution | `ext_components/cp0_lvgl/src/cp0/cp0_app_pty.cpp` | Terminal page command execution and user selection |
+| Device-side process execution | `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_process.cpp` | fork, privilege lowering, long ESC press to exit, keyboard restore |
+| PTY execution | `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_pty.cpp` | Terminal page command execution and user selection |
 
 Minimal `.desktop` template:
 
@@ -132,23 +134,23 @@ Path resolution code:
 
 | Setting item | UI entry | Configuration key | Implementation location |
 | --- | --- | --- | --- |
-| App visibility toggle | SETTING -> Launcher | `app_<Name>` | `save_app_toggle()` in `ui_app_setup.hpp`, `APP_ENABLED()` in `launch.cpp` |
-| Brightness | SETTING -> Screen -> Brightness | `brightness` | `ui_app_setup.hpp`, `ext_components/cp0_lvgl/src/cp0/cp0_app_settings.cpp` |
+| App visibility toggle | SETTING -> Launcher | `AppDescriptor.config_key` | `save_app_toggle()` in `ui_app_setup.hpp`, `launcher_app_registry_is_enabled()` in `launch.cpp` |
+| Brightness | SETTING -> Screen -> Brightness | `brightness` | `ui_app_setup.hpp`, `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_settings.cpp` |
 | Screen-off timeout | SETTING -> Screen -> DarkTime | `dark_time` | `ui_app_setup.hpp` |
 | Volume | SETTING -> Speaker -> Volume | `volume` | `ui_app_setup.hpp`, `cp0_volume_read/write()` |
 | Camera resolution | SETTING -> Camera -> Resolution | `cam_resolution` | `ui_app_setup.hpp`, read by the camera page |
 | Startup mode | Related selection in Settings page | `startup_mode` | `ui_app_setup.hpp` |
 | USB extension port | SETTING -> ExtPort | `extport_usb` | `ui_app_setup.hpp` |
 | 5V output | SETTING -> ExtPort | `extport_5vout` | `ui_app_setup.hpp` |
-| External app runtime user | Manual configuration | `run_as_user` | `cp0_app_process.cpp`, `cp0_app_pty.cpp` |
+| External app runtime user | Manual configuration | `run_as_user` | `cp0_lvgl_process.cpp`, `cp0_lvgl_pty.cpp` |
 
 Configuration implementation:
 
 | File | Description |
 | --- | --- |
 | `ext_components/cp0_lvgl/include/cp0_lvgl_app.h` | Declarations for `cp0_config_get_int/set_int/get_str/set_str/save` |
-| `ext_components/cp0_lvgl/src/cp0/cp0_app_config.cpp` | Device-side configuration read/write, saved to `/var/lib/applaunch/settings` |
-| `ext_components/cp0_lvgl/src/sdl/cp0_app_compat_sdl.cpp` | SDL2 compatibility implementation |
+| `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_config.cpp` | Device-side configuration read/write, saved to `/var/lib/applaunch/settings` |
+| `ext_components/cp0_lvgl/src/sdl/sdl_lvgl_config.cpp` | SDL2 compatibility implementation |
 | `ext_components/cp0_lvgl/src/commount.c` | Applies saved brightness and volume at startup |
 
 ## 7. Build Entry Table
@@ -174,12 +176,12 @@ Configuration implementation:
 | framebuffer/display | `ext_components/cp0_lvgl/src/cp0/cp0_lvgl.h` | `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_freambuffer.c` | `ext_components/cp0_lvgl/src/sdl/sdl_lvgl_display.c` |
 | Keyboard input | `ext_components/cp0_lvgl/include/keyboard_input.h` | `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_keyboard.c` | `ext_components/cp0_lvgl/src/sdl/sdl_lvgl_keyboard.c` |
 | File paths | `ext_components/cp0_lvgl/include/cp0_lvgl_file.hpp` | `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_file.cpp` | `ext_components/cp0_lvgl/src/sdl/sdl_lvgl_file.cpp` |
-| Process | `ext_components/cp0_lvgl/include/hal/hal_process.h` | `ext_components/cp0_lvgl/src/cp0/cp0_app_process.cpp` | `ext_components/cp0_lvgl/src/sdl/cp0_hal_process_sdl.cpp` |
-| PTY | `ext_components/cp0_lvgl/include/hal/hal_pty.h` | `ext_components/cp0_lvgl/src/cp0/cp0_app_pty.cpp` | `ext_components/cp0_lvgl/src/sdl/cp0_hal_pty_sdl.cpp` |
-| Audio | `ext_components/cp0_lvgl/include/hal/hal_audio.h` | `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_audio.cpp` | `ext_components/cp0_lvgl/src/sdl/cp0_hal_audio_sdl.c` |
-| Settings/brightness/volume | `ext_components/cp0_lvgl/include/hal/hal_settings.h` | `ext_components/cp0_lvgl/src/cp0/cp0_app_settings.cpp` | `ext_components/cp0_lvgl/src/sdl/cp0_hal_settings_sdl.cpp` |
-| Network/WiFi | `ext_components/cp0_lvgl/include/hal/hal_network.h` | `ext_components/cp0_lvgl/src/cp0/cp0_app_network.cpp` | `ext_components/cp0_lvgl/src/sdl/cp0_hal_network_sdl.cpp` |
-| Screenshot | `ext_components/cp0_lvgl/include/hal/hal_screenshot.h` | `ext_components/cp0_lvgl/src/cp0/cp0_app_screenshot.cpp` | `ext_components/cp0_lvgl/src/sdl/cp0_hal_screenshot_sdl.cpp` |
+| Process | `ext_components/cp0_lvgl/include/hal/hal_process.h` | `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_process.cpp` | `ext_components/cp0_lvgl/src/sdl/sdl_lvgl_process.cpp` |
+| PTY | `ext_components/cp0_lvgl/include/hal/hal_pty.h` | `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_pty.cpp` | `ext_components/cp0_lvgl/src/sdl/sdl_lvgl_pty.cpp` |
+| Audio | `ext_components/cp0_lvgl/include/hal/hal_audio.h` | `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_audio.cpp` | `ext_components/cp0_lvgl/src/sdl/sdl_lvgl_audio.cpp` |
+| Settings/brightness/volume | `ext_components/cp0_lvgl/include/hal/hal_settings.h` | `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_settings.cpp` | `ext_components/cp0_lvgl/src/sdl/sdl_lvgl_settings.cpp` |
+| Network/WiFi | `ext_components/cp0_lvgl/include/hal/hal_network.h` | `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_network.cpp` | `ext_components/cp0_lvgl/src/sdl/sdl_lvgl_network.cpp` |
+| Screenshot | `ext_components/cp0_lvgl/include/hal/hal_screenshot.h` | `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_screenshot.cpp` | `ext_components/cp0_lvgl/src/sdl/sdl_lvgl_screenshot.cpp` |
 | Camera | `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_camera.cpp` | Device camera | `ext_components/cp0_lvgl/src/sdl/cp0_lvgl_camera.cpp` |
 
 ## 9. Debugging Command Quick Reference

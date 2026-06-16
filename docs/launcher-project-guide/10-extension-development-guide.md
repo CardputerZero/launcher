@@ -13,11 +13,11 @@ This chapter explains how to extend APPLaunch, focusing on four common change ty
 | `projects/APPLaunch/APPLaunch/` | Runtime asset tree; after packaging it maps to `/usr/share/APPLaunch/` on the device |
 | `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_file.cpp` | Device-side `cp0_file_path()` path rules |
 | `ext_components/cp0_lvgl/src/sdl/sdl_lvgl_file.cpp` | SDL2 development-host `cp0_file_path()` path rules |
-| `ext_components/cp0_lvgl/src/cp0/cp0_app_config.cpp` | Device-side settings persistence, saved to `/var/lib/applaunch/settings` |
+| `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_config.cpp` | Device-side settings persistence, saved to `/var/lib/applaunch/settings` |
 
 APPLaunch has two kinds of app sources:
 
-- **Built-in pages**: compiled into the APPLaunch process and registered with `app("NAME", icon, page_v<PageT>)`. When opened, APPLaunch creates a `PageT` object and switches to its screen.
+- **Built-in pages**: compiled into the APPLaunch process and registered in `kBuiltinApps[]` with `append_page_app<PageT>`. When opened, APPLaunch creates a `PageT` object and switches to its screen.
 - **External apps**: launched as independent processes through a fixed `Exec` value or a `.desktop` descriptor. For non-terminal apps, the Launcher pauses its LVGL timer, waits for the child process to exit, and then returns to the home page.
 
 ## 2. Adding a Built-in Page
@@ -103,53 +103,32 @@ If you check manually, `generated/page_app.h` should contain:
 
 ### 2.3 Register the Page in the Home App List
 
-Open `projects/APPLaunch/main/ui/launch.cpp` and find `Launch::Launch()`. Register a built-in page like this:
+Open `projects/APPLaunch/main/ui/launch.cpp` and add a built-in registration to `kBuiltinApps[]`:
 
 ```cpp
-app_list.emplace_back("MYTOOL", img_path("mytool_100.png"), page_v<UIMyToolPage>);
+{{"MYTOOL", "mytool_100.png", "app_MyTool", true, false},
+ nullptr, false, true, false, append_page_app<UIMyToolPage>},
 ```
 
-It is recommended to place it inside the `APP_ENABLED` control section so the Settings page can later control whether it is shown:
+If the page only supports device-side hardware, place the entry in the existing device-only `#if defined(__linux__) && !defined(HAL_PLATFORM_SDL)` block to avoid SDL2 build failures.
 
-```cpp
-#define APP_ENABLED(key) (cp0_config_get_int("app_" key, 1) != 0)
+Registration fields:
 
-if (APP_ENABLED("MyTool"))
-    app_list.emplace_back("MYTOOL", img_path("mytool_100.png"), page_v<UIMyToolPage>);
-
-#undef APP_ENABLED
-```
-
-Registration rules:
-
-- The first argument is the display name in the home carousel. Keep it short to avoid truncation on the small screen.
-- The second argument is the icon path, usually `img_path("xxx_100.png")`.
-- The third argument, `page_v<PageT>`, means a built-in page is created when the app is clicked.
-- If the page only supports device-side hardware, place it inside `#if defined(__linux__) && !defined(HAL_PLATFORM_SDL)` to avoid SDL2 build failures.
+- `AppDescriptor.label` is the display name in the home carousel. Keep it short to avoid truncation on the small screen.
+- `AppDescriptor.icon` is the icon filename resolved through `cp0_file_path()`.
+- `AppDescriptor.config_key` is the full Settings persistence key, such as `app_MyTool`.
+- `append_page_app<PageT>` means a built-in page is created when the app is clicked.
 
 ### 2.4 Add a Settings Page Toggle
 
-If you want the `Launcher` menu in Settings to control whether the new page is shown, update `app_keys` and `app_labels` in `UISetupPage::menu_init()`.
-
-Example:
+The `Launcher` menu in Settings is generated from `launcher_app_registry_entries()`. To expose a toggle, set `AppDescriptor.configurable=true` in the `kBuiltinApps[]` entry:
 
 ```cpp
-static const char *app_keys[] = {
-    "Python", "Store", "CLI", "Game", "Setting",
-    "Game", "Math", "MyTool"
-};
-
-static const char *app_labels[] = {
-    "Python", "Store", "CLI", "Game", "Setting",
-    "Game", "Math", "My Tool"
-};
+{{"MYTOOL", "mytool_100.png", "app_MyTool", true, false},
+ nullptr, false, true, false, append_page_app<UIMyToolPage>},
 ```
 
-`save_app_toggle()` stores the switch as `app_<key>`, for example `app_MyTool=0`. Read the same key in `launch.cpp`:
-
-```cpp
-cp0_config_get_int("app_MyTool", 1)
-```
+`launcher_app_registry_set_enabled()` stores the switch using `config_key`, for example `app_MyTool=0`, and `Launch::rebuild_builtin_apps()` reads it through `launcher_app_registry_is_enabled()`.
 
 The device-side persistence file is:
 
@@ -222,7 +201,7 @@ Fields currently parsed by APPLaunch:
 | `Name` | Yes | Display name on the home page |
 | `Exec` | Yes | Command to execute; can be an absolute path or a shell command |
 | `Icon` | No | Icon path; recommended format is `share/images/xxx.png` or any path readable by LVGL |
-| `Terminal` | No | `true`/`True`/`1` means run in the built-in `UIConsolePage` |
+| `Terminal` | No | `true`/`True`/`1` means run in the built-in `UISTPage` |
 | `Sysplause` | No | Terminal apps only; controls pause behavior after the terminal command ends, default true |
 | `Type` | No | Kept for desktop-file convention compatibility; APPLaunch does not currently depend on it |
 | `TryExec` | No | Not currently parsed by APPLaunch; can only serve as a descriptive field |
@@ -265,7 +244,7 @@ Type=Application
 
 `launch.cpp` supports two external-app launch modes:
 
-- `Terminal=true`: creates `UIConsolePage`, displays a PTY terminal inside the APPLaunch process, and executes `Exec`.
+- `Terminal=true`: creates `UISTPage`, displays a PTY terminal inside the APPLaunch process, and executes `Exec`.
 - `Terminal=false`: calls `cp0_process_exec_blocking()` to start an external process. APPLaunch pauses the LVGL timer and input group, waits for the child process to exit, and then restores the home page.
 
 Returning from non-terminal external apps depends on these behaviors:
@@ -362,11 +341,10 @@ The Settings page is centralized in `projects/APPLaunch/main/ui/page_app/ui_app_
 
 Steps:
 
-1. Add an internal key such as `MyTool` to `app_keys` in `UISetupPage::menu_init()`.
-2. Add a display label such as `My Tool` to `app_labels` in the same location.
-3. Use the same key when registering the app in `launch.cpp`: `APP_ENABLED("MyTool")`.
-4. Open the Settings page, enter the `Launcher` menu, and toggle O/X.
-5. If the list does not refresh after returning to the home page, restart APPLaunch. The current fixed/built-in list reads configuration when `Launch` is constructed.
+1. Add or update the app's `AppDescriptor` in `kBuiltinApps[]`.
+2. Set `configurable=true` and choose a full `config_key`, such as `app_MyTool`.
+3. Open the Settings page, enter the `Launcher` menu, and toggle O/X.
+4. Settings calls `launcher_app_registry_set_enabled()` and notifies the Launcher to rebuild the built-in list.
 
 ### 5.2 Add a Regular Setting
 
@@ -390,7 +368,7 @@ For second-level or third-level pages that choose values, refer to these existin
 
 ### 5.3 Configuration Persistence Location
 
-Device-side configuration implementation: `ext_components/cp0_lvgl/src/cp0/cp0_app_config.cpp`.
+Device-side configuration implementation: `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_config.cpp`.
 
 - Configuration directory: `/var/lib/applaunch`
 - Configuration file: `/var/lib/applaunch/settings`

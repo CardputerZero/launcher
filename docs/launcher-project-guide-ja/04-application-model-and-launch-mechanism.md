@@ -22,7 +22,7 @@ Home center card
   -> Launch::launch_app()
   -> app.launch(this)
       ├── Built-in page: new PageT + lv_disp_load_scr()
-      ├── Terminal app: UIConsolePage + PTY exec()
+      ├── Terminal app: UISTPage + PTY exec()
       └── External app: cp0_process_exec_blocking()
 ```
 
@@ -33,7 +33,7 @@ Home center card
 | `projects/APPLaunch/main/ui/launch.h` | 公開 `Launch` インターフェースと app モデル宣言 |
 | `projects/APPLaunch/main/ui/launch.cpp` | `app`、`Launch`、アプリケーションリスト、起動ロジック、`.desktop` スキャン |
 | `projects/APPLaunch/main/ui/ui_launch_page.cpp` | Enter / クリックイベントを `Launch::launch_app()` へ転送する |
-| `projects/APPLaunch/main/ui/page_app/ui_app_console.hpp` | 端末ページ `UIConsolePage` |
+| `projects/APPLaunch/main/ui/page_app/ui_app_st.hpp` | 端末ページ `UISTPage` |
 | `projects/APPLaunch/main/ui/page_app/*.hpp` | settings、game、file、camera、LoRa などの組み込みページ |
 | `projects/APPLaunch/APPLaunch/applications/` | 実行時 `.desktop` アプリケーション記述ディレクトリ |
 | `ext_components/cp0_lvgl` | プロセス起動、PTY、ディレクトリ監視、パス解決などの低レベル機能 |
@@ -81,8 +81,8 @@ struct app
 
 | Type | Construction | Launch function | Examples |
 | --- | --- | --- | --- |
-| Built-in page | `page_v<PageT>` | ページを構築し `lv_disp_load_scr()` を呼ぶ | `GAME`, `SETTING`, `Compass` |
-| Terminal command | `exec, terminal=true` | `launch_Exec_in_terminal()` | `Python`, `CLI` |
+| Built-in page | `page_v<PageT>` / `append_page_app<PageT>` | ページを構築し `lv_disp_load_scr()` を呼ぶ | `CLI`, `GAME`, `SETTING`, `Compass` |
+| Terminal command | `exec, terminal=true` | `launch_Exec_in_terminal()` が `UISTPage` を作成して `exec()` を呼ぶ | `Python`, `Terminal=true` の `.desktop` アプリ |
 | External process | `exec, terminal=false` | `launch_Exec()` | AppStore, Calculator |
 
 ## 5. Fixed Application Registration
@@ -96,7 +96,7 @@ constexpr BuiltinAppRegistration kBuiltinApps[] = {
     {{"Python", "python_100.png", "app_Python", false, true}, "python3", true, false, false, nullptr},
     {{"STORE", "store_100.png", "app_Store", false, true},
      "/usr/share/APPLaunch/bin/M5CardputerZero-AppStore", false, true, true, nullptr},
-    {{"CLI", "cli_100.png", "app_CLI", false, true}, "bash", true, false, false, nullptr},
+    {{"CLI", "cli_100.png", "app_CLI", false, true}, nullptr, false, true, false, append_page_app<UISTPage>},
     {{"GAME", "game_100.png", "app_Game", false, true}, nullptr, false, true, false, append_page_app<UIGamePage>},
     {{"SETTING", "setting_100.png", "app_Setting", false, true}, nullptr, false, true, false, append_page_app<UISetupPage>},
     {{"MATH", "math_100.png", "app_Math", true, false},
@@ -166,7 +166,7 @@ Enter
 
 ## 7. Terminal Application Launch Mechanism
 
-端末アプリケーションは `UIConsolePage` を使用し、外部コマンドは APPLaunch プロセス内の端末ページで実行されます。
+端末アプリケーションは `UISTPage` を使用し、外部コマンドは APPLaunch プロセス内の端末ページで実行されます。
 
 ```cpp
 void launch_Exec_in_terminal(const std::string &exec, bool sysplause = true)
@@ -174,7 +174,7 @@ void launch_Exec_in_terminal(const std::string &exec, bool sysplause = true)
     ui_loading_show("Loading...");
     lv_refr_now(NULL);
 
-    auto p = std::make_shared<UIConsolePage>();
+    auto p = std::make_shared<UISTPage>();
     app_Page = p;
     lv_disp_load_scr(p->screen());
     lv_indev_set_group(lv_indev_get_next(NULL), p->input_group());
@@ -190,10 +190,10 @@ void launch_Exec_in_terminal(const std::string &exec, bool sysplause = true)
 
 ```text
 Python -> exec = "python3", terminal = true
-CLI    -> exec = "bash", terminal = true
+CLI    -> 組み込み UISTPage。ページ内部で対話型 bash を起動
 ```
 
-組み込みページと比べ、端末アプリケーションには `p->exec(exec)` という追加ステップがあります。通常、コマンドとは PTY を通してやり取りします。ユーザーが見るのは、APPLaunch の外にある別 UI ではなく `UIConsolePage` です。
+組み込みページと比べ、端末アプリケーションには `p->exec(exec)` という追加ステップがあります。通常、コマンドとは PTY を通してやり取りします。ユーザーが見るのは、APPLaunch の外にある別 UI ではなく `UISTPage` です。
 
 ## 8. External Standalone Application Launch Mechanism
 
@@ -256,15 +256,11 @@ Enter external app
   -> LVGL_RUN_FLAGE=1
 ```
 
-`STORE` は外部アプリケーションの例です。
+`STORE` は外部アプリケーションを起動する固定エントリです。
 
 ```cpp
-app_list.emplace_back("STORE",
-    img_path("store_100.png"),
-    "/usr/share/APPLaunch/bin/M5CardputerZero-AppStore",
-    false,
-    true,
-    true);
+{{"STORE", "store_100.png", "app_Store", false, true},
+ "/usr/share/APPLaunch/bin/M5CardputerZero-AppStore", false, true, true, nullptr},
 ```
 
 ここでは `run_as_root=true` が `launch_Exec(exec, run_as_root)` に渡され、そこで `keep_root ? 1 : 0` に変換されます。
@@ -331,7 +327,7 @@ Icon=share/images/e-Mail_80.png
 | `Name` | Yes | ホーム画面に表示するタイトル |
 | `Exec` | Yes | 起動コマンド |
 | `Icon` | No | アイコンパス |
-| `Terminal` | No | `true/True/1` は `UIConsolePage` 経由で起動することを意味する |
+| `Terminal` | No | `true/True/1` は `UISTPage` 経由で起動することを意味する |
 | `Sysplause` | No | 端末ページへ渡す pause policy。デフォルトは true |
 
 登録ロジック:

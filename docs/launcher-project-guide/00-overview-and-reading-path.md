@@ -34,7 +34,7 @@ LVGL 9.5 UI framework
 APPLaunch home, status bar, carousel, application manager
         |
         +--> Built-in page AppPage
-        +--> PTY terminal application UIConsolePage
+        +--> PTY ST terminal application UISTPage
         +--> External independent process cp0_process_exec_blocking()
 ```
 
@@ -80,7 +80,7 @@ If you only want to complete a specific task:
 - **APPLaunch**: the launcher project or launcher process.
 - **Home screen**: the main screen of APPLaunch, with the status bar and application carousel.
 - **Built-in page**: a page class compiled into the APPLaunch process, such as `UISetupPage`.
-- **Terminal application**: a command run inside APPLaunch through `UIConsolePage` + PTY, such as `bash`.
+- **Terminal application**: a command run inside APPLaunch through `UISTPage` + PTY, such as `bash`.
 - **External application**: an independent executable program. When launched, APPLaunch pauses its own LVGL rendering and waits for the external program to exit.
 - **Resource tree**: runtime files such as `APPLaunch/share/images`, `APPLaunch/share/audio`, and `APPLaunch/share/font`.
 - **On-device**: the AArch64 Linux environment on M5CardputerZero.

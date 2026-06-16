@@ -125,8 +125,8 @@ Common configuration keys:
 | `duplicate Exec` | `launch.cpp` | `.desktop` has the same Exec as an existing app |
 | `Launching terminal app` | `launch.cpp` | Entering the built-in terminal page to run a command |
 | `Launching external app` | `launch.cpp` | Starting a non-terminal external program |
-| `[CP0-APP] ESC DOWN/UP` | `cp0_app_process.cpp` | Parent process read ESC while an external app was running |
-| `[cp0] Returned to launcher` | `cp0_app_process.cpp` | External app exited; preparing to return home |
+| `[CP0-APP] ESC DOWN/UP` | `cp0_lvgl_process.cpp` | Parent process read ESC while an external app was running |
+| `[cp0] Returned to launcher` | `cp0_lvgl_process.cpp` | External app exited; preparing to return home |
 | `[HOME_STATUS] connected=` | `launch.cpp` | Home status bar refreshed WiFi/battery state |
 
 ## 3. Black Screen Troubleshooting

@@ -125,8 +125,8 @@ sudo cat /var/lib/applaunch/settings
 | `duplicate Exec` | `launch.cpp` | `.desktop` の Exec が既存アプリと同じ |
 | `Launching terminal app` | `launch.cpp` | コマンド実行のため組み込みターミナルページへ入る |
 | `Launching external app` | `launch.cpp` | 非ターミナル外部プログラムを開始 |
-| `[CP0-APP] ESC DOWN/UP` | `cp0_app_process.cpp` | 外部アプリ実行中に親プロセスが ESC を読んだ |
-| `[cp0] Returned to launcher` | `cp0_app_process.cpp` | 外部アプリが終了し、ホームへ戻る準備中 |
+| `[CP0-APP] ESC DOWN/UP` | `cp0_lvgl_process.cpp` | 外部アプリ実行中に親プロセスが ESC を読んだ |
+| `[cp0] Returned to launcher` | `cp0_lvgl_process.cpp` | 外部アプリが終了し、ホームへ戻る準備中 |
 | `[HOME_STATUS] connected=` | `launch.cpp` | ホームステータスバーの WiFi/battery 状態を更新 |
 
 ## 3. 黒画面のトラブルシューティング

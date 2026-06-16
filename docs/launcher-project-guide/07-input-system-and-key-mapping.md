@@ -265,7 +265,7 @@ Each page independently binds `LV_EVENT_KEYBOARD` on its `root_screen_`. Common 
 
 | Page | File | Main keys |
 | --- | --- | --- |
-| `UIConsolePage` | `ui_app_console.hpp` | ESC/arrow/Enter/Backspace are converted to PTY control sequences; HOME-related state is used for exit/external locks |
+| `UISTPage` | `ui_app_st.hpp` | ESC/arrow/Enter/Backspace are converted to PTY control sequences; HOME-related state is used for exit/external locks |
 | `UIGamePage` | `ui_app_game.hpp` | Arrow keys move, ENTER starts/restarts, ESC returns |
 | `UISetupPage` | `ui_app_setup.hpp` | UP/DOWN or F/X selects, ENTER/RIGHT or C enters/confirms, ESC/LEFT or Z returns, some pages support R/D |
 | `UIGamePage` | `ui_app_game.hpp` | uses the common page key handling; ESC returns |
@@ -324,7 +324,7 @@ This approach is simple, but it does not support Shift uppercase, input methods,
 
 ### 9.2 Terminal Input
 
-`UIConsolePage` reads `struct key_item` directly and converts physical keys and UTF-8 text to a PTY byte stream:
+`UISTPage` reads `struct key_item` directly and converts physical keys and UTF-8 text to a PTY byte stream:
 
 - `KEY_ENTER` -> `\r`
 - `KEY_BACKSPACE` -> `0x7f`
@@ -364,7 +364,7 @@ The home screen and pages each have their own LVGL group:
 
 - Home screen: `UILaunchPage::home_input_group()`.
 - Built-in pages: `AppPageRoot::input_group()`.
-- Nested terminal: `UIConsolePage::input_group()`.
+- Nested terminal: `UISTPage::input_group()`.
 
 When switching pages, the input group must be switched at the same time:
 

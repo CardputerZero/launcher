@@ -68,7 +68,7 @@ launcher/
 ### APPLaunch 特性
 
 - 应用启动器界面，支持多应用导航（轮播翻页）
-- 内置应用页面：Game、Setting、Compass、IP Panel、File、SSH、Mesh、Rec、Camera、LoRa、Tank Battle、Console，以及 Python、Store、CLI、Math 等命令/外部进程入口
+- 内置应用页面：CLI/ST 终端、Game、Setting、Compass、IP Panel、File、SSH、Mesh、Rec、Camera、LoRa、Tank Battle，以及 Python、Store、Math 等命令/外部进程入口
 - LoRa 通信（基于 RadioLib SX1262）
 - 音频播放（基于 Miniaudio）
 - 电池状态监控与显示
@@ -324,7 +324,7 @@ export LV_LINUX_KEYBOARD_DEVICE=/dev/input/by-path/platform-3f804000.i2c-event
 | 主内容区 | 应用轮播页面（左右翻页导航） |
 | 全局提示 | ESC / Shift / SYM 快捷键提示覆盖层 |
 
-内置应用页面包括：Game、Setting、Compass、IP Panel、File、SSH、Mesh、Rec、Camera、LoRa、Tank Battle 和 Console。APPLaunch 也可以显示 Python、Store、CLI、Math 等命令或外部进程入口。
+内置应用页面包括：CLI/ST 终端、Game、Setting、Compass、IP Panel、File、SSH、Mesh、Rec、Camera、LoRa 和 Tank Battle。APPLaunch 也可以显示 Python、Store、Math 等命令或外部进程入口。
 
 
 ## 相关资源

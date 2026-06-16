@@ -48,7 +48,7 @@ public:
 
     ~UISSHPage()
     {
-        console_page_.reset();
+        terminal_page_.reset();
     }
 
 private:
@@ -57,7 +57,7 @@ private:
     std::vector<InputField> fields_;
     int active_field_ = 0;
     ViewState view_state_ = ViewState::INPUT;
-    std::shared_ptr<UISTPage> console_page_;
+    std::shared_ptr<UISTPage> terminal_page_;
 
     // ==================== keycode to char ====================
     static char keycode_to_char(uint32_t key)
@@ -230,25 +230,25 @@ private:
         SLOGI("[SSH] Launching: %s", cmd.c_str());
 
         // Create terminal page
-        console_page_ = std::make_shared<UISTPage>();
+        terminal_page_ = std::make_shared<UISTPage>();
 
-        // Restore the SSH input view when the embedded console exits.
-        console_page_->navigate_home = [this]() {
+        // Restore the SSH input view when the embedded terminal exits.
+        terminal_page_->navigate_home = [this]() {
             // Return to the SSH input view
-            console_page_.reset();
+            terminal_page_.reset();
             view_state_ = ViewState::INPUT;
             // Switch screen back to our root
             lv_disp_load_scr(this->screen());
             lv_indev_set_group(lv_indev_get_next(NULL), this->input_group());
         };
 
-        // Switch to console screen
+        // Switch to terminal screen
         view_state_ = ViewState::TERMINAL;
-        lv_disp_load_scr(console_page_->screen());
-        lv_indev_set_group(lv_indev_get_next(NULL), console_page_->input_group());
+        lv_disp_load_scr(terminal_page_->screen());
+        lv_indev_set_group(lv_indev_get_next(NULL), terminal_page_->input_group());
 
         // Launch ssh command
-        console_page_->exec(cmd);
+        terminal_page_->exec(cmd);
     }
 
     // ==================== event binding ====================

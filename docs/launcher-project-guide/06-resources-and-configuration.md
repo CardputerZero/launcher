@@ -145,7 +145,8 @@ Therefore, the returned `const char *` is stable within the thread and can be pa
 Common home-screen and built-in-page usage:
 
 ```cpp
-app_list.emplace_back("GAME", img_path("game_100.png"), page_v<UIGamePage>);
+{{"GAME", "game_100.png", "app_Game", false, true},
+ nullptr, false, true, false, append_page_app<UIGamePage>},
 
 lv_obj_set_style_bg_img_src(time_panel_,
     cp0_file_path_c("status_time_background.png"),
@@ -212,7 +213,7 @@ Supported keys:
 | `Name` | Yes | Carousel display name |
 | `Exec` | Yes | Launch command or executable path |
 | `Icon` | No | Icon path; can be `share/images/...` or a path readable by LVGL |
-| `Terminal` | No | `true`/`True`/`1` means run inside `UIConsolePage` |
+| `Terminal` | No | `true`/`True`/`1` means run inside `UISTPage` |
 | `Sysplause` | No | Whether to pause and wait for user confirmation after a terminal command exits; defaults to `true` |
 
 Example:
@@ -253,8 +254,8 @@ Usage conventions:
 
 - Always provide a default value when reading, so pages keep running if a setting is missing.
 - Call `cp0_config_save()` after writing to persist changes.
-- The device-side implementation is in `ext_components/cp0_lvgl/src/cp0/cp0_app_config.cpp`.
-- The SDL compatibility implementation is in `ext_components/cp0_lvgl/src/sdl/cp0_app_compat_sdl.cpp`.
+- The device-side implementation is in `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_config.cpp`.
+- The SDL compatibility implementation is in `ext_components/cp0_lvgl/src/sdl/sdl_lvgl_config.cpp`.
 
 Typical usage:
 
@@ -302,7 +303,7 @@ Note: `Compass` currently has no corresponding `app_Compass` setting and is adde
 | `startup_mode` | `UISetupPage` | Startup mode, currently `Launcher` / `CLI` |
 | `extport_usb` | `UISetupPage` | Expansion-port USB toggle |
 | `extport_5vout` | `UISetupPage` | Expansion-port 5V output toggle |
-| `run_as_user` | `cp0_app_process.cpp`, `cp0_app_pty.cpp` | User configuration for dropping privileges in external processes / PTY commands |
+| `run_as_user` | `cp0_lvgl_process.cpp`, `cp0_lvgl_pty.cpp` | User configuration for dropping privileges in external processes / PTY commands |
 
 ### 7.3 Temporary Business Inputs
 
@@ -327,19 +328,20 @@ Example:
 ```cpp
 void save_app_toggle(int idx)
 {
-    char cfg_key[64];
-    snprintf(cfg_key, sizeof(cfg_key), "app_%s", app_keys[idx]);
+    std::size_t app_count = 0;
+    const AppDescriptor *apps = launcher_app_registry_entries(&app_count);
+    const AppDescriptor &desc = apps[idx];
     bool enabled = menu_items_[0].sub_items[idx].toggle_state;
-    cp0_config_set_int(cfg_key, enabled ? 1 : 0);
-    cp0_config_save();
+    launcher_app_registry_set_enabled(desc, enabled);
+    config_save();
 }
 ```
 
 When changing configuration keys, check all of the following in sync:
 
-- `app_keys` / `app_labels` in `UISetupPage::menu_init()`.
-- The `app_keys` and always-on list in `UISetupPage::save_app_toggle()`.
-- `APP_ENABLED("...")` in `launch.cpp`.
+- `AppDescriptor` entries in `kBuiltinApps[]`.
+- `launcher_app_registry_entries()` / `save_app_toggle()` in `UISetupPage`.
+- `launcher_app_registry_is_enabled()` in `launch.cpp`.
 - Documentation and default configuration.
 
 ## 9. Resource Naming Recommendations

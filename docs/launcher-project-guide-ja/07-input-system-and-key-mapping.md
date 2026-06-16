@@ -265,7 +265,7 @@ static uint32_t fzxc_to_arrow(uint32_t key)
 
 | Page | File | Main keys |
 | --- | --- | --- |
-| `UIConsolePage` | `ui_app_console.hpp` | ESC/arrow/Enter/Backspace は PTY 制御シーケンスへ変換。HOME 関連状態は終了/外部ロックに使用 |
+| `UISTPage` | `ui_app_st.hpp` | ESC/arrow/Enter/Backspace は PTY 制御シーケンスへ変換。HOME 関連状態は終了/外部ロックに使用 |
 | `UIGamePage` | `ui_app_game.hpp` | 矢印キーで移動、ENTER で開始/再開始、ESC で戻る |
 | `UISetupPage` | `ui_app_setup.hpp` | UP/DOWN または F/X で選択、ENTER/RIGHT または C で入る/確定、ESC/LEFT または Z で戻る。一部ページは R/D 対応 |
 | `UIGamePage` | `ui_app_game.hpp` | 共通ページキー処理を使用。ESC で戻る |
@@ -324,7 +324,7 @@ static char keycode_to_char(uint32_t key)
 
 ### 9.2 ターミナル入力
 
-`UIConsolePage` は `struct key_item` を直接読み、物理キーと UTF-8 テキストを PTY バイトストリームへ変換します。
+`UISTPage` は `struct key_item` を直接読み、物理キーと UTF-8 テキストを PTY バイトストリームへ変換します。
 
 - `KEY_ENTER` -> `\r`
 - `KEY_BACKSPACE` -> `0x7f`
@@ -364,7 +364,7 @@ LVGL_RUN_FLAGE = 1;
 
 - ホーム画面: `UILaunchPage::home_input_group()`。
 - 組み込みページ: `AppPageRoot::input_group()`。
-- ネストしたターミナル: `UIConsolePage::input_group()`。
+- ネストしたターミナル: `UISTPage::input_group()`。
 
 ページを切り替えるときは、同時に入力グループも切り替える必要があります。
 

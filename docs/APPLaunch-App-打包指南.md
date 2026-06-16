@@ -51,7 +51,7 @@ APPLaunch 使用类 XDG Desktop Entry 格式的 `.desktop` 文件来描述一个
 | `Name` | **必填** | 字符串 | App 在启动器列表中显示的名称 |
 | `Exec` | **必填** | 字符串 | 要执行的命令或可执行文件路径 |
 | `Icon` | 可选 | 字符串 | 图标路径（相对于 `/usr/share/APPLaunch/`，或绝对路径） |
-| `Terminal` | 可选 | `true`/`false` | 是否在内置终端（UIConsolePage）中运行，默认 `false` |
+| `Terminal` | 可选 | `true`/`false` | 是否在内置终端（UISTPage）中运行，默认 `false` |
 | `Sysplause` | 可选 | `true`/`false` | 终端运行结束后是否显示"按任意键返回"提示，默认 `true` |
 | `Type` | 可选 | 字符串 | 固定填写 `Application`（供工具链识别，APPLaunch 本身不校验） |
 | `TryExec` | 可选 | 字符串 | 仅用于文档说明，APPLaunch 不解析此字段 |
@@ -68,7 +68,7 @@ APPLaunch 使用类 XDG Desktop Entry 格式的 `.desktop` 文件来描述一个
 - `Terminal=false`（默认）：APPLaunch 通过 `fork` + `execlp` 直接启动外部程序，
   程序运行期间启动器暂停刷新；程序退出后自动返回主界面。
   长按 Home 键 5 秒可发送 `SIGINT`，再等待 3 秒未退出则发送 `SIGKILL`。
-- `Terminal=true`：APPLaunch 在内置终端界面（UIConsolePage）中运行命令，
+- `Terminal=true`：APPLaunch 在内置终端界面（UISTPage）中运行命令，
   支持键盘输入/输出显示。
 - `Sysplause=true`（默认，仅在 `Terminal=true` 时生效）：命令结束后显示
   "Press any key to return..."，等待用户确认再返回主界面。

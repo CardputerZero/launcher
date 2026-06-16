@@ -13,11 +13,11 @@
 | `projects/APPLaunch/APPLaunch/` | 実行時アセットツリー。パッケージング後はデバイス上の `/usr/share/APPLaunch/` に対応 |
 | `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_file.cpp` | デバイス側 `cp0_file_path()` パスルール |
 | `ext_components/cp0_lvgl/src/sdl/sdl_lvgl_file.cpp` | SDL2 開発ホスト側 `cp0_file_path()` パスルール |
-| `ext_components/cp0_lvgl/src/cp0/cp0_app_config.cpp` | デバイス側設定永続化。`/var/lib/applaunch/settings` に保存 |
+| `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_config.cpp` | デバイス側設定永続化。`/var/lib/applaunch/settings` に保存 |
 
 APPLaunch には 2 種類のアプリソースがあります。
 
-- **組み込みページ**: APPLaunch プロセスにコンパイルされ、`app("NAME", icon, page_v<PageT>)` で登録されます。開くと APPLaunch が `PageT` オブジェクトを作成し、その画面へ切り替えます。
+- **組み込みページ**: APPLaunch プロセスにコンパイルされ、`kBuiltinApps[]` で `append_page_app<PageT>` を使って登録されます。開くと APPLaunch が `PageT` オブジェクトを作成し、その画面へ切り替えます。
 - **外部アプリ**: 固定 `Exec` 値または `.desktop` 記述子を通じて独立プロセスとして起動されます。非ターミナルアプリでは、Launcher は LVGL タイマーを一時停止し、子プロセス終了を待ってからホームページへ戻ります。
 
 ## 2. 組み込みページを追加する
@@ -103,53 +103,32 @@ ui/generate_page_app_includes.py
 
 ### 2.3 ホームのアプリリストへ登録
 
-`projects/APPLaunch/main/ui/launch.cpp` を開き、`Launch::Launch()` を探します。組み込みページは次のように登録します。
+`projects/APPLaunch/main/ui/launch.cpp` を開き、`kBuiltinApps[]` に組み込み登録を追加します。
 
 ```cpp
-app_list.emplace_back("MYTOOL", img_path("mytool_100.png"), page_v<UIMyToolPage>);
+{{"MYTOOL", "mytool_100.png", "app_MyTool", true, false},
+ nullptr, false, true, false, append_page_app<UIMyToolPage>},
 ```
 
-Settings ページから表示有無を制御できるように、`APP_ENABLED` 制御セクション内へ置くことを推奨します。
+ページがデバイス側ハードウェアだけをサポートする場合、SDL2 ビルド失敗を避けるため、既存の `#if defined(__linux__) && !defined(HAL_PLATFORM_SDL)` ブロック内に置いてください。
 
-```cpp
-#define APP_ENABLED(key) (cp0_config_get_int("app_" key, 1) != 0)
+登録フィールド:
 
-if (APP_ENABLED("MyTool"))
-    app_list.emplace_back("MYTOOL", img_path("mytool_100.png"), page_v<UIMyToolPage>);
-
-#undef APP_ENABLED
-```
-
-登録ルール:
-
-- 第 1 引数はホームカルーセルの表示名です。小さい画面で切れないよう短くしてください。
-- 第 2 引数はアイコンパスで、通常 `img_path("xxx_100.png")` です。
-- 第 3 引数 `page_v<PageT>` は、アプリをクリックしたときに組み込みページが作成されることを意味します。
-- ページがデバイス側ハードウェアだけをサポートする場合、SDL2 ビルド失敗を避けるため `#if defined(__linux__) && !defined(HAL_PLATFORM_SDL)` 内に置いてください。
+- `AppDescriptor.label` はホームカルーセルの表示名です。小さい画面で切れないよう短くしてください。
+- `AppDescriptor.icon` は `cp0_file_path()` で解決されるアイコンファイル名です。
+- `AppDescriptor.config_key` は Settings 永続化用の完全な key です。例: `app_MyTool`。
+- `append_page_app<PageT>` は、アプリをクリックしたときに組み込みページが作成されることを意味します。
 
 ### 2.4 Settings ページのトグルを追加
 
-Settings の `Launcher` メニューから新しいページの表示を制御したい場合、`UISetupPage::menu_init()` の `app_keys` と `app_labels` を更新します。
-
-例:
+Settings の `Launcher` メニューは `launcher_app_registry_entries()` から生成されます。表示トグルを出すには、`kBuiltinApps[]` エントリの `AppDescriptor.configurable` を `true` にします。
 
 ```cpp
-static const char *app_keys[] = {
-    "Python", "Store", "CLI", "Game", "Setting",
-    "Game", "Math", "MyTool"
-};
-
-static const char *app_labels[] = {
-    "Python", "Store", "CLI", "Game", "Setting",
-    "Game", "Math", "My Tool"
-};
+{{"MYTOOL", "mytool_100.png", "app_MyTool", true, false},
+ nullptr, false, true, false, append_page_app<UIMyToolPage>},
 ```
 
-`save_app_toggle()` はスイッチを `app_<key>` として保存します。例: `app_MyTool=0`。`launch.cpp` では同じキーを読みます。
-
-```cpp
-cp0_config_get_int("app_MyTool", 1)
-```
+`launcher_app_registry_set_enabled()` は `config_key` で switch を保存します。例: `app_MyTool=0`。`Launch::rebuild_builtin_apps()` は `launcher_app_registry_is_enabled()` を通して読み取ります。
 
 デバイス側の永続化ファイル:
 
@@ -222,7 +201,7 @@ APPLaunch が現在解析するフィールド:
 | `Name` | Yes | ホームページに表示する名前 |
 | `Exec` | Yes | 実行コマンド。絶対パスまたは shell コマンドを指定可能 |
 | `Icon` | No | アイコンパス。推奨形式は `share/images/xxx.png`、または LVGL が読める任意パス |
-| `Terminal` | No | `true`/`True`/`1` の場合、組み込み `UIConsolePage` 内で実行 |
+| `Terminal` | No | `true`/`True`/`1` の場合、組み込み `UISTPage` 内で実行 |
 | `Sysplause` | No | ターミナルアプリのみ。ターミナルコマンド終了後の一時停止動作を制御。既定は true |
 | `Type` | No | desktop-file 慣例との互換用。APPLaunch は現在依存していない |
 | `TryExec` | No | APPLaunch は現在解析しない。説明用フィールドとしてのみ使用可能 |
@@ -265,7 +244,7 @@ Type=Application
 
 `launch.cpp` は 2 種類の外部アプリ起動モードをサポートします。
 
-- `Terminal=true`: `UIConsolePage` を作成し、APPLaunch プロセス内に PTY ターミナルを表示して `Exec` を実行します。
+- `Terminal=true`: `UISTPage` を作成し、APPLaunch プロセス内に PTY ターミナルを表示して `Exec` を実行します。
 - `Terminal=false`: `cp0_process_exec_blocking()` を呼んで外部プロセスを開始します。APPLaunch は LVGL タイマーと入力グループを一時停止し、子プロセス終了を待ってからホームページを復元します。
 
 非ターミナル外部アプリからの復帰は次の挙動に依存します。
@@ -362,11 +341,10 @@ Settings ページは `projects/APPLaunch/main/ui/page_app/ui_app_setup.hpp` に
 
 手順:
 
-1. `UISetupPage::menu_init()` の `app_keys` に `MyTool` のような内部キーを追加します。
-2. 同じ場所の `app_labels` に `My Tool` のような表示ラベルを追加します。
-3. `launch.cpp` でアプリ登録時に同じキーを使います: `APP_ENABLED("MyTool")`。
-4. Settings ページを開き、`Launcher` メニューへ入り、O/X を切り替えます。
-5. ホームへ戻った後にリストが更新されない場合は APPLaunch を再起動します。現在の固定/組み込みリストは `Launch` 構築時に設定を読みます。
+1. `kBuiltinApps[]` でアプリの `AppDescriptor` を追加または更新します。
+2. `configurable=true` にし、`app_MyTool` のような完全な `config_key` を選びます。
+3. Settings ページを開き、`Launcher` メニューへ入り、O/X を切り替えます。
+4. Settings は `launcher_app_registry_set_enabled()` を呼び、Launcher に組み込みアプリリストの再構築を通知します。
 
 ### 5.2 通常設定を追加
 
@@ -390,7 +368,7 @@ Settings ページは `projects/APPLaunch/main/ui/page_app/ui_app_setup.hpp` に
 
 ### 5.3 設定永続化場所
 
-デバイス側設定実装: `ext_components/cp0_lvgl/src/cp0/cp0_app_config.cpp`。
+デバイス側設定実装: `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_config.cpp`。
 
 - 設定ディレクトリ: `/var/lib/applaunch`
 - 設定ファイル: `/var/lib/applaunch/settings`
