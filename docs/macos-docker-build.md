@@ -24,7 +24,7 @@ FROM --platform=linux/arm64 ubuntu:24.04
 RUN apt-get update && apt-get install -y \
     gcc g++ python3 python3-pip scons \
     libfreetype-dev libpng-dev libjpeg-dev \
-    libinput-dev libxkbcommon-dev libudev-dev libcamera-dev pip && \
+    libinput-dev libxkbcommon-dev libudev-dev && \
     pip install parse requests tqdm --break-system-packages && \
     rm -rf /var/lib/apt/lists/*
 EOF
@@ -47,7 +47,7 @@ docker run --rm --platform linux/arm64 \
     apt-get update -qq &&
     apt-get install -y -qq gcc g++ python3 python3-pip scons \
       libfreetype-dev libpng-dev libjpeg-dev \
-      libinput-dev libxkbcommon-dev libudev-dev libcamera-dev pip >/dev/null 2>&1 &&
+      libinput-dev libxkbcommon-dev libudev-dev >/dev/null 2>&1 &&
     pip install parse requests tqdm --break-system-packages -q &&
     rm -rf build dist &&
     CardputerZero=y CONFIG_REPO_AUTOMATION=y scons -j4
@@ -102,6 +102,9 @@ ssh pi@192.168.50.150 "echo pi | sudo -S install -m 0755 /tmp/M5CardputerZero-AP
 
 ## 注意事项
 
+- **不要安装 `libcamera-dev`**：宿主 arm64 的 `libcamera-dev`(0.2.x) 会与 BSP sysroot 自带的 libcamera(0.7) 冲突，链接 cp0_lvgl 的相机代码时报 `undefined reference to libcamera::properties::Model / libcamera::Request::addBuffer(...)`。BSP sysroot 已提供匹配版本，`ext_components/cp0_lvgl/SConstruct` 会在缺少 host libcamera 时自动回退到 sysroot 头。CI 在 x86 上交叉编译（宿主 x86 的 `.so` 无法被 aarch64 `-l` 链接，target 库必然取自 BSP），所以不会遇到此问题；arm64 原生构建必须省去 host `libcamera-dev`。
+- **构建前确保 SDK 子模块与 master 一致**：执行 `git submodule update --init SDK`（与 CI 一致）。若 SDK 停在其它提交，可能出现 `check_component` 报错（c_path 为 None）或缺少 cp0/bsp 头（`hal_lvgl_bsp.h`、`cp0_lvgl_app.h`）。
+- 切换分支或换 SDK 后，先 `rm -rf build dist` 再编译（CI 每次都这么做），避免旧配置残留导致的 include 路径错误。
 - Lima VM 是 aarch64 原生，无需 QEMU 模拟，编译速度接近真机
 - 首次编译会从 GitHub 下载 lvgl 源码 zip（约 100MB），之后缓存在 `SDK/github_source/`
 - Docker volume mount 直接写入本地 `build/` 和 `dist/`，不需要额外拷贝
