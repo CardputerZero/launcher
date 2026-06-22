@@ -334,22 +334,53 @@ private:
         cache_ = st;
     }
 
+    // nmcli 在 -t (terse) 模式下用 ':' 分隔字段，值里的 ':' 与 '\' 会被转义为 "\:" / "\\"。
+    static std::vector<std::string> split_terse_fields(const std::string &line)
+    {
+        std::vector<std::string> fields;
+        std::string cur;
+        for (size_t i = 0; i < line.size(); ++i) {
+            char c = line[i];
+            if (c == '\\' && i + 1 < line.size()) {
+                cur.push_back(line[++i]);
+            } else if (c == ':') {
+                fields.push_back(cur);
+                cur.clear();
+            } else {
+                cur.push_back(c);
+            }
+        }
+        fields.push_back(cur);
+        return fields;
+    }
+
     static void read_status(cp0_wifi_status_t &st)
     {
         char output[4096] = {};
-        const char *status_argv[] = {"nmcli", "-t", "-f", "TYPE,CONNECTION", "dev", "status", nullptr};
+        std::string wifi_iface;
+        // 用 DEVICE,TYPE,STATE,CONNECTION 四列判断：只要 wifi 设备的 STATE 以 "connected"
+        // 开头就算已连接，避免插拔网线后 wlan0 变成 "connected (externally)" 且 CONNECTION
+        // 显示为 "--" 时被误判为未连接（#37）。
+        const char *status_argv[] = {"nmcli", "-t", "-f", "DEVICE,TYPE,STATE,CONNECTION", "dev", "status", nullptr};
         if (cp0_process_capture_argv(status_argv, output, sizeof(output)) == 0) {
             std::istringstream lines(output);
             std::string line;
             while (std::getline(lines, line)) {
                 if (!line.empty() && line.back() == '\r')
                     line.pop_back();
-                if (line.rfind("wifi:", 0) != 0)
+                std::vector<std::string> f = split_terse_fields(line);
+                if (f.size() < 4 || f[1] != "wifi")
                     continue;
-                std::string name = line.substr(5);
-                if (!name.empty() && name != "--") {
+                const std::string &device = f[0];
+                const std::string &state = f[2];
+                const std::string &connection = f[3];
+                bool state_connected = state.rfind("connected", 0) == 0;          // "connected" / "connected (externally)"
+                bool has_connection = !connection.empty() && connection != "--";
+                if (state_connected || has_connection) {
                     st.connected = 1;
-                    cp0_copy_string(st.ssid, sizeof(st.ssid), name);
+                    wifi_iface = device;
+                    if (has_connection)
+                        cp0_copy_string(st.ssid, sizeof(st.ssid), connection);
                 }
                 break;
             }
@@ -358,19 +389,29 @@ private:
         if (!st.connected)
             return;
 
-        const char *signal_argv[] = {"nmcli", "-t", "-f", "IN-USE,SIGNAL", "dev", "wifi", "list", "--rescan", "no", nullptr};
+        if (wifi_iface.empty())
+            wifi_iface = "wlan0";
+
+        const char *signal_argv[] = {"nmcli", "-t", "-f", "IN-USE,SIGNAL,SSID", "dev", "wifi", "list", "--rescan", "no", nullptr};
         if (cp0_process_capture_argv(signal_argv, output, sizeof(output)) == 0) {
             std::istringstream lines(output);
             std::string line;
             while (std::getline(lines, line)) {
-                if (line.rfind("*:", 0) == 0) {
-                    st.signal = std::atoi(line.c_str() + 2);
-                    break;
-                }
+                if (!line.empty() && line.back() == '\r')
+                    line.pop_back();
+                if (line.rfind("*:", 0) != 0)
+                    continue;
+                std::vector<std::string> f = split_terse_fields(line);
+                if (f.size() >= 2)
+                    st.signal = std::atoi(f[1].c_str());
+                // CONNECTION 为 "--" 时（外部连接）用当前接入的 SSID 兜底
+                if (st.ssid[0] == '\0' && f.size() >= 3 && !f[2].empty())
+                    cp0_copy_string(st.ssid, sizeof(st.ssid), f[2]);
+                break;
             }
         }
 
-        const char *ip_argv[] = {"ip", "-4", "-o", "addr", "show", "wlan0", nullptr};
+        const char *ip_argv[] = {"ip", "-4", "-o", "addr", "show", wifi_iface.c_str(), nullptr};
         if (cp0_process_capture_argv(ip_argv, output, sizeof(output)) == 0) {
             std::string line(output);
             auto pos = line.find("inet ");
