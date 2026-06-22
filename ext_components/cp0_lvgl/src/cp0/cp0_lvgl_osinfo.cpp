@@ -34,6 +34,10 @@ public:
             report(callback, ret, encode_account_info(info));
         } else if (cmd == "TimeSet") {
             report(callback, time_set(nth_arg(arg, 1).c_str()), "");
+        } else if (cmd == "NtpGet") {
+            report(callback, ntp_get(), "");
+        } else if (cmd == "NtpSet") {
+            report(callback, ntp_set(nth_arg(arg, 1) == "1"), "");
         } else if (cmd == "AptUpdateBackground") {
             report(callback, apt_update_background(), "");
         } else if (cmd == "UpdateLauncherBackground") {
@@ -154,6 +158,27 @@ private:
         return cp0_process_run_argv(argv, 0);
     }
 
+    // Returns 1 if systemd automatic time sync (NTP) is enabled, 0 if disabled,
+    // negative on failure to query.
+    static int ntp_get()
+    {
+        char output[64] = {};
+        const char *argv[] = {"timedatectl", "show", "-p", "NTP", "--value", nullptr};
+        if (cp0_process_capture_argv(argv, output, sizeof(output)) != 0)
+            return -1;
+        std::string s(output);
+        // trim trailing newline / whitespace
+        while (!s.empty() && (s.back() == '\n' || s.back() == '\r' || s.back() == ' '))
+            s.pop_back();
+        return s == "yes" ? 1 : 0;
+    }
+
+    static int ntp_set(bool enable)
+    {
+        const char *argv[] = {"sudo", "timedatectl", "set-ntp", enable ? "true" : "false", nullptr};
+        return cp0_process_run_argv(argv, 0);
+    }
+
     static int apt_update_background()
     {
         const char *argv[] = {"apt", "update", nullptr};
@@ -256,6 +281,16 @@ extern "C" int cp0_account_info_read(cp0_account_info_t *info)
 extern "C" int cp0_time_set(const char *timestamp)
 {
     return OsInfoSystem::api_simple({"TimeSet", timestamp ? timestamp : ""});
+}
+
+extern "C" int cp0_time_ntp_get(void)
+{
+    return OsInfoSystem::api_simple({"NtpGet"});
+}
+
+extern "C" int cp0_time_ntp_set(int enable)
+{
+    return OsInfoSystem::api_simple({"NtpSet", enable ? "1" : "0"});
 }
 
 extern "C" int cp0_system_apt_update_background(void)
