@@ -1216,6 +1216,13 @@ private:
 
     static constexpr int MENU_X = 60;
 
+    // Right-column value box for sub / value views. After measuring a value's actual
+    // width, anything wider than VALUE_BOX_W is shrunk to VALUE_BOX_W and marquee-scrolled
+    // on the focused row / ellipsized elsewhere — so long values (MAC, Commit, IP,
+    // hostname, version, ...) scroll instead of overflowing or overlapping. (#57)
+    static constexpr int VALUE_BOX_LEFT = 112;
+    static constexpr int VALUE_BOX_W    = 100; // 超过 100px 即缩宽并滚动
+
     RowStyle style_for_slot(int vi) {
         int dist = vi > ROW_CENTER ? vi - ROW_CENTER : ROW_CENTER - vi;
         if (dist == 0)
@@ -1329,6 +1336,25 @@ private:
         if (item_idx < 0 || item_idx >= count)
             lv_obj_add_flag(lbl, LV_OBJ_FLAG_HIDDEN);
         return lbl;
+    }
+
+    // If a (carousel) label's text is wider than box_w, clamp it into [box_left, box_left+box_w]
+    // and either marquee-scroll it (focused/center row) or ellipsize it (other rows). Labels
+    // that already fit keep their original centered auto-width layout. Generic so any long value
+    // (MAC / Commit / IP / hostname / version / long option) is handled, not just one screen.
+    static void apply_overflow_handling(lv_obj_t *lbl, int box_left, int box_w, bool focused)
+    {
+        if (!lbl || box_w <= 0)
+            return;
+        lv_obj_update_layout(lbl);
+        if (lv_obj_get_width(lbl) <= box_w)
+            return; // fits — keep default centered behavior
+        lv_obj_set_width(lbl, box_w);
+        lv_obj_set_x(lbl, box_left);
+        // focused row marquee-scrolls (single line); others clip (single line, no wrap).
+        // Do NOT use LV_LABEL_LONG_DOT here: with auto height it wraps to multiple lines
+        // before adding dots, which looks like an unwanted line break.
+        lv_label_set_long_mode(lbl, focused ? LV_LABEL_LONG_SCROLL_CIRCULAR : LV_LABEL_LONG_CLIP);
     }
 
     // ==================== Main carousel view ====================
@@ -1508,6 +1534,7 @@ private:
             SubItem &sub = item.sub_items[si];
             lv_obj_t *lbl = create_carousel_label(cont, vi, sub_center_vi,
                                                    sub.label.c_str(), SUB_CENTER_X, true);
+            apply_overflow_handling(lbl, VALUE_BOX_LEFT, VALUE_BOX_W, vi == sub_center_vi);
             lv_obj_update_layout(lbl);
             int lx = lv_obj_get_x(lbl);
             int tw = lv_obj_get_width(lbl);
@@ -1606,6 +1633,7 @@ private:
             if (val_i < 0 || val_i >= val_count) continue;
             lv_obj_t *lbl = create_carousel_label(cont, vi, ROW_CENTER,
                                                    val_options_[val_i].c_str(), VAL_CENTER_X, true);
+            apply_overflow_handling(lbl, VALUE_BOX_LEFT, VALUE_BOX_W, vi == ROW_CENTER);
             lv_obj_update_layout(lbl);
             int lx = lv_obj_get_x(lbl);
             if (lx < val_right_min_x) val_right_min_x = lx;
