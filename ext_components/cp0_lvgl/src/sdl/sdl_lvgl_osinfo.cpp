@@ -74,6 +74,10 @@ public:
             report(callback, ret, encode_account_info(info));
         } else if (cmd == "TimeSet") {
             report(callback, time_set(nth_arg(arg, 1).c_str()), "");
+        } else if (cmd == "NtpGet") {
+            report(callback, 0, ""); // emulator: NTP considered off so manual set is allowed
+        } else if (cmd == "NtpSet") {
+            report(callback, 0, ""); // emulator: no-op
         } else if (cmd == "AptUpdateBackground") {
             report(callback, apt_update_background(), "");
         } else if (cmd == "UpdateLauncherBackground") {
@@ -328,6 +332,16 @@ extern "C" int cp0_account_info_read(cp0_account_info_t *info)
 extern "C" int cp0_time_set(const char *timestamp)
 {
     return SdlOsInfoSystem::api_simple({"TimeSet", timestamp ? timestamp : ""});
+}
+
+extern "C" int cp0_time_ntp_get(void)
+{
+    return SdlOsInfoSystem::api_simple({"NtpGet"});
+}
+
+extern "C" int cp0_time_ntp_set(int enable)
+{
+    return SdlOsInfoSystem::api_simple({"NtpSet", enable ? "1" : "0"});
 }
 
 extern "C" int cp0_system_apt_update_background(void)
