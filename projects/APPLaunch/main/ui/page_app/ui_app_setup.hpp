@@ -301,6 +301,7 @@ private:
             MenuItem m;
             m.label = "RTC";
             m.sub_items = {
+                {"NTP",    true,  true,  [this]() { ntp_toggle(); }},
                 {"Year",   false, false, [this]() { enter_rtc_adjust(0); }},
                 {"Month",  false, false, [this]() { enter_rtc_adjust(1); }},
                 {"Day",    false, false, [this]() { enter_rtc_adjust(2); }},
@@ -590,9 +591,11 @@ private:
     // ==================== RTC ====================
     int rtc_values_[6] = {2026, 1, 1, 0, 0, 0}; // Y/M/D/H/Min/S
     int rtc_field_ = 0;
+    bool rtc_ntp_on_ = true; // cached NTP state; manual set only allowed when off
 
     void refresh_rtc_values()
     {
+        rtc_ntp_on_ = cp0_time_ntp_get() == 1;
         time_t now = time(NULL);
         struct tm *t = localtime(&now);
         if (t) {
@@ -603,21 +606,36 @@ private:
             rtc_values_[4] = t->tm_min;
             rtc_values_[5] = t->tm_sec;
         }
-        // Update labels
+        // Update labels. sub_items[0] is the NTP toggle; date fields follow.
         for (auto &m : menu_items_) {
             if (m.label != "RTC") continue;
+            m.sub_items[0].toggle_state = rtc_ntp_on_;
             char buf[32];
             const char *names[] = {"Year", "Month", "Day", "Hour", "Minute", "Second"};
             for (int i = 0; i < 6; ++i) {
                 snprintf(buf, sizeof(buf), "%s: %d", names[i], rtc_values_[i]);
-                m.sub_items[i].label = buf;
+                m.sub_items[i + 1].label = buf;
             }
             break;
         }
     }
 
+    void ntp_toggle()
+    {
+        for (auto &m : menu_items_) {
+            if (m.label != "RTC") continue;
+            bool on = m.sub_items[0].toggle_state; // already flipped by handler
+            cp0_time_ntp_set(on ? 1 : 0);
+            break;
+        }
+        refresh_rtc_values();
+    }
+
     void enter_rtc_adjust(int field)
     {
+        // Manual time can only persist while NTP auto-sync is off.
+        if (rtc_ntp_on_)
+            return;
         rtc_field_ = field;
         const char *names[] = {"Year", "Month", "Day", "Hour", "Minute", "Second"};
         val_title_ = names[field];
@@ -648,6 +666,7 @@ private:
                  rtc_values_[0], rtc_values_[1], rtc_values_[2],
                  rtc_values_[3], rtc_values_[4], rtc_values_[5]);
         cp0_time_set(timestamp);
+        refresh_rtc_values();
     }
 
     void save_app_toggle(const std::string &config_key)
@@ -1222,6 +1241,11 @@ private:
     // hostname, version, ...) scroll instead of overflowing or overlapping. (#57)
     static constexpr int VALUE_BOX_LEFT = 112;
     static constexpr int VALUE_BOX_W    = 100; // 超过 100px 即缩宽并滚动
+    // Right-column hint (ok:xxx) scroll threshold. The hint sits at the far right,
+    // to the right of any toggle indicator (x=220). Anything wider than this is
+    // clamped into a right-edge box and marquee-scrolled. Slightly smaller than the
+    // center VALUE_BOX_W so it clears the toggle indicator instead of overlapping it.
+    static constexpr int RIGHT_HINT_BOX_W = 74;
 
     RowStyle style_for_slot(int vi) {
         int dist = vi > ROW_CENTER ? vi - ROW_CENTER : ROW_CENTER - vi;
@@ -1582,16 +1606,35 @@ private:
         // Hint for selected sub item (right-aligned, 6px from right edge, smaller font)
         SubItem &cur_sub = item.sub_items[sub_selected_idx_];
         lv_obj_t *hint = lv_label_create(cont);
-        if (cur_sub.is_toggle)
+        if (cur_sub.is_toggle && item.label == "RTC" && cur_sub.label == "NTP")
+            lv_label_set_text(hint, cur_sub.toggle_state ? "ok:disable" : "ok:enable");
+        else if (cur_sub.is_toggle)
             lv_label_set_text(hint, cur_sub.toggle_state ? "ok:hide" : "ok:select");
+        else if (item.label == "RTC" && rtc_ntp_on_)
+            lv_label_set_text(hint, "ntp on");
         else
             lv_label_set_text(hint, "ok:enter");
         lv_obj_set_style_text_color(hint, lv_color_hex(0x00CC66), LV_PART_MAIN);
         lv_obj_set_style_text_font(hint, launcher_fonts().get("Montserrat-Bold.ttf", 16, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN);
+        apply_right_hint_overflow(hint, row_y(sub_center_vi));
+    }
+
+    // Position the far-right hint (ok:xxx). If it is wider than RIGHT_HINT_BOX_W it is
+    // clamped into a right-edge box and marquee-scrolled (so long hints like "ok:disable"
+    // don't overlap the toggle indicator); otherwise it keeps its natural right-aligned pos.
+    void apply_right_hint_overflow(lv_obj_t *hint, int row_top_y)
+    {
         lv_obj_update_layout(hint);
-        int sub_hint_w = lv_obj_get_width(hint);
-        int sub_hint_h = lv_obj_get_height(hint);
-        lv_obj_set_pos(hint, SCREEN_W - 6 - sub_hint_w, row_y(sub_center_vi) + (row_h() - sub_hint_h) / 2);
+        int hw = lv_obj_get_width(hint);
+        int hh = lv_obj_get_height(hint);
+        int y = row_top_y + (row_h() - hh) / 2;
+        if (hw > RIGHT_HINT_BOX_W) {
+            lv_obj_set_width(hint, RIGHT_HINT_BOX_W);
+            lv_obj_set_pos(hint, SCREEN_W - 6 - RIGHT_HINT_BOX_W, y);
+            lv_label_set_long_mode(hint, LV_LABEL_LONG_SCROLL_CIRCULAR);
+        } else {
+            lv_obj_set_pos(hint, SCREEN_W - 6 - hw, y);
+        }
     }
 
     // ==================== Value select view (3rd level) ====================

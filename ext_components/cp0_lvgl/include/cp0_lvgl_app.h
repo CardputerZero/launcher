@@ -141,6 +141,10 @@ int cp0_account_info_read(cp0_account_info_t *info);
 int cp0_system_apt_update_background(void);
 int cp0_system_update_launcher_background(void);
 int cp0_time_set(const char *timestamp);
+/* NTP auto time-sync control. get returns 1 when enabled, 0 when disabled,
+ * negative on error. Manual RTC time can only persist while NTP is disabled. */
+int cp0_time_ntp_get(void);
+int cp0_time_ntp_set(int enable);
 int cp0_bq27220_calibrate(int command_index);
 int cp0_compass_read(cp0_compass_read_cb_t callback, void *user);
 int cp0_compass_calibrate(void);
