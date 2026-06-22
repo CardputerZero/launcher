@@ -31,6 +31,7 @@ DEFAULT_ARCHITECTURE = "arm64"
 
 INSTALL_PARENT = PurePosixPath("usr/share")
 SERVICE_PATH = PurePosixPath("usr/lib/systemd/user")
+SYSTEM_SERVICE_PATH = PurePosixPath("usr/lib/systemd/system")
 
 OPTIONAL_BINARIES = (
     "M5CardputerZero-AppStore",
@@ -58,6 +59,8 @@ class PackageConfig:
     priority: str = "optional"
     homepage: str = "https://www.m5stack.com"
     description: str = "M5CardputerZero APPLaunch"
+    service_scope: str = "user"
+    service_restart: str = "always"
 
     @property
     def install_prefix(self) -> PurePosixPath:
@@ -69,7 +72,7 @@ class PackageConfig:
 
     @property
     def service_path(self) -> PurePosixPath:
-        return SERVICE_PATH
+        return SYSTEM_SERVICE_PATH if self.service_scope == "system" else SERVICE_PATH
 
     @property
     def file_name(self) -> str:
@@ -201,6 +204,31 @@ def _control_text(config: PackageConfig) -> str:
 def _postinst_text(config: PackageConfig) -> str:
     service_file = f"/{_posix_path(config.service_path / f'{config.app_name}.service')}"
     service_name = f"{config.app_name}.service"
+    if config.service_scope == "system":
+        return f"""#!/bin/sh
+set -e
+mkdir -p /var/cache/{config.app_name}
+ln -sfn /var/cache/{config.app_name} /usr/share/{config.app_name}/cache
+SERVICE_NAME="{service_name}"
+SERVICE_FILE="{service_file}"
+
+systemd_is_running() {{
+    [ -d /run/systemd/system ] && [ "$(ps -p 1 -o comm= 2>/dev/null)" = "systemd" ]
+}}
+
+if command -v systemctl >/dev/null 2>&1 && [ -f "$SERVICE_FILE" ]; then
+    systemctl daemon-reload || true
+    systemctl enable "$SERVICE_NAME" || true
+    if systemd_is_running; then
+        systemctl restart "$SERVICE_NAME" || systemctl start "$SERVICE_NAME" || true
+    else
+        echo "{config.app_name}: systemd is not running; enabled system service for first boot" >&2
+    fi
+else
+    echo "{config.app_name}: systemctl unavailable or service file missing; skip system service enable/start" >&2
+fi
+exit 0
+"""
     return f"""#!/bin/sh
 set -e
 mkdir -p /var/cache/{config.app_name}
@@ -248,6 +276,29 @@ exit 0
 def _prerm_text(config: PackageConfig) -> str:
     service_file = f"/{_posix_path(config.service_path / f'{config.app_name}.service')}"
     service_name = f"{config.app_name}.service"
+    if config.service_scope == "system":
+        return f"""#!/bin/sh
+set -e
+SERVICE_NAME="{service_name}"
+SERVICE_FILE="{service_file}"
+
+systemd_is_running() {{
+    [ -d /run/systemd/system ] && [ "$(ps -p 1 -o comm= 2>/dev/null)" = "systemd" ]
+}}
+
+if command -v systemctl >/dev/null 2>&1 && [ -f "$SERVICE_FILE" ]; then
+    if systemd_is_running; then
+        systemctl stop "$SERVICE_NAME" || true
+    fi
+    case "$1" in
+        remove|deconfigure)
+            systemctl disable "$SERVICE_NAME" || true
+            ;;
+    esac
+fi
+rm -rf /var/cache/{config.app_name}
+exit 0
+"""
     return f"""#!/bin/sh
 set -e
 APP_UID=1000
@@ -283,6 +334,21 @@ exit 0
 
 
 def _service_text(config: PackageConfig) -> str:
+    if config.service_scope == "system":
+        return f"""[Unit]
+Description={config.app_name} Service
+After=systemd-user-sessions.service
+
+[Service]
+ExecStart=/{_posix_path(config.bin_path / config.bin_name)}
+WorkingDirectory=/{_posix_path(config.install_prefix)}
+Restart={config.service_restart}
+RestartSec=1
+StartLimitInterval=0
+
+[Install]
+WantedBy=multi-user.target
+"""
     return f"""[Unit]
 Description={config.app_name} Service
 After=pipewire-pulse.service
@@ -291,7 +357,7 @@ Wants=pipewire-pulse.service
 [Service]
 ExecStart=/{_posix_path(config.bin_path / config.bin_name)}
 WorkingDirectory=/{_posix_path(config.install_prefix)}
-Restart=always
+Restart={config.service_restart}
 RestartSec=1
 StartLimitInterval=0
 
@@ -493,6 +559,8 @@ def create_deb_package(
     package_name: str = PACKAGE_NAME,
     app_name: str = APP_NAME,
     bin_name: str = BIN_NAME,
+    service_scope: str = "user",
+    service_restart: str = "always",
 ) -> str:
     """Build a project as a Debian package and return the output path."""
     config = PackageConfig(
@@ -504,6 +572,8 @@ def create_deb_package(
         bin_name=bin_name,
         section=app_name,
         description=f"M5CardputerZero {app_name}",
+        service_scope=service_scope,
+        service_restart=service_restart,
     )
     paths = _prepare_paths(src_folder, output_dir, work_dir, config, project, project_dir)
 
@@ -565,6 +635,17 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     build.add_argument("--architecture", default=DEFAULT_ARCHITECTURE, help="Debian architecture")
     build.add_argument("--src", "--src-folder", dest="src", default="dist", help="dist directory containing the built binary; relative paths are resolved from the project directory")
     build.add_argument("--app-tree", default=None, help="resource tree to install as /usr/share/<app-name>")
+    build.add_argument(
+        "--service-scope",
+        choices=("user", "system"),
+        default="user",
+        help="install a systemd user service or root system service",
+    )
+    build.add_argument(
+        "--service-restart",
+        default="always",
+        help="systemd Restart policy for the generated service",
+    )
     build.add_argument("--output-dir", default=None, help="directory for the generated .deb")
     build.add_argument("--work-dir", default=None, help="directory for the staging tree")
     build.add_argument(
@@ -627,6 +708,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             package_name=args.package_name,
             app_name=args.app_name,
             bin_name=args.bin_name,
+            service_scope=args.service_scope,
+            service_restart=args.service_restart,
         )
         return 0
     except (OSError, subprocess.CalledProcessError, PackError) as exc:
