@@ -305,7 +305,7 @@ private:
     static std::string encode_status(const cp0_wifi_status_t &st)
     {
         std::ostringstream oss;
-        oss << st.connected << ':' << st.ssid << ':' << st.ip << ':' << st.signal;
+        oss << st.connected << ':' << st.ssid << ':' << st.ip << ':' << st.signal << ':' << st.ethernet;
         return oss.str();
     }
 
@@ -365,24 +365,34 @@ private:
         if (cp0_process_capture_argv(status_argv, output, sizeof(output)) == 0) {
             std::istringstream lines(output);
             std::string line;
+            bool wifi_found = false;
             while (std::getline(lines, line)) {
                 if (!line.empty() && line.back() == '\r')
                     line.pop_back();
                 std::vector<std::string> f = split_terse_fields(line);
-                if (f.size() < 4 || f[1] != "wifi")
+                if (f.size() < 4)
                     continue;
                 const std::string &device = f[0];
+                const std::string &type = f[1];
                 const std::string &state = f[2];
                 const std::string &connection = f[3];
                 bool state_connected = state.rfind("connected", 0) == 0;          // "connected" / "connected (externally)"
                 bool has_connection = !connection.empty() && connection != "--";
-                if (state_connected || has_connection) {
-                    st.connected = 1;
-                    wifi_iface = device;
-                    if (has_connection)
-                        cp0_copy_string(st.ssid, sizeof(st.ssid), connection);
+
+                if (type == "ethernet" && state_connected) {
+                    st.ethernet = 1;                                              // 有线网口已连接（#37 网口图标）
+                    continue;
                 }
-                break;
+
+                if (type == "wifi" && !wifi_found) {
+                    wifi_found = true;
+                    if (state_connected || has_connection) {
+                        st.connected = 1;
+                        wifi_iface = device;
+                        if (has_connection)
+                            cp0_copy_string(st.ssid, sizeof(st.ssid), connection);
+                    }
+                }
             }
         }
 

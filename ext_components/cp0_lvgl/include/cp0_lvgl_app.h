@@ -36,6 +36,7 @@ typedef struct {
     char ssid[CP0_WIFI_SSID_MAX];
     char ip[48];
     int signal;
+    int ethernet; /* 1 if a wired ethernet device is connected */
 } cp0_wifi_status_t;
 
 typedef struct {
