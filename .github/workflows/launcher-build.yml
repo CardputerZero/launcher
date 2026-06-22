@@ -9,6 +9,7 @@ on:
       - 'projects/AppStore/**'
       - 'projects/Calculator'
       - 'projects/Calculator/**'
+      - 'projects/LaunchWizard/**'
       - 'SDK/**'
       - '.gitmodules'
       - '.github/workflows/launcher-build.yml'
@@ -88,6 +89,14 @@ jobs:
         export CONFIG_REPO_AUTOMATION=y
         scons -j$(nproc)
 
+    - name: Build LaunchWizard (cross-compile aarch64)
+      run: |
+        cd projects/LaunchWizard
+        rm -rf build dist
+        export CardputerZero=y
+        export CONFIG_REPO_AUTOMATION=y
+        scons -j$(nproc)
+
     - name: Copy bundled apps into APPLaunch dist
       run: |
         mkdir -p projects/APPLaunch/dist/bin
@@ -102,11 +111,22 @@ jobs:
       run: |
         python3 scripts/debian_packager.py
 
+    - name: Build LaunchWizard .deb package
+      run: |
+        python3 scripts/debian_packager.py build \
+          --project LaunchWizard \
+          --app-name LaunchWizard \
+          --bin-name LaunchWizard \
+          --package-name launchwizard \
+          --service-scope system
+
     - name: Collect artifacts
       run: |
         mkdir -p artifacts
         cp projects/APPLaunch/dist/M5CardputerZero-APPLaunch artifacts/
         cp projects/APPLaunch/tools/*.deb artifacts/
+        cp projects/LaunchWizard/dist/LaunchWizard artifacts/
+        cp projects/LaunchWizard/tools/*.deb artifacts/
 
     - uses: actions/upload-artifact@v4
       with:
@@ -139,3 +159,4 @@ jobs:
         files: |
           artifacts/*.deb
           artifacts/M5CardputerZero-APPLaunch
+          artifacts/LaunchWizard
