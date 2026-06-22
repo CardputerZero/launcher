@@ -910,6 +910,15 @@ private:
         } else if (wifi_has_saved_profile(ap->ssid)) {
             wifi_show_connecting(ap->ssid);
             ret = launcher_wifi::connect(ap->ssid, NULL);
+            if (ret != 0) {
+                // Saved profile failed to connect (e.g. stale/wrong password). Fall
+                // back to asking for the password again instead of silently erroring,
+                // so the user can re-enter it until the connection succeeds (#69).
+                needs_password = true;
+                wifi_pw_ssid_ = ap->ssid;
+                wifi_pw_buf_.clear();
+                show_wifi_pw_input();
+            }
         } else {
             needs_password = true;
             wifi_pw_ssid_ = ap->ssid;
