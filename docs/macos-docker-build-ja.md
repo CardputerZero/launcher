@@ -24,7 +24,7 @@ FROM --platform=linux/arm64 ubuntu:24.04
 RUN apt-get update && apt-get install -y \
     gcc g++ python3 python3-pip scons \
     libfreetype-dev libpng-dev libjpeg-dev \
-    libinput-dev libxkbcommon-dev libudev-dev libcamera-dev pip && \
+    libinput-dev libxkbcommon-dev libudev-dev && \
     pip install parse requests tqdm --break-system-packages && \
     rm -rf /var/lib/apt/lists/*
 EOF
@@ -47,7 +47,7 @@ docker run --rm --platform linux/arm64 \
     apt-get update -qq &&
     apt-get install -y -qq gcc g++ python3 python3-pip scons \
       libfreetype-dev libpng-dev libjpeg-dev \
-      libinput-dev libxkbcommon-dev libudev-dev libcamera-dev pip >/dev/null 2>&1 &&
+      libinput-dev libxkbcommon-dev libudev-dev >/dev/null 2>&1 &&
     pip install parse requests tqdm --break-system-packages -q &&
     rm -rf build dist &&
     CardputerZero=y CONFIG_REPO_AUTOMATION=y scons -j4
@@ -102,6 +102,9 @@ ssh pi@192.168.50.150 "echo pi | sudo -S install -m 0755 /tmp/M5CardputerZero-AP
 
 ## 注意事項
 
+- **`libcamera-dev` はインストールしないこと**：ホスト arm64 の `libcamera-dev`(0.2.x) は BSP sysroot 同梱の libcamera(0.7) と衝突し、cp0_lvgl のカメラコードをリンクする際に `undefined reference to libcamera::properties::Model / libcamera::Request::addBuffer(...)` となります。BSP sysroot が一致するバージョンを提供しており、`ext_components/cp0_lvgl/SConstruct` はホスト libcamera が無い場合に sysroot のヘッダへ自動フォールバックします。CI は x86 上でクロスコンパイルする（ホスト x86 の `.so` は aarch64 の `-l` でリンクできず、ターゲットライブラリは必ず BSP から取得される）ためこの問題は起きません。arm64 ネイティブビルドではホストの `libcamera-dev` を省く必要があります。
+- **ビルド前に SDK サブモジュールを master と一致させること**：`git submodule update --init SDK` を実行します（CI と同じ）。SDK が別のコミットにあると、`check_component` のエラー（c_path が None）や cp0/bsp ヘッダ（`hal_lvgl_bsp.h`、`cp0_lvgl_app.h`）の欠落が発生する可能性があります。
+- ブランチや SDK を切り替えた後は、`rm -rf build dist` してからビルドしてください（CI も毎回実行）。古い設定の残留による include パスの誤りを防ぎます。
 - Lima VM は aarch64 ネイティブのため、QEMU エミュレーションは不要で、ビルド速度は実機に近くなります
 - 初回ビルドでは GitHub から lvgl ソースコード zip（約 100MB）をダウンロードし、その後は `SDK/github_source/` にキャッシュされます
 - Docker volume mount はローカルの `build/` と `dist/` に直接書き込むため、追加のコピーは不要です
