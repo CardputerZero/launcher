@@ -104,6 +104,8 @@ scripts/debian_packager.py
 | `--bin-name` | `M5CardputerZero-APPLaunch` | メイン実行ファイル名 |
 | `--src` / `--src-folder` | `dist` | ビルド出力ディレクトリ。プロジェクトディレクトリ相対で解決 |
 | `--app-tree` | auto | 実行時リソースツリー。既定は `<project>/<app-name>`、次に `<src>/<app-name>` |
+| `--service-scope` | `user` | `/usr/lib/systemd/user` 配下の systemd user service としてインストールします。`system` を指定すると `/usr/lib/systemd/system` 配下の root system service になります |
+| `--service-restart` | `always` | 生成される systemd service の `Restart=` ポリシー |
 | `--output-dir` | `<project>/tools` | 生成される `.deb` の出力ディレクトリ |
 | `--work-dir` | output directory | ステージングディレクトリの親 |
 | `--builder` | `auto` | 利用可能なら `dpkg-deb`、なければ pure Python writer を使用 |
@@ -111,7 +113,7 @@ scripts/debian_packager.py
 生成される APPLaunch パッケージファイル名の形式:
 
 ```text
-applaunch_0.2.1-m5stack1_arm64.deb
+applaunch_0.6.0-m5stack1_arm64.deb
 ```
 
 ## 4. `.deb` パッケージディレクトリ構造
@@ -144,7 +146,7 @@ projects/APPLaunch/tools/debian-APPLaunch/
 最終的な APPLaunch `.deb` ファイルは次にあります。
 
 ```text
-projects/APPLaunch/tools/applaunch_0.2.1-m5stack1_arm64.deb
+projects/APPLaunch/tools/applaunch_0.6.0-m5stack1_arm64.deb
 ```
 
 ## 5. パッケージングコマンド
@@ -187,9 +189,9 @@ python3 scripts/debian_packager.py build \
 成功すると、次のような出力が表示されます。
 
 ```text
-Creating Debian package applaunch_0.2.1-m5stack1_arm64.deb ...
+Creating Debian package applaunch_0.6.0-m5stack1_arm64.deb ...
 Staged package tree: .../projects/APPLaunch/tools/debian-APPLaunch
-Debian package created: .../projects/APPLaunch/tools/applaunch_0.2.1-m5stack1_arm64.deb
+Debian package created: .../projects/APPLaunch/tools/applaunch_0.6.0-m5stack1_arm64.deb
 Builder: dpkg-deb
 ```
 
@@ -311,7 +313,7 @@ store_arrow_*.png
 
 ```text
 Package: applaunch
-Version: 0.2.1
+Version: 0.6.0
 Architecture: arm64
 Maintainer: dianjixz <dianjixz@m5stack.com>
 Original-Maintainer: m5stack <m5stack@m5stack.com>
@@ -382,7 +384,7 @@ exit 0
 
 ## 8. systemd サービスファイル
 
-スクリプトは次を生成します。
+デフォルトの `--service-scope user` では、スクリプトは次を生成します。
 
 ```ini
 [Unit]
@@ -413,7 +415,7 @@ WantedBy=default.target
 | `After` / `Wants` | 利用可能な場合は PipeWire PulseAudio サポートの後に起動 |
 | `WantedBy=default.target` | ユーザーの既定 systemd target でサービスを有効化 |
 
-現在のパッケージは root 所有の system service ではなく、`/usr/lib/systemd/user` 配下の user service をインストールします。`postinst` により UID 1000 ユーザー向けに有効化されるため、framebuffer、evdev、GPIO、audio、camera へのデバイス権限は、イメージのユーザー/グループ規則で提供されている必要があります。
+デフォルトのパッケージは root 所有の system service ではなく、`/usr/lib/systemd/user` 配下の user service をインストールします。`postinst` により UID 1000 ユーザー向けに有効化されるため、framebuffer、evdev、GPIO、audio、camera へのデバイス権限は、イメージのユーザー/グループ規則で提供されている必要があります。`--service-scope system` を指定すると、サービスは `/usr/lib/systemd/system/APPLaunch.service` としてインストールされ、`WantedBy=multi-user.target` を使用します。
 
 ## 9. デバイスへのインストール
 
@@ -423,21 +425,21 @@ WantedBy=default.target
 
 ```bash
 cd /home/nihao/w2T/github/launcher/projects/APPLaunch/tools
-scp applaunch_0.2.1-m5stack1_arm64.deb pi@192.168.28.177:/home/pi/
+scp applaunch_0.6.0-m5stack1_arm64.deb pi@192.168.28.177:/home/pi/
 ```
 
 ### 9.2 デバイスでインストール
 
 ```bash
 ssh pi@192.168.28.177
-sudo dpkg -i /home/pi/applaunch_0.2.1-m5stack1_arm64.deb
+sudo dpkg -i /home/pi/applaunch_0.6.0-m5stack1_arm64.deb
 ```
 
 インストーラが依存関係不足を報告した場合は、先に依存関係を修正します。
 
 ```bash
 sudo apt-get -f install
-sudo dpkg -i /home/pi/applaunch_0.2.1-m5stack1_arm64.deb
+sudo dpkg -i /home/pi/applaunch_0.6.0-m5stack1_arm64.deb
 ```
 
 ### 9.3 上書きインストール
@@ -445,14 +447,14 @@ sudo dpkg -i /home/pi/applaunch_0.2.1-m5stack1_arm64.deb
 同じパッケージ名またはより高いバージョンを再度インストールします。
 
 ```bash
-sudo dpkg -i /home/pi/applaunch_0.2.1-m5stack1_arm64.deb
+sudo dpkg -i /home/pi/applaunch_0.6.0-m5stack1_arm64.deb
 ```
 
 サービスが実行中の場合、`postinst` は有効化/起動を試みます。インストール中の framebuffer または入力デバイス競合を減らすには、先にサービスを手動停止できます。
 
 ```bash
 systemctl --user stop APPLaunch.service || true
-sudo dpkg -i /home/pi/applaunch_0.2.1-m5stack1_arm64.deb
+sudo dpkg -i /home/pi/applaunch_0.6.0-m5stack1_arm64.deb
 systemctl --user restart APPLaunch.service
 ```
 
@@ -554,13 +556,13 @@ dpkg -L applaunch
 インストールせずに `.deb` パッケージ内容を確認:
 
 ```bash
-dpkg-deb -c applaunch_0.2.1-m5stack1_arm64.deb
+dpkg-deb -c applaunch_0.6.0-m5stack1_arm64.deb
 ```
 
 `.deb` メタデータを確認:
 
 ```bash
-dpkg-deb -I applaunch_0.2.1-m5stack1_arm64.deb
+dpkg-deb -I applaunch_0.6.0-m5stack1_arm64.deb
 ```
 
 ### 12.2 ファイルと権限
@@ -881,8 +883,8 @@ file dist/M5CardputerZero-APPLaunch
 ```bash
 cd /home/nihao/w2T/github/launcher
 python3 scripts/debian_packager.py
-dpkg-deb -I projects/APPLaunch/tools/applaunch_0.2.1-m5stack1_arm64.deb
-dpkg-deb -c projects/APPLaunch/tools/applaunch_0.2.1-m5stack1_arm64.deb | head -n 50
+dpkg-deb -I projects/APPLaunch/tools/applaunch_0.6.0-m5stack1_arm64.deb
+dpkg-deb -c projects/APPLaunch/tools/applaunch_0.6.0-m5stack1_arm64.deb | head -n 50
 ```
 
 インストール後:
@@ -918,8 +920,8 @@ scons -j8
 file dist/M5CardputerZero-APPLaunch
 cd /home/nihao/w2T/github/launcher
 python3 scripts/debian_packager.py
-scp projects/APPLaunch/tools/applaunch_0.2.1-m5stack1_arm64.deb pi@192.168.28.177:/home/pi/
-ssh pi@192.168.28.177 'sudo dpkg -i /home/pi/applaunch_0.2.1-m5stack1_arm64.deb && systemctl --user status APPLaunch.service --no-pager'
+scp projects/APPLaunch/tools/applaunch_0.6.0-m5stack1_arm64.deb pi@192.168.28.177:/home/pi/
+ssh pi@192.168.28.177 'sudo dpkg -i /home/pi/applaunch_0.6.0-m5stack1_arm64.deb && systemctl --user status APPLaunch.service --no-pager'
 ```
 
 開発中の高速置き換えでは次を使います。
