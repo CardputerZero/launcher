@@ -173,20 +173,33 @@ public:
         if (!ssid || !ssid[0])
             return -1;
 
+        const bool with_password = password && password[0];
         char output[4096] = {};
-        int ret = -1;
-        if (password && password[0]) {
+        if (with_password) {
             const char *argv[] = {"nmcli", "dev", "wifi", "connect", ssid, "password", password, nullptr};
-            ret = cp0_process_capture_argv(argv, output, sizeof(output));
+            cp0_process_capture_argv(argv, output, sizeof(output));
         } else {
             const char *argv[] = {"nmcli", "con", "up", "id", ssid, nullptr};
-            ret = cp0_process_capture_argv(argv, output, sizeof(output));
+            cp0_process_capture_argv(argv, output, sizeof(output));
         }
 
-        if (ret == 0 || std::string(output).find("successfully") != std::string::npos) {
+        // Success is determined by NetworkManager's explicit activation message
+        // ("... successfully activated ..."), NOT by the nmcli exit code: on a wrong
+        // password nmcli sometimes still exits 0, which would make us treat a failed
+        // attempt as connected and leave the bad-password profile behind.
+        if (std::string(output).find("successfully activated") != std::string::npos) {
             update_status_cache();
             return 0;
         }
+
+        // Failed. When the user just entered a password, nmcli may have saved a
+        // profile with that wrong password (named after the SSID). Delete it so the
+        // password is never persisted and the next attempt must re-enter it (#69).
+        if (with_password) {
+            const char *del_argv[] = {"nmcli", "con", "delete", "id", ssid, nullptr};
+            cp0_process_run_argv(del_argv, 0);
+        }
+        update_status_cache();
         return -1;
     }
 
