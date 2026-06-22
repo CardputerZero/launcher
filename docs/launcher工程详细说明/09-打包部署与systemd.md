@@ -104,6 +104,8 @@ scripts/debian_packager.py
 | `--bin-name` | `M5CardputerZero-APPLaunch` | 主可执行文件名 |
 | `--src` / `--src-folder` | `dist` | 构建输出目录，相对项目目录解析 |
 | `--app-tree` | 自动 | 运行时资源树，默认依次查找 `<project>/<app-name>`、`<src>/<app-name>` |
+| `--service-scope` | `user` | 安装到 `/usr/lib/systemd/user` 的 systemd 用户服务；传 `system` 时安装到 `/usr/lib/systemd/system` 的系统服务 |
+| `--service-restart` | `always` | 生成的 systemd 服务 `Restart=` 策略 |
 | `--output-dir` | `<project>/tools` | `.deb` 输出目录 |
 | `--work-dir` | 输出目录 | 打包临时目录所在目录 |
 | `--builder` | `auto` | 有 `dpkg-deb` 时使用 `dpkg-deb`，否则使用纯 Python 写包器 |
@@ -111,7 +113,7 @@ scripts/debian_packager.py
 APPLaunch 默认生成的包文件名格式：
 
 ```text
-applaunch_0.2.1-m5stack1_arm64.deb
+applaunch_0.6.0-m5stack1_arm64.deb
 ```
 
 ## 4. `.deb` 包目录结构
@@ -144,7 +146,7 @@ projects/APPLaunch/tools/debian-APPLaunch/
 APPLaunch 最终 `.deb` 文件位于：
 
 ```text
-projects/APPLaunch/tools/applaunch_0.2.1-m5stack1_arm64.deb
+projects/APPLaunch/tools/applaunch_0.6.0-m5stack1_arm64.deb
 ```
 
 ## 5. 打包命令
@@ -187,9 +189,9 @@ python3 scripts/debian_packager.py build \
 成功时会看到类似：
 
 ```text
-Creating Debian package applaunch_0.2.1-m5stack1_arm64.deb ...
+Creating Debian package applaunch_0.6.0-m5stack1_arm64.deb ...
 Staged package tree: .../projects/APPLaunch/tools/debian-APPLaunch
-Debian package created: .../projects/APPLaunch/tools/applaunch_0.2.1-m5stack1_arm64.deb
+Debian package created: .../projects/APPLaunch/tools/applaunch_0.6.0-m5stack1_arm64.deb
 Builder: dpkg-deb
 ```
 
@@ -311,7 +313,7 @@ store_arrow_*.png
 
 ```text
 Package: applaunch
-Version: 0.2.1
+Version: 0.6.0
 Architecture: arm64
 Maintainer: dianjixz <dianjixz@m5stack.com>
 Original-Maintainer: m5stack <m5stack@m5stack.com>
@@ -382,7 +384,7 @@ exit 0
 
 ## 8. systemd 服务文件
 
-脚本生成：
+默认 `--service-scope user` 时，脚本生成：
 
 ```ini
 [Unit]
@@ -413,7 +415,7 @@ WantedBy=default.target
 | `After` / `Wants` | 在可用时等待 PipeWire PulseAudio 支持 |
 | `WantedBy=default.target` | enable 后随用户默认 target 启动 |
 
-当前包安装的是 `/usr/lib/systemd/user` 下的用户服务，不是 root 身份的 system service。`postinst` 会为 UID 1000 用户启用该服务；framebuffer、evdev、GPIO、音频和相机访问权限需由系统镜像的用户/用户组规则提供。
+默认包安装的是 `/usr/lib/systemd/user` 下的用户服务，不是 root 身份的 system service。`postinst` 会为 UID 1000 用户启用该服务；framebuffer、evdev、GPIO、音频和相机访问权限需由系统镜像的用户/用户组规则提供。使用 `--service-scope system` 时，服务会安装为 `/usr/lib/systemd/system/APPLaunch.service`，并使用 `WantedBy=multi-user.target`。
 
 ## 9. 安装到设备
 
@@ -423,21 +425,21 @@ WantedBy=default.target
 
 ```bash
 cd /home/nihao/w2T/github/launcher/projects/APPLaunch/tools
-scp applaunch_0.2.1-m5stack1_arm64.deb pi@192.168.28.177:/home/pi/
+scp applaunch_0.6.0-m5stack1_arm64.deb pi@192.168.28.177:/home/pi/
 ```
 
 ### 9.2 在设备上安装
 
 ```bash
 ssh pi@192.168.28.177
-sudo dpkg -i /home/pi/applaunch_0.2.1-m5stack1_arm64.deb
+sudo dpkg -i /home/pi/applaunch_0.6.0-m5stack1_arm64.deb
 ```
 
 如果安装过程中提示缺少依赖，先修复依赖：
 
 ```bash
 sudo apt-get -f install
-sudo dpkg -i /home/pi/applaunch_0.2.1-m5stack1_arm64.deb
+sudo dpkg -i /home/pi/applaunch_0.6.0-m5stack1_arm64.deb
 ```
 
 ### 9.3 覆盖安装
@@ -445,14 +447,14 @@ sudo dpkg -i /home/pi/applaunch_0.2.1-m5stack1_arm64.deb
 再次安装同名或更高版本包：
 
 ```bash
-sudo dpkg -i /home/pi/applaunch_0.2.1-m5stack1_arm64.deb
+sudo dpkg -i /home/pi/applaunch_0.6.0-m5stack1_arm64.deb
 ```
 
 如果服务正在运行，`postinst` 会尝试 enable/start。为了减少安装期间 framebuffer 或输入设备占用问题，可以手动先停服务：
 
 ```bash
 systemctl --user stop APPLaunch.service || true
-sudo dpkg -i /home/pi/applaunch_0.2.1-m5stack1_arm64.deb
+sudo dpkg -i /home/pi/applaunch_0.6.0-m5stack1_arm64.deb
 systemctl --user restart APPLaunch.service
 ```
 
@@ -554,13 +556,13 @@ dpkg -L applaunch
 查看 `.deb` 包内容但不安装：
 
 ```bash
-dpkg-deb -c applaunch_0.2.1-m5stack1_arm64.deb
+dpkg-deb -c applaunch_0.6.0-m5stack1_arm64.deb
 ```
 
 查看 `.deb` 元信息：
 
 ```bash
-dpkg-deb -I applaunch_0.2.1-m5stack1_arm64.deb
+dpkg-deb -I applaunch_0.6.0-m5stack1_arm64.deb
 ```
 
 ### 12.2 文件和权限
@@ -881,8 +883,8 @@ file dist/M5CardputerZero-APPLaunch
 ```bash
 cd /home/nihao/w2T/github/launcher
 python3 scripts/debian_packager.py
-dpkg-deb -I projects/APPLaunch/tools/applaunch_0.2.1-m5stack1_arm64.deb
-dpkg-deb -c projects/APPLaunch/tools/applaunch_0.2.1-m5stack1_arm64.deb | head -n 50
+dpkg-deb -I projects/APPLaunch/tools/applaunch_0.6.0-m5stack1_arm64.deb
+dpkg-deb -c projects/APPLaunch/tools/applaunch_0.6.0-m5stack1_arm64.deb | head -n 50
 ```
 
 安装后：
@@ -918,8 +920,8 @@ scons -j8
 file dist/M5CardputerZero-APPLaunch
 cd /home/nihao/w2T/github/launcher
 python3 scripts/debian_packager.py
-scp projects/APPLaunch/tools/applaunch_0.2.1-m5stack1_arm64.deb pi@192.168.28.177:/home/pi/
-ssh pi@192.168.28.177 'sudo dpkg -i /home/pi/applaunch_0.2.1-m5stack1_arm64.deb && systemctl --user status APPLaunch.service --no-pager'
+scp projects/APPLaunch/tools/applaunch_0.6.0-m5stack1_arm64.deb pi@192.168.28.177:/home/pi/
+ssh pi@192.168.28.177 'sudo dpkg -i /home/pi/applaunch_0.6.0-m5stack1_arm64.deb && systemctl --user status APPLaunch.service --no-pager'
 ```
 
 开发阶段快速替换建议使用：
