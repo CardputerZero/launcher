@@ -200,24 +200,46 @@ def _control_text(config: PackageConfig) -> str:
 
 def _postinst_text(config: PackageConfig) -> str:
     service_file = f"/{_posix_path(config.service_path / f'{config.app_name}.service')}"
+    service_name = f"{config.app_name}.service"
     return f"""#!/bin/sh
 set -e
 mkdir -p /var/cache/{config.app_name}
 ln -sfn /var/cache/{config.app_name} /usr/share/{config.app_name}/cache
 APP_UID=1000
 APP_USER="$(getent passwd "$APP_UID" | cut -d: -f1)"
-if command -v systemctl >/dev/null 2>&1 && [ -n "$APP_USER" ] && [ -f "{service_file}" ]; then
-    if command -v loginctl >/dev/null 2>&1; then
-        loginctl enable-linger "$APP_USER" || true
+SERVICE_NAME="{service_name}"
+SERVICE_FILE="{service_file}"
+
+systemd_is_running() {{
+    [ -d /run/systemd/system ] && [ "$(ps -p 1 -o comm= 2>/dev/null)" = "systemd" ]
+}}
+
+user_systemctl() {{
+    runuser -u "$APP_USER" -- env \\
+        XDG_RUNTIME_DIR="/run/user/$APP_UID" \\
+        DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$APP_UID/bus" \\
+        systemctl --user "$@"
+}}
+
+if command -v systemctl >/dev/null 2>&1 && [ -f "$SERVICE_FILE" ]; then
+    systemctl --global enable "$SERVICE_NAME" || true
+    if systemd_is_running && [ -n "$APP_USER" ]; then
+        if command -v loginctl >/dev/null 2>&1; then
+            loginctl enable-linger "$APP_USER" || true
+        fi
+        systemctl daemon-reload || true
+        systemctl start "user@$APP_UID.service" || true
+        user_systemctl daemon-reload || true
+        user_systemctl enable "$SERVICE_NAME" || true
+        user_systemctl restart "$SERVICE_NAME" || user_systemctl start "$SERVICE_NAME" || true
+    else
+        echo "{config.app_name}: systemd is not running; enabled user service globally for first boot" >&2
+        if [ -z "$APP_USER" ]; then
+            echo "{config.app_name}: UID 1000 user not found; skip immediate user service start" >&2
+        fi
     fi
-    systemctl daemon-reload || true
-    systemctl start "user@$APP_UID.service" || true
-    runuser -u "$APP_USER" -- env XDG_RUNTIME_DIR="/run/user/$APP_UID" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$APP_UID/bus" systemctl --user daemon-reload || true
-    runuser -u "$APP_USER" -- env XDG_RUNTIME_DIR="/run/user/$APP_UID" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$APP_UID/bus" systemctl --user enable {config.app_name}.service || true
-    runuser -u "$APP_USER" -- env XDG_RUNTIME_DIR="/run/user/$APP_UID" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$APP_UID/bus" systemctl --user restart {config.app_name}.service || \
-        runuser -u "$APP_USER" -- env XDG_RUNTIME_DIR="/run/user/$APP_UID" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$APP_UID/bus" systemctl --user start {config.app_name}.service || true
 else
-    echo "{config.app_name}: UID 1000 user not found or service file missing; skip user service enable/start" >&2
+    echo "{config.app_name}: systemctl unavailable or service file missing; skip user service enable/start" >&2
 fi
 exit 0
 """
@@ -225,13 +247,35 @@ exit 0
 
 def _prerm_text(config: PackageConfig) -> str:
     service_file = f"/{_posix_path(config.service_path / f'{config.app_name}.service')}"
+    service_name = f"{config.app_name}.service"
     return f"""#!/bin/sh
 set -e
 APP_UID=1000
 APP_USER="$(getent passwd "$APP_UID" | cut -d: -f1)"
-if command -v systemctl >/dev/null 2>&1 && [ -n "$APP_USER" ] && [ -f "{service_file}" ]; then
-    runuser -u "$APP_USER" -- env XDG_RUNTIME_DIR="/run/user/$APP_UID" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$APP_UID/bus" systemctl --user stop {config.app_name}.service || true
-    runuser -u "$APP_USER" -- env XDG_RUNTIME_DIR="/run/user/$APP_UID" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$APP_UID/bus" systemctl --user disable {config.app_name}.service || true
+SERVICE_NAME="{service_name}"
+SERVICE_FILE="{service_file}"
+
+systemd_is_running() {{
+    [ -d /run/systemd/system ] && [ "$(ps -p 1 -o comm= 2>/dev/null)" = "systemd" ]
+}}
+
+user_systemctl() {{
+    runuser -u "$APP_USER" -- env \\
+        XDG_RUNTIME_DIR="/run/user/$APP_UID" \\
+        DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$APP_UID/bus" \\
+        systemctl --user "$@"
+}}
+
+if command -v systemctl >/dev/null 2>&1 && [ -f "$SERVICE_FILE" ]; then
+    if systemd_is_running && [ -n "$APP_USER" ]; then
+        user_systemctl stop "$SERVICE_NAME" || true
+        user_systemctl disable "$SERVICE_NAME" || true
+    fi
+    case "$1" in
+        remove|deconfigure)
+            systemctl --global disable "$SERVICE_NAME" || true
+            ;;
+    esac
 fi
 rm -rf /var/cache/{config.app_name}
 exit 0
