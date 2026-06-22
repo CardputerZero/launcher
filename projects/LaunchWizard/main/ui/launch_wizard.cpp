@@ -16,6 +16,7 @@
 #include <errno.h>
 #include <grp.h>
 #include <pwd.h>
+#include <shadow.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -37,16 +38,80 @@
 
 namespace {
 
+// ---------------------------------------------------------------------------
+// Layout / design tokens (CardputerZero OOBE Figma, 320x170 cards)
+// ---------------------------------------------------------------------------
 constexpr int kScreenWidth = 320;
 constexpr int kScreenHeight = 170;
-constexpr int kTitleHeight = 24;
-constexpr int kFieldHeight = 28;
 constexpr uid_t kDefaultUserUid = 1000;
 
-enum class Focus {
-    User,
-    Password,
-    Confirm,
+constexpr uint32_t kColorBg = 0x000000;
+constexpr uint32_t kColorDivider = 0x121212;
+constexpr uint32_t kColorBrand = 0xffffff;
+constexpr uint32_t kColorMuted = 0x8f8f8f;
+constexpr uint32_t kColorFieldFocusBg = 0x303030;
+constexpr uint32_t kColorFieldBg = 0x151515;
+constexpr uint32_t kColorFieldBorder = 0x424242;
+constexpr uint32_t kColorRowSelBg = 0x202020;
+
+// Per-screen accent colors (sampled from the Figma design).
+constexpr uint32_t kAccentWelcome = 0xff6a2a;   // orange
+constexpr uint32_t kAccentRegion = 0x31d843;    // green
+constexpr uint32_t kAccentHostname = 0xff2aa3;  // pink
+constexpr uint32_t kAccentAccount = 0x2e90ff;   // blue
+constexpr uint32_t kAccentNetwork = 0xffd23e;   // yellow
+constexpr uint32_t kAccentTime = 0xff5a3c;      // orange-red
+constexpr uint32_t kAccentSsh = 0x2ec5ff;       // cyan
+constexpr uint32_t kAccentDone = 0x31d843;      // green
+
+enum class Screen {
+    Welcome,
+    Region,
+    CountryList,
+    TimezoneList,
+    Hostname,
+    Account,
+    Network,
+    WifiList,
+    WifiPassword,
+    ManualTime,
+    Ssh,
+    Done,
+    Applying,
+};
+
+struct Country {
+    const char *name;
+    const char *code;
+    const char *timezone;
+    const char *offset;
+};
+
+constexpr Country kCountries[] = {
+    {"China", "CN", "Asia/Shanghai", "UTC+8"},
+    {"United States", "US", "America/Los_Angeles", "UTC-7"},
+    {"Japan", "JP", "Asia/Tokyo", "UTC+9"},
+    {"United Kingdom", "GB", "Europe/London", "UTC+0"},
+    {"Germany", "DE", "Europe/Berlin", "UTC+1"},
+};
+
+struct Timezone {
+    const char *name;
+    const char *offset;
+};
+
+constexpr Timezone kTimezones[] = {
+    {"Asia/Shanghai", "UTC+8"},
+    {"Asia/Tokyo", "UTC+9"},
+    {"UTC", "UTC+0"},
+    {"America/Los_Angeles", "UTC-7"},
+    {"Europe/London", "UTC+0"},
+    {"Europe/Berlin", "UTC+1"},
+};
+
+struct WifiNetwork {
+    std::string ssid;
+    int signal = 0;  // 0..100
 };
 
 struct CommandResult {
@@ -54,96 +119,68 @@ struct CommandResult {
     std::string output;
 };
 
-struct UiState {
-    Focus focus = Focus::User;
-    bool busy = false;
-    bool done = false;
-    bool worker_finished = false;
-    bool existing_user_hint_shown = false;
-    int exit_ticks = 0;
-    int auto_detect_ticks = 0;
+// ---------------------------------------------------------------------------
+// Wizard model (all data collected across screens)
+// ---------------------------------------------------------------------------
+struct Model {
+    Screen screen = Screen::Welcome;
+
+    // Region / timezone
+    int country_index = 0;
+    int timezone_index = 0;
+    int region_focus = 0;  // 0 = country field, 1 = timezone field
+    int country_sel = 0;
+    int timezone_sel = 0;
+
+    // Hostname
+    std::string hostname = "CardputerZero";
+
+    // Account
     std::string username = "pi";
     std::string password;
-    std::string worker_message;
+    std::string confirm;
+    int account_focus = 0;  // 0 user, 1 pass, 2 confirm
 
-    lv_obj_t *screen = nullptr;
-    lv_obj_t *user_box = nullptr;
-    lv_obj_t *pass_box = nullptr;
-    lv_obj_t *confirm_button = nullptr;
-    lv_obj_t *user_value = nullptr;
-    lv_obj_t *pass_value = nullptr;
-    lv_obj_t *status = nullptr;
-    lv_timer_t *poll_timer = nullptr;
+    // Network
+    int network_focus = 0;  // 0 wifi, 1 ethernet
+    bool network_skipped = false;
+    bool use_ethernet = false;
+
+    // Wi-Fi
+    std::vector<WifiNetwork> wifi_list;
+    int wifi_sel = 0;
+    std::string wifi_ssid;
+    std::string wifi_password;
+
+    // Manual time
+    std::string manual_date = "2026-06-16";
+    std::string manual_time = "20:30";
+    int time_focus = 0;  // 0 date, 1 time
+
+    // SSH
+    bool ssh_enabled = true;
+    int ssh_focus = 0;  // 0 yes, 1 no
+
+    // Apply worker
+    bool busy = false;
+    bool worker_finished = false;
+    bool succeeded = false;
+    int exit_ticks = 0;
+    std::string worker_message;
     std::mutex mutex;
+
+    lv_obj_t *screen_obj = nullptr;
+    lv_timer_t *poll_timer = nullptr;
 };
 
-UiState g_ui;
+Model g;
 
-void style_plain(lv_obj_t *obj)
-{
-    lv_obj_remove_style_all(obj);
-    lv_obj_clear_flag(obj, LV_OBJ_FLAG_SCROLLABLE);
-}
+const Country &current_country() { return kCountries[g.country_index]; }
+const Timezone &current_timezone() { return kTimezones[g.timezone_index]; }
 
-void set_label(lv_obj_t *label, const std::string &text)
-{
-    lv_label_set_text(label, text.c_str());
-}
-
-std::string masked_password()
-{
-    if (g_ui.password.empty())
-        return "";
-    return std::string(g_ui.password.size(), '*');
-}
-
-bool validate_username(const std::string &name, std::string &error)
-{
-    if (name.empty()) {
-        error = "Username required";
-        return false;
-    }
-    if (name.size() > 32) {
-        error = "Username too long";
-        return false;
-    }
-    if (name == "root") {
-        error = "Do not create root";
-        return false;
-    }
-    unsigned char first = static_cast<unsigned char>(name[0]);
-    if (!(islower(first) || name[0] == '_')) {
-        error = "Use lowercase user name";
-        return false;
-    }
-    for (size_t i = 1; i < name.size(); ++i) {
-        unsigned char ch = static_cast<unsigned char>(name[i]);
-        bool ok = islower(ch) || isdigit(ch) || name[i] == '_' || name[i] == '-';
-        if (name[i] == '$' && i == name.size() - 1)
-            ok = true;
-        if (!ok) {
-            error = "Invalid username char";
-            return false;
-        }
-    }
-    return true;
-}
-
-bool validate_password(const std::string &password, std::string &error)
-{
-    if (password.empty()) {
-        error = "Password required";
-        return false;
-    }
-    for (char ch : password) {
-        if (ch == '\n' || ch == '\r' || ch == ':' || static_cast<unsigned char>(ch) < 0x20) {
-            error = "Password has bad char";
-            return false;
-        }
-    }
-    return true;
-}
-
+// ---------------------------------------------------------------------------
+// Shell command helpers (dry-run aware) -- preserved from the original wizard.
+// ---------------------------------------------------------------------------
 void print_command(const std::vector<std::string> &args, const std::string *stdin_text)
 {
     printf("LaunchWizard dry-run:");
@@ -159,7 +196,6 @@ void print_command(const std::vector<std::string> &args, const std::string *stdi
             printf(" %s", arg.c_str());
             continue;
         }
-
         printf(" '");
         for (char ch : arg) {
             if (ch == '\'')
@@ -237,7 +273,7 @@ CommandResult run_command(const std::vector<std::string> &args, const std::strin
     char buffer[256];
     ssize_t read_count = 0;
     while ((read_count = read(out_pipe[0], buffer, sizeof(buffer))) > 0) {
-        if (result.output.size() < 800)
+        if (result.output.size() < 4096)
             result.output.append(buffer, static_cast<size_t>(read_count));
     }
     close(out_pipe[0]);
@@ -272,6 +308,83 @@ bool command_ok(const std::vector<std::string> &args, std::string &error)
     return false;
 }
 
+// ---------------------------------------------------------------------------
+// Validation helpers (preserved).
+// ---------------------------------------------------------------------------
+bool validate_username(const std::string &name, std::string &error)
+{
+    if (name.empty()) {
+        error = "Username required";
+        return false;
+    }
+    if (name.size() > 32) {
+        error = "Username too long";
+        return false;
+    }
+    if (name == "root") {
+        error = "Do not create root";
+        return false;
+    }
+    unsigned char first = static_cast<unsigned char>(name[0]);
+    if (!(islower(first) || name[0] == '_')) {
+        error = "Use lowercase user name";
+        return false;
+    }
+    for (size_t i = 1; i < name.size(); ++i) {
+        unsigned char ch = static_cast<unsigned char>(name[i]);
+        bool ok = islower(ch) || isdigit(ch) || name[i] == '_' || name[i] == '-';
+        if (name[i] == '$' && i == name.size() - 1)
+            ok = true;
+        if (!ok) {
+            error = "Invalid username char";
+            return false;
+        }
+    }
+    return true;
+}
+
+bool validate_password(const std::string &password, std::string &error)
+{
+    if (password.empty()) {
+        error = "Password required";
+        return false;
+    }
+    for (char ch : password) {
+        if (ch == '\n' || ch == '\r' || ch == ':' || static_cast<unsigned char>(ch) < 0x20) {
+            error = "Password has bad char";
+            return false;
+        }
+    }
+    return true;
+}
+
+bool validate_hostname(const std::string &name, std::string &error)
+{
+    if (name.empty()) {
+        error = "Hostname required";
+        return false;
+    }
+    if (name.size() > 63) {
+        error = "Hostname too long";
+        return false;
+    }
+    for (char ch : name) {
+        unsigned char c = static_cast<unsigned char>(ch);
+        if (!(isalnum(c) || ch == '-')) {
+            error = "Invalid hostname char";
+            return false;
+        }
+    }
+    if (name.front() == '-' || name.back() == '-') {
+        error = "Bad hostname dashes";
+        return false;
+    }
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// System integration -- user/account (preserved).
+// ---------------------------------------------------------------------------
 bool user_exists(const std::string &name)
 {
 #if LAUNCH_WIZARD_DRY_RUN
@@ -292,25 +405,44 @@ bool uid_exists(uid_t uid)
 #endif
 }
 
-uid_t user_uid(const std::string &user)
+// Name of the existing UID 1000 user (pi-gen always pre-creates one, e.g. "pi").
+std::string current_first_user()
 {
 #if LAUNCH_WIZARD_DRY_RUN
-    (void)user;
-    return kDefaultUserUid;
+    return "pi";
 #else
-    struct passwd *pw = getpwnam(user.c_str());
-    return pw ? pw->pw_uid : static_cast<uid_t>(0);
+    struct passwd *pw = getpwuid(kDefaultUserUid);
+    return (pw && pw->pw_name) ? std::string(pw->pw_name) : std::string();
 #endif
 }
 
-std::string user_name_for_uid(uid_t uid)
+std::string current_first_group()
 {
 #if LAUNCH_WIZARD_DRY_RUN
-    (void)uid;
-    return "";
+    return "pi";
 #else
-    struct passwd *pw = getpwuid(uid);
-    return pw ? std::string(pw->pw_name) : std::string();
+    struct group *gr = getgrgid(kDefaultUserUid);
+    return (gr && gr->gr_name) ? std::string(gr->gr_name) : std::string();
+#endif
+}
+
+// True if the UID 1000 user has a real (unlocked) password set. This mirrors
+// pi-gen's own rule ("FIRST_USER_NAME=pi with no FIRST_USER_PASS launches the
+// wizard"): a factory image leaves the user --disabled-login (shadow "!"/"*"),
+// whereas a configured one (Imager / a baked password / a finished OOBE) stores
+// a real "$..." hash.
+bool first_user_has_password()
+{
+#if LAUNCH_WIZARD_DRY_RUN
+    return false;
+#else
+    struct passwd *pw = getpwuid(kDefaultUserUid);
+    if (!pw || !pw->pw_name)
+        return false;
+    struct spwd *sp = getspnam(pw->pw_name);
+    if (!sp || !sp->sp_pwdp)
+        return false;
+    return sp->sp_pwdp[0] == '$';
 #endif
 }
 
@@ -382,6 +514,46 @@ bool set_user_password(const std::string &user, const std::string &password, std
     if (!pass_result.output.empty())
         error += ": " + pass_result.output;
     return false;
+}
+
+// Provision the owner account. pi-gen always pre-creates the UID 1000 user
+// (default "pi", --disabled-login). Mirroring the official userconf tool we
+// rename that existing user to the chosen name and set its password instead of
+// running useradd (which would collide on UID 1000). Returns the account UID, or
+// 0 on failure with `error` populated.
+uid_t configure_account(const std::string &new_user, const std::string &password,
+                        std::string &error)
+{
+    std::string old_user = current_first_user();
+
+    if (old_user.empty()) {
+        // No pre-created first user (unusual image): create one at UID 1000.
+        if (!create_user(new_user, error))
+            return 0;
+    } else if (old_user != new_user) {
+        if (user_exists(new_user)) {
+            error = "Target username already in use";
+            return 0;
+        }
+        // Rename the existing UID 1000 user/group (same steps as userconf).
+        if (!command_ok({"usermod", "-l", new_user, old_user}, error))
+            return 0;
+        run_command({"usermod", "-m", "-d", "/home/" + new_user, new_user});
+        std::string old_group = current_first_group();
+        if (!old_group.empty() && old_group == old_user)
+            run_command({"groupmod", "-n", new_user, old_group});
+        // Keep subuid/subgid and the nopasswd sudoers entry consistent.
+        run_command({"sed", "-i", "s/^" + old_user + ":/" + new_user + ":/",
+                     "/etc/subuid"});
+        run_command({"sed", "-i", "s/^" + old_user + ":/" + new_user + ":/",
+                     "/etc/subgid"});
+        run_command({"sed", "-i", "s/^" + old_user + " /" + new_user + " /",
+                     "/etc/sudoers.d/010_pi-nopasswd"});
+    }
+
+    if (!set_user_password(new_user, password, error))
+        return 0;
+    return kDefaultUserUid;
 }
 
 void disable_piwiz(const std::string &user)
@@ -465,21 +637,17 @@ std::string start_applaunch_service(const std::string &user, uid_t uid)
     run_command({"systemctl", "daemon-reload"});
     run_command({"systemctl", "start", "user@" + uid_text + ".service"});
     run_command({"runuser", "-u", user, "--", "env",
-                 runtime_dir,
-                 bus_address,
+                 runtime_dir, bus_address,
                  "systemctl", "--user", "daemon-reload"});
     run_command({"runuser", "-u", user, "--", "env",
-                 runtime_dir,
-                 bus_address,
+                 runtime_dir, bus_address,
                  "systemctl", "--user", "enable", "APPLaunch.service"});
     CommandResult restart = run_command({"runuser", "-u", user, "--", "env",
-                                         runtime_dir,
-                                         bus_address,
+                                         runtime_dir, bus_address,
                                          "systemctl", "--user", "restart", "APPLaunch.service"});
     if (restart.code != 0) {
         CommandResult start = run_command({"runuser", "-u", user, "--", "env",
-                                           runtime_dir,
-                                           bus_address,
+                                           runtime_dir, bus_address,
                                            "systemctl", "--user", "start", "APPLaunch.service"});
         if (start.code != 0) {
             warning = "APPLaunch start failed";
@@ -490,14 +658,160 @@ std::string start_applaunch_service(const std::string &user, uid_t uid)
     return warning;
 }
 
-std::string finish_setup_for_user(const std::string &user, uid_t uid)
+// ---------------------------------------------------------------------------
+// System integration -- new OOBE steps (timezone / hostname / wifi / time / ssh).
+// ---------------------------------------------------------------------------
+void apply_timezone(const std::string &timezone)
 {
+    if (timezone.empty())
+        return;
+    run_command({"timedatectl", "set-timezone", timezone});
+}
+
+void apply_hostname(const std::string &hostname)
+{
+    if (hostname.empty())
+        return;
+    run_command({"hostnamectl", "set-hostname", hostname});
+    const std::string hosts =
+        "127.0.0.1\tlocalhost\n"
+        "127.0.1.1\t" + hostname + "\n";
+    run_command({"tee", "/etc/hostname"}, &hostname);
+    run_command({"tee", "/etc/hosts.launchwizard"}, &hosts);
+}
+
+void apply_manual_time(const std::string &date, const std::string &time)
+{
+    if (date.empty() || time.empty())
+        return;
+    run_command({"timedatectl", "set-ntp", "false"});
+    run_command({"timedatectl", "set-time", date + " " + time + ":00"});
+}
+
+std::string apply_ssh(bool enabled)
+{
+    std::string warning;
+    if (enabled) {
+        run_command({"systemctl", "unmask", "ssh.service"});
+        CommandResult ok = run_command({"systemctl", "enable", "--now", "ssh.service"});
+        if (ok.code != 0) {
+            CommandResult alt = run_command({"systemctl", "enable", "--now", "sshd.service"});
+            if (alt.code != 0)
+                warning = "SSH enable failed";
+        }
+    } else {
+        run_command({"systemctl", "disable", "--now", "ssh.service"});
+        run_command({"systemctl", "disable", "--now", "sshd.service"});
+    }
+    return warning;
+}
+
+std::string apply_wifi(const std::string &ssid, const std::string &password)
+{
+    if (ssid.empty())
+        return "";
+    run_command({"nmcli", "radio", "wifi", "on"});
+    std::vector<std::string> args = {"nmcli", "device", "wifi", "connect", ssid};
+    if (!password.empty()) {
+        args.push_back("password");
+        args.push_back(password);
+    }
+    CommandResult result = run_command(args);
+    if (result.code != 0) {
+        std::string warning = "Wi-Fi connect failed";
+        if (!result.output.empty())
+            warning += ": " + result.output;
+        return warning;
+    }
+    return "";
+}
+
+std::vector<WifiNetwork> scan_wifi()
+{
+    std::vector<WifiNetwork> networks;
+#if LAUNCH_WIZARD_DRY_RUN
+    networks.push_back({"Studio_2.4G", 90});
+    networks.push_back({"CardputerLab", 70});
+    networks.push_back({"Home-5G", 45});
+#else
+    run_command({"nmcli", "radio", "wifi", "on"});
+    run_command({"nmcli", "device", "wifi", "rescan"});
+    CommandResult result = run_command(
+        {"nmcli", "-t", "-f", "SSID,SIGNAL", "device", "wifi", "list"});
+    std::string line;
+    for (size_t i = 0; i <= result.output.size(); ++i) {
+        char ch = (i < result.output.size()) ? result.output[i] : '\n';
+        if (ch == '\n') {
+            if (!line.empty()) {
+                size_t sep = line.rfind(':');
+                std::string ssid = sep == std::string::npos ? line : line.substr(0, sep);
+                int signal = 0;
+                if (sep != std::string::npos)
+                    signal = atoi(line.c_str() + sep + 1);
+                bool duplicate = false;
+                for (const WifiNetwork &n : networks) {
+                    if (n.ssid == ssid) {
+                        duplicate = true;
+                        break;
+                    }
+                }
+                if (!ssid.empty() && !duplicate && networks.size() < 16)
+                    networks.push_back({ssid, signal});
+            }
+            line.clear();
+        } else {
+            line.push_back(ch);
+        }
+    }
+#endif
+    return networks;
+}
+
+// ---------------------------------------------------------------------------
+// Full apply (runs on a worker thread when the user confirms on the Done page).
+// ---------------------------------------------------------------------------
+std::string apply_all()
+{
+    const std::string timezone = current_timezone().name;
+    const std::string hostname = g.hostname;
+    const std::string username = g.username;
+    const std::string password = g.password.empty() ? std::string("pi") : g.password;
+    const bool network_skipped = g.network_skipped;
+    const std::string wifi_ssid = g.wifi_ssid;
+    const std::string wifi_password = g.wifi_password;
+    const std::string manual_date = g.manual_date;
+    const std::string manual_time = g.manual_time;
+    const bool ssh_enabled = g.ssh_enabled;
+
+#if !LAUNCH_WIZARD_DRY_RUN
+    if (geteuid() != 0)
+        return "LaunchWizard must run as root";
+#endif
+
+    apply_timezone(timezone);
+    apply_hostname(hostname);
+
+    if (network_skipped) {
+        apply_manual_time(manual_date, manual_time);
+    } else if (!g.use_ethernet && !wifi_ssid.empty()) {
+        std::string wifi_warning = apply_wifi(wifi_ssid, wifi_password);
+        if (!wifi_warning.empty()) {
+            printf("LaunchWizard: %s\n", wifi_warning.c_str());
+            fflush(stdout);
+        }
+    }
+
+    apply_ssh(ssh_enabled);
+
+    // Provision the owner account by renaming/repurposing the pre-created
+    // UID 1000 user (pi-gen always ships one) and setting its password.
+    std::string error;
+    uid_t uid = configure_account(username, password, error);
     if (uid == 0)
-        return "User UID not found";
+        return error;
 
-    std::string desktop_warning = configure_desktop_startup(user);
-
-    std::string service_warning = start_applaunch_service(user, uid);
+    std::string desktop_warning = configure_desktop_startup(username);
+    std::string service_warning = start_applaunch_service(username, uid);
     if (!service_warning.empty())
         return service_warning;
 
@@ -506,147 +820,668 @@ std::string finish_setup_for_user(const std::string &user, uid_t uid)
         printf("LaunchWizard: desktop warning: %s\n", desktop_warning.c_str());
         fflush(stdout);
     }
+
+    // Reboot so autologin starts the desktop/APPLaunch as the freshly renamed
+    // user with a clean session (matches Raspberry Pi's first-boot behaviour).
+    printf("LaunchWizard: OOBE complete, rebooting\n");
+    fflush(stdout);
+    run_command({"systemctl", "reboot"});
     return "";
 }
 
-std::string apply_user_config(std::string target_user, std::string password)
-{
-#if LAUNCH_WIZARD_DRY_RUN
-    printf("LaunchWizard dry-run: configure user=%s uid=%u\n",
-           target_user.c_str(), static_cast<unsigned>(kDefaultUserUid));
-    fflush(stdout);
-#else
-    if (geteuid() != 0)
-        return "LaunchWizard must run as root";
-#endif
+// ===========================================================================
+// UI primitives
+// ===========================================================================
+const lv_font_t *font_xs() { return &lv_font_montserrat_10; }   // 8-9px
+const lv_font_t *font_sm() { return &lv_font_montserrat_12; }   // 10-12px
+const lv_font_t *font_md() { return &lv_font_montserrat_14; }   // 14px
+const lv_font_t *font_lg() { return &lv_font_montserrat_16; }   // 16-17px
+const lv_font_t *font_xl() { return &lv_font_montserrat_22; }   // big title
 
-    std::string error;
-    uid_t uid = 0;
-    if (user_exists(target_user)) {
-        uid = user_uid(target_user);
-        if (uid == 0)
-            return "Existing user UID not found";
-    } else {
-        if (!create_user(target_user, error))
-            return error;
-        uid = user_uid(target_user);
+lv_obj_t *add_label(lv_obj_t *parent, const char *text, const lv_font_t *font,
+                    uint32_t color, int x, int y)
+{
+    lv_obj_t *label = lv_label_create(parent);
+    lv_label_set_text(label, text);
+    lv_obj_set_style_text_font(label, font, 0);
+    lv_obj_set_style_text_color(label, lv_color_hex(color), 0);
+    lv_obj_set_style_text_letter_space(label, 0, 0);
+    lv_obj_align(label, LV_ALIGN_TOP_LEFT, x, y);
+    return label;
+}
+
+lv_obj_t *add_rect(lv_obj_t *parent, int x, int y, int w, int h, uint32_t bg,
+                   int border_w, uint32_t border_color, int radius, lv_opa_t bg_opa = LV_OPA_COVER)
+{
+    lv_obj_t *box = lv_obj_create(parent);
+    lv_obj_remove_style_all(box);
+    lv_obj_clear_flag(box, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_size(box, w, h);
+    lv_obj_align(box, LV_ALIGN_TOP_LEFT, x, y);
+    lv_obj_set_style_radius(box, radius, 0);
+    lv_obj_set_style_bg_color(box, lv_color_hex(bg), 0);
+    lv_obj_set_style_bg_opa(box, bg_opa, 0);
+    if (border_w > 0) {
+        lv_obj_set_style_border_color(box, lv_color_hex(border_color), 0);
+        lv_obj_set_style_border_width(box, border_w, 0);
+    }
+    return box;
+}
+
+// SETUP mode tag + CardputerZero brand + top divider + progress bar.
+void add_chrome(uint32_t accent, int progress_fill, bool show_progress = true)
+{
+    lv_obj_t *p = g.screen_obj;
+
+    // SETUP mode tag. (Figma shows a parallelogram, but the device's software
+    // renderer does not draw skew-transformed rects, so use a rounded rect.)
+    lv_obj_t *tag = add_rect(p, 12, 6, 82, 18, accent, 0, 0, 3);
+    add_label(tag, "SETUP", font_xs(), 0xffffff, 16, 4);
+
+    add_label(p, "CardputerZero", font_sm(), kColorBrand, 120, 7);
+    add_rect(p, 8, 33, 304, 1, kColorDivider, 0, 0, 0);
+
+    if (show_progress) {
+        add_rect(p, 228, 13, 80, 4, accent, 0, 0, 2, LV_OPA_30);
+        if (progress_fill < 4)
+            progress_fill = 4;
+        if (progress_fill > 80)
+            progress_fill = 80;
+        add_rect(p, 228, 13, progress_fill, 4, accent, 0, 0, 2);
+    }
+}
+
+// One key hint pair, e.g. "ESC BACK".
+void add_key_hint(int key_x, const char *key, int hint_x, const char *hint, uint32_t accent)
+{
+    add_label(g.screen_obj, key, font_xs(), accent, key_x, 152);
+    add_label(g.screen_obj, hint, font_xs(), 0xffffff, hint_x, 152);
+}
+
+// A labeled value field (focused vs unfocused styling matches the Figma).
+lv_obj_t *add_field(lv_obj_t *parent, int x, int y, int w, int h, bool focused,
+                    uint32_t accent)
+{
+    if (focused)
+        return add_rect(parent, x, y, w, h, kColorFieldFocusBg, 2, accent, 3);
+    return add_rect(parent, x, y, w, h, kColorFieldBg, 1, kColorFieldBorder, 3);
+}
+
+std::string masked(const std::string &s) { return std::string(s.size(), '*'); }
+
+// ===========================================================================
+// Screen renderers
+// ===========================================================================
+void render_welcome()
+{
+    add_chrome(kAccentWelcome, 8);
+    add_label(g.screen_obj, "First Setup", font_xl(), 0xffffff, 34, 50);
+    add_label(g.screen_obj, "Set up CardputerZero in a few steps.", font_sm(),
+              kColorMuted, 36, 100);
+    add_key_hint(132, "OK", 156, "START", kAccentWelcome);
+}
+
+void render_region()
+{
+    add_chrome(kAccentRegion, 24);
+    const bool country_focus = g.region_focus == 0;
+
+    add_label(g.screen_obj, "COUNTRY / REGION", font_xs(), kAccentRegion, 38, 39);
+    add_field(g.screen_obj, 36, 50, 218, 27, country_focus, kAccentRegion);
+    add_label(g.screen_obj, current_country().name, font_md(), 0xffffff, 44, 56);
+
+    add_label(g.screen_obj, "TIMEZONE", font_xs(), kAccentRegion, 38, 92);
+    add_field(g.screen_obj, 36, 103, 218, 27, !country_focus, kAccentRegion);
+    add_label(g.screen_obj, current_timezone().name, font_md(), 0xffffff, 44, 109);
+    add_label(g.screen_obj, current_timezone().offset, font_md(), 0xffffff, 205, 109);
+
+    add_key_hint(14, "ESC", 38, "BACK", kAccentRegion);
+    add_key_hint(132, "OK", 156, "CHANGE", kAccentRegion);
+    add_key_hint(244, "TAB", 268, "NEXT", kAccentRegion);
+}
+
+// Generic single-column list (country / timezone / wifi).
+void render_list(const char *title, uint32_t accent,
+                 const std::vector<std::string> &left,
+                 const std::vector<std::string> &right, int sel,
+                 const char *ok_hint)
+{
+    add_chrome(accent, 24);
+    add_label(g.screen_obj, title, font_sm(), accent, 36, 40);
+
+    const int count = static_cast<int>(left.size());
+    const int visible = 4;
+    int start = sel - 1;
+    if (start < 0)
+        start = 0;
+    if (start > count - visible)
+        start = count - visible;
+    if (start < 0)
+        start = 0;
+
+    const int row_y0 = 60;
+    const int row_h = 24;
+    for (int i = 0; i < visible && start + i < count; ++i) {
+        int idx = start + i;
+        int y = row_y0 + i * row_h;
+        bool is_sel = idx == sel;
+        if (is_sel) {
+            add_rect(g.screen_obj, 30, y - 1, 260, 22, kColorRowSelBg, 0, 0, 4);
+            add_label(g.screen_obj, ">", font_md(), accent, 42, y + 1);
+        }
+        add_label(g.screen_obj, left[idx].c_str(), font_md(),
+                  is_sel ? 0xffffff : kColorMuted, 66, y + 2);
+        if (idx < static_cast<int>(right.size()) && !right[idx].empty()) {
+            add_label(g.screen_obj, right[idx].c_str(), font_sm(),
+                      is_sel ? 0xffffff : kColorMuted, 240, y + 3);
+        }
     }
 
-    if (!set_user_password(target_user, password, error))
-        return error;
-
-    return finish_setup_for_user(target_user, uid);
+    add_key_hint(14, "ESC", 38, "BACK", accent);
+    add_key_hint(132, "OK", 156, ok_hint, accent);
 }
 
-void refresh_ui()
+void render_country_list()
 {
-    const bool user_focus = g_ui.focus == Focus::User;
-    const bool pass_focus = g_ui.focus == Focus::Password;
-    const bool confirm_focus = g_ui.focus == Focus::Confirm;
-
-    lv_obj_set_style_border_color(g_ui.user_box,
-                                  lv_color_hex(user_focus ? 0x2f80ed : 0x3a3f45), 0);
-    lv_obj_set_style_border_width(g_ui.user_box, user_focus ? 2 : 1, 0);
-    lv_obj_set_style_border_color(g_ui.pass_box,
-                                  lv_color_hex(pass_focus ? 0x2f80ed : 0x3a3f45), 0);
-    lv_obj_set_style_border_width(g_ui.pass_box, pass_focus ? 2 : 1, 0);
-    lv_obj_set_style_bg_color(g_ui.confirm_button,
-                              lv_color_hex(confirm_focus ? 0x2f80ed : 0x23272e), 0);
-    lv_obj_set_style_text_color(g_ui.confirm_button,
-                                lv_color_hex(confirm_focus ? 0xffffff : 0xd7dde5), 0);
-    set_label(g_ui.user_value, g_ui.username.empty() ? " " : g_ui.username);
-    set_label(g_ui.pass_value, g_ui.password.empty() ? " " : masked_password());
+    std::vector<std::string> left, right;
+    for (const Country &c : kCountries) {
+        left.emplace_back(c.name);
+        right.emplace_back("");
+    }
+    render_list("COUNTRY / REGION", kAccentRegion, left, right, g.country_sel, "CONFIRM");
 }
 
-void set_status(const char *text)
+void render_timezone_list()
 {
-    lv_label_set_text(g_ui.status, text);
+    std::vector<std::string> left, right;
+    for (const Timezone &t : kTimezones) {
+        left.emplace_back(t.name);
+        right.emplace_back(t.offset);
+    }
+    render_list("TIMEZONE", kAccentRegion, left, right, g.timezone_sel, "CONFIRM");
+}
+
+void render_hostname()
+{
+    add_chrome(kAccentHostname, 36);
+    add_label(g.screen_obj, "HOSTNAME", font_sm(), kAccentHostname, 36, 47);
+    add_field(g.screen_obj, 36, 66, 248, 31, true, kAccentHostname);
+    std::string value = g.hostname + "|";
+    add_label(g.screen_obj, value.c_str(), font_lg(), 0xffffff, 44, 73);
+    add_label(g.screen_obj, "Default: CardputerZero", font_sm(), kColorMuted, 38, 104);
+
+    add_key_hint(14, "ESC", 38, "BACK", kAccentHostname);
+    add_key_hint(132, "OK", 156, "CONFIRM", kAccentHostname);
+}
+
+void render_account()
+{
+    add_chrome(kAccentAccount, 48);
+
+    add_label(g.screen_obj, "USERNAME", font_xs(), kAccentAccount, 37, 51);
+    add_field(g.screen_obj, 36, 67, 92, 24, g.account_focus == 0, kAccentAccount);
+    std::string user_value = g.username + (g.account_focus == 0 ? "|" : "");
+    add_label(g.screen_obj, user_value.c_str(), font_md(), 0xffffff, 44, 70);
+
+    add_label(g.screen_obj, "PASSWORD", font_xs(), kAccentAccount, 143, 51);
+    add_field(g.screen_obj, 142, 67, 142, 24, g.account_focus == 1, kAccentAccount);
+    std::string pass_value = masked(g.password) + (g.account_focus == 1 ? "|" : "");
+    add_label(g.screen_obj, pass_value.c_str(), font_md(), 0xffffff, 150, 70);
+
+    add_label(g.screen_obj, "CONFIRM PASSWORD", font_xs(), kAccentAccount, 143, 98);
+    add_field(g.screen_obj, 142, 110, 142, 24, g.account_focus == 2, kAccentAccount);
+    std::string confirm_value = masked(g.confirm) + (g.account_focus == 2 ? "|" : "");
+    add_label(g.screen_obj, confirm_value.c_str(), font_md(), 0xffffff, 150, 113);
+
+    add_label(g.screen_obj, "Default: pi / pi", font_sm(), kColorMuted, 36, 113);
+
+    add_key_hint(14, "ESC", 38, "BACK", kAccentAccount);
+    add_key_hint(132, "OK", 156, "CONFIRM", kAccentAccount);
+    add_key_hint(244, "TAB", 268, "NEXT", kAccentAccount);
+}
+
+void render_pill(lv_obj_t *parent, int x, int y, int w, const char *label,
+                 bool focused, uint32_t accent)
+{
+    add_field(parent, x, y, w, 22, focused, accent);
+    add_label(parent, label, font_sm(), focused ? 0xffffff : kColorMuted, x + 8, y + 3);
+}
+
+void render_network()
+{
+    add_chrome(kAccentNetwork, 60);
+    add_label(g.screen_obj, "NETWORK", font_sm(), kAccentNetwork, 36, 38);
+    render_pill(g.screen_obj, 36, 64, 132, "Wi-Fi", g.network_focus == 0, kAccentNetwork);
+    render_pill(g.screen_obj, 36, 92, 132, "Ethernet", g.network_focus == 1, kAccentNetwork);
+
+    add_key_hint(14, "ESC", 38, "BACK", kAccentNetwork);
+    add_key_hint(132, "OK", 156, "CONFIRM", kAccentNetwork);
+    add_key_hint(244, "TAB", 268, "SKIP", kAccentNetwork);
+}
+
+void draw_signal_bars(lv_obj_t *parent, int x, int y, int signal, uint32_t accent)
+{
+    // 4 ascending bars; lit count based on signal strength.
+    int lit = signal >= 75 ? 4 : signal >= 50 ? 3 : signal >= 25 ? 2 : 1;
+    for (int i = 0; i < 4; ++i) {
+        int bar_h = 4 + i * 4;
+        int bar_x = x + i * 7;
+        int bar_y = y + (16 - bar_h);
+        uint32_t color = i < lit ? accent : kColorFieldBorder;
+        add_rect(parent, bar_x, bar_y, 4, bar_h, color, 0, 0, 1);
+    }
+}
+
+void render_wifi_list()
+{
+    add_chrome(kAccentNetwork, 60);
+    add_label(g.screen_obj, "SELECT WI-FI", font_sm(), kAccentNetwork, 36, 40);
+
+    const int count = static_cast<int>(g.wifi_list.size()) + 1;  // + manual entry
+    const int visible = 4;
+    int start = g.wifi_sel - 1;
+    if (start < 0)
+        start = 0;
+    if (start > count - visible)
+        start = count - visible;
+    if (start < 0)
+        start = 0;
+
+    const int row_y0 = 57;
+    const int row_h = 23;
+    for (int i = 0; i < visible && start + i < count; ++i) {
+        int idx = start + i;
+        int y = row_y0 + i * row_h;
+        bool is_sel = idx == g.wifi_sel;
+        if (is_sel) {
+            add_rect(g.screen_obj, 30, y, 260, 21, kColorRowSelBg, 0, 0, 4);
+            add_label(g.screen_obj, ">", font_md(), kAccentNetwork, 42, y + 1);
+        }
+        if (idx < static_cast<int>(g.wifi_list.size())) {
+            add_label(g.screen_obj, g.wifi_list[idx].ssid.c_str(), font_sm(),
+                      is_sel ? 0xffffff : kColorMuted, 66, y + 4);
+            draw_signal_bars(g.screen_obj, 252, y + 1, g.wifi_list[idx].signal, kAccentNetwork);
+        } else {
+            add_label(g.screen_obj, "Other network...", font_sm(),
+                      is_sel ? 0xffffff : kColorMuted, 66, y + 4);
+        }
+    }
+
+    add_key_hint(14, "ESC", 38, "BACK", kAccentNetwork);
+    add_key_hint(132, "OK", 156, "SELECT", kAccentNetwork);
+}
+
+void render_wifi_password()
+{
+    add_chrome(kAccentNetwork, 60);
+    add_label(g.screen_obj, "WI-FI PASSWORD", font_sm(), kAccentNetwork, 36, 47);
+    add_field(g.screen_obj, 36, 66, 248, 31, true, kAccentNetwork);
+    std::string value = masked(g.wifi_password) + "|";
+    add_label(g.screen_obj, value.c_str(), font_lg(), 0xffffff, 44, 73);
+    std::string note = "SSID: " + g.wifi_ssid;
+    add_label(g.screen_obj, note.c_str(), font_sm(), kColorMuted, 38, 104);
+
+    add_key_hint(14, "ESC", 38, "BACK", kAccentNetwork);
+    add_key_hint(132, "OK", 156, "CONFIRM", kAccentNetwork);
+    add_key_hint(244, "TAB", 268, "NEXT", kAccentNetwork);
+}
+
+void render_manual_time()
+{
+    add_chrome(kAccentTime, 60);
+    add_label(g.screen_obj, "MANUAL TIME", font_sm(), kAccentTime, 36, 41);
+    add_label(g.screen_obj, "Set time manually because", font_sm(), kColorMuted, 36, 57);
+    add_label(g.screen_obj, "there is no network connection.", font_sm(), kColorMuted, 36, 69);
+
+    add_field(g.screen_obj, 36, 89, 126, 26, g.time_focus == 0, kAccentTime);
+    std::string date_value = g.manual_date + (g.time_focus == 0 ? "|" : "");
+    add_label(g.screen_obj, date_value.c_str(), font_md(), 0xffffff, 44, 93);
+
+    add_field(g.screen_obj, 174, 89, 84, 26, g.time_focus == 1, kAccentTime);
+    std::string time_value = g.manual_time + (g.time_focus == 1 ? "|" : "");
+    add_label(g.screen_obj, time_value.c_str(), font_md(), 0xffffff, 182, 93);
+
+    add_key_hint(14, "ESC", 38, "BACK", kAccentTime);
+    add_key_hint(132, "OK", 156, "CONFIRM", kAccentTime);
+    add_key_hint(244, "TAB", 268, "NEXT", kAccentTime);
+}
+
+void render_ssh()
+{
+    add_chrome(kAccentSsh, 70);
+    add_label(g.screen_obj, "Enable SSH", font_sm(), kAccentSsh, 36, 41);
+    render_pill(g.screen_obj, 36, 85, 70, "YES", g.ssh_focus == 0, kAccentSsh);
+    render_pill(g.screen_obj, 118, 85, 70, "NO", g.ssh_focus == 1, kAccentSsh);
+
+    add_key_hint(14, "ESC", 38, "BACK", kAccentSsh);
+    add_key_hint(132, "OK", 156, "CONFIRM", kAccentSsh);
+    add_key_hint(244, "TAB", 268, "NEXT", kAccentSsh);
+}
+
+void render_done()
+{
+    add_chrome(kAccentDone, 80);
+    add_label(g.screen_obj, "Setup", font_xl(), 0xffffff, 36, 48);
+    add_label(g.screen_obj, "finished!", font_xl(), 0xffffff, 36, 80);
+
+    add_key_hint(14, "ESC", 38, "BACK", kAccentDone);
+    add_key_hint(132, "OK", 156, "START", kAccentDone);
+}
+
+void render_applying()
+{
+    add_chrome(kAccentDone, 80, false);
+    std::string message;
+    {
+        std::lock_guard<std::mutex> lock(g.mutex);
+        message = g.worker_message.empty() ? "Configuring..." : g.worker_message;
+    }
+    add_label(g.screen_obj, "Applying setup", font_lg(), 0xffffff, 36, 62);
+    lv_obj_t *msg = add_label(g.screen_obj, message.c_str(), font_sm(), kColorMuted, 36, 92);
+    lv_label_set_long_mode(msg, LV_LABEL_LONG_DOT);
+    lv_obj_set_width(msg, 248);
+}
+
+void render()
+{
+    lv_obj_clean(g.screen_obj);
+    switch (g.screen) {
+    case Screen::Welcome: render_welcome(); break;
+    case Screen::Region: render_region(); break;
+    case Screen::CountryList: render_country_list(); break;
+    case Screen::TimezoneList: render_timezone_list(); break;
+    case Screen::Hostname: render_hostname(); break;
+    case Screen::Account: render_account(); break;
+    case Screen::Network: render_network(); break;
+    case Screen::WifiList: render_wifi_list(); break;
+    case Screen::WifiPassword: render_wifi_password(); break;
+    case Screen::ManualTime: render_manual_time(); break;
+    case Screen::Ssh: render_ssh(); break;
+    case Screen::Done: render_done(); break;
+    case Screen::Applying: render_applying(); break;
+    }
+}
+
+void go(Screen screen)
+{
+    g.screen = screen;
+    render();
+}
+
+// ===========================================================================
+// Apply orchestration
+// ===========================================================================
+void start_apply()
+{
+    if (g.busy)
+        return;
+    g.busy = true;
+    {
+        std::lock_guard<std::mutex> lock(g.mutex);
+        g.worker_message = "Configuring...";
+    }
+    go(Screen::Applying);
+
+    std::thread([]() {
+        std::string message = apply_all();
+        std::lock_guard<std::mutex> lock(g.mutex);
+        g.worker_message = message.empty() ? "Done. Starting APPLaunch..." : message;
+        g.worker_finished = true;
+        g.succeeded = message.empty();
+    }).detach();
+}
+
+// ===========================================================================
+// Input handling
+// ===========================================================================
+std::string *active_text_field()
+{
+    switch (g.screen) {
+    case Screen::Hostname:
+        return &g.hostname;
+    case Screen::Account:
+        return g.account_focus == 0 ? &g.username
+             : g.account_focus == 1 ? &g.password
+                                    : &g.confirm;
+    case Screen::WifiPassword:
+        return &g.wifi_password;
+    case Screen::ManualTime:
+        return g.time_focus == 0 ? &g.manual_date : &g.manual_time;
+    default:
+        return nullptr;
+    }
+}
+
+void handle_text_char(char ch)
+{
+    std::string *field = active_text_field();
+    if (!field)
+        return;
+    if (field->size() >= 63)
+        return;
+    field->push_back(ch);
+    render();
+}
+
+void handle_backspace()
+{
+    std::string *field = active_text_field();
+    if (field && !field->empty()) {
+        field->pop_back();
+        render();
+    }
+}
+
+void select_country(int index)
+{
+    g.country_index = index;
+    // Default the timezone to the country's preferred zone.
+    const char *tz = kCountries[index].timezone;
+    for (size_t i = 0; i < sizeof(kTimezones) / sizeof(kTimezones[0]); ++i) {
+        if (strcmp(kTimezones[i].name, tz) == 0) {
+            g.timezone_index = static_cast<int>(i);
+            break;
+        }
+    }
+}
+
+void enter_wifi_list()
+{
+    g.wifi_list = scan_wifi();
+    g.wifi_sel = 0;
+    go(Screen::WifiList);
+}
+
+// ESC navigation per screen.
+void handle_back()
+{
+    switch (g.screen) {
+    case Screen::Welcome: break;
+    case Screen::Region: go(Screen::Welcome); break;
+    case Screen::CountryList: go(Screen::Region); break;
+    case Screen::TimezoneList: go(Screen::Region); break;
+    case Screen::Hostname: go(Screen::Region); break;
+    case Screen::Account: go(Screen::Hostname); break;
+    case Screen::Network: go(Screen::Account); break;
+    case Screen::WifiList: go(Screen::Network); break;
+    case Screen::WifiPassword: go(Screen::WifiList); break;
+    case Screen::ManualTime: go(Screen::Network); break;
+    case Screen::Ssh: go(g.network_skipped ? Screen::ManualTime : Screen::Network); break;
+    case Screen::Done: go(Screen::Ssh); break;
+    case Screen::Applying: break;
+    }
 }
 
 void move_focus(int delta)
 {
-    int idx = 0;
-    if (g_ui.focus == Focus::Password)
-        idx = 1;
-    else if (g_ui.focus == Focus::Confirm)
-        idx = 2;
-    idx = (idx + delta + 3) % 3;
-    g_ui.focus = idx == 0 ? Focus::User : (idx == 1 ? Focus::Password : Focus::Confirm);
-    refresh_ui();
-}
-
-void start_apply()
-{
-    if (g_ui.busy || g_ui.done)
-        return;
-
-    std::string error;
-    if (!validate_username(g_ui.username, error) || !validate_password(g_ui.password, error)) {
-        set_status(error.c_str());
-        return;
+    switch (g.screen) {
+    case Screen::Region:
+        g.region_focus = (g.region_focus + delta + 2) % 2;
+        render();
+        break;
+    case Screen::CountryList: {
+        int n = static_cast<int>(sizeof(kCountries) / sizeof(kCountries[0]));
+        g.country_sel = (g.country_sel + delta + n) % n;
+        render();
+        break;
     }
-
-    g_ui.busy = true;
-    set_status("Configuring...");
-    refresh_ui();
-
-    const std::string username = g_ui.username;
-    const std::string password = g_ui.password;
-    std::thread([username, password]() {
-        std::string message = apply_user_config(username, password);
-        std::lock_guard<std::mutex> lock(g_ui.mutex);
-        g_ui.worker_message = message.empty() ? "Done. Starting APPLaunch..." : message;
-        g_ui.worker_finished = true;
-        g_ui.done = message.empty();
-    }).detach();
-}
-
-void show_existing_user_hint(const std::string &user)
-{
-    if (g_ui.busy || g_ui.done || g_ui.existing_user_hint_shown)
-        return;
-
-    g_ui.username = user;
-    g_ui.existing_user_hint_shown = true;
-    set_status("Existing user found. Enter password.");
-    refresh_ui();
-}
-
-void append_char(char ch)
-{
-    if (g_ui.busy || g_ui.done)
-        return;
-    std::string *target = g_ui.focus == Focus::User ? &g_ui.username :
-                          (g_ui.focus == Focus::Password ? &g_ui.password : nullptr);
-    if (!target)
-        return;
-    if (target->size() >= 32)
-        return;
-    target->push_back(ch);
-    refresh_ui();
-}
-
-void backspace()
-{
-    if (g_ui.busy || g_ui.done)
-        return;
-    std::string *target = g_ui.focus == Focus::User ? &g_ui.username :
-                          (g_ui.focus == Focus::Password ? &g_ui.password : nullptr);
-    if (target && !target->empty()) {
-        target->pop_back();
-        refresh_ui();
+    case Screen::TimezoneList: {
+        int n = static_cast<int>(sizeof(kTimezones) / sizeof(kTimezones[0]));
+        g.timezone_sel = (g.timezone_sel + delta + n) % n;
+        render();
+        break;
+    }
+    case Screen::Account:
+        g.account_focus = (g.account_focus + delta + 3) % 3;
+        render();
+        break;
+    case Screen::Network:
+        g.network_focus = (g.network_focus + delta + 2) % 2;
+        render();
+        break;
+    case Screen::WifiList: {
+        int n = static_cast<int>(g.wifi_list.size()) + 1;
+        g.wifi_sel = (g.wifi_sel + delta + n) % n;
+        render();
+        break;
+    }
+    case Screen::ManualTime:
+        g.time_focus = (g.time_focus + delta + 2) % 2;
+        render();
+        break;
+    case Screen::Ssh:
+        g.ssh_focus = (g.ssh_focus + delta + 2) % 2;
+        render();
+        break;
+    default:
+        break;
     }
 }
 
 void handle_enter()
 {
-    if (g_ui.focus == Focus::User)
-        g_ui.focus = Focus::Password;
-    else if (g_ui.focus == Focus::Password)
-        g_ui.focus = Focus::Confirm;
-    else
+    switch (g.screen) {
+    case Screen::Welcome:
+        go(Screen::Region);
+        break;
+    case Screen::Region:
+        if (g.region_focus == 0) {
+            g.country_sel = g.country_index;
+            go(Screen::CountryList);
+        } else {
+            g.timezone_sel = g.timezone_index;
+            go(Screen::TimezoneList);
+        }
+        break;
+    case Screen::CountryList:
+        select_country(g.country_sel);
+        go(Screen::Region);
+        break;
+    case Screen::TimezoneList:
+        g.timezone_index = g.timezone_sel;
+        go(Screen::Region);
+        break;
+    case Screen::Hostname: {
+        std::string error;
+        if (g.hostname.empty())
+            g.hostname = "CardputerZero";
+        if (!validate_hostname(g.hostname, error))
+            return;
+        go(Screen::Account);
+        break;
+    }
+    case Screen::Account:
+        if (g.account_focus < 2) {
+            ++g.account_focus;
+            render();
+        } else {
+            std::string error;
+            if (g.username.empty())
+                g.username = "pi";
+            if (g.password.empty() && g.confirm.empty()) {
+                g.password = "pi";
+                g.confirm = "pi";
+            }
+            if (!validate_username(g.username, error))
+                return;
+            if (!validate_password(g.password, error))
+                return;
+            if (g.password != g.confirm)
+                return;
+            go(Screen::Network);
+        }
+        break;
+    case Screen::Network:
+        if (g.network_focus == 0) {
+            g.use_ethernet = false;
+            g.network_skipped = false;
+            enter_wifi_list();
+        } else {
+            g.use_ethernet = true;
+            g.network_skipped = false;
+            go(Screen::Ssh);
+        }
+        break;
+    case Screen::WifiList:
+        if (g.wifi_sel < static_cast<int>(g.wifi_list.size())) {
+            g.wifi_ssid = g.wifi_list[g.wifi_sel].ssid;
+        } else {
+            g.wifi_ssid = "";  // Manual entry; SSID can be edited later.
+        }
+        g.wifi_password.clear();
+        go(Screen::WifiPassword);
+        break;
+    case Screen::WifiPassword:
+        go(Screen::Ssh);
+        break;
+    case Screen::ManualTime:
+        go(Screen::Ssh);
+        break;
+    case Screen::Ssh:
+        g.ssh_enabled = g.ssh_focus == 0;
+        go(Screen::Done);
+        break;
+    case Screen::Done:
         start_apply();
-    refresh_ui();
+        break;
+    case Screen::Applying:
+        break;
+    }
+}
+
+// TAB: NEXT / SKIP depending on the screen.
+void handle_tab()
+{
+    switch (g.screen) {
+    case Screen::Region:
+        go(Screen::Hostname);
+        break;
+    case Screen::Account:
+        if (g.username.empty())
+            g.username = "pi";
+        if (g.password.empty() && g.confirm.empty()) {
+            g.password = "pi";
+            g.confirm = "pi";
+        }
+        go(Screen::Network);
+        break;
+    case Screen::Network:
+        g.network_skipped = true;
+        g.use_ethernet = false;
+        go(Screen::ManualTime);
+        break;
+    case Screen::WifiPassword:
+        go(Screen::Ssh);
+        break;
+    case Screen::ManualTime:
+        go(Screen::Ssh);
+        break;
+    case Screen::Ssh:
+        go(Screen::Done);
+        break;
+    default:
+        break;
+    }
 }
 
 void keyboard_event_cb(lv_event_t *event)
@@ -657,23 +1492,30 @@ void keyboard_event_cb(lv_event_t *event)
     auto *key = static_cast<key_item *>(lv_event_get_param(event));
     if (!key || key->key_state == KBD_KEY_RELEASED)
         return;
+    if (g.busy)
+        return;
 
     switch (key->key_code) {
+    case KEY_ESC:
+        handle_back();
+        return;
     case KEY_TAB:
-    case KEY_DOWN:
-    case KEY_RIGHT:
-        move_focus(1);
+        handle_tab();
         return;
     case KEY_UP:
     case KEY_LEFT:
         move_focus(-1);
+        return;
+    case KEY_DOWN:
+    case KEY_RIGHT:
+        move_focus(1);
         return;
     case KEY_ENTER:
         handle_enter();
         return;
     case KEY_BACKSPACE:
     case KEY_DELETE:
-        backspace();
+        handle_backspace();
         return;
     default:
         break;
@@ -682,149 +1524,113 @@ void keyboard_event_cb(lv_event_t *event)
     if (key->utf8[0] != '\0' && key->utf8[1] == '\0') {
         unsigned char ch = static_cast<unsigned char>(key->utf8[0]);
         if (ch >= 0x20 && ch < 0x7f)
-            append_char(static_cast<char>(ch));
+            handle_text_char(static_cast<char>(ch));
     }
-}
-
-void field_click_cb(lv_event_t *event)
-{
-    intptr_t value = reinterpret_cast<intptr_t>(lv_event_get_user_data(event));
-    g_ui.focus = value == 0 ? Focus::User : Focus::Password;
-    refresh_ui();
-}
-
-void confirm_click_cb(lv_event_t *event)
-{
-    (void)event;
-    g_ui.focus = Focus::Confirm;
-    refresh_ui();
-    start_apply();
-}
-
-lv_obj_t *create_label(lv_obj_t *parent, const char *text, const lv_font_t *font)
-{
-    lv_obj_t *label = lv_label_create(parent);
-    lv_label_set_text(label, text);
-    lv_obj_set_style_text_font(label, font, 0);
-    lv_obj_set_style_text_color(label, lv_color_hex(0xf3f5f7), 0);
-    return label;
-}
-
-lv_obj_t *create_field(lv_obj_t *parent, int y, const char *caption,
-                       lv_obj_t **value_label, Focus focus, intptr_t user_data)
-{
-    lv_obj_t *label = create_label(parent, caption, &lv_font_montserrat_12);
-    lv_obj_align(label, LV_ALIGN_TOP_LEFT, 16, y + 7);
-    lv_obj_set_style_text_color(label, lv_color_hex(0x99a2ad), 0);
-
-    lv_obj_t *box = lv_obj_create(parent);
-    lv_obj_remove_style_all(box);
-    lv_obj_set_size(box, 210, kFieldHeight);
-    lv_obj_align(box, LV_ALIGN_TOP_LEFT, 92, y);
-    lv_obj_set_style_radius(box, 6, 0);
-    lv_obj_set_style_bg_color(box, lv_color_hex(0x171a20), 0);
-    lv_obj_set_style_bg_opa(box, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(box, lv_color_hex(0x3a3f45), 0);
-    lv_obj_set_style_border_width(box, 1, 0);
-    lv_obj_set_style_pad_left(box, 8, 0);
-    lv_obj_set_style_pad_right(box, 8, 0);
-    lv_obj_add_flag(box, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_event_cb(box, field_click_cb, LV_EVENT_CLICKED,
-                        reinterpret_cast<void *>(user_data));
-
-    *value_label = create_label(box, "", &lv_font_montserrat_14);
-    lv_label_set_long_mode(*value_label, LV_LABEL_LONG_DOT);
-    lv_obj_set_width(*value_label, 190);
-    lv_obj_align(*value_label, LV_ALIGN_LEFT_MID, 0, 0);
-
-    if (focus == Focus::User)
-        g_ui.user_box = box;
-    else
-        g_ui.pass_box = box;
-    return box;
 }
 
 void poll_worker_cb(lv_timer_t *timer)
 {
     (void)timer;
-    bool done = false;
+    bool finished = false;
+    bool succeeded = false;
     {
-        std::lock_guard<std::mutex> lock(g_ui.mutex);
-        if (g_ui.worker_finished) {
-            g_ui.busy = false;
-            g_ui.worker_finished = false;
-            set_status(g_ui.worker_message.c_str());
+        std::lock_guard<std::mutex> lock(g.mutex);
+        if (g.worker_finished) {
+            g.worker_finished = false;
+            finished = true;
+            succeeded = g.succeeded;
         }
-        done = g_ui.done;
     }
 
-    if (done) {
-        ++g_ui.exit_ticks;
-        if (g_ui.exit_ticks > 25)
+    if (finished) {
+        g.busy = false;
+        render();  // refresh the applying screen with the final message
+        if (!succeeded) {
+            // Allow the user to go back and fix the error.
+            g.busy = false;
+        }
+    }
+
+    if (!g.busy && g.succeeded && g.screen == Screen::Applying) {
+        ++g.exit_ticks;
+        if (g.exit_ticks > 15)
             exit(0);
-        return;
     }
-
-#if !LAUNCH_WIZARD_DRY_RUN
-    if (!g_ui.busy) {
-        ++g_ui.auto_detect_ticks;
-        if (g_ui.auto_detect_ticks >= 10) {
-            g_ui.auto_detect_ticks = 0;
-            std::string user = user_name_for_uid(kDefaultUserUid);
-            if (!user.empty() && user != "root")
-                show_existing_user_hint(user);
-        }
-    }
-#endif
 }
 
 void build_ui()
 {
-    g_ui.screen = lv_screen_active();
-    style_plain(g_ui.screen);
-    lv_obj_set_size(g_ui.screen, kScreenWidth, kScreenHeight);
-    lv_obj_set_style_bg_color(g_ui.screen, lv_color_hex(0x0f1115), 0);
-    lv_obj_set_style_bg_opa(g_ui.screen, LV_OPA_COVER, 0);
-    lv_obj_add_event_cb(g_ui.screen, keyboard_event_cb,
+    g.screen_obj = lv_screen_active();
+    lv_obj_remove_style_all(g.screen_obj);
+    lv_obj_clear_flag(g.screen_obj, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_size(g.screen_obj, kScreenWidth, kScreenHeight);
+    lv_obj_set_style_bg_color(g.screen_obj, lv_color_hex(kColorBg), 0);
+    lv_obj_set_style_bg_opa(g.screen_obj, LV_OPA_COVER, 0);
+    lv_obj_add_event_cb(g.screen_obj, keyboard_event_cb,
                         static_cast<lv_event_code_t>(LV_EVENT_KEYBOARD), nullptr);
 
-    lv_obj_t *title_bar = lv_obj_create(g_ui.screen);
-    style_plain(title_bar);
-    lv_obj_set_size(title_bar, LV_PCT(100), kTitleHeight);
-    lv_obj_set_style_bg_color(title_bar, lv_color_hex(0x181b21), 0);
-    lv_obj_set_style_bg_opa(title_bar, LV_OPA_COVER, 0);
-    lv_obj_align(title_bar, LV_ALIGN_TOP_MID, 0, 0);
-
-    lv_obj_t *title = create_label(title_bar, "First Boot Setup", &lv_font_montserrat_14);
-    lv_obj_center(title);
-
-    create_field(g_ui.screen, 42, "User", &g_ui.user_value, Focus::User, 0);
-    create_field(g_ui.screen, 78, "Password", &g_ui.pass_value, Focus::Password, 1);
-
-    g_ui.confirm_button = lv_button_create(g_ui.screen);
-    lv_obj_remove_style_all(g_ui.confirm_button);
-    lv_obj_set_size(g_ui.confirm_button, 128, 28);
-    lv_obj_align(g_ui.confirm_button, LV_ALIGN_TOP_MID, 0, 116);
-    lv_obj_set_style_radius(g_ui.confirm_button, 6, 0);
-    lv_obj_set_style_bg_color(g_ui.confirm_button, lv_color_hex(0x23272e), 0);
-    lv_obj_set_style_bg_opa(g_ui.confirm_button, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(g_ui.confirm_button, 0, 0);
-    lv_obj_add_event_cb(g_ui.confirm_button, confirm_click_cb, LV_EVENT_CLICKED, nullptr);
-
-    lv_obj_t *confirm_label = create_label(g_ui.confirm_button, "Confirm", &lv_font_montserrat_14);
-    lv_obj_center(confirm_label);
-
-    g_ui.status = create_label(g_ui.screen, "Enter user and password", &lv_font_montserrat_12);
-    lv_obj_set_style_text_color(g_ui.status, lv_color_hex(0x99a2ad), 0);
-    lv_label_set_long_mode(g_ui.status, LV_LABEL_LONG_DOT);
-    lv_obj_set_width(g_ui.status, 300);
-    lv_obj_align(g_ui.status, LV_ALIGN_BOTTOM_MID, 0, -6);
-
-    g_ui.poll_timer = lv_timer_create(poll_worker_cb, 200, nullptr);
-    refresh_ui();
+    g.poll_timer = lv_timer_create(poll_worker_cb, 200, nullptr);
+    render();
 }
 
-} // namespace
+}  // namespace
+
+// ---------------------------------------------------------------------------
+// First-boot detection.
+//
+// Mirrors the real Raspberry Pi OS (pi-gen / userconf-pi / piwiz) mechanism for
+// deciding whether the first-run wizard should appear, so we correctly tell two
+// kinds of CardputerZero owners apart:
+//
+//   * Factory TF-card units ship the identical, unconfigured pi-gen image. They
+//     have NO real UID 1000 user yet (only the system-level
+//     "rpi-first-boot-wizard" account, if any) -> the OOBE MUST run.
+//   * CardputerZero Lite users flash the card themselves with Raspberry Pi
+//     Imager and set the account/password during flashing (userconf). That
+//     leaves either a pending userconf(.txt) on the boot partition or, after the
+//     first boot, a real UID 1000 user -> the OOBE MUST be skipped.
+// ---------------------------------------------------------------------------
+bool launch_wizard_should_run(void)
+{
+#if LAUNCH_WIZARD_DRY_RUN
+    // In the SDL emulator always show the OOBE so it can be developed/previewed.
+    return true;
+#else
+    // 1. Launched as the Raspberry Pi first-boot wizard user => first boot.
+    const char *env_user = getenv("USER");
+    if (env_user && strcmp(env_user, "rpi-first-boot-wizard") == 0)
+        return true;
+    struct passwd *self = getpwuid(geteuid());
+    if (self && self->pw_name && strcmp(self->pw_name, "rpi-first-boot-wizard") == 0)
+        return true;
+
+    // 2. Raspberry Pi Imager / headless userconf customisation present (pending or
+    //    just applied) => the owner already configured an account. Skip the OOBE.
+    static const char *kUserconfPaths[] = {
+        "/boot/firmware/userconf.txt",
+        "/boot/firmware/userconf",
+        "/boot/userconf.txt",
+        "/boot/userconf",
+    };
+    for (const char *path : kUserconfPaths) {
+        if (access(path, F_OK) == 0)
+            return false;
+    }
+
+    // 3. The decisive, build-independent signal: does the UID 1000 user already
+    //    have a real password? pi-gen ALWAYS pre-creates the first user (default
+    //    "pi"), but leaves it --disabled-login (locked, no "$" hash) on a factory
+    //    image, and its own rule is "FIRST_USER_NAME=pi with no FIRST_USER_PASS
+    //    launches the wizard". So:
+    //      * has a valid password  => Imager-configured / baked / OOBE already
+    //        done => skip.
+    //      * locked / no user      => untouched factory TF card => show the OOBE.
+    if (first_user_has_password())
+        return false;
+
+    return true;
+#endif
+}
 
 void ui_init(void)
 {
