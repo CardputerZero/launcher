@@ -65,6 +65,8 @@ inline cp0_wifi_status_t get_status()
         copy_string(st.ssid, sizeof(st.ssid), cols[1]);
         copy_string(st.ip, sizeof(st.ip), cols[2]);
         st.signal = std::atoi(cols[3].c_str());
+        if (cols.size() >= 5)
+            st.ethernet = std::atoi(cols[4].c_str());
     });
     return st;
 }
@@ -167,6 +169,7 @@ public:
 
         create_title(ui_TOP_Container);
         create_spacer(ui_TOP_Container);
+        create_ethernet(ui_TOP_Container);
         create_wifi(ui_TOP_Container);
         create_time(ui_TOP_Container);
         create_battery(ui_TOP_Container);
@@ -193,6 +196,13 @@ public:
     {
         cp0_wifi_status_t ws = launcher_wifi::get_status();
         set_wifi_signal(ws.connected ? ws.signal : 0);
+        if (eth_icon_)
+        {
+            if (ws.ethernet)
+                lv_obj_clear_flag(eth_icon_, LV_OBJ_FLAG_HIDDEN);
+            else
+                lv_obj_add_flag(eth_icon_, LV_OBJ_FLAG_HIDDEN);
+        }
         if (!wifi_panel_)
             return;
         if (ws.connected)
@@ -235,6 +245,7 @@ private:
     lv_obj_t *time_label_ = nullptr;
     lv_obj_t *wifi_panel_ = nullptr;
     lv_obj_t *wifi_bars_[4] = {};
+    lv_obj_t *eth_icon_ = nullptr;
     int height_ = 20;
 
     static lv_font_t *top_title_font()
@@ -273,6 +284,14 @@ private:
         lv_obj_set_size(spacer, 0, height_);
         lv_obj_set_flex_grow(spacer, 1);
         lv_obj_clear_flag(spacer, (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
+    }
+
+    void create_ethernet(lv_obj_t *parent)
+    {
+        eth_icon_ = lv_img_create(parent);
+        lv_img_set_src(eth_icon_, cp0_file_path_c("status_ethernet.png"));
+        lv_obj_clear_flag(eth_icon_, (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
+        lv_obj_add_flag(eth_icon_, LV_OBJ_FLAG_HIDDEN);
     }
 
     void create_wifi(lv_obj_t *parent)
@@ -596,6 +615,7 @@ private:
     lv_obj_t *ui_TOP_logo = nullptr;
     lv_obj_t *ui_TOP_wifiPanel = nullptr;
     lv_obj_t *ui_TOP_wifiBars[4] = {};
+    lv_obj_t *ui_TOP_eth = nullptr;
     lv_obj_t *ui_TOP_time = nullptr;
     lv_obj_t *ui_TOP_time_Label = nullptr;
     lv_obj_t *ui_TOP_Power = nullptr;
@@ -728,6 +748,12 @@ private:
 
         create_wifi_status(ui_TOP_Container);
 
+        ui_TOP_eth = lv_img_create(ui_TOP_Container);
+        lv_img_set_src(ui_TOP_eth, cp0_file_path_c("status_ethernet.png"));
+        lv_obj_set_pos(ui_TOP_eth, 178, 5);
+        lv_obj_clear_flag(ui_TOP_eth, (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
+        lv_obj_add_flag(ui_TOP_eth, LV_OBJ_FLAG_HIDDEN);
+
         ui_TOP_time = lv_obj_create(ui_TOP_Container);
         lv_obj_set_width(ui_TOP_time, 40);
         lv_obj_set_height(ui_TOP_time, 16);
@@ -851,6 +877,14 @@ private:
             lv_obj_clear_flag(ui_TOP_wifiPanel, LV_OBJ_FLAG_HIDDEN);
         else
             lv_obj_add_flag(ui_TOP_wifiPanel, LV_OBJ_FLAG_HIDDEN);
+
+        if (ui_TOP_eth)
+        {
+            if (ws.ethernet)
+                lv_obj_clear_flag(ui_TOP_eth, LV_OBJ_FLAG_HIDDEN);
+            else
+                lv_obj_add_flag(ui_TOP_eth, LV_OBJ_FLAG_HIDDEN);
+        }
     }
 
     void UI_bind_event()
