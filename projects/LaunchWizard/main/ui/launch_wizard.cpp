@@ -816,6 +816,11 @@ std::string apply_all()
         return service_warning;
 
     run_command({"systemctl", "disable", "--now", "LaunchWizard.service"});
+
+    // Consume any "Run Setup Wizard" re-arm marker so the OOBE runs exactly once.
+    remove("/var/lib/applaunch/run-oobe");
+    remove("/var/lib/LaunchWizard/run-oobe");
+
     if (!desktop_warning.empty()) {
         printf("LaunchWizard: desktop warning: %s\n", desktop_warning.c_str());
         fflush(stdout);
@@ -1596,6 +1601,19 @@ bool launch_wizard_should_run(void)
     // In the SDL emulator always show the OOBE so it can be developed/previewed.
     return true;
 #else
+    // 0. Explicit re-arm marker. APPLaunch's "Run Setup Wizard" settings entry
+    //    drops this file and reboots, letting an already-configured device replay
+    //    the OOBE on demand. Highest priority so it overrides every check below.
+    //    apply_all() clears it on completion, so the wizard still runs exactly once.
+    static const char *kRearmPaths[] = {
+        "/var/lib/applaunch/run-oobe",
+        "/var/lib/LaunchWizard/run-oobe",
+    };
+    for (const char *path : kRearmPaths) {
+        if (access(path, F_OK) == 0)
+            return true;
+    }
+
     // 1. Launched as the Raspberry Pi first-boot wizard user => first boot.
     const char *env_user = getenv("USER");
     if (env_user && strcmp(env_user, "rpi-first-boot-wizard") == 0)
