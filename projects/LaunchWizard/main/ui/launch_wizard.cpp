@@ -14,6 +14,7 @@
 
 #include <ctype.h>
 #include <errno.h>
+#include <glob.h>
 #include <grp.h>
 #include <pwd.h>
 #include <shadow.h>
@@ -44,6 +45,7 @@ namespace {
 constexpr int kScreenWidth = 320;
 constexpr int kScreenHeight = 170;
 constexpr uid_t kDefaultUserUid = 1000;
+constexpr const char *kFirstBootWizardUser = "rpi-first-boot-wizard";
 
 constexpr uint32_t kColorBg = 0x000000;
 constexpr uint32_t kColorDivider = 0x121212;
@@ -294,6 +296,91 @@ CommandResult run_command(const std::vector<std::string> &args, const std::strin
            (result.output.back() == '\n' || result.output.back() == '\r'))
         result.output.pop_back();
     return result;
+#endif
+}
+
+std::string trim_copy(const std::string &value)
+{
+    size_t start = 0;
+    while (start < value.size() && isspace(static_cast<unsigned char>(value[start])))
+        ++start;
+    size_t end = value.size();
+    while (end > start && isspace(static_cast<unsigned char>(value[end - 1])))
+        --end;
+    return value.substr(start, end - start);
+}
+
+void read_lightdm_autologin_file(const char *path, std::string &autologin_user)
+{
+    FILE *fp = fopen(path, "r");
+    if (!fp)
+        return;
+
+    char buffer[512];
+    while (fgets(buffer, sizeof(buffer), fp)) {
+        std::string line = trim_copy(buffer);
+        if (line.empty() || line[0] == '#' || line[0] == ';')
+            continue;
+        size_t comment = line.find_first_of("#;");
+        if (comment != std::string::npos)
+            line = trim_copy(line.substr(0, comment));
+        size_t sep = line.find('=');
+        if (sep == std::string::npos)
+            continue;
+        std::string key = trim_copy(line.substr(0, sep));
+        if (key == "autologin-user")
+            autologin_user = trim_copy(line.substr(sep + 1));
+    }
+    fclose(fp);
+}
+
+std::string lightdm_autologin_user()
+{
+#if LAUNCH_WIZARD_DRY_RUN
+    return kFirstBootWizardUser;
+#else
+    std::string autologin_user;
+    read_lightdm_autologin_file("/etc/lightdm/lightdm.conf", autologin_user);
+
+    glob_t matches;
+    memset(&matches, 0, sizeof(matches));
+    if (glob("/etc/lightdm/lightdm.conf.d/*.conf", 0, nullptr, &matches) == 0) {
+        for (size_t i = 0; i < matches.gl_pathc; ++i)
+            read_lightdm_autologin_file(matches.gl_pathv[i], autologin_user);
+    }
+    globfree(&matches);
+    return autologin_user;
+#endif
+}
+
+bool piwiz_autostart_enabled()
+{
+#if LAUNCH_WIZARD_DRY_RUN
+    return true;
+#else
+    FILE *fp = fopen("/etc/xdg/autostart/piwiz.desktop", "r");
+    if (!fp)
+        return false;
+
+    bool hidden = false;
+    char buffer[512];
+    while (fgets(buffer, sizeof(buffer), fp)) {
+        std::string line = trim_copy(buffer);
+        if (line.empty() || line[0] == '#' || line[0] == ';')
+            continue;
+        size_t comment = line.find_first_of("#;");
+        if (comment != std::string::npos)
+            line = trim_copy(line.substr(0, comment));
+        size_t sep = line.find('=');
+        if (sep == std::string::npos)
+            continue;
+        std::string key = trim_copy(line.substr(0, sep));
+        std::string value = trim_copy(line.substr(sep + 1));
+        if (key == "Hidden" && value == "true")
+            hidden = true;
+    }
+    fclose(fp);
+    return !hidden;
 #endif
 }
 
@@ -558,8 +645,6 @@ uid_t configure_account(const std::string &new_user, const std::string &password
 
 void disable_piwiz(const std::string &user)
 {
-    run_command({"systemctl", "disable", "--now", "piwiz.service"});
-    run_command({"systemctl", "mask", "piwiz.service"});
     run_command({"pkill", "-x", "piwiz"});
     run_command({"rm", "-f",
                  "/etc/xdg/autostart/piwiz.desktop.dpkg-new",
@@ -1578,17 +1663,11 @@ void build_ui()
 // ---------------------------------------------------------------------------
 // First-boot detection.
 //
-// Mirrors the real Raspberry Pi OS (pi-gen / userconf-pi / piwiz) mechanism for
-// deciding whether the first-run wizard should appear, so we correctly tell two
-// kinds of CardputerZero owners apart:
-//
-//   * Factory TF-card units ship the identical, unconfigured pi-gen image. They
-//     have NO real UID 1000 user yet (only the system-level
-//     "rpi-first-boot-wizard" account, if any) -> the OOBE MUST run.
-//   * CardputerZero Lite users flash the card themselves with Raspberry Pi
-//     Imager and set the account/password during flashing (userconf). That
-//     leaves either a pending userconf(.txt) on the boot partition or, after the
-//     first boot, a real UID 1000 user -> the OOBE MUST be skipped.
+// Use Raspberry Pi OS's own desktop handoff as the first-boot signal. The
+// native piwiz flow on current images is launched by XDG autostart after LightDM
+// logs in rpi-first-boot-wizard, so LaunchWizard only replaces that exact flow.
+// Otherwise the owner account is already expected to exist, so LaunchWizard
+// skips the OOBE and only starts APPLaunch for that user.
 // ---------------------------------------------------------------------------
 bool launch_wizard_should_run(void)
 {
@@ -1596,40 +1675,36 @@ bool launch_wizard_should_run(void)
     // In the SDL emulator always show the OOBE so it can be developed/previewed.
     return true;
 #else
-    // 1. Launched as the Raspberry Pi first-boot wizard user => first boot.
-    const char *env_user = getenv("USER");
-    if (env_user && strcmp(env_user, "rpi-first-boot-wizard") == 0)
-        return true;
-    struct passwd *self = getpwuid(geteuid());
-    if (self && self->pw_name && strcmp(self->pw_name, "rpi-first-boot-wizard") == 0)
-        return true;
+    return lightdm_autologin_user() == kFirstBootWizardUser && piwiz_autostart_enabled();
+#endif
+}
 
-    // 2. Raspberry Pi Imager / headless userconf customisation present (pending or
-    //    just applied) => the owner already configured an account. Skip the OOBE.
-    static const char *kUserconfPaths[] = {
-        "/boot/firmware/userconf.txt",
-        "/boot/firmware/userconf",
-        "/boot/userconf.txt",
-        "/boot/userconf",
-    };
-    for (const char *path : kUserconfPaths) {
-        if (access(path, F_OK) == 0)
-            return false;
+int launch_wizard_finish_configured_system(void)
+{
+#if !LAUNCH_WIZARD_DRY_RUN
+    if (geteuid() != 0) {
+        fprintf(stderr, "LaunchWizard: configured-system finish must run as root\n");
+        return 1;
+    }
+#endif
+
+    std::string user = current_first_user();
+    if (user.empty() || user == "root") {
+        fprintf(stderr, "LaunchWizard: UID 1000 user not found; cannot start APPLaunch\n");
+        return 1;
     }
 
-    // 3. The decisive, build-independent signal: does the UID 1000 user already
-    //    have a real password? pi-gen ALWAYS pre-creates the first user (default
-    //    "pi"), but leaves it --disabled-login (locked, no "$" hash) on a factory
-    //    image, and its own rule is "FIRST_USER_NAME=pi with no FIRST_USER_PASS
-    //    launches the wizard". So:
-    //      * has a valid password  => Imager-configured / baked / OOBE already
-    //        done => skip.
-    //      * locked / no user      => untouched factory TF card => show the OOBE.
-    if (first_user_has_password())
-        return false;
+    std::string service_warning = start_applaunch_service(user, kDefaultUserUid);
+    if (!service_warning.empty()) {
+        fprintf(stderr, "LaunchWizard: %s\n", service_warning.c_str());
+        return 1;
+    }
 
-    return true;
-#endif
+    run_command({"systemctl", "disable", "--now", "LaunchWizard.service"});
+    printf("LaunchWizard: started APPLaunch for %s and disabled LaunchWizard.service\n",
+           user.c_str());
+    fflush(stdout);
+    return 0;
 }
 
 void ui_init(void)
