@@ -599,6 +599,8 @@ int cp0_account_info_read(cp0_account_info_t *info)
 int cp0_system_apt_update_background(void) { return -1; }
 int cp0_system_update_launcher_background(void) { return -1; }
 int cp0_time_set(const char *) { return -1; }
+int cp0_time_ntp_get(void) { return 0; }
+int cp0_time_ntp_set(int) { return -1; }
 int cp0_bq27220_calibrate(int) { return -1; }
 int cp0_compass_calibrate(void) { return -1; }
 int cp0_compass_read(cp0_compass_read_cb_t callback, void *user)
