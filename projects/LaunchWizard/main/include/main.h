@@ -8,6 +8,7 @@ void ui_init(void);
 // Distinguishes a factory (unconfigured) image from a device the user already
 // configured (e.g. CardputerZero Lite flashed with Raspberry Pi Imager).
 bool launch_wizard_should_run(void);
+int launch_wizard_finish_configured_system(void);
 
 extern "C" {
 #endif
