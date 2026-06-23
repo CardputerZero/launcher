@@ -375,7 +375,12 @@ private:
     {
         val_title_ = "DarkTime";
         val_options_ = {"Never", "10S", "30S", "60S", "300S"};
-        val_sel_idx_ = 2; // default 30S
+        const int times[] = {0, 10, 30, 60, 300};
+        int saved = config_get_int("dark_time", 30); // default 30S
+        val_sel_idx_ = 2;
+        for (int i = 0; i < (int)(sizeof(times) / sizeof(times[0])); ++i) {
+            if (times[i] == saved) { val_sel_idx_ = i; break; }
+        }
         view_state_ = ViewState::VALUE_SELECT;
         transition_enter_level();
     }
@@ -1168,7 +1173,8 @@ private:
         } else if (val_title_ == "Volume") {
             apply_volume();
         } else if (val_title_ == "DarkTime") {
-            // TODO: save dark time setting
+            // Idle screen-blank timeout in seconds (0 = Never); consumed by
+            // ui_darkscreen_tick() in the launcher main loop (#72).
             int times[] = {0, 10, 30, 60, 300};
             config_set_int("dark_time", times[val_sel_idx_]);
             config_save();
