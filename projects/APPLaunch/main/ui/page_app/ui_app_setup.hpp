@@ -442,6 +442,9 @@ private:
         lv_obj_set_pos(title, 8, 2);
         lv_obj_set_style_text_color(title, lv_color_hex(0x58A6FF), LV_PART_MAIN);
         lv_obj_set_style_text_font(title, launcher_fonts().get("Montserrat-Bold.ttf", 12, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN);
+        // The connected-WiFi line (SSID + IP) can overflow off-screen (#66). Clamp it to a
+        // fixed box and marquee-scroll when wider than the threshold so it stays fully readable.
+        apply_overflow_handling(title, 8, WIFI_TITLE_BOX_W, true);
 
         // Column headers
         lv_obj_t *h1 = lv_label_create(cont);
@@ -1255,6 +1258,10 @@ private:
     // clamped into a right-edge box and marquee-scrolled. Slightly smaller than the
     // center VALUE_BOX_W so it clears the toggle indicator instead of overlapping it.
     static constexpr int RIGHT_HINT_BOX_W = 74;
+
+    // Width of the "Connected WiFi: <ssid> <ip>" header box in the WiFi list. When the
+    // text is wider than this it marquee-scrolls instead of overflowing off-screen (#66).
+    static constexpr int WIFI_TITLE_BOX_W = 300;
 
     RowStyle style_for_slot(int vi) {
         int dist = vi > ROW_CENTER ? vi - ROW_CENTER : ROW_CENTER - vi;
