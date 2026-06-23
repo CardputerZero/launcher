@@ -17,3 +17,6 @@ docs/*.html
 skills-lock.json
 *.bak
 projects/APPLaunch/docs/UILaunchPage_carousel_animation.html
+
+# Stale prebuilt OOBE binary — LaunchWizard ships as its own source-built .deb
+projects/APPLaunch/APPLaunch/bin/LaunchWizard
