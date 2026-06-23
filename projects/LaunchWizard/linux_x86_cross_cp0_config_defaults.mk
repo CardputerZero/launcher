@@ -24,6 +24,10 @@ CONFIG_V9_5_LV_FONT_MONTSERRAT_22=y
 CONFIG_V9_5_LV_FONT_DEFAULT_MONTSERRAT_14=y
 
 CONFIG_V9_5_LV_USE_LINUX_FBDEV=y
+# FULL render mode: render the whole frame into the buffer, then write it to
+# fb0 in one shot. PARTIAL mode leaves the first frame black until a user event
+# (and causes SPI tearing). Mirrors APPLaunch's fix.
+CONFIG_V9_5_LV_LINUX_FBDEV_RENDER_MODE_FULL=y
 CONFIG_V9_5_LV_DRAW_SW_ASM_NEON=y
 CONFIG_V9_5_LV_USE_DRAW_SW_ASM=1
 CONFIG_V9_5_LV_USE_EVDEV=y
