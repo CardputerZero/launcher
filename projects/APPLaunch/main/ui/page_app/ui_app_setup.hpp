@@ -25,6 +25,7 @@
 #include <fcntl.h>
 #ifndef _WIN32
 #include <unistd.h>
+#include <sys/stat.h>
 #endif
 #include <dirent.h>
 #include "cp0_lvgl_app.h"
@@ -364,6 +365,7 @@ private:
             MenuItem m;
             m.label = "Reset";
             m.sub_items = {
+                {"Run Setup Wizard", false, false, [this]() { enter_confirm_action("Run Setup?", [this](){ rearm_oobe_and_reboot(); }); }},
                 {"Factory Reset", false, false, [this]() { factory_reset(); }},
             };
             menu_items_.push_back(m);
@@ -879,6 +881,20 @@ private:
         cp0_system_reboot();
     }
 
+    // Re-arm the first-boot setup wizard (OOBE) so it replays once on the next
+    // boot, then reboot. LaunchWizard (root system service) detects this marker,
+    // shows the OOBE, and clears it when finished — so configured devices can
+    // simulate the first-run experience on demand.
+    void rearm_oobe_and_reboot()
+    {
+#ifndef _WIN32
+        mkdir("/var/lib/applaunch", 0755);
+#endif
+        FILE *f = fopen("/var/lib/applaunch/run-oobe", "w");
+        if (f) fclose(f);
+        cp0_system_reboot();
+    }
+
     // ==================== WiFi functions ====================
     void wifi_do_scan()
     {
@@ -1178,7 +1194,7 @@ private:
         } else if (val_title_ == "Year" || val_title_ == "Month" || val_title_ == "Day" ||
                    val_title_ == "Hour" || val_title_ == "Minute" || val_title_ == "Second") {
             apply_rtc_value();
-        } else if (val_title_ == "Reboot?" || val_title_ == "Shutdown?") {
+        } else if (val_title_ == "Reboot?" || val_title_ == "Shutdown?" || val_title_ == "Run Setup?") {
             if (val_sel_idx_ == 0 && confirm_action_) confirm_action_(); // "Yes"
         } else if (val_title_ == "BQ Calib") {
             apply_bq_calibrate();
@@ -1959,12 +1975,12 @@ private:
         case KEY_RIGHT:
             apply_value_selection();
             // After reboot/shutdown, don't animate back — the system is going down.
-            if (val_title_ == "Reboot?" || val_title_ == "Shutdown?") {
+            if (val_title_ == "Reboot?" || val_title_ == "Shutdown?" || val_title_ == "Run Setup?") {
                 // Show a brief message, then let the system halt/reboot.
                 lv_obj_t *cont = ui_obj_["list_cont"];
                 lv_obj_clean(cont);
                 lv_obj_t *lbl = lv_label_create(cont);
-                lv_label_set_text(lbl, val_title_ == "Reboot?" ? "Rebooting..." : "Shutting down...");
+                lv_label_set_text(lbl, val_title_ == "Shutdown?" ? "Shutting down..." : "Rebooting...");
                 lv_obj_center(lbl);
                 lv_obj_set_style_text_color(lbl, lv_color_hex(0x58A6FF), LV_PART_MAIN);
                 lv_obj_set_style_text_font(lbl, &lv_font_montserrat_14, LV_PART_MAIN);
