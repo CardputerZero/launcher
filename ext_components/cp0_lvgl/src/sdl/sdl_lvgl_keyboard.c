@@ -26,6 +26,12 @@ typedef struct {
 static void cp0_sdl_keyboard_read(lv_indev_t *indev, lv_indev_data_t *data);
 static void cp0_sdl_keyboard_delete_cb(lv_event_t *event);
 
+__attribute__((weak)) int ui_darkscreen_filter_key(const struct key_item *elm)
+{
+    (void)elm;
+    return 0;
+}
+
 __attribute__((weak)) void ui_global_hint_on_key(const struct key_item *elm)
 {
     (void)elm;
@@ -513,15 +519,21 @@ static void cp0_sdl_keyboard_read(lv_indev_t *indev, lv_indev_data_t *data)
         struct key_item *elm = STAILQ_FIRST(&keyboard_queue);
         STAILQ_REMOVE_HEAD(&keyboard_queue, entries);
 
-        lv_obj_t *root = lv_screen_active();
-        if (root != NULL)
-            lv_obj_send_event(root, (lv_event_code_t)LV_EVENT_KEYBOARD, elm);
+        int swallowed = ui_darkscreen_filter_key(elm);
 
-        ui_global_hint_on_key(elm);
+        if (!swallowed) {
+            lv_obj_t *root = lv_screen_active();
+            if (root != NULL)
+                lv_obj_send_event(root, (lv_event_code_t)LV_EVENT_KEYBOARD, elm);
 
-        data->key = cp0_evdev_process_key(elm->key_code);
-        if (data->key) {
-            data->state = (lv_indev_state_t)elm->key_state;
+            ui_global_hint_on_key(elm);
+
+            data->key = cp0_evdev_process_key(elm->key_code);
+            if (data->key) {
+                data->state = (lv_indev_state_t)elm->key_state;
+                data->continue_reading = !STAILQ_EMPTY(&keyboard_queue);
+            }
+        } else {
             data->continue_reading = !STAILQ_EMPTY(&keyboard_queue);
         }
         free(elm);
