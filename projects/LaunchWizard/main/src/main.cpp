@@ -17,8 +17,8 @@ int main(int argc, char *argv[])
         force = true;
 
     if (!force && !launch_wizard_should_run()) {
-        printf("LaunchWizard: device already configured, skipping OOBE\n");
-        return 0;
+        printf("LaunchWizard: first-boot desktop is not active, starting APPLaunch\n");
+        return launch_wizard_finish_configured_system();
     }
 
     return lvgl_main();
