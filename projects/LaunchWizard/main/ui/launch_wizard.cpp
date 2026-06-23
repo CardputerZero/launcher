@@ -901,6 +901,11 @@ std::string apply_all()
         return service_warning;
 
     run_command({"systemctl", "disable", "--now", "LaunchWizard.service"});
+
+    // Consume any "Run Setup Wizard" re-arm marker so the OOBE runs exactly once.
+    remove("/var/lib/applaunch/run-oobe");
+    remove("/var/lib/LaunchWizard/run-oobe");
+
     if (!desktop_warning.empty()) {
         printf("LaunchWizard: desktop warning: %s\n", desktop_warning.c_str());
         fflush(stdout);
@@ -1664,10 +1669,11 @@ void build_ui()
 // First-boot detection.
 //
 // Use Raspberry Pi OS's own desktop handoff as the first-boot signal. The
-// native piwiz flow on current images is launched by XDG autostart after LightDM
-// logs in rpi-first-boot-wizard, so LaunchWizard only replaces that exact flow.
-// Otherwise the owner account is already expected to exist, so LaunchWizard
-// skips the OOBE and only starts APPLaunch for that user.
+// APPLaunch settings can explicitly re-arm the OOBE with a marker file. Without
+// that marker, the native piwiz flow on current images is launched by XDG
+// autostart after LightDM logs in rpi-first-boot-wizard, so LaunchWizard only
+// replaces that exact flow. Otherwise the owner account is already expected to
+// exist, so LaunchWizard skips the OOBE and only starts APPLaunch for that user.
 // ---------------------------------------------------------------------------
 bool launch_wizard_should_run(void)
 {
@@ -1675,6 +1681,19 @@ bool launch_wizard_should_run(void)
     // In the SDL emulator always show the OOBE so it can be developed/previewed.
     return true;
 #else
+    // Explicit re-arm marker. APPLaunch's "Run Setup Wizard" settings entry
+    // drops this file and reboots, letting an already-configured device replay
+    // the OOBE on demand. apply_all() clears it on completion, so the wizard
+    // still runs exactly once.
+    static const char *kRearmPaths[] = {
+        "/var/lib/applaunch/run-oobe",
+        "/var/lib/LaunchWizard/run-oobe",
+    };
+    for (const char *path : kRearmPaths) {
+        if (access(path, F_OK) == 0)
+            return true;
+    }
+
     return lightdm_autologin_user() == kFirstBootWizardUser && piwiz_autostart_enabled();
 #endif
 }
