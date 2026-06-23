@@ -107,26 +107,21 @@ jobs:
         cp projects/AppStore/share/images/store_wordmark.png projects/APPLaunch/dist/APPLaunch/share/images/ 2>/dev/null || true
         cp projects/AppStore/share/images/store_arrow_*.png projects/APPLaunch/dist/APPLaunch/share/images/ 2>/dev/null || true
 
+    - name: Bundle LaunchWizard into APPLaunch package tree
+      run: |
+        mkdir -p projects/APPLaunch/APPLaunch/bin
+        cp projects/LaunchWizard/dist/LaunchWizard projects/APPLaunch/APPLaunch/bin/LaunchWizard
+        chmod 0755 projects/APPLaunch/APPLaunch/bin/LaunchWizard
+
     - name: Build .deb package
       run: |
         python3 scripts/debian_packager.py
-
-    - name: Build LaunchWizard .deb package
-      run: |
-        python3 scripts/debian_packager.py build \
-          --project LaunchWizard \
-          --app-name LaunchWizard \
-          --bin-name LaunchWizard \
-          --package-name launchwizard \
-          --service-scope system
 
     - name: Collect artifacts
       run: |
         mkdir -p artifacts
         cp projects/APPLaunch/dist/M5CardputerZero-APPLaunch artifacts/
         cp projects/APPLaunch/tools/*.deb artifacts/
-        cp projects/LaunchWizard/dist/LaunchWizard artifacts/
-        cp projects/LaunchWizard/tools/*.deb artifacts/
 
     - uses: actions/upload-artifact@v4
       with:
@@ -159,4 +154,3 @@ jobs:
         files: |
           artifacts/*.deb
           artifacts/M5CardputerZero-APPLaunch
-          artifacts/LaunchWizard
