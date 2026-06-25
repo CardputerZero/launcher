@@ -2,6 +2,7 @@
 #include "hal_lvgl_bsp.h"
 
 #include <cerrno>
+#include <climits>
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
@@ -30,6 +31,21 @@
 #endif
 
 namespace {
+
+    constexpr int kBatteryCurrentMaxMa = 5000;
+
+    static bool is_charging_status(const char *status)
+    {
+        return std::strcmp(status, "Charging") == 0;
+    }
+
+    static int sanitize_battery_current_ma(int current_ma, bool)
+    {
+        if (std::abs(current_ma) > kBatteryCurrentMaxMa) {
+            return INT32_MIN; // sentinel: value out of plausible range
+        }
+        return current_ma;
+    }
 
 class Bq27220System
 {
@@ -73,7 +89,9 @@ public:
             read_string(path, status, sizeof(status));
 
             if (ok) {
-                const double current_ma = -(current_raw / 1000.0);
+                const bool is_charging = is_charging_status(status);
+                // power_supply convention: negative = discharging, positive = charging
+                const double current_ma = current_raw / 1000.0;
                 double temp_c = temp_raw / 10.0;
                 if (temp_c > 100.0 || temp_c < -40.0) {
                     temp_c = temp_raw / 100.0;
@@ -81,10 +99,11 @@ public:
 
                 info.soc = static_cast<int>(capacity);
                 info.voltage_mv = static_cast<int>(voltage_uv / 1000);
-                info.current_ma = round_to_int(current_ma);
-                info.avg_current_ma = info.current_ma;
+                const int rounded_current_ma = sanitize_battery_current_ma(round_to_int(current_ma), is_charging);
+                info.current_ma = rounded_current_ma;
+                info.avg_current_ma = rounded_current_ma;
                 info.temperature_c10 = round_to_int(temp_c * 10.0);
-                info.flags = (std::strcmp(status, "Charging") == 0) ? 1 : 0;
+                info.flags = is_charging ? 1 : 0;
                 info.valid = 1;
                 return info;
             }
@@ -98,13 +117,13 @@ public:
 
         int v;
         v = read_word(fd, 0x08); if (v >= 0) info.voltage_mv = v;
-        v = read_word(fd, 0x0C); if (v >= 0) info.current_ma = (v > 32767) ? v - 65536 : v;
+        v = read_word(fd, 0x0C); if (v >= 0) info.current_ma = sanitize_battery_current_ma((v > 32767) ? v - 65536 : v, false);
         v = read_word(fd, 0x06); if (v >= 0) info.temperature_c10 = v - 2731;
         v = read_word(fd, 0x2C); if (v >= 0) info.soc = v;
         v = read_word(fd, 0x10); if (v >= 0) info.remain_mah = v;
         v = read_word(fd, 0x12); if (v >= 0) info.full_mah = v;
         v = read_word(fd, 0x0E); if (v >= 0) info.flags = v;
-        v = read_word(fd, 0x14); if (v >= 0) info.avg_current_ma = (v > 32767) ? v - 65536 : v;
+        v = read_word(fd, 0x14); if (v >= 0) info.avg_current_ma = sanitize_battery_current_ma((v > 32767) ? v - 65536 : v, false);
 
         info.valid = 1;
         close(fd);

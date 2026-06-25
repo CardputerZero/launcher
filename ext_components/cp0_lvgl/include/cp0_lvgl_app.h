@@ -133,6 +133,7 @@ void cp0_system_reboot(void);
 
 int cp0_process_run_argv(const char *const *argv, int background);
 int cp0_process_capture_argv(const char *const *argv, char *out, int out_size);
+int cp0_process_run_sudo(const char *password, const char *const *argv);
 int cp0_file_read_first_line(const char *path, char *out, int out_size);
 int cp0_desktop_exec_is_safe(const char *exec, char *reason, int reason_size);
 int cp0_network_default_info_read(cp0_eth_info_t *info);

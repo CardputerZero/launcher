@@ -9,6 +9,9 @@
 #include <string.h>
 #include <time.h>
 
+int cp0_process_run_sudo(const char *password, const char *const *argv)
+{ (void)password; (void)argv; return -1; }
+
 void hal_audio_init(void) {}
 void hal_audio_play(const char *path) { (void)path; }
 void hal_audio_play_sync(const char *path) { (void)path; }

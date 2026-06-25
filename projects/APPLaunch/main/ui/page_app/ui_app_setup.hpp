@@ -14,6 +14,7 @@
 #endif
 #define LAUNCHER_GIT_COMMIT STRINGIFY(LAUNCHER_GIT_COMMIT_RAW)
 #include "../ui_app_page.hpp"
+#include <climits>
 #include <unordered_map>
 #include <string>
 #include <vector>
@@ -28,6 +29,7 @@
 #include <sys/stat.h>
 #endif
 #include <dirent.h>
+#include <sstream>
 #include "cp0_lvgl_app.h"
 #include "hal_lvgl_bsp.h"
 #include "../app_registry.h"
@@ -42,7 +44,8 @@
 
 class UISetupPage : public AppPage
 {
-    enum class ViewState { MAIN, SUB, VALUE_SELECT, WIFI_LIST, WIFI_PW };
+    enum class ViewState { MAIN, SUB, VALUE_SELECT, WIFI_LIST, WIFI_PW,
+                           SOUNDCARD_CARDS, SOUNDCARD_CONTROLS, SOUNDCARD_DETAIL };
 
     struct SubItem {
         std::string label;
@@ -137,11 +140,6 @@ private:
     static void config_save()
     {
         cp0_signal_config_api({"Save"}, nullptr);
-    }
-
-    static void gpio_set(const char *name, int val)
-    {
-        cp0_signal_settings_api({"GpioSet", name ? std::string(name) : std::string(), std::to_string(val)}, nullptr);
     }
 
     static int audio_volume_read()
@@ -289,16 +287,14 @@ private:
             bool usb_en = config_get_int("extport_usb", 1) != 0;
             bool vout_en = config_get_int("extport_5vout", 1) != 0;
             m.sub_items = {
-                {"GROVE5V", true, usb_en, [this]() {
+                {"USB",   true, usb_en, [this]() {
                     bool en = menu_items_[selected_idx_].sub_items[0].toggle_state;
                     config_set_int("extport_usb", en ? 1 : 0);
-                    gpio_set("GROVE5V", en ? 1 : 0);
                     config_save();
                 }},
-                {"EXT5V",   true, vout_en, [this]() {
+                {"5VOUT", true, vout_en, [this]() {
                     bool en = menu_items_[selected_idx_].sub_items[1].toggle_state;
                     config_set_int("extport_5vout", en ? 1 : 0);
-                    gpio_set("EXT5V", en ? 1 : 0);
                     config_save();
                 }},
             };
@@ -374,6 +370,16 @@ private:
             m.sub_items = {
                 {"Run Setup Wizard", false, false, [this]() { enter_confirm_action("Run Setup?", [this](){ rearm_oobe_and_reboot(); }); }},
                 {"Factory Reset", false, false, [this]() { factory_reset(); }},
+            };
+            menu_items_.push_back(m);
+        }
+        // --- SoundCard ---
+        {
+            MenuItem m;
+            m.label = "SoundCard";
+            // Single sub-item acts as an entry point into the full-screen card browser
+            m.sub_items = {
+                {"Open Mixer", false, false, [this]() { sc_enter_cards(); }},
             };
             menu_items_.push_back(m);
         }
@@ -595,7 +601,11 @@ private:
             m.sub_items[0].label = buf;
             snprintf(buf, sizeof(buf), "Temp: %.1fC", bat.valid ? bat.temperature_c10 / 10.0 : 0.0);
             m.sub_items[1].label = buf;
-            snprintf(buf, sizeof(buf), "Current: %dmA", bat.valid ? bat.current_ma : 0);
+            if (bat.valid && bat.current_ma != INT32_MIN) {
+                snprintf(buf, sizeof(buf), "Current: %dmA", bat.current_ma);
+            } else {
+                snprintf(buf, sizeof(buf), "Current: --mA");
+            }
             m.sub_items[2].label = buf;
             snprintf(buf, sizeof(buf), "Voltage: %.2fV", bat.valid ? bat.voltage_mv / 1000.0 : 0.0);
             m.sub_items[3].label = buf;
@@ -682,8 +692,17 @@ private:
         snprintf(timestamp, sizeof(timestamp), "%04d-%02d-%02d %02d:%02d:%02d",
                  rtc_values_[0], rtc_values_[1], rtc_values_[2],
                  rtc_values_[3], rtc_values_[4], rtc_values_[5]);
-        cp0_time_set(timestamp);
-        refresh_rtc_values();
+
+        // Build a combined shell command: set system clock then sync to hardware RTC.
+        // Timestamp format is always "YYYY-MM-DD HH:MM:SS" — safe to single-quote.
+        char shell_cmd[128];
+        snprintf(shell_cmd, sizeof(shell_cmd),
+                 "date -s '%s' && hwclock -w", timestamp);
+
+        SudoPrompt::show({"sh", "-c", shell_cmd}, [this](int code) {
+            refresh_rtc_values();
+            update_datetime_status();
+        });
     }
 
     void save_app_toggle(const std::string &config_key)
@@ -1603,7 +1622,10 @@ private:
             SubItem &sub = item.sub_items[si];
             lv_obj_t *lbl = create_carousel_label(cont, vi, sub_center_vi,
                                                    sub.label.c_str(), SUB_CENTER_X, true);
-            apply_overflow_handling(lbl, VALUE_BOX_LEFT, VALUE_BOX_W, vi == sub_center_vi);
+            // Focused row uses a tighter box (80px) so labels wider than 80px scroll;
+            // non-focused rows keep the full 100px box (only clip when truly overflowing).
+            bool focused_row = (vi == sub_center_vi);
+            apply_overflow_handling(lbl, VALUE_BOX_LEFT, focused_row ? 80 : VALUE_BOX_W, focused_row);
             lv_obj_update_layout(lbl);
             int lx = lv_obj_get_x(lbl);
             int tw = lv_obj_get_width(lbl);
@@ -1761,6 +1783,9 @@ private:
         else if (view_state_ == ViewState::SUB) build_sub_view();
         else if (view_state_ == ViewState::VALUE_SELECT) build_value_view();
         else if (view_state_ == ViewState::WIFI_LIST) build_wifi_list();
+        else if (view_state_ == ViewState::SOUNDCARD_CARDS) build_soundcard_cards_view();
+        else if (view_state_ == ViewState::SOUNDCARD_CONTROLS) build_soundcard_controls_view();
+        else if (view_state_ == ViewState::SOUNDCARD_DETAIL) build_soundcard_detail_view();
     }
 
     // Bounce animation for orange arrows (small Y displacement + return)
@@ -1896,6 +1921,21 @@ private:
         case ViewState::WIFI_PW:
             if (released) handle_wifi_pw_key(key);
             break;
+        case ViewState::SOUNDCARD_CARDS:
+            if (pressed && (key == KEY_UP || key == KEY_DOWN))
+                handle_soundcard_cards_key(key);
+            else if (released && key != KEY_UP && key != KEY_DOWN)
+                handle_soundcard_cards_key(key);
+            break;
+        case ViewState::SOUNDCARD_CONTROLS:
+            if (pressed && (key == KEY_UP || key == KEY_DOWN))
+                handle_soundcard_controls_key(key);
+            else if (released && key != KEY_UP && key != KEY_DOWN)
+                handle_soundcard_controls_key(key);
+            break;
+        case ViewState::SOUNDCARD_DETAIL:
+            if (released) handle_soundcard_detail_key(key);
+            break;
         }
     }
 
@@ -2019,4 +2059,627 @@ private:
             break;
         }
     }
+
+    // ==================== SoundCard ====================
+// ====================================================================
+//  State added to UISetupPage (included in private section)
+// ====================================================================
+
+struct ScCard {
+    int         index = 0;
+    std::string name;
+};
+
+struct ScCtrl {
+    std::string name;
+    std::string type;
+    int         min_val    = 0;
+    int         max_val    = 0;
+    int         step       = 1;
+    std::string current_str;
+    int         current_val = 0;
+};
+
+// Sound card navigation state
+std::vector<ScCard> sc_cards_;
+std::vector<ScCtrl> sc_controls_;
+int  sc_card_sel_   = 0;
+int  sc_ctrl_sel_   = 0;
+int  sc_card_idx_   = -1;
+
+// Detail / input state
+ScCtrl      sc_detail_;
+std::string sc_input_buf_;
+lv_obj_t   *sc_input_lbl_   = nullptr;
+lv_obj_t   *sc_hint_lbl2_   = nullptr;
+lv_timer_t *sc_cursor_timer_ = nullptr;
+bool        sc_cursor_vis_   = true;
+
+// ====================================================================
+//  Parsing helpers (static member functions)
+// ====================================================================
+
+static std::string sc_trim(const std::string &s)
+{
+    size_t a = s.find_first_not_of(" \t\r\n");
+    if (a == std::string::npos) return {};
+    size_t b = s.find_last_not_of(" \t\r\n");
+    return s.substr(a, b - a + 1);
+}
+
+static bool sc_parse_limits(const std::string &line, int &mn, int &mx)
+{
+    size_t p = line.find("Limits:");
+    if (p == std::string::npos) return false;
+    std::string rest = line.substr(p + 7);
+    for (const char *pfx : {"Playback ", "Capture "}) {
+        if (rest.find(pfx) == 0) { rest = rest.substr(std::strlen(pfx)); break; }
+    }
+    int a = 0, b = 0;
+    if (std::sscanf(rest.c_str(), " %d - %d", &a, &b) == 2) {
+        mn = a; mx = b; return true;
+    }
+    return false;
+}
+
+static int sc_parse_current_val(const std::string &line)
+{
+    size_t p = line.find(": ");
+    if (p == std::string::npos) return -1;
+    int v = 0;
+    if (std::sscanf(line.c_str() + p + 2, " %d", &v) == 1) return v;
+    return -1;
+}
+
+static std::string sc_extract_value_str(const std::string &line)
+{
+    static const char *pfx[] = {
+        "Mono:", "Front Left:", "Front Right:", "Rear Left:", "Rear Right:",
+        "Center:", "LFE:", "Side Left:", "Side Right:", "Capture:", "Playback:",
+        nullptr
+    };
+    for (int i = 0; pfx[i]; ++i) {
+        size_t p = line.find(pfx[i]);
+        if (p != std::string::npos) return sc_trim(line.substr(p));
+    }
+    return sc_trim(line);
+}
+
+static bool sc_is_value_line(const std::string &tl)
+{
+    static const char *pfx[] = {
+        "Mono:", "Front Left:", "Front Right:", "Rear Left:", "Rear Right:",
+        "Center:", "LFE:", "Side Left:", "Side Right:", "Capture:", "Playback:",
+        nullptr
+    };
+    for (int i = 0; pfx[i]; ++i)
+        if (tl.rfind(pfx[i], 0) == 0) return true;
+    return false;
+}
+
+// ====================================================================
+//  Helpers
+// ====================================================================
+
+void sc_enter_cards()
+{
+    sc_cards_.clear();
+    cp0_signal_soundcard_api({"ListCards"}, [this](int code, std::string data) {
+        if (code != 0) return;
+        std::istringstream lines(data);
+        std::string line;
+        while (std::getline(lines, line)) {
+            if (line.empty()) continue;
+            size_t tab = line.find('\t');
+            if (tab == std::string::npos) continue;
+            ScCard c;
+            c.index = std::atoi(line.substr(0, tab).c_str());
+            c.name  = line.substr(tab + 1);
+            sc_cards_.push_back(std::move(c));
+        }
+    });
+    sc_card_sel_ = 0;
+    view_state_ = ViewState::SOUNDCARD_CARDS;
+    transition_enter_level();
+}
+
+void sc_enter_controls()
+{
+    if (sc_cards_.empty()) return;
+    sc_card_idx_ = sc_cards_[sc_card_sel_].index;
+    sc_controls_.clear();
+    cp0_signal_soundcard_api({"ListControls", std::to_string(sc_card_idx_)},
+        [this](int code, std::string data) {
+            if (code != 0) return;
+            std::istringstream lines(data);
+            std::string line;
+            while (std::getline(lines, line)) {
+                if (line.empty()) continue;
+                std::vector<std::string> cols;
+                std::string item;
+                std::istringstream row(line);
+                while (std::getline(row, item, '\t')) cols.push_back(item);
+                if (cols.size() < 7) continue;
+                ScCtrl c;
+                c.name        = cols[0];
+                c.type        = cols[1];
+                c.min_val     = std::atoi(cols[2].c_str());
+                c.max_val     = std::atoi(cols[3].c_str());
+                c.step        = std::atoi(cols[4].c_str());
+                c.current_str = cols[5];
+                c.current_val = std::atoi(cols[6].c_str());
+                sc_controls_.push_back(std::move(c));
+            }
+        });
+    sc_ctrl_sel_ = 0;
+    view_state_  = ViewState::SOUNDCARD_CONTROLS;
+    transition_enter_level();
+}
+
+void sc_enter_detail()
+{
+    if (sc_controls_.empty()) return;
+    const auto &ctrl = sc_controls_[sc_ctrl_sel_];
+    sc_detail_ = ScCtrl{};
+    sc_detail_.name = ctrl.name;
+    cp0_signal_soundcard_api({"GetControlDetail", std::to_string(sc_card_idx_), ctrl.name},
+        [this, &ctrl](int code, std::string data) {
+            if (code != 0) { sc_detail_ = ctrl; return; }
+            std::istringstream ss(data);
+            std::string line;
+            while (std::getline(ss, line)) {
+                std::string tl = sc_trim(line);
+                if (tl.rfind("Capabilities:", 0) == 0)
+                    sc_detail_.type = (tl.find("enum") != std::string::npos) ? "ENUMERATED" : "INTEGER";
+                else if (tl.rfind("Limits:", 0) == 0)
+                    sc_parse_limits(tl, sc_detail_.min_val, sc_detail_.max_val);
+                else if (sc_detail_.current_str.empty() && sc_is_value_line(tl)) {
+                    sc_detail_.current_str = sc_extract_value_str(tl);
+                    int v = sc_parse_current_val(tl);
+                    if (v >= 0) sc_detail_.current_val = v;
+                }
+            }
+        });
+    if (sc_detail_.max_val == 0 && ctrl.max_val != 0) {
+        sc_detail_.min_val = ctrl.min_val;
+        sc_detail_.max_val = ctrl.max_val;
+    }
+    sc_input_buf_.clear();
+    sc_input_lbl_  = nullptr;
+    sc_hint_lbl2_  = nullptr;
+    view_state_    = ViewState::SOUNDCARD_DETAIL;
+    transition_enter_level();
+}
+
+// ====================================================================
+//  Build: card list view
+// ====================================================================
+void build_soundcard_cards_view()
+{
+    lv_obj_t *cont = ui_obj_["list_cont"];
+    lv_obj_clean(cont);
+
+    // Title
+    lv_obj_t *title = lv_label_create(cont);
+    lv_label_set_text(title, "Sound Cards");
+    lv_obj_set_pos(title, 8, 4);
+    lv_obj_set_style_text_color(title, lv_color_hex(0x58A6FF), LV_PART_MAIN);
+    lv_obj_set_style_text_font(title, launcher_fonts().get("Montserrat-Bold.ttf", 14, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN);
+
+    if (sc_cards_.empty()) {
+        lv_obj_t *lbl = lv_label_create(cont);
+        lv_label_set_text(lbl, "No ALSA cards found.");
+        lv_obj_set_pos(lbl, 8, 40);
+        lv_obj_set_style_text_color(lbl, lv_color_hex(0x888888), LV_PART_MAIN);
+        lv_obj_set_style_text_font(lbl, &lv_font_montserrat_12, LV_PART_MAIN);
+
+        lv_obj_t *hint = lv_label_create(cont);
+        lv_label_set_text(hint, "ESC: back");
+        lv_obj_set_pos(hint, 8, LIST_H - 14);
+        lv_obj_set_style_text_color(hint, lv_color_hex(0x555555), LV_PART_MAIN);
+        lv_obj_set_style_text_font(hint, &lv_font_montserrat_10, LV_PART_MAIN);
+        return;
+    }
+
+    int visible = 5;
+    int total   = (int)sc_cards_.size();
+    int offset  = sc_card_sel_ - visible / 2;
+    if (offset < 0) offset = 0;
+    if (total > visible && offset > total - visible) offset = total - visible;
+
+    for (int vi = 0; vi < visible && (vi + offset) < total; ++vi) {
+        int ai  = vi + offset;
+        bool sel = (ai == sc_card_sel_);
+        int  y   = 22 + vi * 22;
+
+        if (sel) {
+            lv_obj_t *bg = lv_obj_create(cont);
+            lv_obj_set_size(bg, SCREEN_W - 8, 20);
+            lv_obj_set_pos(bg, 4, y);
+            lv_obj_set_style_radius(bg, 2, LV_PART_MAIN);
+            lv_obj_set_style_bg_color(bg, lv_color_hex(0x1F3A5F), LV_PART_MAIN);
+            lv_obj_set_style_bg_opa(bg, 255, LV_PART_MAIN);
+            lv_obj_set_style_border_width(bg, 0, LV_PART_MAIN);
+            lv_obj_clear_flag(bg, LV_OBJ_FLAG_SCROLLABLE);
+        }
+
+        lv_obj_t *lbl = lv_label_create(cont);
+        lv_label_set_text(lbl, sc_cards_[ai].name.c_str());
+        lv_obj_set_pos(lbl, 12, y + 2);
+        lv_obj_set_width(lbl, SCREEN_W - 24);
+        lv_label_set_long_mode(lbl, LV_LABEL_LONG_CLIP);
+        lv_obj_set_style_text_color(lbl, lv_color_hex(sel ? 0xFFFFFF : 0xCCCCCC), LV_PART_MAIN);
+        lv_obj_set_style_text_font(lbl, &lv_font_montserrat_12, LV_PART_MAIN);
+    }
+
+    lv_obj_t *hint = lv_label_create(cont);
+    lv_label_set_text(hint, "OK: open  ESC: back");
+    lv_obj_set_pos(hint, 8, LIST_H - 14);
+    lv_obj_set_style_text_color(hint, lv_color_hex(0x555555), LV_PART_MAIN);
+    lv_obj_set_style_text_font(hint, &lv_font_montserrat_10, LV_PART_MAIN);
+}
+
+// ====================================================================
+//  Build: control list view
+// ====================================================================
+void build_soundcard_controls_view()
+{
+    lv_obj_t *cont = ui_obj_["list_cont"];
+    lv_obj_clean(cont);
+
+    // Title: card name
+    char title_buf[80];
+    if (!sc_cards_.empty() && sc_card_sel_ < (int)sc_cards_.size())
+        std::snprintf(title_buf, sizeof(title_buf), "%s", sc_cards_[sc_card_sel_].name.c_str());
+    else
+        std::snprintf(title_buf, sizeof(title_buf), "Card %d", sc_card_idx_);
+
+    lv_obj_t *title = lv_label_create(cont);
+    lv_label_set_text(title, title_buf);
+    lv_obj_set_pos(title, 8, 4);
+    lv_obj_set_width(title, SCREEN_W - 16);
+    lv_label_set_long_mode(title, LV_LABEL_LONG_CLIP);
+    lv_obj_set_style_text_color(title, lv_color_hex(0x58A6FF), LV_PART_MAIN);
+    lv_obj_set_style_text_font(title, launcher_fonts().get("Montserrat-Bold.ttf", 12, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN);
+
+    if (sc_controls_.empty()) {
+        lv_obj_t *lbl = lv_label_create(cont);
+        lv_label_set_text(lbl, "No controls found.");
+        lv_obj_set_pos(lbl, 8, 40);
+        lv_obj_set_style_text_color(lbl, lv_color_hex(0x888888), LV_PART_MAIN);
+        lv_obj_set_style_text_font(lbl, &lv_font_montserrat_12, LV_PART_MAIN);
+
+        lv_obj_t *hint = lv_label_create(cont);
+        lv_label_set_text(hint, "ESC: back");
+        lv_obj_set_pos(hint, 8, LIST_H - 14);
+        lv_obj_set_style_text_color(hint, lv_color_hex(0x555555), LV_PART_MAIN);
+        lv_obj_set_style_text_font(hint, &lv_font_montserrat_10, LV_PART_MAIN);
+        return;
+    }
+
+    int visible = 5;
+    int total   = (int)sc_controls_.size();
+    int offset  = sc_ctrl_sel_ - visible / 2;
+    if (offset < 0) offset = 0;
+    if (total > visible && offset > total - visible) offset = total - visible;
+
+    for (int vi = 0; vi < visible && (vi + offset) < total; ++vi) {
+        int ai  = vi + offset;
+        bool sel = (ai == sc_ctrl_sel_);
+        int  y   = 20 + vi * 22;
+
+        if (sel) {
+            lv_obj_t *bg = lv_obj_create(cont);
+            lv_obj_set_size(bg, SCREEN_W - 8, 20);
+            lv_obj_set_pos(bg, 4, y);
+            lv_obj_set_style_radius(bg, 2, LV_PART_MAIN);
+            lv_obj_set_style_bg_color(bg, lv_color_hex(0x1F3A5F), LV_PART_MAIN);
+            lv_obj_set_style_bg_opa(bg, 255, LV_PART_MAIN);
+            lv_obj_set_style_border_width(bg, 0, LV_PART_MAIN);
+            lv_obj_clear_flag(bg, LV_OBJ_FLAG_SCROLLABLE);
+        }
+
+        const auto &ctrl = sc_controls_[ai];
+
+        // Left: control name
+        lv_obj_t *name_lbl = lv_label_create(cont);
+        lv_label_set_text(name_lbl, ctrl.name.c_str());
+        lv_obj_set_pos(name_lbl, 12, y + 2);
+        lv_obj_set_width(name_lbl, 180);
+        lv_label_set_long_mode(name_lbl, LV_LABEL_LONG_CLIP);
+        lv_obj_set_style_text_color(name_lbl, lv_color_hex(sel ? 0xFFFFFF : 0xCCCCCC), LV_PART_MAIN);
+        lv_obj_set_style_text_font(name_lbl, &lv_font_montserrat_12, LV_PART_MAIN);
+
+        // Right: current value summary
+        if (!ctrl.current_str.empty()) {
+            lv_obj_t *val_lbl = lv_label_create(cont);
+            lv_label_set_text(val_lbl, ctrl.current_str.c_str());
+            lv_obj_set_pos(val_lbl, 196, y + 2);
+            lv_obj_set_width(val_lbl, SCREEN_W - 200);
+            lv_label_set_long_mode(val_lbl, LV_LABEL_LONG_CLIP);
+            lv_obj_set_style_text_color(val_lbl, lv_color_hex(sel ? 0xAADDFF : 0x888888), LV_PART_MAIN);
+            lv_obj_set_style_text_font(val_lbl, &lv_font_montserrat_10, LV_PART_MAIN);
+        }
+    }
+
+    // Scroll arrows
+    if (sc_ctrl_sel_ > 0) {
+        lv_obj_t *a = lv_img_create(cont);
+        lv_img_set_src(a, img_arrow_up_.c_str());
+        lv_obj_set_pos(a, SCREEN_W / 2 - 8, 2);
+    }
+    if (sc_ctrl_sel_ < total - 1) {
+        lv_obj_t *a = lv_img_create(cont);
+        lv_img_set_src(a, img_arrow_down_.c_str());
+        lv_obj_set_pos(a, SCREEN_W / 2 - 8, LIST_H - 28);
+    }
+
+    lv_obj_t *hint = lv_label_create(cont);
+    lv_label_set_text(hint, "OK: edit  ESC: back");
+    lv_obj_set_pos(hint, 8, LIST_H - 14);
+    lv_obj_set_style_text_color(hint, lv_color_hex(0x555555), LV_PART_MAIN);
+    lv_obj_set_style_text_font(hint, &lv_font_montserrat_10, LV_PART_MAIN);
+}
+
+// ====================================================================
+//  Build: detail / input view
+// ====================================================================
+void build_soundcard_detail_view()
+{
+    lv_obj_t *cont = ui_obj_["list_cont"];
+    lv_obj_clean(cont);
+    sc_input_lbl_ = nullptr;
+    sc_hint_lbl2_ = nullptr;
+
+    // Control name (header)
+    lv_obj_t *name_lbl = lv_label_create(cont);
+    lv_label_set_text(name_lbl, sc_detail_.name.c_str());
+    lv_obj_set_pos(name_lbl, 8, 4);
+    lv_obj_set_width(name_lbl, SCREEN_W - 16);
+    lv_label_set_long_mode(name_lbl, LV_LABEL_LONG_CLIP);
+    lv_obj_set_style_text_color(name_lbl, lv_color_hex(0x58A6FF), LV_PART_MAIN);
+    lv_obj_set_style_text_font(name_lbl, launcher_fonts().get("Montserrat-Bold.ttf", 14, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN);
+
+    // Info block: Limits + current value
+    char info_buf[128];
+    std::snprintf(info_buf, sizeof(info_buf),
+                  "Limits: %d - %d", sc_detail_.min_val, sc_detail_.max_val);
+    lv_obj_t *limits_lbl = lv_label_create(cont);
+    lv_label_set_text(limits_lbl, info_buf);
+    lv_obj_set_pos(limits_lbl, 8, 26);
+    lv_obj_set_style_text_color(limits_lbl, lv_color_hex(0xAAAAAA), LV_PART_MAIN);
+    lv_obj_set_style_text_font(limits_lbl, &lv_font_montserrat_12, LV_PART_MAIN);
+
+    if (!sc_detail_.current_str.empty()) {
+        lv_obj_t *cur_lbl = lv_label_create(cont);
+        lv_label_set_text(cur_lbl, sc_detail_.current_str.c_str());
+        lv_obj_set_pos(cur_lbl, 8, 44);
+        lv_obj_set_width(cur_lbl, SCREEN_W - 16);
+        lv_label_set_long_mode(cur_lbl, LV_LABEL_LONG_CLIP);
+        lv_obj_set_style_text_color(cur_lbl, lv_color_hex(0xCCCCCC), LV_PART_MAIN);
+        lv_obj_set_style_text_font(cur_lbl, &lv_font_montserrat_12, LV_PART_MAIN);
+    }
+
+    // Separator line
+    lv_obj_t *sep = lv_obj_create(cont);
+    lv_obj_set_size(sep, SCREEN_W - 16, 1);
+    lv_obj_set_pos(sep, 8, 64);
+    lv_obj_set_style_bg_color(sep, lv_color_hex(0x333333), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(sep, 255, LV_PART_MAIN);
+    lv_obj_set_style_border_width(sep, 0, LV_PART_MAIN);
+    lv_obj_clear_flag(sep, LV_OBJ_FLAG_SCROLLABLE);
+
+    // "New value:" label
+    lv_obj_t *new_lbl = lv_label_create(cont);
+    lv_label_set_text(new_lbl, "New value:");
+    lv_obj_set_pos(new_lbl, 8, 72);
+    lv_obj_set_style_text_color(new_lbl, lv_color_hex(0xCCCCCC), LV_PART_MAIN);
+    lv_obj_set_style_text_font(new_lbl, &lv_font_montserrat_12, LV_PART_MAIN);
+
+    // Input field (digits + cursor)
+    sc_cursor_vis_ = true;
+    sc_input_lbl_ = lv_label_create(cont);
+    sc_input_update_display();
+    lv_obj_set_pos(sc_input_lbl_, 100, 70);
+    lv_obj_set_width(sc_input_lbl_, 150);
+    lv_label_set_long_mode(sc_input_lbl_, LV_LABEL_LONG_CLIP);
+    lv_obj_set_style_text_color(sc_input_lbl_, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+    lv_obj_set_style_text_font(sc_input_lbl_, &lv_font_montserrat_14, LV_PART_MAIN);
+
+    // Blinking cursor timer (500 ms period)
+    sc_cursor_timer_ = lv_timer_create([](lv_timer_t *timer) {
+        auto *self = static_cast<UISetupPage *>(lv_timer_get_user_data(timer));
+        self->sc_cursor_vis_ = !self->sc_cursor_vis_;
+        self->sc_input_update_display();
+    }, 500, this);
+
+    // Range hint below input
+    char range_buf[64];
+    std::snprintf(range_buf, sizeof(range_buf), "Range: %d ~ %d",
+                  sc_detail_.min_val, sc_detail_.max_val);
+    sc_hint_lbl2_ = lv_label_create(cont);
+    lv_label_set_text(sc_hint_lbl2_, range_buf);
+    lv_obj_set_pos(sc_hint_lbl2_, 8, 92);
+    lv_obj_set_style_text_color(sc_hint_lbl2_, lv_color_hex(0x666666), LV_PART_MAIN);
+    lv_obj_set_style_text_font(sc_hint_lbl2_, &lv_font_montserrat_10, LV_PART_MAIN);
+
+    // Bottom hint
+    lv_obj_t *hint = lv_label_create(cont);
+    lv_label_set_text(hint, "0-9:type  BS:del  OK:apply  ESC:back");
+    lv_obj_set_pos(hint, 8, LIST_H - 14);
+    lv_obj_set_style_text_color(hint, lv_color_hex(0x555555), LV_PART_MAIN);
+    lv_obj_set_style_text_font(hint, &lv_font_montserrat_10, LV_PART_MAIN);
+}
+
+void sc_input_update_display()
+{
+    if (!sc_input_lbl_) return;
+    std::string disp = sc_input_buf_ + (sc_cursor_vis_ ? "_" : " ");
+    lv_label_set_text(sc_input_lbl_, disp.c_str());
+}
+
+void sc_cursor_stop()
+{
+    if (sc_cursor_timer_) {
+        lv_timer_del(sc_cursor_timer_);
+        sc_cursor_timer_ = nullptr;
+    }
+    sc_cursor_vis_ = true;
+}
+
+// Apply the typed value via cp0_signal_soundcard_api
+void sc_apply_value()
+{
+    if (sc_input_buf_.empty()) return;
+
+    int new_val = std::atoi(sc_input_buf_.c_str());
+    // Clamp to declared limits when they are known
+    if (sc_detail_.max_val > sc_detail_.min_val) {
+        if (new_val < sc_detail_.min_val) new_val = sc_detail_.min_val;
+        if (new_val > sc_detail_.max_val) new_val = sc_detail_.max_val;
+    }
+
+    // Visual feedback while applying
+    if (sc_hint_lbl2_) {
+        lv_label_set_text(sc_hint_lbl2_, "Applying...");
+        lv_obj_set_style_text_color(sc_hint_lbl2_, lv_color_hex(0xFFAA00), LV_PART_MAIN);
+        lv_refr_now(NULL);
+    }
+
+    int rc = -1;
+    cp0_signal_soundcard_api(
+        {"SetControl", std::to_string(sc_card_idx_), sc_detail_.name, std::to_string(new_val)},
+        [&rc](int code, std::string) { rc = code; });
+
+    if (sc_hint_lbl2_) {
+        if (rc == 0) {
+            lv_label_set_text(sc_hint_lbl2_, "Applied OK");
+            lv_obj_set_style_text_color(sc_hint_lbl2_, lv_color_hex(0x33CC33), LV_PART_MAIN);
+        } else {
+            lv_label_set_text(sc_hint_lbl2_, "Error (check amixer)");
+            lv_obj_set_style_text_color(sc_hint_lbl2_, lv_color_hex(0xFF4444), LV_PART_MAIN);
+        }
+        lv_refr_now(NULL);
+    }
+
+    // Refresh the control list entry with the new value
+    if (rc == 0 && sc_ctrl_sel_ < (int)sc_controls_.size()) {
+        char val_str[32];
+        std::snprintf(val_str, sizeof(val_str), "%d", new_val);
+        sc_controls_[sc_ctrl_sel_].current_val = new_val;
+        sc_controls_[sc_ctrl_sel_].current_str = val_str;
+    }
+
+    // Go back to control list after a short pause
+    sc_cursor_stop();
+    sc_input_lbl_  = nullptr;
+    sc_hint_lbl2_  = nullptr;
+    view_state_ = ViewState::SOUNDCARD_CONTROLS;
+    lv_timer_t *t = lv_timer_create([](lv_timer_t *timer) {
+        auto *self = static_cast<UISetupPage *>(lv_timer_get_user_data(timer));
+        lv_timer_del(timer);
+        self->transition_back_level();
+    }, 900, this);
+    (void)t;
+}
+
+// ====================================================================
+//  Key handlers
+// ====================================================================
+void handle_soundcard_cards_key(uint32_t key)
+{
+    int total = (int)sc_cards_.size();
+    switch (key) {
+    case KEY_UP:
+        if (sc_card_sel_ > 0) { --sc_card_sel_; build_soundcard_cards_view(); }
+        break;
+    case KEY_DOWN:
+        if (sc_card_sel_ < total - 1) { ++sc_card_sel_; build_soundcard_cards_view(); }
+        break;
+    case KEY_ENTER:
+    case KEY_RIGHT:
+        if (total > 0) { play_enter(); sc_enter_controls(); }
+        break;
+    case KEY_ESC:
+    case KEY_LEFT:
+        play_back();
+        view_state_ = ViewState::SUB;
+        transition_back_level();
+        break;
+    default:
+        break;
+    }
+}
+
+void handle_soundcard_controls_key(uint32_t key)
+{
+    int total = (int)sc_controls_.size();
+    switch (key) {
+    case KEY_UP:
+        if (sc_ctrl_sel_ > 0) { --sc_ctrl_sel_; build_soundcard_controls_view(); }
+        break;
+    case KEY_DOWN:
+        if (sc_ctrl_sel_ < total - 1) { ++sc_ctrl_sel_; build_soundcard_controls_view(); }
+        break;
+    case KEY_ENTER:
+    case KEY_RIGHT:
+        if (total > 0) { play_enter(); sc_enter_detail(); }
+        break;
+    case KEY_ESC:
+    case KEY_LEFT:
+        play_back();
+        view_state_ = ViewState::SOUNDCARD_CARDS;
+        transition_back_level();
+        break;
+    default:
+        break;
+    }
+}
+
+void handle_soundcard_detail_key(uint32_t key)
+{
+    // Digit keys: accumulate input
+    if (key == KEY_0 || (key >= KEY_1 && key <= KEY_9)) {
+        // KEY_1..KEY_9 map to '1'..'9', KEY_0 maps to '0'
+        // Linux input key codes: KEY_1=2..KEY_9=10, KEY_0=11
+        int digit = -1;
+        if (key == KEY_0)         digit = 0;
+        else if (key >= KEY_1 && key <= KEY_9) digit = (int)(key - KEY_1 + 1);
+        if (digit >= 0 && sc_input_buf_.size() < 8) {
+            sc_input_buf_ += (char)('0' + digit);
+            sc_input_update_display();
+        }
+        return;
+    }
+
+    switch (key) {
+    case KEY_BACKSPACE:
+        if (!sc_input_buf_.empty()) {
+            sc_input_buf_.pop_back();
+            sc_input_update_display();
+        }
+        break;
+    case KEY_ENTER:
+    case KEY_RIGHT:
+        sc_apply_value();
+        break;
+    case KEY_ESC:
+    case KEY_LEFT:
+        sc_cursor_stop();
+        play_back();
+        view_state_ = ViewState::SOUNDCARD_CONTROLS;
+        transition_back_level();
+        break;
+    default:
+        // Also accept typed digit characters forwarded via cur_elm_->utf8
+        if (cur_elm_ && cur_elm_->utf8[0] >= '0' && cur_elm_->utf8[0] <= '9') {
+            if (sc_input_buf_.size() < 8) {
+                sc_input_buf_ += cur_elm_->utf8[0];
+                sc_input_update_display();
+            }
+        }
+        break;
+    }
+}
+
 };

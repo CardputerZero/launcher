@@ -77,6 +77,11 @@ public:
             int background = std::atoi(nth_arg(arg, 1).c_str());
             std::vector<std::string> argv = args_from(arg, 2);
             report(callback, run_argv(argv, background), "");
+        } else if (cmd == "RunSudo") {
+            // args: "RunSudo" <password> <cmd> [args...]
+            const std::string password = nth_arg(arg, 1);
+            std::vector<std::string> argv = args_from(arg, 2);
+            report(callback, run_sudo(password, argv), "");
         } else if (cmd == "CaptureArgv") {
             std::vector<std::string> argv = args_from(arg, 1);
             std::string output;
@@ -236,8 +241,66 @@ public:
 #endif
     }
 
-    int capture_argv(const std::vector<std::string> &argv, std::string &output)
+    // Run a command via `sudo -S -- argv...`, feeding `password\n` to stdin.
+    // Returns the child's exit code, or a negative errno on fork/pipe failure.
+    int run_sudo(const std::string &password, const std::vector<std::string> &argv)
     {
+#if defined(_WIN32) || defined(HAL_PLATFORM_SDL)
+        (void)password; (void)argv;
+        return -1;
+#else
+        if (argv.empty() || argv[0].empty())
+            return -EINVAL;
+
+        // Build: sudo -S -- <argv>
+        std::vector<std::string> sudo_argv = {"sudo", "-S", "--"};
+        sudo_argv.insert(sudo_argv.end(), argv.begin(), argv.end());
+
+        int stdin_pipe[2];
+        if (pipe(stdin_pipe) != 0)
+            return -errno;
+
+        pid_t pid = fork();
+        if (pid < 0) {
+            close(stdin_pipe[0]);
+            close(stdin_pipe[1]);
+            return -errno;
+        }
+
+        if (pid == 0) {
+            // Child: redirect stdin from pipe, suppress stdout/stderr
+            close(stdin_pipe[1]);
+            dup2(stdin_pipe[0], STDIN_FILENO);
+            if (stdin_pipe[0] > STDIN_FILENO)
+                close(stdin_pipe[0]);
+            int devnull = open("/dev/null", O_WRONLY);
+            if (devnull >= 0) {
+                dup2(devnull, STDOUT_FILENO);
+                dup2(devnull, STDERR_FILENO);
+                if (devnull > STDERR_FILENO) close(devnull);
+            }
+            auto raw = make_argv(sudo_argv);
+            execvp(raw[0], raw.data());
+            _exit(127);
+        }
+
+        // Parent: write password + newline, then close write-end
+        close(stdin_pipe[0]);
+        std::string pw_line = password + "\n";
+        ::write(stdin_pipe[1], pw_line.c_str(), pw_line.size());
+        close(stdin_pipe[1]);
+
+        int status = 0;
+        while (waitpid(pid, &status, 0) < 0) {
+            if (errno != EINTR) return -errno;
+        }
+        if (WIFEXITED(status))  return WEXITSTATUS(status);
+        if (WIFSIGNALED(status)) return 128 + WTERMSIG(status);
+        return -1;
+#endif
+    }
+
+    int capture_argv(const std::vector<std::string> &argv, std::string &output)    {
         output.clear();
 #if defined(_WIN32)
         (void)argv;
@@ -694,6 +757,19 @@ extern "C" int cp0_process_capture_argv(const char *const *argv, char *out, int 
     if (out && out_size > 0)
         cp0_copy_string(out, out_size, data);
     return ret;
+}
+
+// Run argv via `sudo -S`, feeding password to stdin.
+// password: null-terminated sudo password string.
+// argv: null-terminated array of command + args (must not include "sudo").
+extern "C" int cp0_process_run_sudo(const char *password, const char *const *argv)
+{
+    std::list<std::string> args = {"RunSudo", password ? password : ""};
+    if (argv) {
+        for (int i = 0; argv[i]; ++i)
+            args.push_back(argv[i]);
+    }
+    return ProcessSystem::api_simple(args);
 }
 
 extern "C" int cp0_file_read_first_line(const char *path, char *out, int out_size)

@@ -10,6 +10,7 @@
 // Project name: zero
 
 #include "ui.h"
+#include "ui_app_page.hpp"
 #include <stdio.h>
 #include <sys/stat.h>
 #include <cstdlib>
@@ -44,3 +45,5 @@ LauncherFonts &launcher_fonts()
     }
     return *home->fonts_;
 }
+
+SudoPrompt *SudoPrompt::s_instance_ = nullptr;
