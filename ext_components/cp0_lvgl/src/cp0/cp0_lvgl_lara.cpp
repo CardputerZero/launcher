@@ -508,9 +508,13 @@ static size_t collect_spi_candidates(char out[][64], size_t max_count, const cha
         struct dirent *entry = NULL;
         while ((entry = readdir(dir)) != NULL) {
             if (strncmp(entry->d_name, "spidev", 6) != 0) continue;
-            if (strlen(entry->d_name) > sizeof("/dev/") + 57) continue;
             char full_path[64];
-            snprintf(full_path, sizeof(full_path), "/dev/%s", entry->d_name);
+            const char *dev_prefix = "/dev/";
+            const size_t prefix_len = strlen(dev_prefix);
+            const size_t name_len = strlen(entry->d_name);
+            if (name_len >= sizeof(full_path) - prefix_len) continue;
+            memcpy(full_path, dev_prefix, prefix_len);
+            memcpy(full_path + prefix_len, entry->d_name, name_len + 1);
             append_candidate(full_path);
         }
         closedir(dir);
