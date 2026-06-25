@@ -683,6 +683,13 @@ extern "C" int cp0_process_capture_argv(const char *const *argv, char *out, int 
     return ret;
 }
 
+extern "C" int cp0_process_run_sudo(const char *password, const char *const *argv)
+{
+    // sudo is not available on SDL/emulator builds; run the command directly.
+    (void)password;
+    return cp0_process_run_argv(argv, 0);
+}
+
 extern "C" int cp0_file_read_first_line(const char *path, char *out, int out_size)
 {
     if (out && out_size > 0)
