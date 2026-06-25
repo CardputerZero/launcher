@@ -333,8 +333,22 @@ void UILaunchPage::show_home_screen()
 
 void UILaunchPage::load_home_screen()
 {
-    show_home_screen();
     play_startup_sound_with_retry();
+
+    // Show logo_lcd.png as background during the 1-second sound delay
+    snprintf(startup_logo_path_.data(), startup_logo_path_.size(), "%s", cp0_file_path("logo_lcd.png").c_str());
+    startup_logo_scr_ = lv_obj_create(nullptr);
+    lv_obj_set_style_bg_color(startup_logo_scr_, lv_color_hex(0x000000), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(startup_logo_scr_, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_t *logo_img = lv_img_create(startup_logo_scr_);
+    lv_img_set_src(logo_img, startup_logo_path_.data());
+    lv_obj_center(logo_img);
+    lv_disp_load_scr(startup_logo_scr_);
+
+    if (!startup_delay_timer_) {
+        startup_delay_timer_ = lv_timer_create(startup_delay_timer_cb, 1000, this);
+        lv_timer_set_repeat_count(startup_delay_timer_, 1);
+    }
 }
 
 void UILaunchPage::play_startup_sound_with_retry()
@@ -385,6 +399,14 @@ UILaunchPage::UILaunchPage(Launch *launch)
 UILaunchPage::~UILaunchPage()
 {
     stop_startup_sound_timer();
+    if (startup_delay_timer_) {
+        lv_timer_delete(startup_delay_timer_);
+        startup_delay_timer_ = nullptr;
+    }
+    if (startup_logo_scr_) {
+        lv_obj_del(startup_logo_scr_);
+        startup_logo_scr_ = nullptr;
+    }
     if (green_bg_) {
         lv_obj_del(green_bg_);
         green_bg_ = nullptr;
@@ -671,6 +693,21 @@ void UILaunchPage::startup_sound_timer_cb(lv_timer_t *timer)
     }
 
     self->play_startup_sound_with_retry();
+}
+
+void UILaunchPage::startup_delay_timer_cb(lv_timer_t *timer)
+{
+    UILaunchPage *self = static_cast<UILaunchPage *>(lv_timer_get_user_data(timer));
+    if (!self)
+        return;
+
+    self->startup_delay_timer_ = nullptr;
+    self->show_home_screen();
+
+    if (self->startup_logo_scr_) {
+        lv_obj_del(self->startup_logo_scr_);
+        self->startup_logo_scr_ = nullptr;
+    }
 }
 
 void UILaunchPage::create_screen()
