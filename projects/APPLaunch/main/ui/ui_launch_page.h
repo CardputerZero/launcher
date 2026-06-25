@@ -78,6 +78,7 @@ private:
     static void on_home_key(lv_event_t *event);
     static void on_startup_gif_event(lv_event_t *event);
     static void startup_sound_timer_cb(lv_timer_t *timer);
+    static void startup_delay_timer_cb(lv_timer_t *timer);
 
     Launch *launch_ = nullptr;
     lv_obj_t *startup_gif_ = nullptr;
@@ -85,7 +86,10 @@ private:
     lv_obj_t *right_arrow_button_ = nullptr;
     lv_obj_t *green_bg_ = nullptr;
     lv_timer_t *startup_sound_timer_ = nullptr;
+    lv_timer_t *startup_delay_timer_ = nullptr;
+    lv_obj_t *startup_logo_scr_ = nullptr;
     std::array<char, 256> startup_gif_path_ = {};
+    std::array<char, 256> startup_logo_path_ = {};
     bool is_animating_ = false;
     bool startup_gif_done_ = false;
     int startup_sound_retry_count_ = 0;

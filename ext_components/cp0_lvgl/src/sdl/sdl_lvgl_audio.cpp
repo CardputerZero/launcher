@@ -110,7 +110,7 @@ private:
     bool cap_paused_ = false;
     bool waveform_enabled_ = false;
     int volume_ = kDefaultVolume;
-    std::array<std::string, 3> system_sound_names_ = {"startup.mp3", "switch.wav", "enter.wav"};
+    std::array<std::string, 3> system_sound_names_ = {"Ding2.wav", "switch.wav", "enter.wav"};
     bool system_sound_enabled_ = true;
 
     void report(callback_t callback, int code, const std::string &data)
