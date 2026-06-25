@@ -23,4 +23,5 @@ void cp0_lvgl_init(void)
     init_lvgl_saved_settings();
     init_battery();
     init_camera();
+    init_soundcard();
 }

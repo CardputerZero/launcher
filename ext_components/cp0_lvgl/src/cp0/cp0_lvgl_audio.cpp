@@ -54,7 +54,7 @@ public:
     bool system_play_inited_ = false;
     bool system_sounds_loaded_ = false;
     std::mutex system_play_mutex_;
-    std::array<std::string, 3> system_sound_names_ = {"startup.mp3", "key_back.wav", "key_back.wav"};
+    std::array<std::string, 3> system_sound_names_ = {"Ding2.wav", "key_back.wav", "key_back.wav"};
     bool system_sound_enabled_ = true;
 
     static constexpr int kRecWaveformSize = 128;

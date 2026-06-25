@@ -21,6 +21,7 @@
 #include <utility>
 #include <sstream>
 #include <keyboard_input.h>
+#include <compat/input_keys.h>
 #include <functional>
 #include "cp0_lvgl_app.h"
 #include "hal_lvgl_bsp.h"
@@ -353,7 +354,7 @@ private:
 
         power_label_ = lv_label_create(battery_panel_);
         lv_obj_set_align(power_label_, LV_ALIGN_CENTER);
-        lv_label_set_text(power_label_, "96%");
+        lv_label_set_text(power_label_, "--");
         lv_obj_set_style_text_color(power_label_, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_text_opa(power_label_, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
     }
@@ -727,38 +728,44 @@ private:
         lv_obj_set_size(ui_TOP_Container, 320, 20);
         lv_obj_set_pos(ui_TOP_Container, 0, 0);
         lv_obj_clear_flag(ui_TOP_Container, (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
+        lv_obj_set_flex_flow(ui_TOP_Container, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(ui_TOP_Container, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_set_style_pad_left(ui_TOP_Container, 5, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_pad_right(ui_TOP_Container, 4, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_pad_top(ui_TOP_Container, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_pad_bottom(ui_TOP_Container, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_pad_column(ui_TOP_Container, 4, LV_PART_MAIN | LV_STATE_DEFAULT);
 
 #ifdef APPLAUNCH_LOGO_USE_PNG
         ui_TOP_logo = lv_img_create(ui_TOP_Container);
         lv_img_set_src(ui_TOP_logo, cp0_file_path_c("launcher_brand_logo.png"));
-        lv_obj_set_width(ui_TOP_logo, LV_SIZE_CONTENT);
-        lv_obj_set_height(ui_TOP_logo, LV_SIZE_CONTENT);
-        lv_obj_set_x(ui_TOP_logo, 5);
-        lv_obj_set_y(ui_TOP_logo, 5);
+        lv_obj_set_size(ui_TOP_logo, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
         lv_obj_add_flag(ui_TOP_logo, LV_OBJ_FLAG_ADV_HITTEST);
         lv_obj_clear_flag(ui_TOP_logo, LV_OBJ_FLAG_SCROLLABLE);
 #else
         ui_TOP_logo = lv_label_create(ui_TOP_Container);
         lv_label_set_text(ui_TOP_logo, "ZERO");
-        lv_obj_set_x(ui_TOP_logo, 5);
-        lv_obj_set_y(ui_TOP_logo, 2);
         lv_obj_set_style_text_font(ui_TOP_logo, &lv_font_montserrat_14, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_text_color(ui_TOP_logo, lv_color_hex(0xCCAA00), LV_PART_MAIN | LV_STATE_DEFAULT);
 #endif
 
-        create_wifi_status(ui_TOP_Container);
+        // Spacer: pushes right-side icons to the far right
+        lv_obj_t *spacer = lv_obj_create(ui_TOP_Container);
+        lv_obj_remove_style_all(spacer);
+        lv_obj_set_size(spacer, 0, 20);
+        lv_obj_set_flex_grow(spacer, 1);
+        lv_obj_clear_flag(spacer, (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
 
         ui_TOP_eth = lv_img_create(ui_TOP_Container);
         lv_img_set_src(ui_TOP_eth, cp0_file_path_c("status_ethernet.png"));
-        lv_obj_set_pos(ui_TOP_eth, 178, 5);
         lv_obj_clear_flag(ui_TOP_eth, (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
         lv_obj_add_flag(ui_TOP_eth, LV_OBJ_FLAG_HIDDEN);
+
+        create_wifi_status(ui_TOP_Container);
 
         ui_TOP_time = lv_obj_create(ui_TOP_Container);
         lv_obj_set_width(ui_TOP_time, 40);
         lv_obj_set_height(ui_TOP_time, 16);
-        lv_obj_set_x(ui_TOP_time, 236);
-        lv_obj_set_y(ui_TOP_time, 4);
         lv_obj_clear_flag(ui_TOP_time, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_set_style_radius(ui_TOP_time, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_color(ui_TOP_time, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -776,8 +783,6 @@ private:
         lv_obj_t *battery_panel = lv_obj_create(ui_TOP_Container);
         lv_obj_set_width(battery_panel, 36);
         lv_obj_set_height(battery_panel, 16);
-        lv_obj_set_x(battery_panel, 280);
-        lv_obj_set_y(battery_panel, 4);
         lv_obj_clear_flag(battery_panel, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_set_style_radius(battery_panel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_color(battery_panel, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -804,7 +809,7 @@ private:
         lv_obj_set_width(ui_TOP_power_Label, LV_SIZE_CONTENT);
         lv_obj_set_height(ui_TOP_power_Label, LV_SIZE_CONTENT);
         lv_obj_set_align(ui_TOP_power_Label, LV_ALIGN_CENTER);
-        lv_label_set_text(ui_TOP_power_Label, "96%");
+        lv_label_set_text(ui_TOP_power_Label, "--");
         lv_obj_set_style_text_color(ui_TOP_power_Label, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_text_opa(ui_TOP_power_Label, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
@@ -822,8 +827,6 @@ private:
         ui_TOP_wifiPanel = lv_obj_create(parent);
         lv_obj_set_width(ui_TOP_wifiPanel, 24);
         lv_obj_set_height(ui_TOP_wifiPanel, 15);
-        lv_obj_set_x(ui_TOP_wifiPanel, 210);
-        lv_obj_set_y(ui_TOP_wifiPanel, 4);
         lv_obj_clear_flag(ui_TOP_wifiPanel, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_set_style_radius(ui_TOP_wifiPanel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_opa(ui_TOP_wifiPanel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -902,4 +905,307 @@ public:
     }
 
     ~AppPage() override = default;
+};
+
+// ===========================================================================
+//  SudoPrompt — floating sudo-password dialog
+//
+//  Usage:
+//      SudoPrompt::show({"apt", "install", "-y", "htop"},
+//          [](int code) { /* code==0: success, code==-2: cancelled */ });
+//
+//  The dialog floats above all screens (lv_layer_top). Keyboard events on
+//  the current active object are intercepted by temporarily swapping the
+//  indev group. Enter executes the command with the supplied password via
+//  `sudo -S`; ESC cancels without running anything.
+//  The caller is responsible for ensuring the command args are safe.
+// ===========================================================================
+class SudoPrompt
+{
+public:
+    using Callback = std::function<void(int /*exit_code*/)>;
+    static constexpr int kCancelled = -2;
+
+    static void show(std::vector<std::string> cmd, Callback cb)
+    {
+        // Only one prompt at a time
+        if (s_instance_)
+            return;
+        s_instance_ = new SudoPrompt(std::move(cmd), std::move(cb));
+        s_instance_->build_ui();
+        s_instance_->grab_input();
+    }
+
+private:
+    // ---- state ----
+    std::vector<std::string> cmd_;
+    Callback                 cb_;
+    std::string              pw_buf_;
+    bool                     cursor_vis_ = true;
+
+    // ---- LVGL objects (all children of lv_layer_top) ----
+    lv_obj_t   *overlay_  = nullptr; // full-screen dim
+    lv_obj_t   *box_      = nullptr; // dialog card
+    lv_obj_t   *pw_lbl_   = nullptr; // masked password + cursor
+    lv_obj_t   *hint_lbl_ = nullptr; // status / hint line
+    lv_timer_t *cursor_timer_ = nullptr;
+    lv_timer_t *exec_timer_   = nullptr; // one-shot to run cmd after render
+
+    // ---- saved indev group + screen event registration ----
+    lv_group_t *saved_group_  = nullptr;
+    lv_group_t *prompt_group_ = nullptr;
+    lv_obj_t   *key_hook_obj_ = nullptr; // active screen where event is registered
+
+    static SudoPrompt *s_instance_;
+
+    // ---- construction ----
+    SudoPrompt(std::vector<std::string> cmd, Callback cb)
+        : cmd_(std::move(cmd)), cb_(std::move(cb)) {}
+
+    void build_ui()
+    {
+        lv_obj_t *layer = lv_layer_top();
+
+        // Semi-transparent full-screen backdrop
+        overlay_ = lv_obj_create(layer);
+        lv_obj_remove_style_all(overlay_);
+        lv_obj_set_size(overlay_, 320, 170);
+        lv_obj_set_pos(overlay_, 0, 0);
+        lv_obj_set_style_bg_color(overlay_, lv_color_hex(0x000000), 0);
+        lv_obj_set_style_bg_opa(overlay_, LV_OPA_70, 0);
+        lv_obj_clear_flag(overlay_, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_clear_flag(overlay_, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_move_foreground(overlay_);
+
+        // Dialog card — centered, 220×110
+        box_ = lv_obj_create(layer);
+        lv_obj_remove_style_all(box_);
+        lv_obj_set_size(box_, 220, 110);
+        lv_obj_align(box_, LV_ALIGN_CENTER, 0, 0);
+        lv_obj_set_style_bg_color(box_, lv_color_hex(0x1A1A2E), 0);
+        lv_obj_set_style_bg_opa(box_, LV_OPA_COVER, 0);
+        lv_obj_set_style_radius(box_, 6, 0);
+        lv_obj_set_style_border_color(box_, lv_color_hex(0x3A5A8A), 0);
+        lv_obj_set_style_border_width(box_, 1, 0);
+        lv_obj_set_style_shadow_width(box_, 12, 0);
+        lv_obj_set_style_shadow_color(box_, lv_color_hex(0x000000), 0);
+        lv_obj_set_style_shadow_opa(box_, LV_OPA_60, 0);
+        lv_obj_clear_flag(box_, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_clear_flag(box_, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_move_foreground(box_);
+
+        const lv_font_t *font14 = &lv_font_montserrat_14;
+        const lv_font_t *font12 = &lv_font_montserrat_12;
+        const lv_font_t *font10 = &lv_font_montserrat_10;
+
+        // Title
+        lv_obj_t *title = lv_label_create(box_);
+        lv_label_set_text(title, "Sudo Password");
+        lv_obj_set_pos(title, 0, 8);
+        lv_obj_set_width(title, 220);
+        lv_obj_set_style_text_align(title, LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_set_style_text_color(title, lv_color_hex(0x4A9EFF), 0);
+        lv_obj_set_style_text_font(title, font14, 0);
+
+        // Command preview (first token, truncated)
+        std::string cmd_preview = cmd_.empty() ? "" : cmd_[0];
+        if (cmd_preview.size() > 24) cmd_preview = cmd_preview.substr(0, 21) + "...";
+        lv_obj_t *cmd_lbl = lv_label_create(box_);
+        lv_label_set_text(cmd_lbl, cmd_preview.c_str());
+        lv_obj_set_pos(cmd_lbl, 0, 28);
+        lv_obj_set_width(cmd_lbl, 220);
+        lv_obj_set_style_text_align(cmd_lbl, LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_set_style_text_color(cmd_lbl, lv_color_hex(0x888888), 0);
+        lv_obj_set_style_text_font(cmd_lbl, font10, 0);
+
+        // Password input box
+        lv_obj_t *pw_box = lv_obj_create(box_);
+        lv_obj_remove_style_all(pw_box);
+        lv_obj_set_size(pw_box, 180, 22);
+        lv_obj_set_pos(pw_box, 20, 46);
+        lv_obj_set_style_bg_color(pw_box, lv_color_hex(0x0D0D1A), 0);
+        lv_obj_set_style_bg_opa(pw_box, LV_OPA_COVER, 0);
+        lv_obj_set_style_radius(pw_box, 3, 0);
+        lv_obj_set_style_border_color(pw_box, lv_color_hex(0x3A5A8A), 0);
+        lv_obj_set_style_border_width(pw_box, 1, 0);
+        lv_obj_set_style_pad_hor(pw_box, 4, 0);
+        lv_obj_set_style_pad_ver(pw_box, 2, 0);
+        lv_obj_clear_flag(pw_box, LV_OBJ_FLAG_SCROLLABLE);
+
+        pw_lbl_ = lv_label_create(pw_box);
+        lv_obj_set_width(pw_lbl_, 172);
+        lv_obj_set_style_text_color(pw_lbl_, lv_color_hex(0xFFFFFF), 0);
+        lv_obj_set_style_text_font(pw_lbl_, font12, 0);
+        lv_label_set_long_mode(pw_lbl_, LV_LABEL_LONG_CLIP);
+        lv_obj_align(pw_lbl_, LV_ALIGN_LEFT_MID, 0, 0);
+        update_pw_display();
+
+        // Hint line
+        hint_lbl_ = lv_label_create(box_);
+        lv_label_set_text(hint_lbl_, "Enter:OK  ESC:Cancel");
+        lv_obj_set_pos(hint_lbl_, 0, 88);
+        lv_obj_set_width(hint_lbl_, 220);
+        lv_obj_set_style_text_align(hint_lbl_, LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_set_style_text_color(hint_lbl_, lv_color_hex(0x555566), 0);
+        lv_obj_set_style_text_font(hint_lbl_, font10, 0);
+
+        // Cursor blink timer (500 ms)
+        cursor_timer_ = lv_timer_create(cursor_timer_cb, 500, this);
+    }
+
+    void grab_input()
+    {
+        // Register on active screen so LV_EVENT_KEYBOARD reaches us
+        key_hook_obj_ = lv_screen_active();
+        if (key_hook_obj_)
+            lv_obj_add_event_cb(key_hook_obj_, key_event_cb,
+                                static_cast<lv_event_code_t>(LV_EVENT_KEYBOARD), this);
+        // Also push a dedicated group so indev state is clean
+        saved_group_ = lv_group_get_default();
+        prompt_group_ = lv_group_create();
+        lv_group_add_obj(prompt_group_, overlay_);
+        lv_group_set_default(prompt_group_);
+        lv_indev_t *indev = lv_indev_get_next(nullptr);
+        if (indev)
+            lv_indev_set_group(indev, prompt_group_);
+    }
+
+    void release_input()
+    {
+        if (key_hook_obj_) {
+            lv_obj_remove_event_cb_with_user_data(key_hook_obj_, key_event_cb, this);
+            key_hook_obj_ = nullptr;
+        }
+        lv_group_set_default(saved_group_);
+        lv_indev_t *indev = lv_indev_get_next(nullptr);
+        if (indev)
+            lv_indev_set_group(indev, saved_group_);
+        if (prompt_group_) {
+            lv_group_delete(prompt_group_);
+            prompt_group_ = nullptr;
+        }
+    }
+
+    // ---- input ----
+    void handle_key(const struct key_item *elm)
+    {
+        if (!elm || elm->key_state != KBD_KEY_RELEASED)
+            return;
+
+        uint32_t key = elm->key_code;
+
+        if (key == KEY_ESC) {
+            dismiss(kCancelled);
+            return;
+        }
+        if (key == KEY_ENTER) {
+            start_execute();
+            return;
+        }
+        if (key == KEY_BACKSPACE) {
+            if (!pw_buf_.empty()) pw_buf_.pop_back();
+            update_pw_display();
+            return;
+        }
+        if (elm->utf8[0] && (unsigned char)elm->utf8[0] >= 0x20) {
+            pw_buf_ += elm->utf8;
+            update_pw_display();
+        }
+    }
+
+    void update_pw_display()
+    {
+        if (!pw_lbl_) return;
+        std::string masked(pw_buf_.size(), '*');
+        masked += (cursor_vis_ ? '_' : ' ');
+        lv_label_set_text(pw_lbl_, masked.c_str());
+    }
+
+    // ---- execute ----
+    void start_execute()
+    {
+        if (hint_lbl_)
+            lv_label_set_text(hint_lbl_, "Running...");
+        lv_refr_now(nullptr);
+
+        // Run command via sudo -S on a one-shot timer so the frame renders first
+        exec_timer_ = lv_timer_create(exec_timer_cb, 20, this);
+        lv_timer_set_repeat_count(exec_timer_, 1);
+    }
+
+    int run_with_sudo()
+    {
+        if (cmd_.empty()) return -EINVAL;
+        // Build null-terminated argv array for cp0_process_run_sudo
+        std::vector<const char *> argv;
+        for (const auto &s : cmd_)
+            argv.push_back(s.c_str());
+        argv.push_back(nullptr);
+        return cp0_process_run_sudo(pw_buf_.c_str(), argv.data());
+    }
+
+    void finish_execute()
+    {
+        int ret = run_with_sudo();
+        if (ret != 0 && ret != kCancelled) {
+            // Show error, let user retry or cancel
+            if (hint_lbl_) {
+                char buf[48];
+                snprintf(buf, sizeof(buf), "Failed (code %d)  ESC:close", ret);
+                lv_label_set_text(hint_lbl_, buf);
+                lv_obj_set_style_text_color(hint_lbl_, lv_color_hex(0xFF4444), 0);
+            }
+            pw_buf_.clear();
+            update_pw_display();
+            // Re-enable input for retry
+            grab_input();
+            return;
+        }
+        dismiss(ret);
+    }
+
+    void dismiss(int result)
+    {
+        stop_timers();
+        release_input();
+        if (box_)     { lv_obj_del(box_);     box_     = nullptr; }
+        if (overlay_) { lv_obj_del(overlay_); overlay_ = nullptr; }
+        Callback cb = std::move(cb_);
+        delete s_instance_;
+        s_instance_ = nullptr;
+        if (cb) cb(result);
+    }
+
+    void stop_timers()
+    {
+        if (cursor_timer_) { lv_timer_delete(cursor_timer_); cursor_timer_ = nullptr; }
+        if (exec_timer_)   { lv_timer_delete(exec_timer_);   exec_timer_   = nullptr; }
+    }
+
+    // ---- static LVGL callbacks ----
+    static void cursor_timer_cb(lv_timer_t *t)
+    {
+        auto *self = static_cast<SudoPrompt *>(lv_timer_get_user_data(t));
+        if (!self) return;
+        self->cursor_vis_ = !self->cursor_vis_;
+        self->update_pw_display();
+    }
+
+    static void exec_timer_cb(lv_timer_t *t)
+    {
+        auto *self = static_cast<SudoPrompt *>(lv_timer_get_user_data(t));
+        if (!self) return;
+        self->exec_timer_ = nullptr;
+        // Release input before blocking exec so no stale keys queue up
+        self->release_input();
+        self->finish_execute();
+    }
+
+    static void key_event_cb(lv_event_t *e)
+    {
+        auto *self = static_cast<SudoPrompt *>(lv_event_get_user_data(e));
+        if (!self) return;
+        const struct key_item *elm = static_cast<const struct key_item *>(lv_event_get_param(e));
+        self->handle_key(elm);
+    }
 };

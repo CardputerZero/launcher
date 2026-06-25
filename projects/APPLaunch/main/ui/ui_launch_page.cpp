@@ -188,6 +188,13 @@ static void snap_label_to_slot(lv_obj_t *label, int slot)
     lv_obj_set_x(label, layout.x);
     lv_obj_set_y(label, layout.y);
 
+    // Constrain label width to the matching card width so long names never overflow.
+    // Label slots are 5..9; corresponding card slots are 0..4.
+    const int card_w = CAROUSEL_SLOTS[slot - 5].width;
+    lv_obj_set_width(label, card_w > 0 ? card_w : LV_SIZE_CONTENT);
+    lv_label_set_long_mode(label, LV_LABEL_LONG_SCROLL_CIRCULAR);
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN | LV_STATE_DEFAULT);
+
     if (layout.hidden)
     {
         lv_obj_add_flag(label, LV_OBJ_FLAG_HIDDEN);
@@ -326,8 +333,22 @@ void UILaunchPage::show_home_screen()
 
 void UILaunchPage::load_home_screen()
 {
-    show_home_screen();
     play_startup_sound_with_retry();
+
+    // Show logo_lcd.png as background during the 1-second sound delay
+    snprintf(startup_logo_path_.data(), startup_logo_path_.size(), "%s", cp0_file_path("logo_lcd.png").c_str());
+    startup_logo_scr_ = lv_obj_create(nullptr);
+    lv_obj_set_style_bg_color(startup_logo_scr_, lv_color_hex(0x000000), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(startup_logo_scr_, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_t *logo_img = lv_img_create(startup_logo_scr_);
+    lv_img_set_src(logo_img, startup_logo_path_.data());
+    lv_obj_center(logo_img);
+    lv_disp_load_scr(startup_logo_scr_);
+
+    if (!startup_delay_timer_) {
+        startup_delay_timer_ = lv_timer_create(startup_delay_timer_cb, 1000, this);
+        lv_timer_set_repeat_count(startup_delay_timer_, 1);
+    }
 }
 
 void UILaunchPage::play_startup_sound_with_retry()
@@ -378,6 +399,14 @@ UILaunchPage::UILaunchPage(Launch *launch)
 UILaunchPage::~UILaunchPage()
 {
     stop_startup_sound_timer();
+    if (startup_delay_timer_) {
+        lv_timer_delete(startup_delay_timer_);
+        startup_delay_timer_ = nullptr;
+    }
+    if (startup_logo_scr_) {
+        lv_obj_del(startup_logo_scr_);
+        startup_logo_scr_ = nullptr;
+    }
     if (green_bg_) {
         lv_obj_del(green_bg_);
         green_bg_ = nullptr;
@@ -666,6 +695,21 @@ void UILaunchPage::startup_sound_timer_cb(lv_timer_t *timer)
     self->play_startup_sound_with_retry();
 }
 
+void UILaunchPage::startup_delay_timer_cb(lv_timer_t *timer)
+{
+    UILaunchPage *self = static_cast<UILaunchPage *>(lv_timer_get_user_data(timer));
+    if (!self)
+        return;
+
+    self->startup_delay_timer_ = nullptr;
+    self->show_home_screen();
+
+    if (self->startup_logo_scr_) {
+        lv_obj_del(self->startup_logo_scr_);
+        self->startup_logo_scr_ = nullptr;
+    }
+}
+
 void UILaunchPage::create_screen()
 {
     if (carousel_elements_[kCardCenter])
@@ -751,33 +795,39 @@ void UILaunchPage::create_app_container(lv_obj_t *parent)
     lv_obj_set_style_border_opa(carousel_elements_[kPageDot4], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
     carousel_elements_[kTitleCenter] = lv_label_create(app_container);
-    lv_obj_set_width(carousel_elements_[kTitleCenter], LV_SIZE_CONTENT);
+    lv_obj_set_width(carousel_elements_[kTitleCenter], 100);
     lv_obj_set_height(carousel_elements_[kTitleCenter], LV_SIZE_CONTENT);    /// 1
     lv_obj_set_x(carousel_elements_[kTitleCenter], 0);
     lv_obj_set_y(carousel_elements_[kTitleCenter], LABEL_Y_CENTER);
     lv_obj_set_align(carousel_elements_[kTitleCenter], LV_ALIGN_CENTER);
+    lv_label_set_long_mode(carousel_elements_[kTitleCenter], LV_LABEL_LONG_SCROLL_CIRCULAR);
+    lv_obj_set_style_text_align(carousel_elements_[kTitleCenter], LV_TEXT_ALIGN_CENTER, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_label_set_text(carousel_elements_[kTitleCenter], "CLI");
     lv_obj_set_style_text_font(carousel_elements_[kTitleCenter], launcher_fonts().get("Montserrat-Bold.ttf", 16, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_color(carousel_elements_[kTitleCenter], lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(carousel_elements_[kTitleCenter], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
     carousel_elements_[kTitleRight] = lv_label_create(app_container);
-    lv_obj_set_width(carousel_elements_[kTitleRight], LV_SIZE_CONTENT);
+    lv_obj_set_width(carousel_elements_[kTitleRight], 80);
     lv_obj_set_height(carousel_elements_[kTitleRight], LV_SIZE_CONTENT);    /// 1
     lv_obj_set_x(carousel_elements_[kTitleRight], 99);
     lv_obj_set_y(carousel_elements_[kTitleRight], LABEL_Y_SIDE);
     lv_obj_set_align(carousel_elements_[kTitleRight], LV_ALIGN_CENTER);
+    lv_label_set_long_mode(carousel_elements_[kTitleRight], LV_LABEL_LONG_SCROLL_CIRCULAR);
+    lv_obj_set_style_text_align(carousel_elements_[kTitleRight], LV_TEXT_ALIGN_CENTER, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_label_set_text(carousel_elements_[kTitleRight], "GAME");
     lv_obj_set_style_text_color(carousel_elements_[kTitleRight], lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_font(carousel_elements_[kTitleRight], launcher_fonts().get("Montserrat-Bold.ttf", 16, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(carousel_elements_[kTitleRight], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
     carousel_elements_[kTitleLeft] = lv_label_create(app_container);
-    lv_obj_set_width(carousel_elements_[kTitleLeft], LV_SIZE_CONTENT);
+    lv_obj_set_width(carousel_elements_[kTitleLeft], 80);
     lv_obj_set_height(carousel_elements_[kTitleLeft], LV_SIZE_CONTENT);    /// 1
     lv_obj_set_x(carousel_elements_[kTitleLeft], -99);
     lv_obj_set_y(carousel_elements_[kTitleLeft], LABEL_Y_SIDE);
     lv_obj_set_align(carousel_elements_[kTitleLeft], LV_ALIGN_CENTER);
+    lv_label_set_long_mode(carousel_elements_[kTitleLeft], LV_LABEL_LONG_SCROLL_CIRCULAR);
+    lv_obj_set_style_text_align(carousel_elements_[kTitleLeft], LV_TEXT_ALIGN_CENTER, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_label_set_text(carousel_elements_[kTitleLeft], "STORE");
     lv_obj_set_style_text_color(carousel_elements_[kTitleLeft], lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(carousel_elements_[kTitleLeft], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -882,11 +932,13 @@ void UILaunchPage::create_app_container(lv_obj_t *parent)
     lv_obj_set_style_border_opa(carousel_elements_[kCardFarLeft], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
     carousel_elements_[kTitleFarLeft] = lv_label_create(app_container);
-    lv_obj_set_width(carousel_elements_[kTitleFarLeft], LV_SIZE_CONTENT);
+    lv_obj_set_width(carousel_elements_[kTitleFarLeft], 61);
     lv_obj_set_height(carousel_elements_[kTitleFarLeft], LV_SIZE_CONTENT);    /// 1
     lv_obj_set_x(carousel_elements_[kTitleFarLeft], -177);
     lv_obj_set_y(carousel_elements_[kTitleFarLeft], LABEL_Y_SIDE);
     lv_obj_set_align(carousel_elements_[kTitleFarLeft], LV_ALIGN_CENTER);
+    lv_label_set_long_mode(carousel_elements_[kTitleFarLeft], LV_LABEL_LONG_SCROLL_CIRCULAR);
+    lv_obj_set_style_text_align(carousel_elements_[kTitleFarLeft], LV_TEXT_ALIGN_CENTER, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_label_set_text(carousel_elements_[kTitleFarLeft], "one");
     lv_obj_add_flag(carousel_elements_[kTitleFarLeft], LV_OBJ_FLAG_HIDDEN);     /// Flags
     lv_obj_set_style_text_font(carousel_elements_[kTitleFarLeft], launcher_fonts().get("Montserrat-Bold.ttf", 16, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -894,11 +946,13 @@ void UILaunchPage::create_app_container(lv_obj_t *parent)
     lv_obj_set_style_text_opa(carousel_elements_[kTitleFarLeft], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
     carousel_elements_[kTitleFarRight] = lv_label_create(app_container);
-    lv_obj_set_width(carousel_elements_[kTitleFarRight], LV_SIZE_CONTENT);
+    lv_obj_set_width(carousel_elements_[kTitleFarRight], 61);
     lv_obj_set_height(carousel_elements_[kTitleFarRight], LV_SIZE_CONTENT);    /// 1
     lv_obj_set_x(carousel_elements_[kTitleFarRight], 177);
     lv_obj_set_y(carousel_elements_[kTitleFarRight], LABEL_Y_SIDE);
     lv_obj_set_align(carousel_elements_[kTitleFarRight], LV_ALIGN_CENTER);
+    lv_label_set_long_mode(carousel_elements_[kTitleFarRight], LV_LABEL_LONG_SCROLL_CIRCULAR);
+    lv_obj_set_style_text_align(carousel_elements_[kTitleFarRight], LV_TEXT_ALIGN_CENTER, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_label_set_text(carousel_elements_[kTitleFarRight], "three");
     lv_obj_add_flag(carousel_elements_[kTitleFarRight], LV_OBJ_FLAG_HIDDEN);     /// Flags
     lv_obj_set_style_text_font(carousel_elements_[kTitleFarRight], launcher_fonts().get("Montserrat-Bold.ttf", 16, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN | LV_STATE_DEFAULT);

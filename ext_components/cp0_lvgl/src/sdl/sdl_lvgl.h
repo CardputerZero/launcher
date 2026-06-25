@@ -24,6 +24,7 @@ void init_battery();
 void init_imu(void);
 void init_lvgl_saved_settings(void);
 void init_camera(void);
+void init_soundcard(void);
 #ifdef __cplusplus
 }
 #endif
