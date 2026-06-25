@@ -21,6 +21,7 @@
 #include <utility>
 #include <sstream>
 #include <keyboard_input.h>
+#include <compat/input_keys.h>
 #include <functional>
 #include "cp0_lvgl_app.h"
 #include "hal_lvgl_bsp.h"
@@ -353,7 +354,7 @@ private:
 
         power_label_ = lv_label_create(battery_panel_);
         lv_obj_set_align(power_label_, LV_ALIGN_CENTER);
-        lv_label_set_text(power_label_, "96%");
+        lv_label_set_text(power_label_, "--");
         lv_obj_set_style_text_color(power_label_, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_text_opa(power_label_, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
     }
@@ -727,38 +728,44 @@ private:
         lv_obj_set_size(ui_TOP_Container, 320, 20);
         lv_obj_set_pos(ui_TOP_Container, 0, 0);
         lv_obj_clear_flag(ui_TOP_Container, (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
+        lv_obj_set_flex_flow(ui_TOP_Container, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(ui_TOP_Container, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_set_style_pad_left(ui_TOP_Container, 5, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_pad_right(ui_TOP_Container, 4, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_pad_top(ui_TOP_Container, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_pad_bottom(ui_TOP_Container, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_pad_column(ui_TOP_Container, 4, LV_PART_MAIN | LV_STATE_DEFAULT);
 
 #ifdef APPLAUNCH_LOGO_USE_PNG
         ui_TOP_logo = lv_img_create(ui_TOP_Container);
         lv_img_set_src(ui_TOP_logo, cp0_file_path_c("launcher_brand_logo.png"));
-        lv_obj_set_width(ui_TOP_logo, LV_SIZE_CONTENT);
-        lv_obj_set_height(ui_TOP_logo, LV_SIZE_CONTENT);
-        lv_obj_set_x(ui_TOP_logo, 5);
-        lv_obj_set_y(ui_TOP_logo, 5);
+        lv_obj_set_size(ui_TOP_logo, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
         lv_obj_add_flag(ui_TOP_logo, LV_OBJ_FLAG_ADV_HITTEST);
         lv_obj_clear_flag(ui_TOP_logo, LV_OBJ_FLAG_SCROLLABLE);
 #else
         ui_TOP_logo = lv_label_create(ui_TOP_Container);
         lv_label_set_text(ui_TOP_logo, "ZERO");
-        lv_obj_set_x(ui_TOP_logo, 5);
-        lv_obj_set_y(ui_TOP_logo, 2);
         lv_obj_set_style_text_font(ui_TOP_logo, &lv_font_montserrat_14, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_text_color(ui_TOP_logo, lv_color_hex(0xCCAA00), LV_PART_MAIN | LV_STATE_DEFAULT);
 #endif
 
-        create_wifi_status(ui_TOP_Container);
+        // Spacer: pushes right-side icons to the far right
+        lv_obj_t *spacer = lv_obj_create(ui_TOP_Container);
+        lv_obj_remove_style_all(spacer);
+        lv_obj_set_size(spacer, 0, 20);
+        lv_obj_set_flex_grow(spacer, 1);
+        lv_obj_clear_flag(spacer, (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
 
         ui_TOP_eth = lv_img_create(ui_TOP_Container);
         lv_img_set_src(ui_TOP_eth, cp0_file_path_c("status_ethernet.png"));
-        lv_obj_set_pos(ui_TOP_eth, 178, 5);
         lv_obj_clear_flag(ui_TOP_eth, (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
         lv_obj_add_flag(ui_TOP_eth, LV_OBJ_FLAG_HIDDEN);
+
+        create_wifi_status(ui_TOP_Container);
 
         ui_TOP_time = lv_obj_create(ui_TOP_Container);
         lv_obj_set_width(ui_TOP_time, 40);
         lv_obj_set_height(ui_TOP_time, 16);
-        lv_obj_set_x(ui_TOP_time, 236);
-        lv_obj_set_y(ui_TOP_time, 4);
         lv_obj_clear_flag(ui_TOP_time, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_set_style_radius(ui_TOP_time, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_color(ui_TOP_time, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -776,8 +783,6 @@ private:
         lv_obj_t *battery_panel = lv_obj_create(ui_TOP_Container);
         lv_obj_set_width(battery_panel, 36);
         lv_obj_set_height(battery_panel, 16);
-        lv_obj_set_x(battery_panel, 280);
-        lv_obj_set_y(battery_panel, 4);
         lv_obj_clear_flag(battery_panel, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_set_style_radius(battery_panel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_color(battery_panel, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -804,7 +809,7 @@ private:
         lv_obj_set_width(ui_TOP_power_Label, LV_SIZE_CONTENT);
         lv_obj_set_height(ui_TOP_power_Label, LV_SIZE_CONTENT);
         lv_obj_set_align(ui_TOP_power_Label, LV_ALIGN_CENTER);
-        lv_label_set_text(ui_TOP_power_Label, "96%");
+        lv_label_set_text(ui_TOP_power_Label, "--");
         lv_obj_set_style_text_color(ui_TOP_power_Label, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_text_opa(ui_TOP_power_Label, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
@@ -822,8 +827,6 @@ private:
         ui_TOP_wifiPanel = lv_obj_create(parent);
         lv_obj_set_width(ui_TOP_wifiPanel, 24);
         lv_obj_set_height(ui_TOP_wifiPanel, 15);
-        lv_obj_set_x(ui_TOP_wifiPanel, 210);
-        lv_obj_set_y(ui_TOP_wifiPanel, 4);
         lv_obj_clear_flag(ui_TOP_wifiPanel, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_set_style_radius(ui_TOP_wifiPanel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_opa(ui_TOP_wifiPanel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
