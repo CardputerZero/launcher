@@ -6,28 +6,142 @@
 #endif
 
 #include <algorithm>
+#include <cerrno>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
+#include <fcntl.h>
 #include <functional>
 #include <iterator>
 #include <list>
 #include <memory>
+#include <mutex>
 #include <sstream>
 #include <string>
+#include <sys/ioctl.h>
 #include <thread>
+#include <linux/gpio.h>
+#include <unistd.h>
 #include <utility>
 #include <vector>
 
 namespace {
+
+struct ExtPortGpioMap {
+    const char *chip_path;
+    unsigned int grove5v_line;
+    unsigned int ext5v_line;
+    bool grove5v_active_low;
+    bool ext5v_active_low;
+};
+
+static constexpr const char *kHwIdPath = "/proc/cardputerzero_hw_id";
+static constexpr ExtPortGpioMap kCardputerZeroGpioMap = {"/dev/gpiochip1", 3, 12, false, false};
+static constexpr ExtPortGpioMap kFallbackGpioMap = {"/dev/gpiochip0", 17, 5, false, true};
+
+static int gpio_v2_get_value(int line_fd);
+
+static int gpio_v2_request_output(const char *chip_path, unsigned int line, const char *consumer, int value)
+{
+#if defined(GPIO_V2_GET_LINE_IOCTL) && defined(GPIO_V2_LINE_SET_VALUES_IOCTL)
+    int chip_fd = open(chip_path, O_RDONLY | O_CLOEXEC);
+    if (chip_fd < 0)
+        return -errno;
+
+    struct gpio_v2_line_request req;
+    std::memset(&req, 0, sizeof(req));
+    req.offsets[0] = line;
+    req.num_lines = 1;
+    std::snprintf(req.consumer, sizeof(req.consumer), "%s", consumer ? consumer : "applaunch");
+    req.config.flags = GPIO_V2_LINE_FLAG_OUTPUT;
+
+    if (ioctl(chip_fd, GPIO_V2_GET_LINE_IOCTL, &req) < 0) {
+        int err = errno;
+        close(chip_fd);
+        return -err;
+    }
+    close(chip_fd);
+
+    struct gpio_v2_line_values vals;
+    std::memset(&vals, 0, sizeof(vals));
+    vals.mask = 1;
+    vals.bits = value ? 1 : 0;
+    if (ioctl(req.fd, GPIO_V2_LINE_SET_VALUES_IOCTL, &vals) < 0) {
+        int err = errno;
+        close(req.fd);
+        return -err;
+    }
+    return req.fd;
+#else
+    (void)chip_path;
+    (void)line;
+    (void)consumer;
+    (void)value;
+    return -ENOSYS;
+#endif
+}
+
+static int gpio_v2_read_input(const char *chip_path, unsigned int line, const char *consumer)
+{
+#if defined(GPIO_V2_GET_LINE_IOCTL) && defined(GPIO_V2_LINE_GET_VALUES_IOCTL)
+    int chip_fd = open(chip_path, O_RDONLY | O_CLOEXEC);
+    if (chip_fd < 0)
+        return -errno;
+
+    struct gpio_v2_line_request req;
+    std::memset(&req, 0, sizeof(req));
+    req.offsets[0] = line;
+    req.num_lines = 1;
+    std::snprintf(req.consumer, sizeof(req.consumer), "%s", consumer ? consumer : "applaunch");
+    req.config.flags = GPIO_V2_LINE_FLAG_INPUT;
+
+    if (ioctl(chip_fd, GPIO_V2_GET_LINE_IOCTL, &req) < 0) {
+        int err = errno;
+        close(chip_fd);
+        return -err;
+    }
+    close(chip_fd);
+
+    int value = gpio_v2_get_value(req.fd);
+    close(req.fd);
+    return value;
+#else
+    (void)chip_path;
+    (void)line;
+    (void)consumer;
+    return -ENOSYS;
+#endif
+}
+
+static int gpio_v2_get_value(int line_fd)
+{
+#if defined(GPIO_V2_LINE_GET_VALUES_IOCTL)
+    if (line_fd < 0)
+        return -EBADF;
+    struct gpio_v2_line_values vals;
+    std::memset(&vals, 0, sizeof(vals));
+    vals.mask = 1;
+    if (ioctl(line_fd, GPIO_V2_LINE_GET_VALUES_IOCTL, &vals) < 0)
+        return -errno;
+    return (vals.bits & 1) ? 1 : 0;
+#else
+    (void)line_fd;
+    return -ENOSYS;
+#endif
+}
 
 class SettingsSystem
 {
 public:
     using callback_t = std::function<void(int, std::string)>;
     using arg_t = std::list<std::string>;
+
+    SettingsSystem()
+    {
+        apply_extport_config();
+    }
 
     void api_call(arg_t arg, callback_t callback)
     {
@@ -54,6 +168,18 @@ public:
             char buf[32] = {};
             time_str(buf, sizeof(buf));
             report(callback, 0, buf);
+        } else if (cmd == "GpioSet") {
+            const std::string name = nth_arg(arg, 1);
+            int val = std::atoi(nth_arg(arg, 2).c_str());
+            int ret = set_named_gpio(name.c_str(), val);
+            report(callback, ret, ret == 0 ? "ok" : std::string("gpio set failed: ") + std::to_string(-ret));
+        } else if (cmd == "GpioGet") {
+            const std::string name = nth_arg(arg, 1);
+            int val = get_named_gpio(name.c_str());
+            if (val < 0)
+                report(callback, val, std::string("gpio get failed: ") + std::to_string(-val));
+            else
+                report(callback, 0, std::to_string(val));
         } else {
             report(callback, -1, "unknown settings api command");
         }
@@ -111,10 +237,86 @@ public:
     }
 
 private:
+    std::mutex gpio_mutex_;
+    const ExtPortGpioMap *gpio_map_ = nullptr;
+
     void report(callback_t callback, int code, const std::string &data)
     {
         if (callback)
             callback(code, data);
+    }
+
+    void apply_extport_config()
+    {
+        set_named_gpio("GROVE5V", config_get_int("extport_usb", 1));
+        set_named_gpio("EXT5V", config_get_int("extport_5vout", 1));
+    }
+
+    int set_named_gpio(const char *name, int val)
+    {
+        std::lock_guard<std::mutex> lock(gpio_mutex_);
+        const ExtPortGpioMap &map = active_gpio_map_locked();
+        if (is_grove5v_name(name))
+            return set_gpio_value(map.chip_path, map.grove5v_line, map.grove5v_active_low, "GROVE5V", val);
+        if (is_ext5v_name(name))
+            return set_gpio_value(map.chip_path, map.ext5v_line, map.ext5v_active_low, "EXT5V", val);
+        return -EINVAL;
+    }
+
+    int get_named_gpio(const char *name)
+    {
+        std::lock_guard<std::mutex> lock(gpio_mutex_);
+        const ExtPortGpioMap &map = active_gpio_map_locked();
+        if (is_grove5v_name(name))
+            return get_gpio_value(map.chip_path, map.grove5v_line, map.grove5v_active_low, "GROVE5V");
+        if (is_ext5v_name(name))
+            return get_gpio_value(map.chip_path, map.ext5v_line, map.ext5v_active_low, "EXT5V");
+        return -EINVAL;
+    }
+
+    const ExtPortGpioMap &active_gpio_map_locked()
+    {
+        const ExtPortGpioMap *map = access(kHwIdPath, F_OK) == 0 ? &kCardputerZeroGpioMap : &kFallbackGpioMap;
+        if (gpio_map_ != map)
+            gpio_map_ = map;
+        return *gpio_map_;
+    }
+
+    int set_gpio_value(const char *chip_path, unsigned int line, bool active_low, const char *consumer, int val)
+    {
+        int bit = (val ? 1 : 0) ^ (active_low ? 1 : 0);
+        int fd = gpio_v2_request_output(chip_path, line, consumer, bit);
+        if (fd < 0)
+            return fd;
+        close(fd);
+        return fd >= 0 ? 0 : fd;
+    }
+
+    int get_gpio_value(const char *chip_path, unsigned int line, bool active_low, const char *consumer)
+    {
+        int value = gpio_v2_read_input(chip_path, line, consumer);
+        return value < 0 ? value : (value ^ (active_low ? 1 : 0));
+    }
+
+    static int config_get_int(const char *key, int default_val)
+    {
+        int val = default_val;
+        cp0_signal_config_api({"GetInt", key ? std::string(key) : std::string(), std::to_string(default_val)},
+                              [&](int code, std::string data) {
+                                  if (code == 0)
+                                      val = std::atoi(data.c_str());
+                              });
+        return val;
+    }
+
+    static bool is_grove5v_name(const char *name)
+    {
+        return name && (std::strcmp(name, "GROVE5V") == 0 || std::strcmp(name, "extport_usb") == 0);
+    }
+
+    static bool is_ext5v_name(const char *name)
+    {
+        return name && (std::strcmp(name, "EXT5V") == 0 || std::strcmp(name, "extport_5vout") == 0);
     }
 
     static std::string nth_arg(const arg_t &arg, size_t index)
