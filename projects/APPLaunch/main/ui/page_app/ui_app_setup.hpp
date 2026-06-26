@@ -45,7 +45,8 @@
 class UISetupPage : public AppPage
 {
     enum class ViewState { MAIN, SUB, VALUE_SELECT, WIFI_LIST, WIFI_PW,
-                           SOUNDCARD_CARDS, SOUNDCARD_CONTROLS, SOUNDCARD_DETAIL };
+                           SOUNDCARD_CARDS, SOUNDCARD_CONTROLS, SOUNDCARD_DETAIL,
+                           USB_GUIDE };
 
     struct SubItem {
         std::string label;
@@ -85,6 +86,11 @@ private:
     std::string img_right_arrow_;
     std::string img_ok_;
     std::string img_cross_;
+
+    // USB-mode guidance screen (shown when a reboot is required to switch dwc2).
+    // Drawn natively with LVGL objects + lv_anim (no GIF) so it stays crisp.
+    bool usb_guide_enabling_ = true;
+    lv_obj_t *usb_guide_knob_ = nullptr;
 
     // WiFi state
     cp0_wifi_ap_t wifi_aps_[CP0_WIFI_AP_MAX];
@@ -298,6 +304,20 @@ private:
                     config_save();
                 }},
             };
+            menu_items_.push_back(m);
+        }
+        // --- Developer (developer options: ADB USB debug bridge, ON by default) ---
+        {
+            MenuItem m;
+            m.label = "Developer";
+            // ADB is OFF by default: enabling it switches the USB controller to
+            // peripheral mode, which disables the onboard USB hub (keyboard/mouse
+            // and other peripherals). It must stay opt-in.
+            bool adb_en = config_get_int("adb_debug", 0) != 0;
+            m.sub_items = {
+                {"ADB", true, adb_en, [this]() { adb_toggle(); }},
+            };
+            m.on_enter = [this]() { refresh_adb_status(); };
             menu_items_.push_back(m);
         }
         // --- RTC ---
@@ -722,6 +742,212 @@ private:
                 return;
             }
             ++visible_idx;
+        }
+    }
+
+    // ==================== ADB debug (USB) ====================
+    // Device-side helper shipped inside the APPLaunch resource tree. It installs
+    // adbd, embeds the default authorized key, brands the USB gadget as
+    // "CardputerZero", and starts adbd.service. It exits 10 when the USB
+    // controller had to be switched to peripheral mode and a reboot is required.
+    static constexpr const char *kAdbHelper = "/usr/share/APPLaunch/adb/cardputer-adb";
+
+    int find_menu(const char *label)
+    {
+        for (size_t i = 0; i < menu_items_.size(); ++i)
+            if (menu_items_[i].label == label) return (int)i;
+        return -1;
+    }
+
+    void adb_toggle()
+    {
+        int idx = find_menu("Developer");
+        if (idx < 0) return;
+        // The key handler has already flipped the toggle; read the desired state.
+        bool want_on = menu_items_[idx].sub_items[0].toggle_state;
+
+        const char *argv[] = {"sudo", kAdbHelper, want_on ? "enable" : "disable", nullptr};
+        int rc = cp0_process_run_argv(argv, 0 /* foreground: we need the exit code */);
+
+        // rc == 10: the USB controller (dwc2) had to change dr_mode in config.txt
+        // (host<->peripheral). That only takes effect after a reboot, so guide the
+        // user through the physical switch and offer to reboot. This happens on
+        // BOTH directions: enabling switches host->peripheral, disabling switches
+        // it back so the onboard hub/peripherals work again.
+        if (rc == 10) {
+            config_set_int("adb_debug", want_on ? 1 : 0);
+            config_save();
+            enter_usb_guide(want_on);
+            return;
+        }
+        if (rc != 0) {
+            // Failed — revert; the key handler redraws the sub view afterwards.
+            menu_items_[idx].sub_items[0].toggle_state = !want_on;
+            return;
+        }
+        config_set_int("adb_debug", want_on ? 1 : 0);
+        config_save();
+    }
+
+    // Sync the toggle with the real adbd.service state when the menu is opened.
+    void refresh_adb_status()
+    {
+        int idx = find_menu("Developer");
+        if (idx < 0) return;
+        char out[64] = {0};
+        const char *argv[] = {"systemctl", "is-active", "adbd.service", nullptr};
+        cp0_process_capture_argv(argv, out, sizeof(out));
+        bool active = (std::strncmp(out, "active", 6) == 0);
+        menu_items_[idx].sub_items[0].toggle_state = active;
+        config_set_int("adb_debug", active ? 1 : 0);
+    }
+
+    // Full-screen animated guide shown when the USB controller has to switch
+    // dwc2 dr_mode (a reboot is required). It plays a GIF that tells the user to
+    // flip the left USB switch, which port to use, and that peripherals are
+    // temporarily unavailable. OK reboots now; ESC postpones.
+    void enter_usb_guide(bool enabling)
+    {
+        usb_guide_enabling_ = enabling;
+        // Defer the actual build one cycle so the trailing build_sub_view() from
+        // the key handler does not clobber this view.
+        lv_timer_t *t = lv_timer_create([](lv_timer_t *timer) {
+            UISetupPage *self = (UISetupPage *)lv_timer_get_user_data(timer);
+            lv_timer_delete(timer);
+            self->build_usb_guide_view();
+        }, 60, this);
+        lv_timer_set_repeat_count(t, 1);
+    }
+
+    // Small helper: a filled, rounded "chip" used for the board/switch/ports.
+    static lv_obj_t *guide_chip(lv_obj_t *parent, int x, int y, int w, int h,
+                                uint32_t bg, uint32_t border, int radius = 5,
+                                int border_w = 2)
+    {
+        lv_obj_t *o = lv_obj_create(parent);
+        lv_obj_set_pos(o, x, y);
+        lv_obj_set_size(o, w, h);
+        lv_obj_set_style_radius(o, radius, LV_PART_MAIN);
+        lv_obj_set_style_bg_color(o, lv_color_hex(bg), LV_PART_MAIN);
+        lv_obj_set_style_bg_opa(o, LV_OPA_COVER, LV_PART_MAIN);
+        lv_obj_set_style_border_color(o, lv_color_hex(border), LV_PART_MAIN);
+        lv_obj_set_style_border_width(o, border_w, LV_PART_MAIN);
+        lv_obj_set_style_pad_all(o, 0, LV_PART_MAIN);
+        lv_obj_clear_flag(o, LV_OBJ_FLAG_SCROLLABLE);
+        return o;
+    }
+
+    static lv_obj_t *guide_label(lv_obj_t *parent, int x, int y, const char *txt,
+                                 uint32_t color, const lv_font_t *font)
+    {
+        lv_obj_t *l = lv_label_create(parent);
+        lv_label_set_text(l, txt);
+        lv_obj_set_pos(l, x, y);
+        lv_obj_set_style_text_color(l, lv_color_hex(color), LV_PART_MAIN);
+        lv_obj_set_style_text_font(l, font, LV_PART_MAIN);
+        return l;
+    }
+
+    // Draw the USB-mode guidance natively (crisp vector-style shapes + lv_anim).
+    void build_usb_guide_view()
+    {
+        view_state_ = ViewState::USB_GUIDE;
+        usb_guide_knob_ = nullptr;
+        lv_obj_t *cont = ui_obj_["list_cont"];
+        lv_obj_clean(cont);
+
+        const bool en = usb_guide_enabling_;
+        const uint32_t C_GREEN = 0x46DC87, C_YEL = 0xF0C850, C_RED = 0xEB5F5F;
+        const uint32_t C_WHITE = 0xECECEC, C_GREY = 0x9A9AA0;
+        const lv_font_t *f_title = launcher_fonts().get("Montserrat-Bold.ttf", 13,
+                                                        LV_FREETYPE_FONT_STYLE_BOLD);
+        const lv_font_t *f_msg = &lv_font_montserrat_10;
+
+        // Title
+        guide_label(cont, 8, 2,
+                    en ? "Enable ADB - switch USB to device" : "Disable ADB - switch USB to HUB",
+                    C_WHITE, f_title ? f_title : &lv_font_montserrat_12);
+
+        // Board
+        guide_chip(cont, 86, 24, 146, 50, 0x282A30, 0x5A5C64, 6, 2);
+        guide_label(cont, 120, 28, "CardputerZero", C_GREY, f_msg);
+
+        // ---- Top-right USB-C port with a cable plugged in ----
+        guide_chip(cont, 218, 30, 12, 12, 0x101012, 0x5A5C64, 3, 2);  // socket
+        guide_chip(cont, 228, 32, 22, 8, 0xCDCDD2, 0xCDCDD2, 2, 0);   // plug (inserted)
+        guide_chip(cont, 250, 34, 60, 4, 0x6A6C72, 0x6A6C72, 2, 0);   // cable
+        guide_label(cont, 232, 42, "USB-C", C_GREEN, f_msg);
+
+        // ---- Left slide switch (side view), narrow thumb ----
+        guide_chip(cont, 24, 28, 32, 44, 0x1A1A1C, 0x5A5C64, 6, 2);   // housing
+        guide_chip(cont, 33, 33, 14, 34, 0x0E0E10, 0x0E0E10, 4, 0);   // track slot
+        guide_label(cont, 26, 14, "HUB", en ? C_RED : C_GREEN, f_msg);
+        guide_label(cont, 28, 72, "USB", en ? C_GREEN : C_GREY, f_msg);
+        const int thumb_top = 34, thumb_bot = 54;
+        usb_guide_knob_ = guide_chip(cont, 32, en ? thumb_top : thumb_bot, 16, 10,
+                                     C_GREEN, 0x2A6F49, 3, 1);
+
+        // ---- Messages ----
+        int y = 80;
+        if (en) {
+            guide_label(cont, 8, y,      "1  Slide LEFT switch  HUB -> USB", C_WHITE, f_msg);
+            guide_label(cont, 8, y + 15, "2  USB hub & peripherals turn OFF", C_YEL, f_msg);
+            guide_label(cont, 8, y + 30, "3  Cable -> top-right USB-C port", C_GREEN, f_msg);
+        } else {
+            guide_label(cont, 8, y,      "1  Slide LEFT switch  USB -> HUB", C_WHITE, f_msg);
+            guide_label(cont, 8, y + 15, "2  USB hub & peripherals come back", C_GREEN, f_msg);
+            guide_label(cont, 8, y + 30, "3  Reboot to apply the change", C_YEL, f_msg);
+        }
+
+        // Footer
+        guide_label(cont, 8, LIST_H - 16, "OK: reboot now     ESC: later", C_GREY,
+                    &lv_font_montserrat_10);
+
+        // ---- Animation: the switch thumb slides toward its target, ping-pong ----
+        lv_anim_t a;
+        lv_anim_init(&a);
+        lv_anim_set_var(&a, usb_guide_knob_);
+        lv_anim_set_values(&a, en ? thumb_top : thumb_bot, en ? thumb_bot : thumb_top);
+        lv_anim_set_time(&a, 650);
+        lv_anim_set_playback_time(&a, 650);
+        lv_anim_set_repeat_count(&a, LV_ANIM_REPEAT_INFINITE);
+        lv_anim_set_path_cb(&a, lv_anim_path_ease_in_out);
+        lv_anim_set_exec_cb(&a, [](void *var, int32_t v) {
+            lv_obj_set_y((lv_obj_t *)var, v);
+        });
+        lv_anim_start(&a);
+    }
+
+    void stop_usb_guide_anims()
+    {
+        if (usb_guide_knob_) lv_anim_del(usb_guide_knob_, nullptr);
+        usb_guide_knob_ = nullptr;
+    }
+
+    void handle_usb_guide_key(uint32_t key)
+    {
+        switch (key) {
+        case KEY_ENTER:
+        case KEY_RIGHT: {
+            stop_usb_guide_anims();
+            lv_obj_t *cont = ui_obj_["list_cont"];
+            lv_obj_clean(cont);
+            lv_obj_t *lbl = lv_label_create(cont);
+            lv_label_set_text(lbl, "Rebooting...");
+            lv_obj_center(lbl);
+            cp0_system_reboot();
+            break;
+        }
+        case KEY_ESC:
+        case KEY_LEFT:
+            // Postpone: the dr_mode change is already written to config.txt and
+            // will take effect on the next boot. Return to the sub view.
+            stop_usb_guide_anims();
+            view_state_ = ViewState::SUB;
+            build_sub_view();
+            break;
+        default:
+            break;
         }
     }
 
@@ -1935,6 +2161,9 @@ private:
             break;
         case ViewState::SOUNDCARD_DETAIL:
             if (released) handle_soundcard_detail_key(key);
+            break;
+        case ViewState::USB_GUIDE:
+            if (released) handle_usb_guide_key(key);
             break;
         }
     }
