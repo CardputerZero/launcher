@@ -1,0 +1,247 @@
+#!/bin/sh
+# cardputer-adb — enable/disable USB ADB ("debug") mode on CardputerZero.
+#
+# This is the device-side helper driven by the Launcher "ADB Debug" toggle
+# (Settings -> ADB). It is the CardputerZero equivalent of Android's
+# "USB debugging" switch: ADB is OFF by default and only runs while the toggle
+# is on.
+#
+# It will, on enable:
+#   * install the Debian `adbd` package if missing,
+#   * embed the bundled default authorized key into /adb_keys,
+#   * install a systemd drop-in so the gadget shows a friendly name
+#     ("CardputerZero" / serial "CardputerZero-xxxx"),
+#   * make sure the USB controller is in peripheral mode (editing config.txt and
+#     asking for a reboot when necessary),
+#   * enable and start adbd.service.
+#
+# Exit codes:
+#   0   success, ADB is running
+#   10  success, but a REBOOT is required (USB was switched to peripheral mode)
+#   1   error
+set -e
+
+SELF_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+GADGET="$SELF_DIR/cardputer-adb-gadget"
+DEFAULT_KEY="$SELF_DIR/adbkey.pub"
+ADB_KEYS=/adb_keys
+DROPIN_DIR=/etc/systemd/system/adbd.service.d
+DROPIN="$DROPIN_DIR/cardputer.conf"
+
+CONFIG_TXT=/boot/firmware/config.txt
+[ -f "$CONFIG_TXT" ] || CONFIG_TXT=/boot/config.txt
+
+log() { echo "[cardputer-adb] $*"; }
+die() { echo "[cardputer-adb] ERROR: $*" >&2; exit 1; }
+
+peripheral_ready() { [ -n "$(ls /sys/class/udc 2>/dev/null)" ]; }
+
+ensure_adbd_installed() {
+    if [ ! -x /usr/lib/android-sdk/platform-tools/adbd ] && [ ! -x /usr/sbin/adbd ]; then
+        log "installing adbd ..."
+        apt-get update -y >/dev/null 2>&1 || true
+        apt-get install -y adbd || die "failed to install adbd"
+    fi
+    modprobe libcomposite 2>/dev/null || true
+}
+
+# adbd execs `/bin/sh` (dash) for `adb shell`, which has no line editing — no tab
+# completion and arrow keys show raw escape codes. Interactive `adb shell` runs a
+# *login* shell (`-/bin/sh`) that reads ~/.profile, so we upgrade it to bash
+# there. `adb shell <cmd>` uses a non-login `sh -c` and is left on dash.
+setup_better_shell() {
+    if [ ! -f /usr/share/bash-completion/bash_completion ] && [ ! -f /etc/bash_completion ]; then
+        apt-get install -y bash-completion >/dev/null 2>&1 || true
+    fi
+
+    home=/root           # adbd runs as root
+    marker="# >>> cardputer-adb shell >>>"
+
+    if ! grep -qF "$marker" "$home/.profile" 2>/dev/null; then
+        cat >> "$home/.profile" <<'EOF'
+
+# >>> cardputer-adb shell >>>
+# Upgrade interactive `adb shell` (dash login) to bash for tab-completion,
+# history and working arrow keys. `adb shell <cmd>` uses `sh -c` and does not
+# read this file, so scripts keep running on fast dash.
+if [ -z "${BASH:-}" ] && [ -x /bin/bash ]; then
+    case $- in
+        *i*) exec /bin/bash ;;
+    esac
+fi
+# <<< cardputer-adb shell <<<
+EOF
+        log "upgraded interactive adb shell to bash ($home/.profile)"
+    fi
+
+    if ! grep -qF "$marker" "$home/.bashrc" 2>/dev/null; then
+        cat >> "$home/.bashrc" <<'EOF'
+
+# >>> cardputer-adb shell >>>
+case "$TERM" in ""|dumb|unknown) export TERM=xterm-256color ;; esac
+if ! shopt -oq posix; then
+    if [ -f /usr/share/bash-completion/bash_completion ]; then
+        . /usr/share/bash-completion/bash_completion
+    elif [ -f /etc/bash_completion ]; then
+        . /etc/bash_completion
+    fi
+fi
+HISTSIZE=2000; HISTFILESIZE=4000
+shopt -s histappend checkwinsize 2>/dev/null
+PS1='\[\e[1;32m\]\u@CardputerZero\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
+
+# Colorize command output so listings, matches and diffs are highlighted.
+# (Text *selection* highlight when copying is done by the host terminal over the
+# PTY; this only adds the device-side content colors.)
+if [ -x /usr/bin/dircolors ]; then
+    eval "$(dircolors -b 2>/dev/null)"
+fi
+alias ls='ls --color=auto'
+alias ll='ls -alF --color=auto'
+alias la='ls -A --color=auto'
+alias grep='grep --color=auto'
+alias fgrep='fgrep --color=auto'
+alias egrep='egrep --color=auto'
+alias diff='diff --color=auto'
+alias ip='ip -color=auto'
+export CLICOLOR=1
+export GREP_COLORS='ms=01;31:mc=01;31:sl=:cx=:fn=35:ln=32:bn=32:se=36'
+export LESS='-R'  # let `less`/git pagers pass ANSI colors through
+# <<< cardputer-adb shell <<<
+EOF
+        log "installed bash rc ($home/.bashrc)"
+    fi
+}
+
+install_default_key() {
+    [ -f "$DEFAULT_KEY" ] || return 0
+    if [ ! -f "$ADB_KEYS" ] || ! grep -qFf "$DEFAULT_KEY" "$ADB_KEYS" 2>/dev/null; then
+        cat "$DEFAULT_KEY" >> "$ADB_KEYS"
+        log "embedded default adb key into $ADB_KEYS"
+    fi
+}
+
+install_dropin() {
+    mkdir -p "$DROPIN_DIR"
+    cat > "$DROPIN" <<EOF
+# Installed by cardputer-adb: brand the gadget as "CardputerZero".
+[Service]
+ExecStartPre=
+ExecStartPre=$GADGET setup
+ExecStartPost=
+ExecStartPost=$GADGET activate
+ExecStopPost=
+ExecStopPost=$GADGET reset
+EOF
+    systemctl daemon-reload 2>/dev/null || true
+}
+
+# Make sure the dwc2 USB controller runs in peripheral mode. Returns 10 when a
+# reboot is required for the change to take effect.
+ensure_peripheral() {
+    peripheral_ready && return 0
+    [ -w "$CONFIG_TXT" ] || die "cannot write $CONFIG_TXT"
+
+    if grep -qE '^[[:space:]]*otg_mode=1' "$CONFIG_TXT"; then
+        sed -i 's/^[[:space:]]*otg_mode=1.*/# otg_mode=1  # disabled by cardputer-adb/' "$CONFIG_TXT"
+    fi
+    if grep -qE '^[[:space:]]*dtoverlay=dwc2,dr_mode=host' "$CONFIG_TXT"; then
+        sed -i 's/^[[:space:]]*dtoverlay=dwc2,dr_mode=host/# &/' "$CONFIG_TXT"
+    fi
+    if ! grep -qE '^[[:space:]]*dtoverlay=dwc2,dr_mode=peripheral' "$CONFIG_TXT"; then
+        printf '\n[all]\ndtoverlay=dwc2,dr_mode=peripheral\n' >> "$CONFIG_TXT"
+    fi
+    return 10
+}
+
+# Revert dwc2 back to host mode so the onboard USB hub and its peripherals
+# (keyboard, mouse, etc.) work again. This is the mirror of ensure_peripheral and,
+# like it, only takes effect after a reboot. Returns 10 when a reboot is required
+# (i.e. the controller is still in peripheral mode right now).
+ensure_host() {
+    if [ -w "$CONFIG_TXT" ]; then
+        # Drop the peripheral overlay we appended on enable.
+        if grep -qE '^[[:space:]]*dtoverlay=dwc2,dr_mode=peripheral' "$CONFIG_TXT"; then
+            sed -i '/^[[:space:]]*dtoverlay=dwc2,dr_mode=peripheral/d' "$CONFIG_TXT"
+        fi
+        # Restore otg_mode / host overlay that enable may have commented out.
+        if grep -qE '^[[:space:]]*#[[:space:]]*otg_mode=1.*disabled by cardputer-adb' "$CONFIG_TXT"; then
+            sed -i 's/^[[:space:]]*#[[:space:]]*otg_mode=1.*disabled by cardputer-adb.*/otg_mode=1/' "$CONFIG_TXT"
+        fi
+        if grep -qE '^[[:space:]]*#[[:space:]]*dtoverlay=dwc2,dr_mode=host' "$CONFIG_TXT"; then
+            sed -i 's/^[[:space:]]*#[[:space:]]*dtoverlay=dwc2,dr_mode=host/dtoverlay=dwc2,dr_mode=host/' "$CONFIG_TXT"
+        fi
+    fi
+    # A reboot is needed while the controller is still in peripheral mode.
+    peripheral_ready && return 10
+    return 0
+}
+
+# The legacy PiBridge CDC-ACM gadget and adbd cannot share the single UDC.
+stop_serial_gadget() {
+    G=/sys/kernel/config/usb_gadget/pibridge
+    [ -d "$G" ] || return 0
+    echo "" > "$G/UDC" 2>/dev/null || true
+    find "$G" -type l -delete 2>/dev/null || true
+    rmdir "$G"/configs/c.1/strings/0x409 "$G"/configs/c.1 \
+          "$G"/functions/* "$G"/strings/0x409 "$G" 2>/dev/null || true
+    log "stopped legacy PiBridge serial gadget"
+}
+
+cmd_enable() {
+    ensure_adbd_installed
+    install_default_key
+    setup_better_shell
+    install_dropin
+    stop_serial_gadget
+
+    rc=0
+    ensure_peripheral || rc=$?
+    if [ "$rc" = 10 ]; then
+        systemctl enable adbd.service 2>/dev/null || true
+        log "USB switched to peripheral mode; reboot required"
+        exit 10
+    fi
+
+    systemctl enable adbd.service 2>/dev/null || true
+    # restart (not just start) so the branded-gadget drop-in is applied even when
+    # adbd was already running.
+    systemctl restart adbd.service || die "failed to start adbd"
+    log "ADB debug enabled"
+}
+
+cmd_disable() {
+    systemctl disable --now adbd.service 2>/dev/null || true
+    "$GADGET" reset 2>/dev/null || true
+
+    # Switch the USB controller back to host mode so the onboard hub works again.
+    rc=0
+    ensure_host || rc=$?
+    if [ "$rc" = 10 ]; then
+        log "ADB disabled; USB returns to host/hub mode after reboot"
+        exit 10
+    fi
+    log "ADB debug disabled"
+}
+
+cmd_status() {
+    peripheral_ready && echo "peripheral=yes" || echo "peripheral=no"
+    echo "adbd=$(systemctl is-active adbd.service 2>/dev/null || echo inactive)"
+    echo "enabled=$(systemctl is-enabled adbd.service 2>/dev/null || echo disabled)"
+}
+
+# Append an extra authorized host key (the CLI form of "allow this computer").
+cmd_authorize() {
+    key="$1"
+    [ -n "$key" ] || die "usage: cardputer-adb authorize <pubkey|file>"
+    if [ -f "$key" ]; then cat "$key" >> "$ADB_KEYS"; else echo "$key" >> "$ADB_KEYS"; fi
+    log "authorized host key"
+}
+
+case "$1" in
+    enable)    cmd_enable ;;
+    disable)   cmd_disable ;;
+    status)    cmd_status ;;
+    authorize) shift; cmd_authorize "$@" ;;
+    *) echo "Usage: $0 {enable|disable|status|authorize <pubkey>}" >&2; exit 1 ;;
+esac

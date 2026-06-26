@@ -1,0 +1,82 @@
+#!/bin/sh
+# USB ADB gadget for CardputerZero.
+#
+# Mirrors Debian's stock `adbd-usb-gadget` but with a friendly manufacturer /
+# product / serial so that `adb devices` shows e.g.
+#
+#     CardputerZero-c7ead0dd   device
+#
+# instead of a raw sha256 of the machine-id. Wired into adbd.service through a
+# systemd drop-in installed by `cardputer-adb`.
+set -e
+
+UDC="${ADBD_GADGET_UDC}"
+if [ -z "${UDC}" ] && [ -d /sys/class/udc ]; then
+    UDC="$(ls /sys/class/udc | head -1)"
+fi
+# No USB Device Controller -> nothing to do (e.g. running on a host-only board).
+[ "${UDC}" ] || exit 0
+
+CONFIGFS_DIR="/sys/kernel/config/usb_gadget/g1"
+
+# 0x18D1 = Google's vendor id; keeps host-side adb auto-recognition working
+# (it is part of adb's built-in vendor list, so no udev rules are required).
+VID=0x18D1
+PID=0x4EE7
+MANUFACTURER="M5Stack"
+PRODUCT="CardputerZero"
+
+device_serial() {
+    if [ -r /etc/machine-id ]; then
+        echo "CardputerZero-$(sha256sum < /etc/machine-id | cut -c1-8)"
+    else
+        echo "CardputerZero-0000"
+    fi
+}
+
+setup() {
+    mkdir -p "${CONFIGFS_DIR}/configs/c.1"
+    cd "${CONFIGFS_DIR}"
+
+    mkdir -p strings/0x409
+    mkdir -p configs/c.1/strings/0x409
+
+    echo "${PID}" > idProduct
+    echo "${VID}" > idVendor
+
+    echo "${MANUFACTURER}" > strings/0x409/manufacturer
+    echo "${PRODUCT}"      > strings/0x409/product
+    device_serial          > strings/0x409/serialnumber
+
+    echo "ADB Configuration" > configs/c.1/strings/0x409/configuration
+    echo 120 > configs/c.1/MaxPower
+
+    mkdir -p functions/ffs.adb
+    ln -sf functions/ffs.adb configs/c.1
+
+    mkdir -p /dev/usb-ffs/adb
+    mount -t functionfs adb /dev/usb-ffs/adb 2>/dev/null || true
+}
+
+activate() {
+    echo "${UDC}" > "${CONFIGFS_DIR}/UDC"
+}
+
+reset() {
+    echo "" > "${CONFIGFS_DIR}/UDC" 2>/dev/null || true
+    umount /dev/usb-ffs/adb 2>/dev/null || true
+    rmdir /dev/usb-ffs/adb 2>/dev/null || true
+    rm -f "${CONFIGFS_DIR}/configs/c.1/ffs.adb" 2>/dev/null || true
+    rmdir "${CONFIGFS_DIR}/configs/c.1/strings/0x409" 2>/dev/null || true
+    rmdir "${CONFIGFS_DIR}/configs/c.1" 2>/dev/null || true
+    rmdir "${CONFIGFS_DIR}/functions/ffs.adb" 2>/dev/null || true
+    rmdir "${CONFIGFS_DIR}/strings/0x409" 2>/dev/null || true
+    rmdir "${CONFIGFS_DIR}" 2>/dev/null || true
+}
+
+case "$1" in
+    setup)    setup ;;
+    activate) activate ;;
+    reset)    reset ;;
+    *) echo "Usage: $0 [setup|activate|reset]" >&2; exit 1 ;;
+esac
