@@ -30,7 +30,7 @@
 #include <unistd.h>
 #endif
 
-#if !defined(HAL_PLATFORM_SDL) && !defined(_WIN32)
+#if !defined(_WIN32)
 #include <linux/input.h>
 #endif
 
@@ -105,8 +105,6 @@ public:
         (void)home_key_flag;
         (void)keep_root;
         return -1;
-#elif defined(HAL_PLATFORM_SDL)
-        return exec_blocking_sdl(exec_path, home_key_flag, keep_root);
 #else
         return exec_blocking_cp0(exec_path, home_key_flag, keep_root);
 #endif
@@ -245,7 +243,7 @@ public:
     // Returns the child's exit code, or a negative errno on fork/pipe failure.
     int run_sudo(const std::string &password, const std::vector<std::string> &argv)
     {
-#if defined(_WIN32) || defined(HAL_PLATFORM_SDL)
+#if defined(_WIN32)
         (void)password; (void)argv;
         return -1;
 #else
@@ -356,7 +354,7 @@ public:
 
     void system_shutdown()
     {
-#if defined(HAL_PLATFORM_SDL) || defined(_WIN32)
+#if defined(_WIN32)
         std::printf("[CP0] shutdown (emulator exit)\n");
         std::exit(0);
 #else
@@ -368,7 +366,7 @@ public:
 
     void system_reboot()
     {
-#if defined(HAL_PLATFORM_SDL) || defined(_WIN32)
+#if defined(_WIN32)
         std::printf("[CP0] reboot (emulator exit)\n");
         std::exit(0);
 #else
@@ -558,8 +556,11 @@ private:
 
     int exec_blocking_cp0(const char *exec_path, volatile int *home_key_flag, int keep_root)
     {
-#if defined(_WIN32) || defined(HAL_PLATFORM_SDL)
-        return exec_blocking_sdl(exec_path, home_key_flag, keep_root);
+#if defined(_WIN32)
+        (void)exec_path;
+        (void)home_key_flag;
+        (void)keep_root;
+        return -1;
 #else
         (void)home_key_flag;
         keyboard_pause();

@@ -3,3 +3,10 @@ menuconfig CP0_LVGL_COMPONENT_ENABLED
     bool "Enable cp0 lvgl support"
     default n
 
+if CP0_LVGL_COMPONENT_ENABLED
+
+config CP0_LVGL_USE_ZMQ_LOG
+    bool "Enable cp0 lvgl zmq log publisher"
+    default n
+
+endif

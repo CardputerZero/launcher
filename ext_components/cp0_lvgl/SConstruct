@@ -1,10 +1,14 @@
 # component/SConscript
 Import("env")
 import os
-import subprocess
+from pathlib import Path
 
 with open(env["PROJECT_TOOL_S"]) as f:
     exec(f.read())
+
+def toolchain_path(*parts):
+    return Path(os.environ.get("CONFIG_TOOLCHAIN_SYSROOT", "")).joinpath(*parts)
+
 
 if "CONFIG_CP0_LVGL_COMPONENT_ENABLED" in os.environ or "CONFIG_SIGSLOT_COMPONENT_ENABLED" in os.environ:
     SRCS = []
@@ -24,13 +28,14 @@ if "CONFIG_CP0_LVGL_COMPONENT_ENABLED" in os.environ or "CONFIG_SIGSLOT_COMPONEN
     else:
         SRCS += Glob('src/cp0/*.c*')
         REQUIREMENTS += ['input', 'xkbcommon', 'udev', 'pthread']
+        REQUIREMENTS += [':libdbus-1.so.3']
         REQUIREMENTS += ['camera', 'camera-base', 'jpeg']
-        try:
-            DEFINITIONS += subprocess.check_output(
-                ['pkg-config', '--cflags', 'libcamera'], text=True).split()
-        except Exception:
-            _sr = os.environ.get('CONFIG_TOOLCHAIN_SYSROOT', '')
-            DEFINITIONS += [f'-I{_sr}/usr/include/libcamera']
+        PRIVATE_INCLUDE += [toolchain_path('usr', 'include', 'dbus-1.0'),
+                            toolchain_path('usr', 'lib', env.get('GCC_DUMPMACHINE', ''), 'dbus-1.0', 'include')]
+
+        if 'CONFIG_CP0_LVGL_USE_ZMQ_LOG' in os.environ:
+            DEFINITIONS += ['-DCP0_LVGL_USE_ZMQ_LOG=1']
+            REQUIREMENTS += ['zmq']
 
     env["COMPONENTS"].append(
         {

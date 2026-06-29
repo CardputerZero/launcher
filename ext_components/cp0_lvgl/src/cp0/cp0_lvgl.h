@@ -14,6 +14,7 @@ void init_process(void);
 void init_screenshot(void);
 void init_lora(void);
 void init_wifi();
+void init_bluetooth(void);
 void init_settings(void);
 void init_osinfo(void);
 void init_bq27220(void);

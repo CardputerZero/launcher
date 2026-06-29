@@ -624,14 +624,6 @@ int cp0_backlight_read(void) { return 100; }
 int cp0_backlight_max(void) { return 100; }
 int cp0_backlight_write(int val) { return val; }
 
-cp0_bt_status_t cp0_bt_get_status(void)
-{
-    cp0_bt_status_t st{};
-    return st;
-}
-int cp0_bt_set_power(int) { return 0; }
-int cp0_bt_scan(cp0_bt_device_t *, int) { return 0; }
-
 void cp0_time_str(char *buf, int buf_size)
 {
     if (!buf || buf_size <= 0) return;
