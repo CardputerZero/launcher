@@ -485,11 +485,14 @@ public:
         update_datetime_status();
         update_status_bar();
         update_battery_status(cp0_battery_read());
+        time_timer_ = lv_timer_create(app_time_timer_cb, 1000, this);
         status_timer_ = lv_timer_create(app_status_timer_cb, 5000, this);
     }
 
     virtual ~AppTopBarRegion()
     {
+        if (time_timer_)
+            lv_timer_delete(time_timer_);
         if (status_timer_)
             lv_timer_delete(status_timer_);
     }
@@ -517,6 +520,7 @@ public:
 
 private:
     UIAppTopBar top_bar_;
+    lv_timer_t *time_timer_ = nullptr;
     lv_timer_t *status_timer_ = nullptr;
 
     static void app_battery_event_cb(lv_event_t *e)
@@ -542,6 +546,13 @@ private:
         AppTopBarRegion *self = static_cast<AppTopBarRegion *>(lv_timer_get_user_data(timer));
         if (self)
             self->update_status_bar();
+    }
+
+    static void app_time_timer_cb(lv_timer_t *timer)
+    {
+        AppTopBarRegion *self = static_cast<AppTopBarRegion *>(lv_timer_get_user_data(timer));
+        if (self)
+            self->update_datetime_status();
     }
 
     void UI_bind_event()
@@ -631,6 +642,7 @@ private:
     lv_obj_t *ui_TOP_time_Label = nullptr;
     lv_obj_t *ui_TOP_Power = nullptr;
     lv_obj_t *ui_TOP_power_Label = nullptr;
+    lv_timer_t *time_timer_ = nullptr;
     lv_timer_t *status_timer_ = nullptr;
 
 public:
@@ -643,10 +655,13 @@ public:
         UI_bind_event();
         update_time_status();
         update_status_bar();
+        time_timer_ = lv_timer_create(home_time_timer_cb, 1000, this);
         status_timer_ = lv_timer_create(home_status_timer_cb, 5000, this);
     }
     ~home_base()
     {
+        if (time_timer_)
+            lv_timer_delete(time_timer_);
         if (status_timer_)
             lv_timer_delete(status_timer_);
     }
@@ -674,6 +689,13 @@ public:
         home_base *self = static_cast<home_base *>(lv_timer_get_user_data(timer));
         if (self)
             self->update_status_bar();
+    }
+
+    static void home_time_timer_cb(lv_timer_t *timer)
+    {
+        home_base *self = static_cast<home_base *>(lv_timer_get_user_data(timer));
+        if (self)
+            self->update_time_status();
     }
 
     void update_status_bar()
