@@ -465,7 +465,7 @@ private:
             switch (view_state_)
             {
             case ViewState::MAIN:  handle_main_key(key); break;
-            case ViewState::INPUT: handle_input_key(key); break;
+            case ViewState::INPUT: handle_input_key(key, launcher_ui::events::keyboard_item(e)); break;
             }
         }
     }
@@ -507,7 +507,7 @@ private:
     }
 
     // ==================== input overlay keys ====================
-    void handle_input_key(uint32_t key)
+    void handle_input_key(uint32_t key, const struct key_item *elm)
     {
         if (key == KEY_ESC) {
             close_input_overlay();
@@ -526,6 +526,14 @@ private:
             if (!msg_input_buf_.empty())
                 msg_input_buf_.pop_back();
             update_input_display();
+            return;
+        }
+
+        if (elm && elm->utf8[0] && (unsigned char)elm->utf8[0] >= 0x20) {
+            if (msg_input_buf_.size() + strlen(elm->utf8) <= 40) {
+                msg_input_buf_ += elm->utf8;
+                update_input_display();
+            }
             return;
         }
 

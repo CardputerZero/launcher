@@ -308,6 +308,14 @@ private:
 
             default:
             {
+                const struct key_item *elm = launcher_ui::events::keyboard_item(e);
+                if (elm && elm->utf8[0] && (unsigned char)elm->utf8[0] >= 0x20)
+                {
+                    fields_[active_field_].value += elm->utf8;
+                    build_input_fields();
+                    break;
+                }
+
                 char ch = keycode_to_char(key);
                 if (ch)
                 {
