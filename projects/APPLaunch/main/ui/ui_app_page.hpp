@@ -130,6 +130,16 @@ inline int profile_disconnect_active()
     return simple({"ProfileDisconnectActive"});
 }
 
+inline int radio_enabled()
+{
+    return simple({"RadioEnabled"});
+}
+
+inline int radio_set_enabled(bool enabled)
+{
+    return simple({"RadioSetEnabled", enabled ? "on" : "off"});
+}
+
 } // namespace launcher_wifi
 
 class UIAppTopBar
@@ -362,7 +372,7 @@ private:
     void set_wifi_signal(int signal)
     {
         static const int thresholds[4] = {1, 30, 60, 80};
-        const uint32_t on_color = 0x00CCFF;
+        const uint32_t on_color = 0x33CC33;
         const uint32_t off_color = 0x4D4D4D;
 
         for (int i = 0; i < 4; ++i)
