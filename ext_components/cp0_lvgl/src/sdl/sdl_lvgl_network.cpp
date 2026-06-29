@@ -55,6 +55,10 @@ public:
             const std::string ssid = nth_arg(arg, 1);
             cp0_wifi_status_t st = get_status();
             report(callback, ssid == st.ssid ? 1 : 0, "");
+        } else if (cmd == "RadioEnabled") {
+            report(callback, 1, "");
+        } else if (cmd == "RadioSetEnabled") {
+            report(callback, 0, "");
         } else {
             report(callback, -1, "unknown wifi api command");
         }

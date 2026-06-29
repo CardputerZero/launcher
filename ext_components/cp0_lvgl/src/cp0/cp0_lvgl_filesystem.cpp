@@ -164,41 +164,6 @@ private:
         return file;
     }
 
-#ifdef HAL_PLATFORM_SDL
-    static bool path_exists(const std::string &path)
-    {
-        return access(path.c_str(), F_OK) == 0;
-    }
-
-    static const std::string &sdl_app_root()
-    {
-        static const std::string root = []() {
-            const char *candidates[] = {
-                "APPLaunch",
-                "dist/APPLaunch",
-                "../APPLaunch",
-                "../dist/APPLaunch",
-                "projects/APPLaunch/APPLaunch",
-                "projects/APPLaunch/dist/APPLaunch",
-            };
-            for (const char *candidate : candidates) {
-                if (path_exists(std::string(candidate) + "/share/images")) return std::string(candidate);
-            }
-            return std::string("APPLaunch");
-        }();
-        return root;
-    }
-
-    static std::string sdl_resource_path(const char *dir, const std::string &file)
-    {
-        std::string rel = strip_app_root_prefix(file);
-        const std::string dir_prefix = std::string(dir) + "/";
-        if (starts_with(rel, dir_prefix.c_str())) return sdl_app_root() + "/" + rel;
-        if (!rel.empty() && rel.front() == '/') return rel;
-        return sdl_app_root() + "/" + dir_prefix + rel;
-    }
-#endif
-
     static std::string lvgl_root_path(std::string rel)
     {
         while (!rel.empty() && rel.front() == '/') {
@@ -209,9 +174,6 @@ private:
 
     static std::string resolve_lvgl_image_path(const std::string &file)
     {
-#ifdef HAL_PLATFORM_SDL
-        return sdl_resource_path("share/images", file);
-#else
         if (has_lvgl_drive(file)) return file;
 
         const std::string rel = strip_app_root_prefix(file);
@@ -220,36 +182,22 @@ private:
         if (starts_with(rel, "share/images/")) return lvgl_root_path(rel);
 
         return lvgl_root_path("share/images/" + rel);
-#endif
     }
 
     static std::string resolve_path(const std::string &file)
     {
         if (file.empty()) return "";
 
-#ifdef HAL_PLATFORM_SDL
-        if (file == "applications") return sdl_app_root() + "/applications";
-        if (file == "lock_file") return "/tmp/M5CardputerZero-APPLaunch_fcntl.lock";
-        if (file == "keyboard_device") return "";
-        if (file == "keyboard_map") return "";
-        if (file == "store_sync_cmd") return std::string("python ") + sdl_app_root() + "/bin/store_cache_sync.py";
-#else
         if (file == "applications") return std::string(kAppRoot) + "/applications";
         if (file == "lock_file") return "/tmp/M5CardputerZero-APPLaunch_fcntl.lock";
         if (file == "keyboard_device") return "/dev/input/by-path/platform-3f804000.i2c-event";
         if (file == "keyboard_map") return "/usr/share/keymaps/tca8418_keypad_m5stack_keymap.map";
         if (file == "store_sync_cmd") return std::string("python ") + kAppRoot + "/bin/store_cache_sync.py";
-#endif
 
         const std::string ext = lower_ext(file);
         if (is_image_ext(ext)) return resolve_lvgl_image_path(file);
-#ifdef HAL_PLATFORM_SDL
-        if (is_audio_ext(ext)) return sdl_resource_path("share/audio", file);
-        if (is_font_ext(ext)) return sdl_resource_path("share/font", file);
-#else
         if (is_audio_ext(ext)) return std::string(kAppRoot) + "/share/audio/" + file;
         if (is_font_ext(ext)) return std::string(kAppRoot) + "/share/font/" + file;
-#endif
 
         return file;
     }

@@ -1,4 +1,6 @@
 #include "hal_lvgl_bsp.h"
+#include "lvgl/lvgl.h"
+#include "lvgl/src/drivers/sdl/lv_sdl_window.h"
 
 #include <cerrno>
 #include <cstdint>
@@ -13,6 +15,7 @@
 #include <string>
 #include <sys/stat.h>
 #include <utility>
+#include <SDL.h>
 
 namespace {
 
@@ -67,57 +70,47 @@ private:
         if (mkdir_p(dir) != 0)
             return -1;
 
-        std::time_t now = std::time(nullptr);
-        std::tm *t = std::localtime(&now);
-        if (!t)
-            return -1;
+        lv_display_t *disp = lv_display_get_default();
+        if (!disp)
+            return -2;
+        lv_refr_now(disp);
 
-        char filename[512];
-        std::snprintf(filename, sizeof(filename), "%s/scr_%04d%02d%02d_%02d%02d%02d_sdl.bmp",
-                      dir, t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
-                      t->tm_hour, t->tm_min, t->tm_sec);
+        SDL_Renderer *renderer = static_cast<SDL_Renderer *>(lv_sdl_window_get_renderer(disp));
+        if (!renderer)
+            return -3;
 
-        FILE *fp = std::fopen(filename, "wb");
-        if (!fp)
-            return -1;
+        int w = 0;
+        int h = 0;
+        if (SDL_GetRendererOutputSize(renderer, &w, &h) != 0 || w <= 0 || h <= 0)
+            return -4;
 
-        constexpr int w = 320;
-        constexpr int h = 240;
-        const int row_size = w * 3;
-        const int pad = (4 - (row_size % 4)) % 4;
-        const int bmp_row = row_size + pad;
-        const uint32_t img_size = static_cast<uint32_t>(bmp_row * h);
-        const uint32_t file_size = 54 + img_size;
+        SDL_Surface *surface = SDL_CreateRGBSurfaceWithFormat(0, w, h, 32, SDL_PIXELFORMAT_ARGB8888);
+        if (!surface)
+            return -5;
 
-        fputc('B', fp); fputc('M', fp);
-        write_le32(fp, file_size);
-        write_le16(fp, 0); write_le16(fp, 0);
-        write_le32(fp, 54);
-        write_le32(fp, 40);
-        write_le32(fp, w);
-        write_le32(fp, h);
-        write_le16(fp, 1);
-        write_le16(fp, 24);
-        write_le32(fp, 0);
-        write_le32(fp, img_size);
-        write_le32(fp, 2835); write_le32(fp, 2835);
-        write_le32(fp, 0); write_le32(fp, 0);
-
-        uint8_t padding[3] = {0, 0, 0};
-        for (int y = h - 1; y >= 0; --y) {
-            for (int x = 0; x < w; ++x) {
-                const uint8_t r = static_cast<uint8_t>((x * 255) / (w - 1));
-                const uint8_t g = static_cast<uint8_t>((y * 255) / (h - 1));
-                const uint8_t b = static_cast<uint8_t>(((x / 20 + y / 20) % 2) ? 0x66 : 0x22);
-                uint8_t bgr[3] = {b, g, r};
-                fwrite(bgr, 1, 3, fp);
+        int ret = 0;
+        if (SDL_RenderReadPixels(renderer, nullptr, SDL_PIXELFORMAT_ARGB8888, surface->pixels, surface->pitch) != 0) {
+            ret = -6;
+        } else {
+            std::time_t now = std::time(nullptr);
+            std::tm *t = std::localtime(&now);
+            if (!t) {
+                ret = -7;
+            } else {
+                char filename[512];
+                std::snprintf(filename, sizeof(filename), "%s/scr_%04d%02d%02d_%02d%02d%02d_sdl.bmp",
+                              dir, t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
+                              t->tm_hour, t->tm_min, t->tm_sec);
+                if (SDL_SaveBMP(surface, filename) != 0) {
+                    ret = -8;
+                } else {
+                    std::printf("[SDL SCREENSHOT] Saved screenshot: %s\n", filename);
+                }
             }
-            if (pad > 0)
-                fwrite(padding, 1, static_cast<size_t>(pad), fp);
         }
-        std::fclose(fp);
-        std::printf("[SDL SCREENSHOT] Saved simulated screenshot: %s\n", filename);
-        return 0;
+
+        SDL_FreeSurface(surface);
+        return ret;
     }
 };
 
