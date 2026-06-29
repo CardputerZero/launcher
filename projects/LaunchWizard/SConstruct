@@ -13,9 +13,11 @@ scons -j8
 """
 
 cross_package_enabled = False
-version = "v0.0.4"
 local_path = Path(os.getcwd())
 sdk_path = local_path.parent.parent / "SDK"
+version_file = local_path.parent.parent / "ext_components" / "cp0_lvgl" / "sdk_version.txt"
+
+version = version_file.read_text(encoding="utf-8")
 static_lib_path = sdk_path / "github_source" / f"static_lib_{version}"
 
 if os.environ.get("CardputerZero", "") == "y":
