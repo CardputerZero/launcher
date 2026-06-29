@@ -17,6 +17,7 @@ void cp0_lvgl_init(void)
     init_screenshot();
     init_lora();
     init_wifi();
+    init_bluetooth();
     init_settings();
     init_bq27220();
     init_imu();

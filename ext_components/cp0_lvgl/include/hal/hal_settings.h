@@ -60,8 +60,10 @@ int  hal_wifi_disconnect(void);
 typedef struct {
     char name[BT_NAME_MAX];
     char address[24];
-    int  rssi;
-    int  connected;
+	int  rssi;
+	int  connected;
+	int  paired;
+	int  trusted;
 } hal_bt_device_t;
 
 hal_bt_status_t hal_bt_get_status(void);

@@ -49,6 +49,8 @@ typedef struct {
     char address[24];
     int rssi;
     int connected;
+    int paired;
+    int trusted;
 } cp0_bt_device_t;
 
 typedef struct {
@@ -153,9 +155,6 @@ cp0_battery_info_t cp0_battery_read(void);
 int cp0_backlight_read(void);
 int cp0_backlight_max(void);
 int cp0_backlight_write(int val);
-cp0_bt_status_t cp0_bt_get_status(void);
-int cp0_bt_set_power(int on);
-int cp0_bt_scan(cp0_bt_device_t *out, int max_devices);
 void cp0_time_str(char *buf, int buf_size);
 
 #ifdef __cplusplus

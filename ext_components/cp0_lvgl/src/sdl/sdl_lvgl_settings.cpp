@@ -43,7 +43,19 @@ public:
         } else if (cmd == "BacklightWrite") {
             int val = backlight_write(std::atoi(nth_arg(arg, 1).c_str()));
             report(callback, val < 0 ? -1 : 0, std::to_string(val));
-        } else if (cmd == "BtStatus") {
+        } else if (cmd == "TimeStr") {
+            char buf[32] = {};
+            time_str(buf, sizeof(buf));
+            report(callback, 0, buf);
+        } else {
+            report(callback, -1, "unknown settings api command");
+        }
+    }
+
+    void bt_api_call(arg_t arg, callback_t callback)
+    {
+        const std::string cmd = arg.empty() ? "" : arg.front();
+        if (cmd == "BtStatus") {
             report(callback, 0, encode_bt_status(bt_get_status()));
         } else if (cmd == "BtPower") {
             report(callback, bt_set_power(std::atoi(nth_arg(arg, 1).c_str())), "");
@@ -52,12 +64,25 @@ public:
             std::vector<cp0_bt_device_t> devices(std::max(0, max_count));
             int count = bt_scan(devices.empty() ? nullptr : devices.data(), static_cast<int>(devices.size()));
             report(callback, count, encode_bt_scan(devices.data(), count));
-        } else if (cmd == "TimeStr") {
-            char buf[32] = {};
-            time_str(buf, sizeof(buf));
-            report(callback, 0, buf);
+        } else if (cmd == "BtDiscoveryStart") {
+            report(callback, 0, "");
+        } else if (cmd == "BtDiscoveryStop") {
+            report(callback, 0, "");
+        } else if (cmd == "BtList") {
+            int max_count = arg.size() >= 2 ? std::atoi(nth_arg(arg, 1).c_str()) : CP0_BT_DEVICE_MAX;
+            std::vector<cp0_bt_device_t> devices(std::max(0, max_count));
+            int count = bt_scan(devices.empty() ? nullptr : devices.data(), static_cast<int>(devices.size()));
+            report(callback, count, encode_bt_scan(devices.data(), count));
+        } else if (cmd == "BtConnectedList") {
+            int max_count = arg.size() >= 2 ? std::atoi(nth_arg(arg, 1).c_str()) : CP0_BT_DEVICE_MAX;
+            std::vector<cp0_bt_device_t> devices(std::max(0, max_count));
+            int count = bt_scan(devices.empty() ? nullptr : devices.data(), static_cast<int>(devices.size()));
+            count = filter_connected(devices.data(), count);
+            report(callback, count, encode_bt_scan(devices.data(), count));
+        } else if (cmd == "BtPair" || cmd == "BtConnect" || cmd == "BtDisconnect" || cmd == "BtRemove") {
+            report(callback, -1, "");
         } else {
-            report(callback, -1, "unknown settings api command");
+            report(callback, -1, "unknown bt api command");
         }
     }
 
@@ -71,32 +96,19 @@ public:
         return result;
     }
 
-    static cp0_bt_status_t api_bt_status()
+    static int filter_connected(cp0_bt_device_t *devices, int count)
     {
-        cp0_bt_status_t st{};
-        cp0_signal_settings_api({"BtStatus"}, [&](int code, std::string data) {
-            if (code == 0)
-                decode_bt_status(data, st);
-        });
-        return st;
-    }
-
-    static int api_bt_power(int on)
-    {
-        int result = -1;
-        cp0_signal_settings_api({"BtPower", std::to_string(on)}, [&](int code, std::string) {
-            result = code;
-        });
-        return result;
-    }
-
-    static int api_bt_scan(cp0_bt_device_t *out, int max_devices)
-    {
-        int count = 0;
-        cp0_signal_settings_api({"BtScan", std::to_string(max_devices)}, [&](int code, std::string data) {
-            count = out && max_devices > 0 ? decode_bt_scan(data, out, max_devices) : code;
-        });
-        return count;
+        if (!devices || count <= 0)
+            return 0;
+        int out = 0;
+        for (int i = 0; i < count; ++i) {
+            if (!devices[i].connected)
+                continue;
+            if (out != i)
+                devices[out] = devices[i];
+            ++out;
+        }
+        return out;
     }
 
     static void api_time_str(char *buf, int buf_size)
@@ -151,47 +163,18 @@ private:
         return oss.str();
     }
 
-    static bool decode_bt_status(const std::string &data, cp0_bt_status_t &st)
-    {
-        auto cols = split_char(data, '\t');
-        if (cols.size() < 2)
-            return false;
-        st = {};
-        st.powered = std::atoi(cols[0].c_str());
-        copy_string(st.address, sizeof(st.address), cols[1]);
-        return true;
-    }
-
     static std::string encode_bt_scan(const cp0_bt_device_t *devices, int count)
     {
         std::ostringstream oss;
         for (int i = 0; devices && i < count; ++i) {
-            oss << devices[i].address << '\t' << devices[i].rssi << '\t' << devices[i].connected << '\t' << devices[i].name << '\n';
+            oss << devices[i].address << '\t'
+                << devices[i].rssi << '\t'
+                << devices[i].connected << '\t'
+                << devices[i].paired << '\t'
+                << devices[i].trusted << '\t'
+                << devices[i].name << '\n';
         }
         return oss.str();
-    }
-
-    static int decode_bt_scan(const std::string &data, cp0_bt_device_t *out, int max_devices)
-    {
-        if (!out || max_devices <= 0)
-            return 0;
-        int count = 0;
-        std::istringstream lines(data);
-        std::string line;
-        while (count < max_devices && std::getline(lines, line)) {
-            if (!line.empty() && line.back() == '\r')
-                line.pop_back();
-            auto cols = split_char(line, '\t');
-            if (cols.size() < 4 || cols[0].empty())
-                continue;
-            cp0_bt_device_t dev{};
-            copy_string(dev.address, sizeof(dev.address), cols[0]);
-            dev.rssi = std::atoi(cols[1].c_str());
-            dev.connected = std::atoi(cols[2].c_str());
-            copy_string(dev.name, sizeof(dev.name), cols[3]);
-            out[count++] = dev;
-        }
-        return count;
     }
 
     static void fallback_time_str(char *buf, int buf_size)
@@ -236,6 +219,8 @@ private:
             copy_string(out[i].address, sizeof(out[i].address), hal_devices[static_cast<size_t>(i)].address);
             out[i].rssi = hal_devices[static_cast<size_t>(i)].rssi;
             out[i].connected = hal_devices[static_cast<size_t>(i)].connected;
+            out[i].paired = hal_devices[static_cast<size_t>(i)].paired;
+            out[i].trusted = hal_devices[static_cast<size_t>(i)].trusted;
         }
         return count;
     }
@@ -367,6 +352,9 @@ extern "C" void init_settings(void)
     cp0_signal_settings_api.append([settings](std::list<std::string> arg, std::function<void(int, std::string)> callback) {
         settings->api_call(std::move(arg), std::move(callback));
     });
+    cp0_signal_bt_api.append([settings](std::list<std::string> arg, std::function<void(int, std::string)> callback) {
+        settings->bt_api_call(std::move(arg), std::move(callback));
+    });
 }
 
 extern "C" int cp0_backlight_read(void)
@@ -382,21 +370,6 @@ extern "C" int cp0_backlight_max(void)
 extern "C" int cp0_backlight_write(int val)
 {
     return SettingsSystem::api_int({"BacklightWrite", std::to_string(val)});
-}
-
-extern "C" cp0_bt_status_t cp0_bt_get_status(void)
-{
-    return SettingsSystem::api_bt_status();
-}
-
-extern "C" int cp0_bt_set_power(int on)
-{
-    return SettingsSystem::api_bt_power(on);
-}
-
-extern "C" int cp0_bt_scan(cp0_bt_device_t *out, int max_devices)
-{
-    return SettingsSystem::api_bt_scan(out, max_devices);
 }
 
 extern "C" void cp0_time_str(char *buf, int buf_size)

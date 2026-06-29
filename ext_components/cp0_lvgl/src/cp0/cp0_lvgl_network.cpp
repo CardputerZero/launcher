@@ -17,13 +17,9 @@
 #include <utility>
 #include <vector>
 
-#ifdef HAL_PLATFORM_SDL
-#include "hal/hal_network.h"
-#else
 #include <arpa/inet.h>
 #include <ifaddrs.h>
 #include <net/if.h>
-#endif
 
 int cp0_network_list(cp0_netif_info_t *entries, int max_entries, int *out_count)
 {
@@ -31,25 +27,6 @@ int cp0_network_list(cp0_netif_info_t *entries, int max_entries, int *out_count)
         return -1;
     *out_count = 0;
 
-#ifdef HAL_PLATFORM_SDL
-    if (!entries || max_entries <= 0)
-        return hal_network_list(nullptr, 0, out_count);
-
-    std::vector<hal_netif_info_t> hal_entries(static_cast<size_t>(max_entries));
-    int ret = hal_network_list(hal_entries.data(), max_entries, out_count);
-    int count = *out_count;
-    if (count > max_entries)
-        count = max_entries;
-
-    for (int i = 0; i < count; ++i) {
-        cp0_copy_string(entries[i].iface, sizeof(entries[i].iface), hal_entries[i].iface);
-        cp0_copy_string(entries[i].ipv4, sizeof(entries[i].ipv4), hal_entries[i].ipv4);
-        cp0_copy_string(entries[i].netmask, sizeof(entries[i].netmask), hal_entries[i].netmask);
-        entries[i].is_up = hal_entries[i].is_up;
-    }
-    *out_count = count;
-    return ret;
-#else
     if (!entries || max_entries <= 0)
         return 0;
 
@@ -80,7 +57,6 @@ int cp0_network_list(cp0_netif_info_t *entries, int max_entries, int *out_count)
     }
     freeifaddrs(ifap);
     return 0;
-#endif
 }
 
 class WifiSystem
@@ -121,6 +97,11 @@ public:
             report(callback, profile_exists(ssid.c_str()), "");
         } else if (cmd == "ProfileDisconnectActive") {
             report(callback, profile_disconnect_active(), "");
+        } else if (cmd == "RadioEnabled") {
+            report(callback, radio_enabled(), "");
+        } else if (cmd == "RadioSetEnabled") {
+            const std::string state = nth_arg(arg, 1);
+            report(callback, radio_set_enabled(state == "on" || state == "1" || state == "true"), "");
         } else {
             report(callback, -1, "unknown wifi api command");
         }
@@ -244,6 +225,26 @@ public:
             return -1;
         const char *argv[] = {"nmcli", "con", "down", "id", active.c_str(), nullptr};
         return cp0_process_run_argv(argv, 0);
+    }
+
+    int radio_enabled()
+    {
+        char output[64] = {};
+        const char *argv[] = {"nmcli", "radio", "wifi", nullptr};
+        if (cp0_process_capture_argv(argv, output, sizeof(output)) != 0)
+            return 0;
+        std::string state(output);
+        while (!state.empty() && (state.back() == '\n' || state.back() == '\r' || state.back() == ' ' || state.back() == '\t'))
+            state.pop_back();
+        return state == "enabled" ? 1 : 0;
+    }
+
+    int radio_set_enabled(bool enabled)
+    {
+        const char *argv[] = {"nmcli", "radio", "wifi", enabled ? "on" : "off", nullptr};
+        int ret = cp0_process_run_argv(argv, 0);
+        update_status_cache();
+        return ret;
     }
 
 private:

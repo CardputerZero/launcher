@@ -22,6 +22,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
+#include <cctype>
 #include <ctime>
 #include <fcntl.h>
 #ifndef _WIN32
@@ -30,6 +31,9 @@
 #endif
 #include <dirent.h>
 #include <sstream>
+#include <thread>
+#include <list>
+#include <utility>
 #include "cp0_lvgl_app.h"
 #include "hal_lvgl_bsp.h"
 #include "../app_registry.h"
@@ -44,7 +48,7 @@
 
 class UISetupPage : public AppPage
 {
-    enum class ViewState { MAIN, SUB, VALUE_SELECT, WIFI_LIST, WIFI_PW,
+    enum class ViewState { MAIN, SUB, VALUE_SELECT, WIFI_LIST, WIFI_PW, BT_LIST,
                            SOUNDCARD_CARDS, SOUNDCARD_CONTROLS, SOUNDCARD_DETAIL,
                            USB_GUIDE };
 
@@ -62,6 +66,14 @@ class UISetupPage : public AppPage
         std::function<void(uint32_t key)> custom_key_handler;
     };
 
+    struct BtListRow {
+        int device_index;
+        const char *title;
+        bool is_header;
+    };
+
+    enum class BtListMode { Managed, Scan };
+
 public:
     UISetupPage() : AppPage()
     {
@@ -71,7 +83,11 @@ public:
         create_ui();
         event_handler_init();
     }
-    ~UISetupPage() { stop_power_timer(); }
+    ~UISetupPage()
+    {
+        stop_power_timer();
+        stop_bt_scan_timer();
+    }
 
 private:
     std::vector<MenuItem> menu_items_;
@@ -100,6 +116,17 @@ private:
     lv_obj_t *pw_input_lbl_ = nullptr;
     lv_obj_t *pw_hint_lbl_ = nullptr;
     struct key_item *cur_elm_ = nullptr;
+
+    // Bluetooth state
+    cp0_bt_device_t bt_devices_[CP0_BT_DEVICE_MAX];
+    int bt_device_count_ = 0;
+    int bt_list_sel_ = 0;
+    std::vector<BtListRow> bt_rows_;
+    BtListMode bt_list_mode_ = BtListMode::Managed;
+    lv_timer_t *bt_scan_timer_ = nullptr;
+    bool bt_discovery_active_ = false;
+    bool bt_named_only_ = true;
+    bool bt_action_busy_ = false;
 
     // Brightness
     int bright_val_ = 75;
@@ -228,8 +255,10 @@ private:
             MenuItem m;
             m.label = "WiFi";
             m.sub_items = {
+                {"Power",   true,  false, [this]() { wifi_toggle_enable(); }},
                 {"Scan",    false, false, [this]() { enter_wifi_scan(); }},
             };
+            m.on_enter = [this]() { refresh_wifi_radio(); };
             menu_items_.push_back(m);
         }
         // --- Speaker ---
@@ -340,9 +369,12 @@ private:
         {
             MenuItem m;
             m.label = "Bluetooth";
+            bt_named_only_ = config_get_int("bt_named_only", 1) != 0;
             m.sub_items = {
                 {"Power",  true, false, [this]() { bt_toggle_power(); }},
-                {"Scan",   false, false, [this]() { bt_do_scan(); }},
+                {"Named Only", true, bt_named_only_, [this]() { bt_toggle_named_only(); }},
+                {"Connected", false, false, [this]() { enter_bt_devices(); }},
+                {"Scan",   false, false, [this]() { enter_bt_scan(); }},
             };
             m.on_enter = [this]() { refresh_bt_status(); };
             menu_items_.push_back(m);
@@ -603,6 +635,344 @@ private:
             break;
         case KEY_ESC:
         case KEY_LEFT:
+            view_state_ = ViewState::SUB;
+            build_sub_view();
+            break;
+        default:
+            break;
+        }
+    }
+
+    void enter_bt_devices()
+    {
+        stop_bt_scan_timer();
+        bt_list_mode_ = BtListMode::Managed;
+        view_state_ = ViewState::BT_LIST;
+        bt_list_sel_ = 0;
+        bt_refresh_devices();
+        build_bt_list();
+    }
+
+    void enter_bt_scan()
+    {
+        bt_list_mode_ = BtListMode::Scan;
+        view_state_ = ViewState::BT_LIST;
+        bt_list_sel_ = 0;
+        start_bt_scan_timer();
+    }
+
+    void build_bt_list()
+    {
+        lv_obj_t *cont = ui_obj_["list_cont"];
+        lv_obj_clean(cont);
+        rebuild_bt_rows();
+
+        cp0_bt_status_t st = bt_get_status();
+        char title_buf[96];
+        snprintf(title_buf, sizeof(title_buf), "%s: %s  %.24s",
+                 bt_list_mode_ == BtListMode::Scan ? "Scan" : "Connected",
+                 st.powered ? "On" : "Off", st.address[0] ? st.address : "--");
+        lv_obj_t *title = lv_label_create(cont);
+        lv_label_set_text(title, title_buf);
+        lv_obj_set_pos(title, 8, 2);
+        lv_obj_set_style_text_color(title, lv_color_hex(0x58A6FF), LV_PART_MAIN);
+        lv_obj_set_style_text_font(title, launcher_fonts().get("Montserrat-Bold.ttf", 12, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN);
+        apply_overflow_handling(title, 8, WIFI_TITLE_BOX_W, true);
+
+        if (bt_rows_.empty()) {
+            lv_obj_t *empty = lv_label_create(cont);
+            if (!st.powered)
+                lv_label_set_text(empty, "Bluetooth is off. Enable Power first.");
+            else if (bt_list_mode_ == BtListMode::Scan)
+                lv_label_set_text(empty, "Scanning...");
+            else
+                lv_label_set_text(empty, "No connected devices.");
+            lv_obj_set_pos(empty, 8, 50);
+            lv_obj_set_width(empty, 300);
+            lv_label_set_long_mode(empty, LV_LABEL_LONG_WRAP);
+            lv_obj_set_style_text_color(empty, lv_color_hex(0x666666), LV_PART_MAIN);
+            lv_obj_set_style_text_font(empty, &lv_font_montserrat_12, LV_PART_MAIN);
+        }
+
+        constexpr int list_y = 22;
+        constexpr int row_step = 20;
+        constexpr int hint_y = LIST_H - 14;
+        constexpr int list_bottom_gap = 8;
+        int visible = (hint_y - list_bottom_gap - list_y) / row_step;
+        if (visible < 1) visible = 1;
+        int offset = bt_list_sel_ - visible / 2;
+        if (offset < 0) offset = 0;
+        if (offset > (int)bt_rows_.size() - visible) offset = (int)bt_rows_.size() - visible;
+        if (offset < 0) offset = 0;
+
+        for (int vi = 0; vi < visible && (vi + offset) < (int)bt_rows_.size(); ++vi) {
+            int row_index = vi + offset;
+            const BtListRow &row = bt_rows_[row_index];
+            int y = list_y + vi * row_step;
+
+            if (row.is_header) {
+                lv_obj_t *header = lv_label_create(cont);
+                lv_label_set_text(header, row.title);
+                lv_obj_set_pos(header, 8, y + 3);
+                lv_obj_set_style_text_color(header, lv_color_hex(0x888888), LV_PART_MAIN);
+                lv_obj_set_style_text_font(header, launcher_fonts().get("Montserrat-Bold.ttf", 10, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN);
+                continue;
+            }
+
+            bool sel = (row_index == bt_list_sel_);
+            cp0_bt_device_t *dev = &bt_devices_[row.device_index];
+
+            if (sel) {
+                lv_obj_t *bg = lv_obj_create(cont);
+                lv_obj_set_size(bg, SCREEN_W - 8, 20);
+                lv_obj_set_pos(bg, 4, y);
+                lv_obj_set_style_radius(bg, 2, LV_PART_MAIN);
+                lv_obj_set_style_bg_color(bg, lv_color_hex(0x1F3A5F), LV_PART_MAIN);
+                lv_obj_set_style_bg_opa(bg, 255, LV_PART_MAIN);
+                lv_obj_set_style_border_width(bg, 0, LV_PART_MAIN);
+                lv_obj_clear_flag(bg, LV_OBJ_FLAG_SCROLLABLE);
+            }
+
+            uint32_t tc = dev->connected ? 0x58A6FF : (sel ? 0xFFFFFF : 0xCCCCCC);
+            lv_obj_t *name = lv_label_create(cont);
+            lv_label_set_text(name, dev->name[0] ? dev->name : dev->address);
+            lv_obj_set_pos(name, 8, y + 1);
+            lv_obj_set_width(name, 150);
+            lv_label_set_long_mode(name, LV_LABEL_LONG_CLIP);
+            lv_obj_set_style_text_color(name, lv_color_hex(tc), LV_PART_MAIN);
+            lv_obj_set_style_text_font(name, &lv_font_montserrat_12, LV_PART_MAIN);
+
+            lv_obj_t *addr = lv_label_create(cont);
+            lv_label_set_text(addr, dev->address);
+            lv_obj_set_pos(addr, 8, y + 12);
+            lv_obj_set_width(addr, 190);
+            lv_label_set_long_mode(addr, LV_LABEL_LONG_CLIP);
+            lv_obj_set_style_text_color(addr, lv_color_hex(sel ? 0xBBBBBB : 0x777777), LV_PART_MAIN);
+            lv_obj_set_style_text_font(addr, &lv_font_montserrat_10, LV_PART_MAIN);
+
+            char state_buf[32];
+            if (dev->connected)
+                snprintf(state_buf, sizeof(state_buf), "Connected");
+            else if (dev->paired)
+                snprintf(state_buf, sizeof(state_buf), "Paired");
+            else
+                snprintf(state_buf, sizeof(state_buf), "%d", dev->rssi);
+            lv_obj_t *state = lv_label_create(cont);
+            lv_label_set_text(state, state_buf);
+            lv_obj_set_pos(state, 226, y + 4);
+            lv_obj_set_width(state, 88);
+            lv_label_set_long_mode(state, LV_LABEL_LONG_CLIP);
+            lv_obj_set_style_text_align(state, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
+            lv_obj_set_style_text_color(state, lv_color_hex(tc), LV_PART_MAIN);
+            lv_obj_set_style_text_font(state, &lv_font_montserrat_10, LV_PART_MAIN);
+        }
+
+        lv_obj_t *hint = lv_label_create(cont);
+        lv_label_set_text(hint, bt_list_mode_ == BtListMode::Scan
+                                     ? "OK:act R:restart ESC:back"
+                                     : "OK:disconnect D:remove ESC:back");
+        lv_obj_set_pos(hint, 8, hint_y);
+        lv_obj_set_width(hint, 304);
+        lv_label_set_long_mode(hint, LV_LABEL_LONG_CLIP);
+        lv_obj_set_style_text_color(hint, lv_color_hex(0x555555), LV_PART_MAIN);
+        lv_obj_set_style_text_font(hint, &lv_font_montserrat_10, LV_PART_MAIN);
+    }
+
+    void rebuild_bt_rows()
+    {
+        bt_rows_.clear();
+        if (bt_list_mode_ == BtListMode::Managed) {
+            bool has_connected = false;
+            for (int i = 0; i < bt_device_count_; ++i) {
+                if (bt_should_hide_device(bt_devices_[i]))
+                    continue;
+                if (bt_devices_[i].connected) {
+                    if (!has_connected) {
+                        bt_rows_.push_back({-1, "Connected Devices", true});
+                        has_connected = true;
+                    }
+                    bt_rows_.push_back({i, nullptr, false});
+                }
+            }
+        } else {
+            bool has_devices = false;
+            for (int i = 0; i < bt_device_count_; ++i) {
+                if (bt_should_hide_device(bt_devices_[i]))
+                    continue;
+                if (!has_devices) {
+                    bt_rows_.push_back({-1, "Discovered Devices", true});
+                    has_devices = true;
+                }
+                bt_rows_.push_back({i, nullptr, false});
+            }
+        }
+        if (bt_list_sel_ >= (int)bt_rows_.size())
+            bt_list_sel_ = bt_rows_.empty() ? 0 : (int)bt_rows_.size() - 1;
+        if (!bt_rows_.empty() && bt_rows_[bt_list_sel_].is_header)
+            bt_select_next_device(1);
+    }
+
+    bool bt_should_hide_device(const cp0_bt_device_t &dev) const
+    {
+        if (!bt_named_only_)
+            return false;
+        if (!dev.name[0])
+            return true;
+        std::string name_hex = bt_normalized_mac_text(dev.name);
+        std::string addr_hex = bt_normalized_mac_text(dev.address);
+        return !name_hex.empty() && (name_hex == addr_hex || name_hex.size() == 12);
+    }
+
+    static std::string bt_normalized_mac_text(const char *text)
+    {
+        std::string out;
+        if (!text)
+            return out;
+        for (const unsigned char *p = reinterpret_cast<const unsigned char *>(text); *p; ++p) {
+            if (std::isxdigit(*p))
+                out.push_back((char)std::tolower(*p));
+            else if (*p != ':' && *p != '-' && *p != '_' && *p != ' ')
+                return std::string();
+        }
+        return out;
+    }
+
+    int bt_selected_device_index() const
+    {
+        if (bt_list_sel_ < 0 || bt_list_sel_ >= (int)bt_rows_.size())
+            return -1;
+        return bt_rows_[bt_list_sel_].is_header ? -1 : bt_rows_[bt_list_sel_].device_index;
+    }
+
+    void bt_select_next_device(int direction)
+    {
+        if (bt_rows_.empty())
+            return;
+        int idx = bt_list_sel_;
+        for (int steps = 0; steps < (int)bt_rows_.size(); ++steps) {
+            idx += direction;
+            if (idx < 0 || idx >= (int)bt_rows_.size())
+                return;
+            if (!bt_rows_[idx].is_header) {
+                bt_list_sel_ = idx;
+                return;
+            }
+        }
+    }
+
+    void bt_show_action(const char *msg, uint32_t color = 0x58A6FF)
+    {
+        lv_obj_t *cont = ui_obj_["list_cont"];
+        lv_obj_clean(cont);
+        lv_obj_t *lbl = lv_label_create(cont);
+        lv_label_set_text(lbl, msg);
+        lv_obj_set_pos(lbl, 8, 60);
+        lv_obj_set_style_text_color(lbl, lv_color_hex(color), LV_PART_MAIN);
+        lv_obj_set_style_text_font(lbl, &lv_font_montserrat_14, LV_PART_MAIN);
+        lv_refr_now(NULL);
+    }
+
+    void bt_activate_selected()
+    {
+        if (bt_action_busy_)
+            return;
+        int dev_index = bt_selected_device_index();
+        if (dev_index < 0)
+            return;
+        cp0_bt_device_t dev = bt_devices_[dev_index];
+        bool from_scan = bt_list_mode_ == BtListMode::Scan;
+        if (from_scan)
+            stop_bt_scan_timer();
+        bt_action_busy_ = true;
+        if (dev.connected)
+            bt_show_action("Disconnecting...");
+        else if (dev.paired)
+            bt_show_action("Connecting...");
+        else
+            bt_show_action("Pairing...");
+
+        struct BtActionResult {
+            UISetupPage *self;
+            int ret;
+            bool from_scan;
+        };
+
+        std::thread([this, dev, from_scan]() {
+            int ret = -1;
+            if (dev.connected) {
+                ret = bt_device_command("BtDisconnect", dev.address);
+            } else if (dev.paired) {
+                ret = bt_device_command("BtConnect", dev.address);
+            } else {
+                ret = bt_device_command("BtPair", dev.address);
+                if (ret == 0)
+                    ret = bt_device_command("BtConnect", dev.address);
+            }
+
+            BtActionResult *result = new BtActionResult{this, ret, from_scan};
+            lv_async_call([](void *user) {
+                BtActionResult *result = static_cast<BtActionResult *>(user);
+                UISetupPage *self = result->self;
+                if (self) {
+                    self->bt_action_busy_ = false;
+                    if (result->ret != 0) {
+                        self->bt_show_action("Bluetooth action failed", 0xFF4444);
+                    } else if (result->from_scan) {
+                        self->bt_list_mode_ = BtListMode::Managed;
+                    }
+                    self->bt_refresh_devices();
+                    if (self->view_state_ == ViewState::BT_LIST)
+                        self->build_bt_list();
+                }
+                delete result;
+            }, result);
+        }).detach();
+    }
+
+    void bt_remove_selected()
+    {
+        int dev_index = bt_selected_device_index();
+        if (dev_index < 0)
+            return;
+        bt_show_action("Removing...");
+        int ret = bt_device_command("BtRemove", bt_devices_[dev_index].address);
+        if (ret != 0) {
+            bt_show_action("Remove failed", 0xFF4444);
+            usleep(1200000);
+        }
+        bt_refresh_devices();
+        build_bt_list();
+    }
+
+    void handle_bt_list_key(uint32_t key)
+    {
+        switch (key) {
+        case KEY_UP:
+            bt_select_next_device(-1);
+            build_bt_list();
+            break;
+        case KEY_DOWN:
+            bt_select_next_device(1);
+            build_bt_list();
+            break;
+        case KEY_ENTER:
+            bt_activate_selected();
+            break;
+        case KEY_D:
+            if (bt_list_mode_ == BtListMode::Managed)
+                bt_remove_selected();
+            break;
+        case KEY_R:
+            if (bt_list_mode_ == BtListMode::Scan) {
+                start_bt_scan_timer();
+            } else {
+                bt_refresh_devices();
+                build_bt_list();
+            }
+            break;
+        case KEY_ESC:
+        case KEY_LEFT:
+            stop_bt_scan_timer();
             view_state_ = ViewState::SUB;
             build_sub_view();
             break;
@@ -952,9 +1322,107 @@ private:
     }
 
     // ==================== Bluetooth ====================
+    static void bt_copy_string(char *dst, size_t dst_size, const std::string &src)
+    {
+        if (!dst || dst_size == 0)
+            return;
+        std::strncpy(dst, src.c_str(), dst_size - 1);
+        dst[dst_size - 1] = '\0';
+    }
+
+    static std::vector<std::string> bt_split_char(const std::string &line, char delimiter)
+    {
+        std::vector<std::string> cols;
+        std::string item;
+        std::istringstream iss(line);
+        while (std::getline(iss, item, delimiter))
+            cols.push_back(item);
+        return cols;
+    }
+
+    static bool bt_decode_status(const std::string &data, cp0_bt_status_t &st)
+    {
+        auto cols = bt_split_char(data, '\t');
+        if (cols.size() < 2)
+            return false;
+        st = {};
+        st.powered = std::atoi(cols[0].c_str());
+        bt_copy_string(st.address, sizeof(st.address), cols[1]);
+        return true;
+    }
+
+    static int bt_decode_devices(const std::string &data, cp0_bt_device_t *out, int max_devices)
+    {
+        if (!out || max_devices <= 0)
+            return 0;
+        int count = 0;
+        std::istringstream lines(data);
+        std::string line;
+        while (count < max_devices && std::getline(lines, line)) {
+            if (!line.empty() && line.back() == '\r')
+                line.pop_back();
+            auto cols = bt_split_char(line, '\t');
+            if (cols.size() < 4 || cols[0].empty())
+                continue;
+            cp0_bt_device_t dev{};
+            bt_copy_string(dev.address, sizeof(dev.address), cols[0]);
+            dev.rssi = std::atoi(cols[1].c_str());
+            dev.connected = std::atoi(cols[2].c_str());
+            if (cols.size() >= 6) {
+                dev.paired = std::atoi(cols[3].c_str());
+                dev.trusted = std::atoi(cols[4].c_str());
+                bt_copy_string(dev.name, sizeof(dev.name), cols[5]);
+            } else {
+                bt_copy_string(dev.name, sizeof(dev.name), cols[3]);
+            }
+            out[count++] = dev;
+        }
+        return count;
+    }
+
+    static int bt_api_int(std::list<std::string> args, int default_value = -1)
+    {
+        int result = default_value;
+        cp0_signal_bt_api(std::move(args), [&](int code, std::string) {
+            result = code;
+        });
+        return result;
+    }
+
+    static cp0_bt_status_t bt_get_status()
+    {
+        cp0_bt_status_t st{};
+        cp0_signal_bt_api({"BtStatus"}, [&](int code, std::string data) {
+            if (code == 0)
+                bt_decode_status(data, st);
+        });
+        return st;
+    }
+
+    static int bt_set_power(int on)
+    {
+        return bt_api_int({"BtPower", std::to_string(on)});
+    }
+
+    static int bt_device_command(const char *cmd, const char *address)
+    {
+        return bt_api_int({cmd ? std::string(cmd) : std::string(),
+                           address ? std::string(address) : std::string()});
+    }
+
+    static int bt_device_list(const char *cmd, cp0_bt_device_t *out, int max_devices)
+    {
+        int count = 0;
+        cp0_signal_bt_api({cmd ? std::string(cmd) : std::string(), std::to_string(max_devices)},
+                          [&](int code, std::string data) {
+                              count = out && max_devices > 0 ? bt_decode_devices(data, out, max_devices) : code;
+                          });
+        return count;
+    }
+
     void refresh_bt_status()
     {
-        cp0_bt_status_t st = cp0_bt_get_status();
+        cp0_bt_status_t st = bt_get_status();
         // Find Bluetooth menu and update Power toggle state
         for (auto &m : menu_items_) {
             if (m.label != "Bluetooth") continue;
@@ -968,15 +1436,65 @@ private:
         for (auto &m : menu_items_) {
             if (m.label != "Bluetooth") continue;
             bool on = m.sub_items[0].toggle_state;
-            cp0_bt_set_power(on ? 1 : 0);
+            if (!on)
+                stop_bt_scan_timer();
+            bt_set_power(on ? 1 : 0);
             break;
         }
     }
 
-    void bt_do_scan()
+    void bt_toggle_named_only()
     {
-        cp0_bt_device_t devices[CP0_BT_DEVICE_MAX];
-        cp0_bt_scan(devices, CP0_BT_DEVICE_MAX);
+        for (auto &m : menu_items_) {
+            if (m.label != "Bluetooth") continue;
+            bt_named_only_ = m.sub_items[1].toggle_state;
+            config_set_int("bt_named_only", bt_named_only_ ? 1 : 0);
+            config_save();
+            break;
+        }
+        if (view_state_ == ViewState::BT_LIST)
+            build_bt_list();
+    }
+
+    void start_bt_scan_timer()
+    {
+        stop_bt_scan_timer();
+        bt_discovery_active_ = bt_api_int({"BtDiscoveryStart"}, 0) == 0;
+        bt_refresh_devices();
+        build_bt_list();
+        if (!bt_discovery_active_)
+            return;
+        bt_scan_timer_ = lv_timer_create([](lv_timer_t *t) {
+            UISetupPage *self = (UISetupPage *)lv_timer_get_user_data(t);
+            if (!self || self->view_state_ != ViewState::BT_LIST || self->bt_list_mode_ != BtListMode::Scan)
+                return;
+            self->bt_refresh_devices();
+            self->build_bt_list();
+        }, 1000, this);
+    }
+
+    void stop_bt_scan_timer()
+    {
+        if (bt_scan_timer_) {
+            lv_timer_delete(bt_scan_timer_);
+            bt_scan_timer_ = nullptr;
+        }
+        if (bt_discovery_active_) {
+            bt_api_int({"BtDiscoveryStop"}, 0);
+            bt_discovery_active_ = false;
+        }
+    }
+
+    void bt_refresh_devices()
+    {
+        if (bt_list_mode_ == BtListMode::Managed)
+            bt_device_count_ = bt_device_list("BtConnectedList", bt_devices_, CP0_BT_DEVICE_MAX);
+        else
+            bt_device_count_ = bt_device_list("BtList", bt_devices_, CP0_BT_DEVICE_MAX);
+        if (bt_device_count_ < 0)
+            bt_device_count_ = 0;
+        if (bt_device_count_ == 0)
+            bt_list_sel_ = 0;
     }
 
     // ==================== Ethernet ====================
@@ -1128,11 +1646,7 @@ private:
     // ==================== Bluetooth scan ====================
     void bt_do_scan_impl()
     {
-        // TODO: implement BT scan list page similar to WiFi
-        // For now just trigger scan
-        cp0_bt_device_t devices[CP0_BT_DEVICE_MAX];
-        int count = cp0_bt_scan(devices, CP0_BT_DEVICE_MAX);
-        (void)count;
+        enter_bt_scan();
     }
 
     void factory_reset()
@@ -1161,10 +1675,25 @@ private:
         wifi_ap_count_ = launcher_wifi::scan(wifi_aps_, CP0_WIFI_AP_MAX);
     }
 
+    void refresh_wifi_radio()
+    {
+        for (auto &m : menu_items_) {
+            if (m.label != "WiFi") continue;
+            m.sub_items[0].toggle_state = launcher_wifi::radio_enabled() != 0;
+            break;
+        }
+    }
+
     void wifi_toggle_enable()
     {
-        // Toggle is handled by the generic sub_key handler (toggle_state flip)
-        // TODO: actual wifi enable/disable HAL call
+        for (auto &m : menu_items_) {
+            if (m.label != "WiFi") continue;
+            // Same NetworkManager radio control used by nmtui: nmcli radio wifi on/off.
+            bool on = m.sub_items[0].toggle_state;
+            launcher_wifi::radio_set_enabled(on);
+            m.sub_items[0].toggle_state = launcher_wifi::radio_enabled() != 0;
+            break;
+        }
     }
 
     void handle_wifi_custom_key(uint32_t key)
@@ -1901,6 +2430,10 @@ private:
         lv_obj_t *hint = lv_label_create(cont);
         if (cur_sub.is_toggle && item.label == "RTC" && cur_sub.label == "NTP")
             lv_label_set_text(hint, cur_sub.toggle_state ? "ok:disable" : "ok:enable");
+        else if (cur_sub.is_toggle && item.label == "WiFi" && cur_sub.label == "Power")
+            lv_label_set_text(hint, cur_sub.toggle_state ? "ok:disable" : "ok:enable");
+        else if (cur_sub.is_toggle && item.label == "Bluetooth" && cur_sub.label == "Named Only")
+            lv_label_set_text(hint, cur_sub.toggle_state ? "ok:show all" : "ok:named");
         else if (cur_sub.is_toggle)
             lv_label_set_text(hint, cur_sub.toggle_state ? "ok:hide" : "ok:select");
         else if (item.label == "RTC" && rtc_ntp_on_)
@@ -2009,6 +2542,7 @@ private:
         else if (view_state_ == ViewState::SUB) build_sub_view();
         else if (view_state_ == ViewState::VALUE_SELECT) build_value_view();
         else if (view_state_ == ViewState::WIFI_LIST) build_wifi_list();
+        else if (view_state_ == ViewState::BT_LIST) build_bt_list();
         else if (view_state_ == ViewState::SOUNDCARD_CARDS) build_soundcard_cards_view();
         else if (view_state_ == ViewState::SOUNDCARD_CONTROLS) build_soundcard_controls_view();
         else if (view_state_ == ViewState::SOUNDCARD_DETAIL) build_soundcard_detail_view();
@@ -2146,6 +2680,12 @@ private:
             break;
         case ViewState::WIFI_PW:
             if (released) handle_wifi_pw_key(key);
+            break;
+        case ViewState::BT_LIST:
+            if (pressed && (key == KEY_UP || key == KEY_DOWN))
+                handle_bt_list_key(key);
+            else if (released && key != KEY_UP && key != KEY_DOWN)
+                handle_bt_list_key(key);
             break;
         case ViewState::SOUNDCARD_CARDS:
             if (pressed && (key == KEY_UP || key == KEY_DOWN))
