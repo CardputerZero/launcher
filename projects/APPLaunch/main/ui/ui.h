@@ -74,11 +74,6 @@ inline lv_event_code_t battery_event()
     return static_cast<lv_event_code_t>(lv_c_event[CP0_C_EVENT_BATTERY]);
 }
 
-inline lv_event_code_t datetime_event()
-{
-    return static_cast<lv_event_code_t>(lv_c_event[CP0_C_EVENT_DATATIME]);
-}
-
 inline const cp0_battery_info_t *battery_info(lv_event_t *event)
 {
     return static_cast<const cp0_battery_info_t *>(lv_event_get_param(event));
