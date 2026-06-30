@@ -11,6 +11,10 @@
 #include "lvgl/src/widgets/gif/lv_gif.h"
 #include "sample_log.h"
 #include "compat/input_keys.h"
+
+#undef SLOGI
+#define SLOGI(...) do { } while (0)
+
 #include <list>
 #include <string>
 #include <utility>
