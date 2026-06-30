@@ -394,7 +394,7 @@ private:
         lv_obj_set_style_bg_opa(battery_bar_, charging ? 70 : 0, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_color(battery_bar_, lv_color_hex(charging ? 0xFFD24A : 0x66CC33),
                                   LV_PART_INDICATOR | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_opa(battery_bar_, charging ? 170 : 0, LV_PART_INDICATOR | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_opa(battery_bar_, 170, LV_PART_INDICATOR | LV_STATE_DEFAULT);
         lv_obj_set_style_text_color(power_label_, lv_color_hex(charging ? 0xFFF2A8 : 0xFFFFFF),
                                     LV_PART_MAIN | LV_STATE_DEFAULT);
 
@@ -911,7 +911,7 @@ private:
         lv_obj_set_style_bg_opa(ui_TOP_Power, charging ? 70 : 0, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_color(ui_TOP_Power, lv_color_hex(charging ? 0xFFD24A : 0x66CC33),
                                   LV_PART_INDICATOR | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_opa(ui_TOP_Power, charging ? 170 : 0, LV_PART_INDICATOR | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_opa(ui_TOP_Power, 170, LV_PART_INDICATOR | LV_STATE_DEFAULT);
         lv_obj_set_style_text_color(ui_TOP_power_Label, lv_color_hex(charging ? 0xFFF2A8 : 0xFFFFFF),
                                     LV_PART_MAIN | LV_STATE_DEFAULT);
 
