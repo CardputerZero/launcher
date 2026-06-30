@@ -533,14 +533,6 @@ private:
             self->update_battery_status(*bat);
     }
 
-    static void app_datetime_event_cb(lv_event_t *e)
-    {
-        AppTopBarRegion *self = static_cast<AppTopBarRegion *>(lv_event_get_user_data(e));
-        if (!self || lv_event_get_code(e) != launcher_ui::events::datetime_event())
-            return;
-        self->update_datetime_status();
-    }
-
     static void app_status_timer_cb(lv_timer_t *timer)
     {
         AppTopBarRegion *self = static_cast<AppTopBarRegion *>(lv_timer_get_user_data(timer));
@@ -558,7 +550,6 @@ private:
     void UI_bind_event()
     {
         lv_obj_add_event_cb(root_screen_, app_battery_event_cb, launcher_ui::events::battery_event(), this);
-        lv_obj_add_event_cb(root_screen_, app_datetime_event_cb, launcher_ui::events::datetime_event(), this);
     }
 };
 
@@ -674,14 +665,6 @@ public:
         const cp0_battery_info_t *bat = launcher_ui::events::battery_info(e);
         if (bat)
             self->update_battery_status(*bat);
-    }
-
-    static void home_datetime_event_cb(lv_event_t *e)
-    {
-        home_base *self = static_cast<home_base *>(lv_event_get_user_data(e));
-        if (!self || lv_event_get_code(e) != launcher_ui::events::datetime_event())
-            return;
-        self->update_time_status();
     }
 
     static void home_status_timer_cb(lv_timer_t *timer)
@@ -925,7 +908,6 @@ private:
     void UI_bind_event()
     {
         lv_obj_add_event_cb(root_screen_, home_battery_event_cb, launcher_ui::events::battery_event(), this);
-        lv_obj_add_event_cb(root_screen_, home_datetime_event_cb, launcher_ui::events::datetime_event(), this);
     }
 };
 
