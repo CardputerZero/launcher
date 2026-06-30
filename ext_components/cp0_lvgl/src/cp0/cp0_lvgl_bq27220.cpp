@@ -81,8 +81,7 @@ public:
             int ok = read_long(path, &capacity);
             std::snprintf(path, sizeof(path), "%s/voltage_now", bq_path);
             ok = ok && read_long(path, &voltage_uv);
-            std::snprintf(path, sizeof(path), "%s/current_now", bq_path);
-            ok = ok && read_long(path, &current_raw);
+            ok = ok && read_current_raw(bq_path, &current_raw);
             std::snprintf(path, sizeof(path), "%s/temp", bq_path);
             ok = ok && read_long(path, &temp_raw);
             std::snprintf(path, sizeof(path), "%s/status", bq_path);
@@ -240,6 +239,16 @@ private:
         return 1;
     }
 
+    static int read_current_raw(const char *dir, long *value)
+    {
+        if (!dir || !value) return 0;
+        char path[320];
+        std::snprintf(path, sizeof(path), "%s/current_instant", dir);
+        if (read_long(path, value)) return 1;
+        std::snprintf(path, sizeof(path), "%s/current_now", dir);
+        return read_long(path, value);
+    }
+
     static int read_string(const char *path, char *buf, size_t len)
     {
         if (!path || !buf || len == 0) return 0;
@@ -279,7 +288,7 @@ private:
             std::snprintf(dir, sizeof(dir), "%s/%s", base, ent->d_name);
             if (!has_file(dir, "capacity") ||
                 !has_file(dir, "voltage_now") ||
-                !has_file(dir, "current_now") ||
+                (!has_file(dir, "current_instant") && !has_file(dir, "current_now")) ||
                 !has_file(dir, "temp") ||
                 !has_file(dir, "status")) {
                 continue;
