@@ -23,6 +23,10 @@
 #endif
 #include "keyboard_input.h"
 #include "lvgl/lvgl.h"
+#include "../../../../SDK/components/utilities/include/sample_log.h"
+
+#undef SLOGD
+#define SLOGD(...) do { } while (0)
 
 /* ============================================================
  *  Global queue
@@ -39,12 +43,12 @@ static struct libinput *g_libinput = NULL;
 void keyboard_pause(void) {
     keyboard_paused_flag = 1;
     if (g_libinput) libinput_suspend(g_libinput);
-    printf("[KBD] keyboard_pause()\n");
+    SLOGI("[KBD] keyboard_pause()");
 }
 void keyboard_resume(void) {
     if (g_libinput) libinput_resume(g_libinput);
     keyboard_paused_flag = 0;
-    printf("[KBD] keyboard_resume()\n");
+    SLOGI("[KBD] keyboard_resume()");
 }
 #else
 void keyboard_pause(void) { keyboard_paused_flag = 1; }
@@ -90,11 +94,11 @@ void kbd_dump_keymap_table(void)
         {KEY_HOME,"HOME"},{KEY_END,"END"},{KEY_DELETE,"DEL"},{KEY_INSERT,"INS"},
         {KEY_LEFTSHIFT,"LSHIFT"},{KEY_LEFTCTRL,"LCTRL"},{KEY_LEFTALT,"LALT"},
     };
-    printf("[KBD] ==== evdev key_code -> label table ====\n");
+    SLOGD("[KBD] ==== evdev key_code -> label table ====");
     for (size_t i = 0; i < sizeof(keys)/sizeof(keys[0]); i++) {
-        printf("[KBD]   code=%3u  %s\n", keys[i].code, keys[i].name);
+        SLOGD("[KBD]   code=%3u  %s", keys[i].code, keys[i].name);
     }
-    printf("[KBD] ==== end ====\n");
+    SLOGD("[KBD] ==== end ====");
     fflush(stdout);
 }
 #else
@@ -177,9 +181,9 @@ static void cp0_keypad_read_cb(lv_indev_t *indev, lv_indev_data_t *data)
                 di += snprintf(utf8_dbg + di, 64 - di, "\\x%02x", c);
         }
         utf8_dbg[di] = '\0';
-        printf("[INDEV] dequeue code=%u state=%s sym=%s utf8='%s' cp=0x%x active_screen=%p\n",
-               elm->key_code, kbd_state_name(elm->key_state), elm->sym_name,
-               utf8_dbg, elm->codepoint, (void *)lv_screen_active());
+        SLOGD("[INDEV] dequeue code=%u state=%s sym=%s utf8='%s' cp=0x%x active_screen=%p",
+              elm->key_code, kbd_state_name(elm->key_state), elm->sym_name,
+              utf8_dbg, elm->codepoint, (void *)lv_screen_active());
 
         /* DarkTime: if the screen is blanked this key only wakes it and must
          * not reach the UI (nor the keypad indev) so it doesn't also act. */
@@ -453,13 +457,13 @@ static void enqueue_key(const struct key_item *src) {
         else di += snprintf(utf8_dbg+di, 64-di, "\\x%02x", c);
     }
     utf8_dbg[di] = '\0';
-    printf("[KBD] enqueue code=%u state=%s sym=%s utf8='%s' cp=0x%x mods=0x%x run=%d home_flag=%d\n",
-           elm->key_code, kbd_state_name(elm->key_state), elm->sym_name,
-           utf8_dbg, elm->codepoint, elm->mods, LVGL_RUN_FLAGE, LVGL_HOME_KEY_FLAG);
+    SLOGD("[KBD] enqueue code=%u state=%s sym=%s utf8='%s' cp=0x%x mods=0x%x run=%d home_flag=%d",
+          elm->key_code, kbd_state_name(elm->key_state), elm->sym_name,
+          utf8_dbg, elm->codepoint, elm->mods, LVGL_RUN_FLAGE, LVGL_HOME_KEY_FLAG);
 
     if(elm->key_code == KEY_ESC) {
         LVGL_HOME_KEY_FLAG = elm->key_state;
-        printf("[KBD] LVGL_HOME_KEY_FLAG := %d\n", LVGL_HOME_KEY_FLAG);
+        SLOGI("[KBD] LVGL_HOME_KEY_FLAG := %d", LVGL_HOME_KEY_FLAG);
     }
 
     if(LVGL_RUN_FLAGE)
@@ -470,7 +474,7 @@ static void enqueue_key(const struct key_item *src) {
     }
     else
     {
-        printf("[KBD] dropped (LVGL_RUN_FLAGE=0, external app running)\n");
+        SLOGW("[KBD] dropped (LVGL_RUN_FLAGE=0, external app running)");
         free(elm);
     }
 
@@ -763,7 +767,7 @@ void *keyboard_read_thread(void *argv) {
     };
 
     g_libinput = kc.li;
-    printf("Start listening for keyboard input (%s)\n", device_path);
+    SLOGI("Start listening for keyboard input (%s)", device_path);
     libinput_dispatch(kc.li);
 
     while (1) {
