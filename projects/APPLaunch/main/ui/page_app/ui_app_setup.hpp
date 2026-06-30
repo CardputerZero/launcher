@@ -175,6 +175,11 @@ private:
         cp0_signal_config_api({"Save"}, nullptr);
     }
 
+    static void gpio_set(const char *name, int val)
+    {
+        cp0_signal_settings_api({"GpioSet", name ? std::string(name) : std::string(), std::to_string(val)}, nullptr);
+    }
+
     static int audio_volume_read()
     {
         int volume = -1;
@@ -322,14 +327,16 @@ private:
             bool usb_en = config_get_int("extport_usb", 1) != 0;
             bool vout_en = config_get_int("extport_5vout", 1) != 0;
             m.sub_items = {
-                {"USB",   true, usb_en, [this]() {
+                {"GROVE5V", true, usb_en, [this]() {
                     bool en = menu_items_[selected_idx_].sub_items[0].toggle_state;
                     config_set_int("extport_usb", en ? 1 : 0);
+                    gpio_set("GROVE5V", en ? 1 : 0);
                     config_save();
                 }},
-                {"5VOUT", true, vout_en, [this]() {
+                {"EXT5V",   true, vout_en, [this]() {
                     bool en = menu_items_[selected_idx_].sub_items[1].toggle_state;
                     config_set_int("extport_5vout", en ? 1 : 0);
+                    gpio_set("EXT5V", en ? 1 : 0);
                     config_save();
                 }},
             };
