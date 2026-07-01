@@ -1,6 +1,8 @@
 #include "cp0_lvgl_app.h"
 #include "hal_lvgl_bsp.h"
 
+#include "../cp0_config_json.h"
+
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
@@ -9,13 +11,16 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <utility>
+#include <vector>
 #include <sys/stat.h>
 #include <unistd.h>
-#include <utility>
 
-#define CONFIG_DIR  "/var/lib/applaunch"
-#define CONFIG_FILE CONFIG_DIR "/settings"
-#define MAX_ENTRIES 32
+// Unified per-user device config. Everything the launcher persists (app
+// visibility, brightness, camera resolution, ...) lives in a single JSON file
+// under the user's home, shared with other apps (e.g. the camera app reads
+// camera.resolution.{width,height} from here).
+#define MAX_ENTRIES 64
 #define KEY_MAX     64
 #define VAL_MAX     256
 
@@ -75,14 +80,7 @@ public:
     {
         std::lock_guard<std::mutex> lock(mutex_);
         ensure_loaded_locked();
-        mkdir(CONFIG_DIR, 0755);
-        FILE *fp = std::fopen(CONFIG_FILE, "w");
-        if (!fp) return;
-        for (int i = 0; i < count_; i++) {
-            std::fprintf(fp, "%s=%s\n", entries_[i].key, entries_[i].val);
-        }
-        std::fclose(fp);
-        sync();
+        save_locked();
     }
 
     void api_call(arg_t arg, callback_t callback)
@@ -134,9 +132,29 @@ private:
     bool loaded_ = false;
     std::mutex mutex_;
 
+    static std::string config_dir()
+    {
+        const char *home = std::getenv("HOME");
+        std::string base = (home && home[0]) ? std::string(home) : std::string("/root");
+        return base + "/.config/cardputerzero";
+    }
+
+    static std::string config_file()
+    {
+        return config_dir() + "/config.json";
+    }
+
     void ensure_loaded_locked()
     {
         if (!loaded_) load_locked();
+    }
+
+    void add_entry_locked(const std::string &key, const std::string &val)
+    {
+        if (key.empty() || count_ >= MAX_ENTRIES) return;
+        copy_cstr(entries_[count_].key, key.c_str(), KEY_MAX);
+        copy_cstr(entries_[count_].val, val.c_str(), VAL_MAX);
+        count_++;
     }
 
     void load_locked()
@@ -144,21 +162,47 @@ private:
         count_ = 0;
         loaded_ = true;
 
-        FILE *fp = std::fopen(CONFIG_FILE, "r");
-        if (!fp) return;
+        std::string text;
+        if (!read_file(config_file().c_str(), text))
+            return;
+        std::vector<std::pair<std::string, std::string>> kv;
+        if (!cp0cfg::from_json(text, kv))
+            return;
+        for (const auto &e : kv)
+            add_entry_locked(e.first, e.second);
+    }
 
-        char line[KEY_MAX + VAL_MAX + 4];
-        while (std::fgets(line, sizeof(line), fp) && count_ < MAX_ENTRIES) {
-            line[std::strcspn(line, "\r\n")] = 0;
-            char *eq = std::strchr(line, '=');
-            if (!eq) continue;
-            *eq = 0;
-            if (line[0] == '\0') continue;
-            copy_cstr(entries_[count_].key, line, KEY_MAX);
-            copy_cstr(entries_[count_].val, eq + 1, VAL_MAX);
-            count_++;
-        }
+    void save_locked()
+    {
+        std::vector<std::pair<std::string, std::string>> kv;
+        kv.reserve(count_);
+        for (int i = 0; i < count_; i++)
+            kv.emplace_back(entries_[i].key, entries_[i].val);
+        const std::string json = cp0cfg::to_json(kv);
+
+        const std::string dir = config_dir();
+        const char *home = std::getenv("HOME");
+        std::string base = (home && home[0]) ? std::string(home) : std::string("/root");
+        mkdir((base + "/.config").c_str(), 0755);
+        mkdir(dir.c_str(), 0755);
+
+        FILE *fp = std::fopen(config_file().c_str(), "w");
+        if (!fp) return;
+        std::fwrite(json.data(), 1, json.size(), fp);
         std::fclose(fp);
+        sync();
+    }
+
+    static bool read_file(const char *path, std::string &out)
+    {
+        FILE *fp = std::fopen(path, "r");
+        if (!fp) return false;
+        char buf[512];
+        size_t n;
+        while ((n = std::fread(buf, 1, sizeof(buf), fp)) > 0)
+            out.append(buf, n);
+        std::fclose(fp);
+        return true;
     }
 
     int find_entry_locked(const char *key) const
