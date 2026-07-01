@@ -68,8 +68,6 @@ constexpr uint32_t kAccentDone = 0x31d843;      // green
 
 enum class Screen {
     Welcome,
-    Region,
-    CountryList,
     TimezoneList,
     Hostname,
     Account,
@@ -82,34 +80,37 @@ enum class Screen {
     Applying,
 };
 
-struct Country {
-    const char *name;
-    const char *code;
-    const char *timezone;
-    const char *offset;
-};
-
-constexpr Country kCountries[] = {
-    {"China", "CN", "Asia/Shanghai", "UTC+8"},
-    {"United States", "US", "America/Los_Angeles", "UTC-7"},
-    {"Japan", "JP", "Asia/Tokyo", "UTC+9"},
-    {"United Kingdom", "GB", "Europe/London", "UTC+0"},
-    {"Germany", "DE", "Europe/Berlin", "UTC+1"},
-};
-
 struct Timezone {
     const char *name;
     const char *offset;
 };
 
+// Concise list of common international time zones (IANA names), ordered
+// west-to-east. Country selection was removed (#111/#98); this is the only
+// region step now.
 constexpr Timezone kTimezones[] = {
+    {"Pacific/Honolulu", "UTC-10"},
+    {"America/Los_Angeles", "UTC-8"},
+    {"America/Chicago", "UTC-6"},
+    {"America/New_York", "UTC-5"},
+    {"America/Sao_Paulo", "UTC-3"},
+    {"UTC", "UTC+0"},
+    {"Europe/London", "UTC+0"},
+    {"Europe/Paris", "UTC+1"},
+    {"Europe/Moscow", "UTC+3"},
+    {"Asia/Dubai", "UTC+4"},
+    {"Asia/Kolkata", "UTC+5:30"},
+    {"Asia/Bangkok", "UTC+7"},
     {"Asia/Shanghai", "UTC+8"},
     {"Asia/Tokyo", "UTC+9"},
-    {"UTC", "UTC+0"},
-    {"America/Los_Angeles", "UTC-7"},
-    {"Europe/London", "UTC+0"},
-    {"Europe/Berlin", "UTC+1"},
+    {"Australia/Sydney", "UTC+10"},
+    {"Pacific/Auckland", "UTC+12"},
 };
+
+constexpr int kTimezoneCount = static_cast<int>(sizeof(kTimezones) / sizeof(kTimezones[0]));
+
+// Index of the default timezone (Asia/Shanghai) in kTimezones.
+constexpr int kDefaultTimezoneIndex = 12;
 
 struct WifiNetwork {
     std::string ssid;
@@ -127,12 +128,9 @@ struct CommandResult {
 struct Model {
     Screen screen = Screen::Welcome;
 
-    // Region / timezone
-    int country_index = 0;
-    int timezone_index = 0;
-    int region_focus = 0;  // 0 = country field, 1 = timezone field
-    int country_sel = 0;
-    int timezone_sel = 0;
+    // Timezone
+    int timezone_index = kDefaultTimezoneIndex;
+    int timezone_sel = kDefaultTimezoneIndex;
 
     // Hostname
     std::string hostname = "CardputerZero";
@@ -142,6 +140,7 @@ struct Model {
     std::string password;
     std::string confirm;
     int account_focus = 0;  // 0 user, 1 pass, 2 confirm
+    std::string form_error;  // inline validation message (e.g. password mismatch)
 
     // Network
     int network_focus = 0;  // 0 wifi, 1 ethernet
@@ -153,6 +152,11 @@ struct Model {
     int wifi_sel = 0;
     std::string wifi_ssid;
     std::string wifi_password;
+
+    // Wi-Fi async scan state (guarded by mutex where noted).
+    bool wifi_scanning = false;
+    bool wifi_scan_ready = false;
+    std::vector<WifiNetwork> wifi_scan_result;
 
     // Manual time
     std::string manual_date = "2026-06-16";
@@ -177,7 +181,6 @@ struct Model {
 
 Model g;
 
-const Country &current_country() { return kCountries[g.country_index]; }
 const Timezone &current_timezone() { return kTimezones[g.timezone_index]; }
 
 // ---------------------------------------------------------------------------
@@ -1011,26 +1014,7 @@ void render_welcome()
     add_key_hint(132, "OK", 156, "START", kAccentWelcome);
 }
 
-void render_region()
-{
-    add_chrome(kAccentRegion, 24);
-    const bool country_focus = g.region_focus == 0;
-
-    add_label(g.screen_obj, "COUNTRY / REGION", font_xs(), kAccentRegion, 38, 39);
-    add_field(g.screen_obj, 36, 50, 218, 27, country_focus, kAccentRegion);
-    add_label(g.screen_obj, current_country().name, font_md(), 0xffffff, 44, 56);
-
-    add_label(g.screen_obj, "TIMEZONE", font_xs(), kAccentRegion, 38, 92);
-    add_field(g.screen_obj, 36, 103, 218, 27, !country_focus, kAccentRegion);
-    add_label(g.screen_obj, current_timezone().name, font_md(), 0xffffff, 44, 109);
-    add_label(g.screen_obj, current_timezone().offset, font_md(), 0xffffff, 205, 109);
-
-    add_key_hint(14, "ESC", 38, "BACK", kAccentRegion);
-    add_key_hint(132, "OK", 156, "CHANGE", kAccentRegion);
-    add_key_hint(244, "TAB", 268, "NEXT", kAccentRegion);
-}
-
-// Generic single-column list (country / timezone / wifi).
+// Generic single-column list (timezone / wifi).
 void render_list(const char *title, uint32_t accent,
                  const std::vector<std::string> &left,
                  const std::vector<std::string> &right, int sel,
@@ -1071,16 +1055,6 @@ void render_list(const char *title, uint32_t accent,
     add_key_hint(132, "OK", 156, ok_hint, accent);
 }
 
-void render_country_list()
-{
-    std::vector<std::string> left, right;
-    for (const Country &c : kCountries) {
-        left.emplace_back(c.name);
-        right.emplace_back("");
-    }
-    render_list("COUNTRY / REGION", kAccentRegion, left, right, g.country_sel, "CONFIRM");
-}
-
 void render_timezone_list()
 {
     std::vector<std::string> left, right;
@@ -1113,17 +1087,24 @@ void render_account()
     std::string user_value = g.username + (g.account_focus == 0 ? "|" : "");
     add_label(g.screen_obj, user_value.c_str(), font_md(), 0xffffff, 44, 70);
 
+    // #80: the focused password field is shown in plaintext; once focus moves
+    // away it reverts to masked. Only one field can be focused at a time.
     add_label(g.screen_obj, "PASSWORD", font_xs(), kAccentAccount, 143, 51);
     add_field(g.screen_obj, 142, 67, 142, 24, g.account_focus == 1, kAccentAccount);
-    std::string pass_value = masked(g.password) + (g.account_focus == 1 ? "|" : "");
+    std::string pass_value = (g.account_focus == 1 ? g.password + "|" : masked(g.password));
     add_label(g.screen_obj, pass_value.c_str(), font_md(), 0xffffff, 150, 70);
 
     add_label(g.screen_obj, "CONFIRM PASSWORD", font_xs(), kAccentAccount, 143, 98);
     add_field(g.screen_obj, 142, 110, 142, 24, g.account_focus == 2, kAccentAccount);
-    std::string confirm_value = masked(g.confirm) + (g.account_focus == 2 ? "|" : "");
+    std::string confirm_value = (g.account_focus == 2 ? g.confirm + "|" : masked(g.confirm));
     add_label(g.screen_obj, confirm_value.c_str(), font_md(), 0xffffff, 150, 113);
 
-    add_label(g.screen_obj, "Default: pi / pi", font_sm(), kColorMuted, 36, 113);
+    // #99: surface an inline error (e.g. password mismatch) instead of the
+    // default hint so the user knows why NEXT/CONFIRM was blocked.
+    if (!g.form_error.empty())
+        add_label(g.screen_obj, g.form_error.c_str(), font_sm(), 0xff5a5a, 36, 113);
+    else
+        add_label(g.screen_obj, "Default: pi / pi", font_sm(), kColorMuted, 36, 113);
 
     add_key_hint(14, "ESC", 38, "BACK", kAccentAccount);
     add_key_hint(132, "OK", 156, "CONFIRM", kAccentAccount);
@@ -1166,6 +1147,22 @@ void render_wifi_list()
 {
     add_chrome(kAccentNetwork, 60);
     add_label(g.screen_obj, "SELECT WI-FI", font_sm(), kAccentNetwork, 36, 40);
+
+    // #94: while the first scan is still running show a loading state with a
+    // spinner so the user isn't staring at an empty/"Other network..." list.
+    if (g.wifi_scanning && g.wifi_list.empty()) {
+        lv_obj_t *spinner = lv_spinner_create(g.screen_obj);
+        lv_obj_set_size(spinner, 28, 28);
+        lv_spinner_set_anim_params(spinner, 1000, 60);
+        lv_obj_align(spinner, LV_ALIGN_TOP_LEFT, 40, 78);
+        lv_obj_set_style_arc_color(spinner, lv_color_hex(kColorFieldBorder), LV_PART_MAIN);
+        lv_obj_set_style_arc_color(spinner, lv_color_hex(kAccentNetwork), LV_PART_INDICATOR);
+        lv_obj_set_style_arc_width(spinner, 4, LV_PART_MAIN);
+        lv_obj_set_style_arc_width(spinner, 4, LV_PART_INDICATOR);
+        add_label(g.screen_obj, "Scanning for networks...", font_sm(), kColorMuted, 80, 86);
+        add_key_hint(14, "ESC", 38, "BACK", kAccentNetwork);
+        return;
+    }
 
     const int count = static_cast<int>(g.wifi_list.size()) + 1;  // + manual entry
     const int visible = 4;
@@ -1277,8 +1274,6 @@ void render()
     lv_obj_clean(g.screen_obj);
     switch (g.screen) {
     case Screen::Welcome: render_welcome(); break;
-    case Screen::Region: render_region(); break;
-    case Screen::CountryList: render_country_list(); break;
     case Screen::TimezoneList: render_timezone_list(); break;
     case Screen::Hostname: render_hostname(); break;
     case Screen::Account: render_account(); break;
@@ -1350,6 +1345,7 @@ void handle_text_char(char ch)
     if (field->size() >= 63)
         return;
     field->push_back(ch);
+    g.form_error.clear();
     render();
 }
 
@@ -1358,28 +1354,31 @@ void handle_backspace()
     std::string *field = active_text_field();
     if (field && !field->empty()) {
         field->pop_back();
+        g.form_error.clear();
         render();
-    }
-}
-
-void select_country(int index)
-{
-    g.country_index = index;
-    // Default the timezone to the country's preferred zone.
-    const char *tz = kCountries[index].timezone;
-    for (size_t i = 0; i < sizeof(kTimezones) / sizeof(kTimezones[0]); ++i) {
-        if (strcmp(kTimezones[i].name, tz) == 0) {
-            g.timezone_index = static_cast<int>(i);
-            break;
-        }
     }
 }
 
 void enter_wifi_list()
 {
-    g.wifi_list = scan_wifi();
+    // #94: scan asynchronously so the list screen appears immediately with a
+    // loading spinner and refreshes as soon as results arrive (poll_worker_cb).
+    g.wifi_list.clear();
     g.wifi_sel = 0;
+    {
+        std::lock_guard<std::mutex> lock(g.mutex);
+        g.wifi_scan_ready = false;
+        g.wifi_scan_result.clear();
+    }
+    g.wifi_scanning = true;
     go(Screen::WifiList);
+
+    std::thread([]() {
+        std::vector<WifiNetwork> networks = scan_wifi();
+        std::lock_guard<std::mutex> lock(g.mutex);
+        g.wifi_scan_result = std::move(networks);
+        g.wifi_scan_ready = true;
+    }).detach();
 }
 
 // ESC navigation per screen.
@@ -1387,10 +1386,8 @@ void handle_back()
 {
     switch (g.screen) {
     case Screen::Welcome: break;
-    case Screen::Region: go(Screen::Welcome); break;
-    case Screen::CountryList: go(Screen::Region); break;
-    case Screen::TimezoneList: go(Screen::Region); break;
-    case Screen::Hostname: go(Screen::Region); break;
+    case Screen::TimezoneList: go(Screen::Welcome); break;
+    case Screen::Hostname: go(Screen::TimezoneList); break;
     case Screen::Account: go(Screen::Hostname); break;
     case Screen::Network: go(Screen::Account); break;
     case Screen::WifiList: go(Screen::Network); break;
@@ -1405,24 +1402,15 @@ void handle_back()
 void move_focus(int delta)
 {
     switch (g.screen) {
-    case Screen::Region:
-        g.region_focus = (g.region_focus + delta + 2) % 2;
-        render();
-        break;
-    case Screen::CountryList: {
-        int n = static_cast<int>(sizeof(kCountries) / sizeof(kCountries[0]));
-        g.country_sel = (g.country_sel + delta + n) % n;
-        render();
-        break;
-    }
     case Screen::TimezoneList: {
-        int n = static_cast<int>(sizeof(kTimezones) / sizeof(kTimezones[0]));
+        int n = kTimezoneCount;
         g.timezone_sel = (g.timezone_sel + delta + n) % n;
         render();
         break;
     }
     case Screen::Account:
         g.account_focus = (g.account_focus + delta + 3) % 3;
+        g.form_error.clear();
         render();
         break;
     case Screen::Network:
@@ -1452,24 +1440,12 @@ void handle_enter()
 {
     switch (g.screen) {
     case Screen::Welcome:
-        go(Screen::Region);
-        break;
-    case Screen::Region:
-        if (g.region_focus == 0) {
-            g.country_sel = g.country_index;
-            go(Screen::CountryList);
-        } else {
-            g.timezone_sel = g.timezone_index;
-            go(Screen::TimezoneList);
-        }
-        break;
-    case Screen::CountryList:
-        select_country(g.country_sel);
-        go(Screen::Region);
+        g.timezone_sel = g.timezone_index;
+        go(Screen::TimezoneList);
         break;
     case Screen::TimezoneList:
         g.timezone_index = g.timezone_sel;
-        go(Screen::Region);
+        go(Screen::Hostname);
         break;
     case Screen::Hostname: {
         std::string error;
@@ -1483,6 +1459,7 @@ void handle_enter()
     case Screen::Account:
         if (g.account_focus < 2) {
             ++g.account_focus;
+            g.form_error.clear();
             render();
         } else {
             std::string error;
@@ -1492,12 +1469,24 @@ void handle_enter()
                 g.password = "pi";
                 g.confirm = "pi";
             }
-            if (!validate_username(g.username, error))
+            if (!validate_username(g.username, error)) {
+                g.form_error = error;
+                render();
                 return;
-            if (!validate_password(g.password, error))
+            }
+            if (!validate_password(g.password, error)) {
+                g.form_error = error;
+                render();
                 return;
-            if (g.password != g.confirm)
+            }
+            // #99: block progression and surface a clear message when the two
+            // password entries differ, instead of silently doing nothing.
+            if (g.password != g.confirm) {
+                g.form_error = "Passwords do not match";
+                render();
                 return;
+            }
+            g.form_error.clear();
             go(Screen::Network);
         }
         break;
@@ -1543,9 +1532,6 @@ void handle_enter()
 void handle_tab()
 {
     switch (g.screen) {
-    case Screen::Region:
-        go(Screen::Hostname);
-        break;
     case Screen::Account:
         if (g.username.empty())
             g.username = "pi";
@@ -1553,6 +1539,13 @@ void handle_tab()
             g.password = "pi";
             g.confirm = "pi";
         }
+        // #99: mismatched passwords must block skipping ahead too.
+        if (g.password != g.confirm) {
+            g.form_error = "Passwords do not match";
+            render();
+            return;
+        }
+        g.form_error.clear();
         go(Screen::Network);
         break;
     case Screen::Network:
@@ -1621,6 +1614,25 @@ void keyboard_event_cb(lv_event_t *event)
 void poll_worker_cb(lv_timer_t *timer)
 {
     (void)timer;
+
+    // #94: pull in async Wi-Fi scan results and refresh the list live.
+    bool wifi_updated = false;
+    {
+        std::lock_guard<std::mutex> lock(g.mutex);
+        if (g.wifi_scan_ready) {
+            g.wifi_scan_ready = false;
+            g.wifi_list = std::move(g.wifi_scan_result);
+            g.wifi_scan_result.clear();
+            g.wifi_scanning = false;
+            wifi_updated = true;
+        }
+    }
+    if (wifi_updated && g.screen == Screen::WifiList) {
+        if (g.wifi_sel >= static_cast<int>(g.wifi_list.size()) + 1)
+            g.wifi_sel = 0;
+        render();
+    }
+
     bool finished = false;
     bool succeeded = false;
     {
