@@ -453,7 +453,7 @@ private:
     {
         val_title_ = "Resolution";
         val_options_ = {"1280x720", "640x480"};
-        val_sel_idx_ = 0;
+        val_sel_idx_ = (config_get_int("camera.resolution.width", 1280) == 640) ? 1 : 0;
         view_state_ = ViewState::VALUE_SELECT;
         transition_enter_level();
     }
@@ -1961,7 +1961,12 @@ private:
         } else if (val_title_ == "Volume") {
             apply_volume();
         } else if (val_title_ == "Resolution") {
-            config_set_int("cam_resolution", val_sel_idx_);
+            // Publish the real width/height to the shared user config the
+            // camera app reads (camera.resolution.{width,height}).
+            int width = 1280, height = 720;
+            if (val_sel_idx_ == 1) { width = 640; height = 480; }
+            config_set_int("camera.resolution.width", width);
+            config_set_int("camera.resolution.height", height);
             config_save();
         } else if (val_title_ == "Startup") {
             config_set_int("startup_mode", val_sel_idx_);
