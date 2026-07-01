@@ -403,8 +403,16 @@ private:
                     if (state_connected || has_connection) {
                         st.connected = 1;
                         wifi_iface = device;
-                        if (has_connection)
-                            cp0_copy_string(st.ssid, sizeof(st.ssid), connection);
+                        if (has_connection) {
+                            // Imager/netplan-provisioned networks are named
+                            // "netplan-<iface>-<SSID>". Strip that prefix so the UI
+                            // shows the plain SSID instead of the profile name (#66).
+                            std::string display = connection;
+                            const std::string prefix = "netplan-" + device + "-";
+                            if (display.rfind(prefix, 0) == 0)
+                                display = display.substr(prefix.size());
+                            cp0_copy_string(st.ssid, sizeof(st.ssid), display.c_str());
+                        }
                     }
                 }
             }
