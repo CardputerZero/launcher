@@ -251,7 +251,6 @@ private:
             m.label = "Screen";
             m.sub_items = {
                 {"Brightness", false, false, [this]() { enter_brightness_adjust(); }},
-                {"DarkTime",   false, false, [this]() { enter_darktime_adjust(); }},
             };
             menu_items_.push_back(m);
         }
@@ -422,16 +421,6 @@ private:
             m.on_enter = [this]() { refresh_version_info(); };
             menu_items_.push_back(m);
         }
-        // --- Reset ---
-        {
-            MenuItem m;
-            m.label = "Reset";
-            m.sub_items = {
-                {"Run Setup Wizard", false, false, [this]() { enter_confirm_action("Run Setup?", [this](){ rearm_oobe_and_reboot(); }); }},
-                {"Factory Reset", false, false, [this]() { factory_reset(); }},
-            };
-            menu_items_.push_back(m);
-        }
         // --- SoundCard ---
         {
             MenuItem m;
@@ -445,20 +434,6 @@ private:
     }
 
     // ==================== Placeholder functions for new menus ====================
-    void enter_darktime_adjust()
-    {
-        val_title_ = "DarkTime";
-        val_options_ = {"Never", "10S", "30S", "60S", "300S"};
-        const int times[] = {0, 10, 30, 60, 300};
-        int saved = config_get_int("dark_time", 30); // default 30S
-        val_sel_idx_ = 2;
-        for (int i = 0; i < (int)(sizeof(times) / sizeof(times[0])); ++i) {
-            if (times[i] == saved) { val_sel_idx_ = i; break; }
-        }
-        view_state_ = ViewState::VALUE_SELECT;
-        transition_enter_level();
-    }
-
     void enter_volume_adjust()
     {
         val_title_ = "Volume";
@@ -1104,6 +1079,13 @@ private:
 
     void save_app_toggle(const std::string &config_key)
     {
+        // Locate the Launcher menu by label instead of assuming a fixed index,
+        // so reordering the menu list can't desync the toggle from its app.
+        int launcher_idx = find_menu("Launcher");
+        if (launcher_idx < 0)
+            return;
+        MenuItem &launcher_menu = menu_items_[launcher_idx];
+
         std::size_t app_count = 0;
         const AppDescriptor *apps = launcher_app_registry_entries(&app_count);
         int visible_idx = 0;
@@ -1112,7 +1094,9 @@ private:
             if (!desc.configurable)
                 continue;
             if (config_key == desc.config_key) {
-                bool enabled = menu_items_[0].sub_items[visible_idx].toggle_state;
+                if (visible_idx >= (int)launcher_menu.sub_items.size())
+                    return;
+                bool enabled = launcher_menu.sub_items[visible_idx].toggle_state;
                 launcher_app_registry_set_enabled(desc, enabled);
                 config_save();
                 launcher_app_registry_notify_changed();
@@ -1976,12 +1960,6 @@ private:
             config_save();
         } else if (val_title_ == "Volume") {
             apply_volume();
-        } else if (val_title_ == "DarkTime") {
-            // Idle screen-blank timeout in seconds (0 = Never); consumed by
-            // ui_darkscreen_tick() in the launcher main loop (#72).
-            int times[] = {0, 10, 30, 60, 300};
-            config_set_int("dark_time", times[val_sel_idx_]);
-            config_save();
         } else if (val_title_ == "Resolution") {
             config_set_int("cam_resolution", val_sel_idx_);
             config_save();
@@ -2442,7 +2420,7 @@ private:
         else if (cur_sub.is_toggle && item.label == "Bluetooth" && cur_sub.label == "Named Only")
             lv_label_set_text(hint, cur_sub.toggle_state ? "ok:show all" : "ok:named");
         else if (cur_sub.is_toggle)
-            lv_label_set_text(hint, cur_sub.toggle_state ? "ok:hide" : "ok:select");
+            lv_label_set_text(hint, cur_sub.toggle_state ? "ok:hide" : "ok:show");
         else if (item.label == "RTC" && rtc_ntp_on_)
             lv_label_set_text(hint, "ntp on");
         else
@@ -2491,7 +2469,7 @@ private:
         lv_obj_set_style_border_width(bar, 0, LV_PART_MAIN);
         lv_obj_clear_flag(bar, LV_OBJ_FLAG_SCROLLABLE);
 
-        // Left column: sub-items (Brightness/DarkTime) as carousel at MENU_X
+        // Left column: sub-items (Brightness) as carousel at MENU_X
         lv_obj_t *val_left_lbl = nullptr;
         for (int vi = 0; vi < ROWS_VISIBLE; ++vi) {
             int si = sub_selected_idx_ - ROW_CENTER + vi;

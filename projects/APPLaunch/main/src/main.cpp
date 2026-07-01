@@ -12,7 +12,6 @@
 #include <string>
 #include <semaphore.h>
 #include "ui/ui.h"
-#include "ui/ui_darkscreen.h"
 #include "keyboard_input.h"
 #include "cp0_lvgl_app.h"
 #include "cp0_lvgl_file.hpp"
@@ -95,12 +94,6 @@ int main(void)
 
     /*Handle LVGL tasks*/
     SLOGI("Entering main loop (FULL render mode)...");
-    // while(1) {
-    //     // APPLaunch_lock();
-    //     // ui_darkscreen_tick();
-    //     lv_timer_handler();
-    //     usleep(5000);
-    // }
     while (1) {
         uint32_t ms = lv_timer_handler();
         if (ms == LV_NO_TIMER_READY) {

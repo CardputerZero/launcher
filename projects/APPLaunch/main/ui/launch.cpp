@@ -360,6 +360,25 @@ void Launch::applications_load()
                 continue;
             }
 
+            // Never let a third-party *.desktop shadow a built-in app: if the Exec
+            // matches a built-in, the built-in registry owns visibility. Otherwise a
+            // built-in the user hid (removed from app_list) would silently reappear
+            // here as a "third-party" entry (#59).
+            bool shadows_builtin = false;
+            for (const auto &registration : kBuiltinApps)
+            {
+                if (registration.exec && app_exec == registration.exec)
+                {
+                    shadows_builtin = true;
+                    break;
+                }
+            }
+            if (shadows_builtin)
+            {
+                fprintf(stderr, "applications_load: skip %s (shadows built-in app)\n", filepath.c_str());
+                continue;
+            }
+
             app_list.emplace_back(page_title, cp0_file_path(app_icon), app_exec, app_terminal, app_sysplause);
         }
 
