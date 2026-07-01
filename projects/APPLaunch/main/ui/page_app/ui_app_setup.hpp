@@ -2130,34 +2130,35 @@ private:
         return lbl;
     }
 
-    static constexpr int ARROW_W = 18;
+    static constexpr int ARROW_SRC = 19;    // setting_right_arrow.png is 19x19
+    static constexpr int ARROW_SCALE = 224; // 256 = 100%; shrink the blue arrow a touch
 
-    // Place blue arrow between left column and right column.
-    // Uses left_lbl's right edge and right_min_x (leftmost x of any right-column item)
-    // to center the arrow in the gap between them.
+    // Place the blue "drill-in" arrow between the left column and the right
+    // column. It sits just left of the right text with a guaranteed gap, is
+    // scaled down slightly, and is drawn *behind* the row text (but above the
+    // highlight bar) so a wide left label can never be occluded by it. (plan A)
     void place_blue_arrow(lv_obj_t *parent, lv_obj_t *left_lbl, int right_min_x)
     {
         if (!left_lbl || right_min_x <= 0) return;
         lv_obj_update_layout(left_lbl);
 
+        const int vis = ARROW_SRC * ARROW_SCALE / 256; // scaled width/height (square)
         int left_right_edge = lv_obj_get_x(left_lbl) + lv_obj_get_width(left_lbl);
-        int gap = right_min_x - left_right_edge;
 
-        int arrow_x;
-        if (gap >= ARROW_W) {
-            arrow_x = left_right_edge + (gap - ARROW_W) / 2;
-        } else {
-            arrow_x = right_min_x - ARROW_W;
-        }
-        if (arrow_x < left_right_edge + 2) arrow_x = left_right_edge + 2;
+        static constexpr int SAFE_GAP = 4;
+        int arrow_x = right_min_x - SAFE_GAP - vis;
+        if (arrow_x < left_right_edge + 1) arrow_x = left_right_edge + 1;
 
-        // Vertically center the arrow (19px tall) within the row
-        static constexpr int ARROW_H = 19;
-        int arrow_y = row_y(ROW_CENTER) + (row_h() - ARROW_H) / 2;
+        // Vertically center the (scaled) arrow within the focused row.
+        int arrow_y = row_y(ROW_CENTER) + (row_h() - vis) / 2;
 
         lv_obj_t *arrow = lv_img_create(parent);
         lv_img_set_src(arrow, img_right_arrow_.c_str());
+        lv_image_set_pivot(arrow, 0, 0);
+        lv_image_set_scale(arrow, ARROW_SCALE);
         lv_obj_set_pos(arrow, arrow_x, arrow_y);
+        // Behind the row text, above the highlight bar (child index 0).
+        lv_obj_move_to_index(arrow, 1);
     }
 
     // Convenience: create a main-menu label at slot vi
@@ -2188,6 +2189,14 @@ private:
         // Do NOT use LV_LABEL_LONG_DOT here: with auto height it wraps to multiple lines
         // before adding dots, which looks like an unwanted line break.
         lv_label_set_long_mode(lbl, focused ? LV_LABEL_LONG_SCROLL_CIRCULAR : LV_LABEL_LONG_CLIP);
+    }
+
+    // Same as apply_overflow_handling but keeps the clamped box centered on
+    // center_x, so an overflowing (marquee) value stays visually centered
+    // instead of drifting to a fixed left edge.
+    static void apply_overflow_centered(lv_obj_t *lbl, int center_x, int box_w, bool focused)
+    {
+        apply_overflow_handling(lbl, center_x - box_w / 2, box_w, focused);
     }
 
     // ==================== Main carousel view ====================
@@ -2370,7 +2379,7 @@ private:
             // Focused row uses a tighter box (80px) so labels wider than 80px scroll;
             // non-focused rows keep the full 100px box (only clip when truly overflowing).
             bool focused_row = (vi == sub_center_vi);
-            apply_overflow_handling(lbl, VALUE_BOX_LEFT, focused_row ? 80 : VALUE_BOX_W, focused_row);
+            apply_overflow_centered(lbl, SUB_CENTER_X, focused_row ? 80 : VALUE_BOX_W, focused_row);
             lv_obj_update_layout(lbl);
             int lx = lv_obj_get_x(lbl);
             int tw = lv_obj_get_width(lbl);
@@ -2474,13 +2483,17 @@ private:
         lv_obj_set_style_border_width(bar, 0, LV_PART_MAIN);
         lv_obj_clear_flag(bar, LV_OBJ_FLAG_SCROLLABLE);
 
-        // Left column: sub-items (Brightness) as carousel at MENU_X
+        // Left column: sub-item name (e.g. "Resolution") as carousel at MENU_X.
+        // Long names are clamped + marquee-scrolled so they can't run into the
+        // arrow / value column (kept centered on MENU_X).
+        static constexpr int VAL_LEFT_BOX_W = 84;
         lv_obj_t *val_left_lbl = nullptr;
         for (int vi = 0; vi < ROWS_VISIBLE; ++vi) {
             int si = sub_selected_idx_ - ROW_CENTER + vi;
             if (si < 0 || si >= count) continue;
             const char *text = menu_items_[selected_idx_].sub_items[si].label.c_str();
             lv_obj_t *lbl = create_carousel_label(cont, vi, ROW_CENTER, text, MENU_X);
+            apply_overflow_centered(lbl, MENU_X, VAL_LEFT_BOX_W, vi == ROW_CENTER);
             if (vi == ROW_CENTER) val_left_lbl = lbl;
         }
 
@@ -2492,7 +2505,7 @@ private:
             if (val_i < 0 || val_i >= val_count) continue;
             lv_obj_t *lbl = create_carousel_label(cont, vi, ROW_CENTER,
                                                    val_options_[val_i].c_str(), VAL_CENTER_X, true);
-            apply_overflow_handling(lbl, VALUE_BOX_LEFT, VALUE_BOX_W, vi == ROW_CENTER);
+            apply_overflow_centered(lbl, VAL_CENTER_X, VALUE_BOX_W, vi == ROW_CENTER);
             lv_obj_update_layout(lbl);
             int lx = lv_obj_get_x(lbl);
             if (lx < val_right_min_x) val_right_min_x = lx;
