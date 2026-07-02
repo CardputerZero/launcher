@@ -120,7 +120,7 @@ public:
 
     UISTPage() : AppPage()
     {
-        set_page_title("ST");
+        set_page_title("CLI");
         reset_terminal();
         create_ui();
         bind_events();
