@@ -2103,6 +2103,7 @@ private:
     static constexpr int SUB_LEFT_BOX_X   = 4;
     static constexpr int SUB_LEFT_BOX_W   = 90;
     static constexpr int SUB_ARROW_X      = 100;
+    static constexpr int SUB_CENTER_X     = 160;
 
     RowStyle style_for_slot(int vi) {
         int dist = vi > ROW_CENTER ? vi - ROW_CENTER : ROW_CENTER - vi;
@@ -2433,7 +2434,6 @@ private:
         }
 
         // Right column: sub items (same carousel style, centered at x=160)
-        static constexpr int SUB_CENTER_X = 160;
 
         if (sub_count == 0) {
             create_carousel_label(cont, ROW_CENTER, ROW_CENTER, "(no options)", SUB_CENTER_X, true);
