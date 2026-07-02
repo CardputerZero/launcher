@@ -3,8 +3,8 @@ import os, sys
 import platform
 import subprocess
 """
-  The default cross-compilation toolchain can be specified in a 
-  custom `config_defaults.mk` file and passed via the `CONFIG_DEFAULT_FILE` 
+  The default cross-compilation toolchain can be specified in a
+  custom `config_defaults.mk` file and passed via the `CONFIG_DEFAULT_FILE`
   environment variable.
 
 export CONFIG_DEFAULT_FILE=linux_x86_cross_cp0_config_defaults.mk

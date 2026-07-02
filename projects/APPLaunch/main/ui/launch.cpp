@@ -64,7 +64,7 @@ void append_builtin_app(std::list<app> &apps, const BuiltinAppRegistration &regi
 constexpr BuiltinAppRegistration kBuiltinApps[] = {
     {{"Python", "python_100.png", "app_Python", false, true}, "python3", true, false, false, nullptr},
     {{"STORE", "store_100.png", "app_Store", false, true},
-     "/usr/share/APPLaunch/bin/M5CardputerZero-AppStore", false, true, true, nullptr},
+     "/usr/share/APPLaunch/bin/M5CardputerZero-AppStore", false, true, false, nullptr},
     {{"CLI", "cli_100.png", "app_CLI", false, true}, nullptr, false, true, false, append_page_app<UISTPage>},
     {{"GAME", "game_100.png", "app_Game", false, true}, nullptr, false, true, false, append_page_app<UIGamePage>},
     {{"SETTING", "setting_100.png", "app_Setting", false, true}, nullptr, false, true, false, append_page_app<UISetupPage>},
