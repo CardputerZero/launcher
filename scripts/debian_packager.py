@@ -208,6 +208,7 @@ def _postinst_text(config: PackageConfig) -> str:
         return f"""#!/bin/sh
 set -e
 mkdir -p /var/cache/{config.app_name}
+chown 1000:1000 /var/cache/{config.app_name} || true
 ln -sfn /var/cache/{config.app_name} /usr/share/{config.app_name}/cache
 SERVICE_NAME="{service_name}"
 SERVICE_FILE="{service_file}"
@@ -232,6 +233,7 @@ exit 0
     return f"""#!/bin/sh
 set -e
 mkdir -p /var/cache/{config.app_name}
+chown 1000:1000 /var/cache/{config.app_name} || true
 ln -sfn /var/cache/{config.app_name} /usr/share/{config.app_name}/cache
 APP_UID=1000
 APP_USER="$(getent passwd "$APP_UID" | cut -d: -f1)"
