@@ -171,8 +171,14 @@ def _copy_optional_binaries(src_dir: Path, package_root: Path, config: PackageCo
 
 
 def _copy_appstore_images(project_dir: Path, app_dst: Path) -> list[str]:
-    images_src = project_dir.parent / "AppStore" / "share" / "images"
-    if not images_src.is_dir():
+    appstore_dir = project_dir.parent / "AppStore"
+    image_roots = (
+        appstore_dir / "dist" / "APPLaunch" / "share" / "images",
+        appstore_dir / "APPLaunch" / "share" / "images",
+        appstore_dir / "share" / "images",
+    )
+    images_src = next((path for path in image_roots if path.is_dir()), None)
+    if images_src is None:
         return []
     images_dst = app_dst / "share" / "images"
     images_dst.mkdir(parents=True, exist_ok=True)
@@ -208,6 +214,7 @@ def _postinst_text(config: PackageConfig) -> str:
         return f"""#!/bin/sh
 set -e
 mkdir -p /var/cache/{config.app_name}
+chown 1000:1000 /var/cache/{config.app_name} || true
 ln -sfn /var/cache/{config.app_name} /usr/share/{config.app_name}/cache
 SERVICE_NAME="{service_name}"
 SERVICE_FILE="{service_file}"
@@ -232,6 +239,7 @@ exit 0
     return f"""#!/bin/sh
 set -e
 mkdir -p /var/cache/{config.app_name}
+chown 1000:1000 /var/cache/{config.app_name} || true
 ln -sfn /var/cache/{config.app_name} /usr/share/{config.app_name}/cache
 APP_UID=1000
 APP_USER="$(getent passwd "$APP_UID" | cut -d: -f1)"

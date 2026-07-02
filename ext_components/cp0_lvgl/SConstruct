@@ -24,8 +24,8 @@ if "CONFIG_CP0_LVGL_COMPONENT_ENABLED" in os.environ or "CONFIG_SIGSLOT_COMPONEN
     SRCS += Glob('src/*.c*')
     if 'CONFIG_V9_5_LV_USE_SDL' in os.environ:
         DEFINITIONS += ['-DHAL_PLATFORM_SDL=1']
-        DEFINITIONS += pkg_config_cflags("sdl2")
-        REQUIREMENTS += pkg_config_ldflags("sdl2")
+        DEFINITIONS += pkg_config_cflags('sdl2')
+        REQUIREMENTS += pkg_config_ldflags('sdl2')
         SRCS += Glob('src/sdl/*.c*')
     else:
         SRCS += Glob('src/cp0/*.c*')

@@ -1,58 +1,66 @@
 from pathlib import Path
 import os
-import shutil
-import socket
 import platform
-import subprocess
 
-arch = platform.machine()
-
-# export CardputerZero=y for cross-compiling to CardputerZero
-if 'CardputerZero' in os.environ:
-    if not os.path.exists('build/config/config_tmp.mk'):
-        os.makedirs('build/config', exist_ok=True)
-        with open('build/config/config_tmp.mk', 'w') as f:
-            f.write('CONFIG_V9_5_LV_USE_LINUX_FBDEV=y\n')
-            f.write('CONFIG_V9_5_LV_DRAW_SW_ASM_NEON=y\n')
-            f.write('CONFIG_V9_5_LV_USE_DRAW_SW_ASM=1\n')
-            f.write('CONFIG_V9_5_LV_USE_EVDEV=y\n')
-            f.write('CONFIG_TOOLCHAIN_PREFIX="aarch64-linux-gnu-"\n')
-
-# non-aarch64: SDL simulator (macOS / x86_64 Linux)
-elif arch != "aarch64":
-    if not os.path.exists('build/config/config_tmp.mk'):
-        os.makedirs('build/config', exist_ok=True)
-        with open('build/config/config_tmp.mk', 'w') as f:
-            f.write('CONFIG_V9_5_LV_USE_SDL=y\n')
-            try:
-                sdl2_flags = subprocess.check_output(
-                    ['pkg-config', '--cflags', '--libs', 'sdl2'], text=True).strip()
-                f.write('CONFIG_TOOLCHAIN_FLAGS="{}"\n'.format(sdl2_flags))
-            except Exception:
-                pass
-
-# aarch64 native: CardputerZero on-device build
-else:
-    if not os.path.exists('build/config/config_tmp.mk'):
-        os.makedirs('build/config', exist_ok=True)
-        with open('build/config/config_tmp.mk', 'w') as f:
-            f.write('CONFIG_V9_5_LV_USE_LINUX_FBDEV=y\n')
-            f.write('CONFIG_V9_5_LV_DRAW_SW_ASM_NEON=y\n')
-            f.write('CONFIG_V9_5_LV_USE_DRAW_SW_ASM=1\n')
-            f.write('CONFIG_V9_5_LV_USE_EVDEV=y\n')
-
-
-
-
+cross_package_enabled = False
 
 local_path = Path(os.getcwd())
-sdk_path = local_path.parent.parent / 'SDK'
-os.environ['SDK_PATH'] = str(sdk_path)
-os.environ['EXT_COMPONENTS_PATH'] = str(sdk_path.parent / 'ext_components')
+sdk_path = local_path.parent.parent / "SDK"
+version_file = local_path.parent.parent / "ext_components" / "cp0_lvgl" / "sdk_version.txt"
 
+version = version_file.read_text(encoding="utf-8")
+static_lib_path = sdk_path / "github_source" / f"static_lib_{version}"
+
+if os.environ.get("CardputerZero", "") == "y":
+    os.environ["CONFIG_DEFAULT_FILE"] = "linux_x86_cross_cp0_config_defaults.mk"
+
+if os.environ.get("CONFIG_DEFAULT_FILE") is None:
+    if platform.machine() == "x86_64":
+        os.environ["CONFIG_DEFAULT_FILE"] = "linux_x86_sdl2_config_defaults.mk"
+
+if "cross" in os.environ.get("CONFIG_DEFAULT_FILE", ""):
+    cross_package_enabled = True
+    config_tmp_path = Path("build") / "config" / "config_tmp.mk"
+    sysroot_path_str = static_lib_path.as_posix().replace('"', r'\"')
+    config_tmp_content = f'CONFIG_TOOLCHAIN_SYSROOT="{sysroot_path_str}"\n'
+    if not config_tmp_path.exists() or config_tmp_path.read_text() != config_tmp_content:
+        config_tmp_path.parent.mkdir(parents=True, exist_ok=True)
+        config_tmp_path.write_text(config_tmp_content)
+
+os.environ["SDK_PATH"] = str(sdk_path)
+os.environ["EXT_COMPONENTS_PATH"] = str(sdk_path.parent / "ext_components")
 
 env = SConscript(
-    str(sdk_path / 'tools' / 'scons' / 'project.py'),
+    str(sdk_path / "tools" / "scons" / "project.py"),
     variant_dir=os.getcwd(),
     duplicate=0,
 )
+
+if cross_package_enabled:
+    update = False
+    if not static_lib_path.exists():
+        update = True
+    else:
+        try:
+            with open(str(static_lib_path / "version"), "r") as f:
+                if version != f.read().strip():
+                    update = True
+        except Exception:
+            update = True
+
+    if update:
+        with open(env["PROJECT_TOOL_S"]) as f:
+            exec(f.read())
+        try:
+            import tarfile
+
+            tarfile.TarFile.extraction_filter = staticmethod(
+                tarfile.fully_trusted_filter
+            )
+        except AttributeError:
+            pass
+        down_url = (
+            "https://github.com/CardputerZero/M5CardputerZero-UserDemo/"
+            "releases/download/{}/sdk_bsp.tar.gz"
+        ).format(version)
+        check_wget_down(down_url, "static_lib_{}.tar.gz".format(version))
