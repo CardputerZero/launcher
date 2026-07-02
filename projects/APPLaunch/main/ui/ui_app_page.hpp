@@ -386,15 +386,11 @@ private:
     {
         if (!battery_panel_ || !battery_bar_ || !power_label_ || !battery_charge_wave_)
             return;
-        lv_obj_set_style_bg_color(battery_panel_, lv_color_hex(charging ? 0xF3B51B : 0x000000),
-                                  LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_opa(battery_panel_, charging ? 80 : 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_color(battery_bar_, lv_color_hex(charging ? 0x2A2608 : 0x484847),
-                                  LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_opa(battery_bar_, charging ? 70 : 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_color(battery_bar_, lv_color_hex(charging ? 0xFFD24A : 0x66CC33),
-                                  LV_PART_INDICATOR | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_opa(battery_bar_, 170, LV_PART_INDICATOR | LV_STATE_DEFAULT);
+        // No progress fill: the battery level is shown by the rounded background
+        // image + "%" label only. Keep the bar fully transparent in all states.
+        lv_obj_set_style_bg_opa(battery_panel_, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_opa(battery_bar_, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_opa(battery_bar_, 0, LV_PART_INDICATOR | LV_STATE_DEFAULT);
         lv_obj_set_style_text_color(power_label_, lv_color_hex(charging ? 0xFFF2A8 : 0xFFFFFF),
                                     LV_PART_MAIN | LV_STATE_DEFAULT);
 
@@ -908,15 +904,11 @@ private:
     {
         if (!ui_TOP_battery_panel || !ui_TOP_Power || !ui_TOP_power_Label || !ui_TOP_charge_wave)
             return;
-        lv_obj_set_style_bg_color(ui_TOP_battery_panel, lv_color_hex(charging ? 0xF3B51B : 0x000000),
-                                  LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_opa(ui_TOP_battery_panel, charging ? 80 : 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_color(ui_TOP_Power, lv_color_hex(charging ? 0x2A2608 : 0x484847),
-                                  LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_opa(ui_TOP_Power, charging ? 70 : 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_color(ui_TOP_Power, lv_color_hex(charging ? 0xFFD24A : 0x66CC33),
-                                  LV_PART_INDICATOR | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_opa(ui_TOP_Power, 170, LV_PART_INDICATOR | LV_STATE_DEFAULT);
+        // No progress fill: the battery level is shown by the rounded background
+        // image + "%" label only. Keep the bar fully transparent in all states.
+        lv_obj_set_style_bg_opa(ui_TOP_battery_panel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_opa(ui_TOP_Power, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_opa(ui_TOP_Power, 0, LV_PART_INDICATOR | LV_STATE_DEFAULT);
         lv_obj_set_style_text_color(ui_TOP_power_Label, lv_color_hex(charging ? 0xFFF2A8 : 0xFFFFFF),
                                     LV_PART_MAIN | LV_STATE_DEFAULT);
 

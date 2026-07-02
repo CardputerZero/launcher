@@ -254,7 +254,6 @@ private:
             m.label = "Screen";
             m.sub_items = {
                 {"Brightness", false, false, [this]() { enter_brightness_adjust(); }},
-                {"DarkTime",   false, false, [this]() { enter_darktime_adjust(); }},
             };
             menu_items_.push_back(m);
         }
@@ -425,16 +424,6 @@ private:
             m.on_enter = [this]() { refresh_version_info(); };
             menu_items_.push_back(m);
         }
-        // --- Reset ---
-        {
-            MenuItem m;
-            m.label = "Reset";
-            m.sub_items = {
-                {"Run Setup Wizard", false, false, [this]() { enter_confirm_action("Run Setup?", [this](){ rearm_oobe_and_reboot(); }); }},
-                {"Factory Reset", false, false, [this]() { factory_reset(); }},
-            };
-            menu_items_.push_back(m);
-        }
         // --- SoundCard ---
         {
             MenuItem m;
@@ -448,20 +437,6 @@ private:
     }
 
     // ==================== Placeholder functions for new menus ====================
-    void enter_darktime_adjust()
-    {
-        val_title_ = "DarkTime";
-        val_options_ = {"Never", "10S", "30S", "60S", "300S"};
-        const int times[] = {0, 10, 30, 60, 300};
-        int saved = config_get_int("dark_time", 30); // default 30S
-        val_sel_idx_ = 2;
-        for (int i = 0; i < (int)(sizeof(times) / sizeof(times[0])); ++i) {
-            if (times[i] == saved) { val_sel_idx_ = i; break; }
-        }
-        view_state_ = ViewState::VALUE_SELECT;
-        transition_enter_level();
-    }
-
     void enter_volume_adjust()
     {
         val_title_ = "Volume";
@@ -481,7 +456,7 @@ private:
     {
         val_title_ = "Resolution";
         val_options_ = {"1280x720", "640x480"};
-        val_sel_idx_ = 0;
+        val_sel_idx_ = (config_get_int("camera.resolution.width", 1280) == 640) ? 1 : 0;
         view_state_ = ViewState::VALUE_SELECT;
         transition_enter_level();
     }
@@ -1036,7 +1011,7 @@ private:
 
             lv_label_set_text(lbl, new_text);
             info_visible_text_[i] = new_text;
-            apply_overflow_handling(lbl, VALUE_BOX_LEFT,
+            apply_overflow_centered(lbl, SUB_CENTER_X,
                                     info_sub_label_focused_[i] ? 80 : VALUE_BOX_W,
                                     info_sub_label_focused_[i]);
         }
@@ -1134,6 +1109,13 @@ private:
 
     void save_app_toggle(const std::string &config_key)
     {
+        // Locate the Launcher menu by label instead of assuming a fixed index,
+        // so reordering the menu list can't desync the toggle from its app.
+        int launcher_idx = find_menu("Launcher");
+        if (launcher_idx < 0)
+            return;
+        MenuItem &launcher_menu = menu_items_[launcher_idx];
+
         std::size_t app_count = 0;
         const AppDescriptor *apps = launcher_app_registry_entries(&app_count);
         int visible_idx = 0;
@@ -1142,7 +1124,9 @@ private:
             if (!desc.configurable)
                 continue;
             if (config_key == desc.config_key) {
-                bool enabled = menu_items_[0].sub_items[visible_idx].toggle_state;
+                if (visible_idx >= (int)launcher_menu.sub_items.size())
+                    return;
+                bool enabled = launcher_menu.sub_items[visible_idx].toggle_state;
                 launcher_app_registry_set_enabled(desc, enabled);
                 config_save();
                 launcher_app_registry_notify_changed();
@@ -2006,14 +1990,13 @@ private:
             config_save();
         } else if (val_title_ == "Volume") {
             apply_volume();
-        } else if (val_title_ == "DarkTime") {
-            // Idle screen-blank timeout in seconds (0 = Never); consumed by
-            // ui_darkscreen_tick() in the launcher main loop (#72).
-            int times[] = {0, 10, 30, 60, 300};
-            config_set_int("dark_time", times[val_sel_idx_]);
-            config_save();
         } else if (val_title_ == "Resolution") {
-            config_set_int("cam_resolution", val_sel_idx_);
+            // Publish the real width/height to the shared user config the
+            // camera app reads (camera.resolution.{width,height}).
+            int width = 1280, height = 720;
+            if (val_sel_idx_ == 1) { width = 640; height = 480; }
+            config_set_int("camera.resolution.width", width);
+            config_set_int("camera.resolution.height", height);
             config_save();
         } else if (val_title_ == "Startup") {
             config_set_int("startup_mode", val_sel_idx_);
@@ -2195,35 +2178,36 @@ private:
         return lbl;
     }
 
-    static constexpr int ARROW_W = 18;
     static constexpr int SUB_RIGHT_ARROW_X = SUB_ARROW_X;
+    static constexpr int ARROW_SRC = 19;    // setting_right_arrow.png is 19x19
+    static constexpr int ARROW_SCALE = 224; // 256 = 100%; shrink the blue arrow a touch
 
-    // Place blue arrow between left column and right column.
-    // Uses left_lbl's right edge and right_min_x (leftmost x of any right-column item)
-    // to center the arrow in the gap between them.
+    // Place the blue "drill-in" arrow between the left column and the right
+    // column. It sits just left of the right text with a guaranteed gap, is
+    // scaled down slightly, and is drawn *behind* the row text (but above the
+    // highlight bar) so a wide left label can never be occluded by it. (plan A)
     void place_blue_arrow(lv_obj_t *parent, lv_obj_t *left_lbl, int right_min_x)
     {
         if (!left_lbl || right_min_x <= 0) return;
         lv_obj_update_layout(left_lbl);
 
+        const int vis = ARROW_SRC * ARROW_SCALE / 256; // scaled width/height (square)
         int left_right_edge = lv_obj_get_x(left_lbl) + lv_obj_get_width(left_lbl);
-        int gap = right_min_x - left_right_edge;
 
-        int arrow_x;
-        if (gap >= ARROW_W) {
-            arrow_x = left_right_edge + (gap - ARROW_W) / 2;
-        } else {
-            arrow_x = right_min_x - ARROW_W;
-        }
-        if (arrow_x < left_right_edge + 2) arrow_x = left_right_edge + 2;
+        static constexpr int SAFE_GAP = 4;
+        int arrow_x = right_min_x - SAFE_GAP - vis;
+        if (arrow_x < left_right_edge + 1) arrow_x = left_right_edge + 1;
 
-        // Vertically center the arrow (19px tall) within the row
-        static constexpr int ARROW_H = 19;
-        int arrow_y = row_y(ROW_CENTER) + (row_h() - ARROW_H) / 2;
+        // Vertically center the (scaled) arrow within the focused row.
+        int arrow_y = row_y(ROW_CENTER) + (row_h() - vis) / 2;
 
         lv_obj_t *arrow = lv_img_create(parent);
         lv_img_set_src(arrow, img_right_arrow_.c_str());
+        lv_image_set_pivot(arrow, 0, 0);
+        lv_image_set_scale(arrow, ARROW_SCALE);
         lv_obj_set_pos(arrow, arrow_x, arrow_y);
+        // Behind the row text, above the highlight bar (child index 0).
+        lv_obj_move_to_index(arrow, 1);
     }
 
     void place_fixed_sub_arrow(lv_obj_t *parent)
@@ -2280,6 +2264,14 @@ private:
         lv_obj_set_x(lbl, x);
         lv_obj_set_width(lbl, w);
         lv_label_set_long_mode(lbl, scroll ? LV_LABEL_LONG_SCROLL_CIRCULAR : LV_LABEL_LONG_CLIP);
+    }
+
+    // Same as apply_overflow_handling but keeps the clamped box centered on
+    // center_x, so an overflowing (marquee) value stays visually centered
+    // instead of drifting to a fixed left edge.
+    static void apply_overflow_centered(lv_obj_t *lbl, int center_x, int box_w, bool focused)
+    {
+        apply_overflow_handling(lbl, center_x - box_w / 2, box_w, focused);
     }
 
     // ==================== Main carousel view ====================
@@ -2465,7 +2457,7 @@ private:
             lv_obj_t *lbl = create_carousel_label(cont, vi, sub_center_vi,
                                                    sub.label.c_str(), SUB_CENTER_X, true);
             bool focused_row = (vi == sub_center_vi);
-            clamp_label_box(lbl, VALUE_BOX_LEFT, VALUE_BOX_W, focused_row);
+            apply_overflow_centered(lbl, SUB_CENTER_X, focused_row ? 80 : VALUE_BOX_W, focused_row);
             if (item.label == "Info" && si >= 0 && si < 4) {
                 info_sub_labels_[si] = lbl;
                 info_sub_label_focused_[si] = focused_row;
@@ -2525,7 +2517,7 @@ private:
         else if (cur_sub.is_toggle && item.label == "Bluetooth" && cur_sub.label == "Named Only")
             lv_label_set_text(hint, cur_sub.toggle_state ? "ok:show all" : "ok:named");
         else if (cur_sub.is_toggle)
-            lv_label_set_text(hint, cur_sub.toggle_state ? "ok:hide" : "ok:select");
+            lv_label_set_text(hint, cur_sub.toggle_state ? "ok:hide" : "ok:show");
         else if (item.label == "RTC" && rtc_ntp_on_)
             lv_label_set_text(hint, "ntp on");
         else
@@ -2574,13 +2566,17 @@ private:
         lv_obj_set_style_border_width(bar, 0, LV_PART_MAIN);
         lv_obj_clear_flag(bar, LV_OBJ_FLAG_SCROLLABLE);
 
-        // Left column: sub-items (Brightness/DarkTime) as carousel at MENU_X
+        // Left column: sub-item name (e.g. "Resolution") as carousel at MENU_X.
+        // Long names are clamped + marquee-scrolled so they can't run into the
+        // arrow / value column (kept centered on MENU_X).
+        static constexpr int VAL_LEFT_BOX_W = 84;
         lv_obj_t *val_left_lbl = nullptr;
         for (int vi = 0; vi < ROWS_VISIBLE; ++vi) {
             int si = sub_selected_idx_ - ROW_CENTER + vi;
             if (si < 0 || si >= count) continue;
             const char *text = menu_items_[selected_idx_].sub_items[si].label.c_str();
             lv_obj_t *lbl = create_carousel_label(cont, vi, ROW_CENTER, text, MENU_X);
+            apply_overflow_centered(lbl, MENU_X, VAL_LEFT_BOX_W, vi == ROW_CENTER);
             if (vi == ROW_CENTER) val_left_lbl = lbl;
         }
 
@@ -2592,7 +2588,7 @@ private:
             if (val_i < 0 || val_i >= val_count) continue;
             lv_obj_t *lbl = create_carousel_label(cont, vi, ROW_CENTER,
                                                    val_options_[val_i].c_str(), VAL_CENTER_X, true);
-            apply_overflow_handling(lbl, VALUE_BOX_LEFT, VALUE_BOX_W, vi == ROW_CENTER);
+            apply_overflow_centered(lbl, VAL_CENTER_X, VALUE_BOX_W, vi == ROW_CENTER);
             lv_obj_update_layout(lbl);
             int lx = lv_obj_get_x(lbl);
             if (lx < val_right_min_x) val_right_min_x = lx;

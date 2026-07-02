@@ -2,6 +2,8 @@
 #include "hal/hal_paths.h"
 #include "hal_lvgl_bsp.h"
 
+#include "../cp0_config_json.h"
+
 #include <cerrno>
 #include <cstdlib>
 #include <cstdio>
@@ -14,6 +16,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <utility>
+#include <vector>
 
 namespace {
 
@@ -123,11 +126,15 @@ public:
         const std::string dir = config_dir();
         if (mkdir_p(dir) != 0)
             return -1;
-        FILE *fp = std::fopen(join_path(dir, "settings").c_str(), "w");
+        std::vector<std::pair<std::string, std::string>> kv;
+        kv.reserve(count_);
+        for (int i = 0; i < count_; ++i)
+            kv.emplace_back(entries_[i].key, entries_[i].val);
+        const std::string json = cp0cfg::to_json(kv);
+        FILE *fp = std::fopen(join_path(dir, "config.json").c_str(), "w");
         if (!fp)
             return -1;
-        for (int i = 0; i < count_; ++i)
-            std::fprintf(fp, "%s=%s\n", entries_[i].key, entries_[i].val);
+        std::fwrite(json.data(), 1, json.size(), fp);
         std::fclose(fp);
         return 0;
     }
@@ -181,21 +188,26 @@ private:
     {
         count_ = 0;
         loaded_ = true;
-        FILE *fp = std::fopen(join_path(config_dir(), "settings").c_str(), "r");
+        FILE *fp = std::fopen(join_path(config_dir(), "config.json").c_str(), "r");
         if (!fp)
             return;
-        char line[kKeyMax + kValMax + 4];
-        while (std::fgets(line, sizeof(line), fp) && count_ < kMaxEntries) {
-            line[std::strcspn(line, "\r\n")] = '\0';
-            char *eq = std::strchr(line, '=');
-            if (!eq || line[0] == '\0')
-                continue;
-            *eq = '\0';
-            copy_cstr(entries_[count_].key, sizeof(entries_[count_].key), line);
-            copy_cstr(entries_[count_].val, sizeof(entries_[count_].val), eq + 1);
+        std::string text;
+        char buf[512];
+        size_t n;
+        while ((n = std::fread(buf, 1, sizeof(buf), fp)) > 0)
+            text.append(buf, n);
+        std::fclose(fp);
+
+        std::vector<std::pair<std::string, std::string>> kv;
+        if (!cp0cfg::from_json(text, kv))
+            return;
+        for (const auto &e : kv) {
+            if (count_ >= kMaxEntries)
+                break;
+            copy_cstr(entries_[count_].key, sizeof(entries_[count_].key), e.first.c_str());
+            copy_cstr(entries_[count_].val, sizeof(entries_[count_].val), e.second.c_str());
             ++count_;
         }
-        std::fclose(fp);
     }
 
     int find_entry_locked(const char *key) const
