@@ -171,8 +171,14 @@ def _copy_optional_binaries(src_dir: Path, package_root: Path, config: PackageCo
 
 
 def _copy_appstore_images(project_dir: Path, app_dst: Path) -> list[str]:
-    images_src = project_dir.parent / "AppStore" / "share" / "images"
-    if not images_src.is_dir():
+    appstore_dir = project_dir.parent / "AppStore"
+    image_roots = (
+        appstore_dir / "dist" / "APPLaunch" / "share" / "images",
+        appstore_dir / "APPLaunch" / "share" / "images",
+        appstore_dir / "share" / "images",
+    )
+    images_src = next((path for path in image_roots if path.is_dir()), None)
+    if images_src is None:
         return []
     images_dst = app_dst / "share" / "images"
     images_dst.mkdir(parents=True, exist_ok=True)
