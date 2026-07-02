@@ -95,6 +95,9 @@ private:
     int sub_selected_idx_ = 0;
     ViewState view_state_ = ViewState::MAIN;
     std::unordered_map<std::string, lv_obj_t *> ui_obj_;
+    lv_obj_t *info_sub_labels_[4] = {};
+    bool info_sub_label_focused_[4] = {};
+    std::string info_visible_text_[4];
 
     // Image paths
     std::string img_arrow_up_;
@@ -1008,8 +1011,35 @@ private:
             m.sub_items[3].label = buf;
             break;
         }
-        // Refresh the sub view if currently showing Info
-        if (view_state_ == ViewState::SUB) build_sub_view();
+        // Refresh visible Info labels in place. Rebuilding the sub view every second
+        // recreates marquee labels and restarts LV_LABEL_LONG_SCROLL_CIRCULAR.
+        if (view_state_ == ViewState::SUB) refresh_visible_info_labels();
+    }
+
+    void refresh_visible_info_labels()
+    {
+        if (selected_idx_ < 0 || selected_idx_ >= (int)menu_items_.size())
+            return;
+
+        MenuItem &item = menu_items_[selected_idx_];
+        if (item.label != "Info")
+            return;
+
+        for (int i = 0; i < 4 && i < (int)item.sub_items.size(); ++i) {
+            lv_obj_t *lbl = info_sub_labels_[i];
+            if (!lbl)
+                continue;
+
+            const char *new_text = item.sub_items[i].label.c_str();
+            if (info_visible_text_[i] == new_text)
+                continue;
+
+            lv_label_set_text(lbl, new_text);
+            info_visible_text_[i] = new_text;
+            apply_overflow_handling(lbl, VALUE_BOX_LEFT,
+                                    info_sub_label_focused_[i] ? 80 : VALUE_BOX_W,
+                                    info_sub_label_focused_[i]);
+        }
     }
 
     // ==================== RTC ====================
@@ -2061,8 +2091,8 @@ private:
     // width, anything wider than VALUE_BOX_W is shrunk to VALUE_BOX_W and marquee-scrolled
     // on the focused row / ellipsized elsewhere — so long values (MAC, Commit, IP,
     // hostname, version, ...) scroll instead of overflowing or overlapping. (#57)
-    static constexpr int VALUE_BOX_LEFT = 112;
-    static constexpr int VALUE_BOX_W    = 100; // 超过 100px 即缩宽并滚动
+    static constexpr int VALUE_BOX_LEFT = 124;
+    static constexpr int VALUE_BOX_W    = 88; // 超过 88px 即缩宽并滚动
     // Right-column hint (ok:xxx) scroll threshold. The hint sits at the far right,
     // to the right of any toggle indicator (x=220). Anything wider than this is
     // clamped into a right-edge box and marquee-scrolled. Slightly smaller than the
@@ -2072,6 +2102,24 @@ private:
     // Width of the "Connected WiFi: <ssid> <ip>" header box in the WiFi list. When the
     // text is wider than this it marquee-scrolls instead of overflowing off-screen (#66).
     static constexpr int WIFI_TITLE_BOX_W = 300;
+
+    // SoundCard uses fixed slots so long ALSA names/values cannot push neighboring
+    // text or hints out of place.
+    static constexpr int SC_MARGIN_X      = 8;
+    static constexpr int SC_ROW_X         = 12;
+    static constexpr int SC_CARD_NAME_W   = SCREEN_W - 24;
+    static constexpr int SC_CTRL_NAME_X   = 12;
+    static constexpr int SC_CTRL_NAME_W   = 172;
+    static constexpr int SC_CTRL_VALUE_X  = 190;
+    static constexpr int SC_CTRL_VALUE_W  = SCREEN_W - SC_CTRL_VALUE_X - 8;
+    static constexpr int SC_DETAIL_TEXT_W = SCREEN_W - 16;
+    static constexpr int SC_INPUT_X       = 100;
+    static constexpr int SC_INPUT_W       = SCREEN_W - SC_INPUT_X - 12;
+    static constexpr int SC_BOTTOM_HINT_W = SCREEN_W - 16;
+
+    static constexpr int SUB_LEFT_BOX_X   = 4;
+    static constexpr int SUB_LEFT_BOX_W   = 90;
+    static constexpr int SUB_ARROW_X      = 100;
 
     RowStyle style_for_slot(int vi) {
         int dist = vi > ROW_CENTER ? vi - ROW_CENTER : ROW_CENTER - vi;
@@ -2148,6 +2196,7 @@ private:
     }
 
     static constexpr int ARROW_W = 18;
+    static constexpr int SUB_RIGHT_ARROW_X = SUB_ARROW_X;
 
     // Place blue arrow between left column and right column.
     // Uses left_lbl's right edge and right_min_x (leftmost x of any right-column item)
@@ -2175,6 +2224,14 @@ private:
         lv_obj_t *arrow = lv_img_create(parent);
         lv_img_set_src(arrow, img_right_arrow_.c_str());
         lv_obj_set_pos(arrow, arrow_x, arrow_y);
+    }
+
+    void place_fixed_sub_arrow(lv_obj_t *parent)
+    {
+        static constexpr int ARROW_H = 19;
+        lv_obj_t *arrow = lv_img_create(parent);
+        lv_img_set_src(arrow, img_right_arrow_.c_str());
+        lv_obj_set_pos(arrow, SUB_RIGHT_ARROW_X, row_y(ROW_CENTER) + (row_h() - ARROW_H) / 2);
     }
 
     // Convenience: create a main-menu label at slot vi
@@ -2205,6 +2262,24 @@ private:
         // Do NOT use LV_LABEL_LONG_DOT here: with auto height it wraps to multiple lines
         // before adding dots, which looks like an unwanted line break.
         lv_label_set_long_mode(lbl, focused ? LV_LABEL_LONG_SCROLL_CIRCULAR : LV_LABEL_LONG_CLIP);
+    }
+
+    static void apply_fixed_label_box(lv_obj_t *lbl, int x, int y, int w, bool scroll)
+    {
+        if (!lbl || w <= 0)
+            return;
+        lv_obj_set_pos(lbl, x, y);
+        lv_obj_set_width(lbl, w);
+        lv_label_set_long_mode(lbl, scroll ? LV_LABEL_LONG_SCROLL_CIRCULAR : LV_LABEL_LONG_CLIP);
+    }
+
+    static void clamp_label_box(lv_obj_t *lbl, int x, int w, bool scroll)
+    {
+        if (!lbl || w <= 0)
+            return;
+        lv_obj_set_x(lbl, x);
+        lv_obj_set_width(lbl, w);
+        lv_label_set_long_mode(lbl, scroll ? LV_LABEL_LONG_SCROLL_CIRCULAR : LV_LABEL_LONG_CLIP);
     }
 
     // ==================== Main carousel view ====================
@@ -2331,6 +2406,11 @@ private:
     void build_sub_view()
     {
         lv_obj_t *cont = ui_obj_["list_cont"];
+        for (int i = 0; i < 4; ++i) {
+            info_sub_labels_[i] = nullptr;
+            info_sub_label_focused_[i] = false;
+            info_visible_text_[i].clear();
+        }
         lv_obj_clean(cont);
 
         MenuItem &item = menu_items_[selected_idx_];
@@ -2356,6 +2436,7 @@ private:
             if (item_idx < 0 || item_idx >= count) continue;
 
             lv_obj_t *lbl = create_menu_label(cont, vi, item_idx, count);
+            clamp_label_box(lbl, SUB_LEFT_BOX_X, SUB_LEFT_BOX_W, vi == ROW_CENTER);
             if (vi == ROW_CENTER) left_center_lbl = lbl;
         }
 
@@ -2375,7 +2456,6 @@ private:
         SubLabelInfo sub_labels[ROWS_VISIBLE] = {};
         int sub_label_count = 0;
         int right_min_x = SCREEN_W;
-        int right_max_edge = 0;
 
         for (int vi = 0; vi < ROWS_VISIBLE; ++vi) {
             int si = sub_selected_idx_ - sub_center_vi + vi;
@@ -2384,15 +2464,17 @@ private:
             SubItem &sub = item.sub_items[si];
             lv_obj_t *lbl = create_carousel_label(cont, vi, sub_center_vi,
                                                    sub.label.c_str(), SUB_CENTER_X, true);
-            // Focused row uses a tighter box (80px) so labels wider than 80px scroll;
-            // non-focused rows keep the full 100px box (only clip when truly overflowing).
             bool focused_row = (vi == sub_center_vi);
-            apply_overflow_handling(lbl, VALUE_BOX_LEFT, focused_row ? 80 : VALUE_BOX_W, focused_row);
+            clamp_label_box(lbl, VALUE_BOX_LEFT, VALUE_BOX_W, focused_row);
+            if (item.label == "Info" && si >= 0 && si < 4) {
+                info_sub_labels_[si] = lbl;
+                info_sub_label_focused_[si] = focused_row;
+                info_visible_text_[si] = sub.label;
+            }
             lv_obj_update_layout(lbl);
             int lx = lv_obj_get_x(lbl);
             int tw = lv_obj_get_width(lbl);
             if (lx < right_min_x) right_min_x = lx;
-            if (lx + tw > right_max_edge) right_max_edge = lx + tw;
 
             sub_labels[sub_label_count++] = {lbl, si, lx + tw};
         }
@@ -2415,9 +2497,10 @@ private:
             lv_obj_set_pos(ind, indicator_x + x_offset, lbl_y + (lbl_h - ind_h) / 2);
         }
 
-        // Blue arrow centered between left text right edge and right column left edge
-        if (left_center_lbl && sub_count > 0)
-            place_blue_arrow(cont, left_center_lbl, right_min_x);
+        // Keep the sub-view pointer in a fixed slot. Dynamic placement based on text
+        // widths breaks when long menu names like "SoundCard" overlap the value column.
+        if (sub_count > 0)
+            place_fixed_sub_arrow(cont);
 
         // Up/down arrows for sub (centered at SUB_CENTER_X)
         int sub_arrow_x = SUB_CENTER_X - 8;
@@ -3038,20 +3121,20 @@ void build_soundcard_cards_view()
     // Title
     lv_obj_t *title = lv_label_create(cont);
     lv_label_set_text(title, "Sound Cards");
-    lv_obj_set_pos(title, 8, 4);
+    apply_fixed_label_box(title, SC_MARGIN_X, 4, SC_DETAIL_TEXT_W, false);
     lv_obj_set_style_text_color(title, lv_color_hex(0x58A6FF), LV_PART_MAIN);
     lv_obj_set_style_text_font(title, launcher_fonts().get("Montserrat-Bold.ttf", 14, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN);
 
     if (sc_cards_.empty()) {
         lv_obj_t *lbl = lv_label_create(cont);
         lv_label_set_text(lbl, "No ALSA cards found.");
-        lv_obj_set_pos(lbl, 8, 40);
+        apply_fixed_label_box(lbl, SC_MARGIN_X, 40, SC_DETAIL_TEXT_W, false);
         lv_obj_set_style_text_color(lbl, lv_color_hex(0x888888), LV_PART_MAIN);
         lv_obj_set_style_text_font(lbl, &lv_font_montserrat_12, LV_PART_MAIN);
 
         lv_obj_t *hint = lv_label_create(cont);
         lv_label_set_text(hint, "ESC: back");
-        lv_obj_set_pos(hint, 8, LIST_H - 14);
+        apply_fixed_label_box(hint, SC_MARGIN_X, LIST_H - 14, SC_BOTTOM_HINT_W, false);
         lv_obj_set_style_text_color(hint, lv_color_hex(0x555555), LV_PART_MAIN);
         lv_obj_set_style_text_font(hint, &lv_font_montserrat_10, LV_PART_MAIN);
         return;
@@ -3081,16 +3164,14 @@ void build_soundcard_cards_view()
 
         lv_obj_t *lbl = lv_label_create(cont);
         lv_label_set_text(lbl, sc_cards_[ai].name.c_str());
-        lv_obj_set_pos(lbl, 12, y + 2);
-        lv_obj_set_width(lbl, SCREEN_W - 24);
-        lv_label_set_long_mode(lbl, LV_LABEL_LONG_CLIP);
+        apply_fixed_label_box(lbl, SC_ROW_X, y + 2, SC_CARD_NAME_W, sel);
         lv_obj_set_style_text_color(lbl, lv_color_hex(sel ? 0xFFFFFF : 0xCCCCCC), LV_PART_MAIN);
         lv_obj_set_style_text_font(lbl, &lv_font_montserrat_12, LV_PART_MAIN);
     }
 
     lv_obj_t *hint = lv_label_create(cont);
     lv_label_set_text(hint, "OK: open  ESC: back");
-    lv_obj_set_pos(hint, 8, LIST_H - 14);
+    apply_fixed_label_box(hint, SC_MARGIN_X, LIST_H - 14, SC_BOTTOM_HINT_W, false);
     lv_obj_set_style_text_color(hint, lv_color_hex(0x555555), LV_PART_MAIN);
     lv_obj_set_style_text_font(hint, &lv_font_montserrat_10, LV_PART_MAIN);
 }
@@ -3112,22 +3193,20 @@ void build_soundcard_controls_view()
 
     lv_obj_t *title = lv_label_create(cont);
     lv_label_set_text(title, title_buf);
-    lv_obj_set_pos(title, 8, 4);
-    lv_obj_set_width(title, SCREEN_W - 16);
-    lv_label_set_long_mode(title, LV_LABEL_LONG_CLIP);
+    apply_fixed_label_box(title, SC_MARGIN_X, 4, SC_DETAIL_TEXT_W, true);
     lv_obj_set_style_text_color(title, lv_color_hex(0x58A6FF), LV_PART_MAIN);
     lv_obj_set_style_text_font(title, launcher_fonts().get("Montserrat-Bold.ttf", 12, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN);
 
     if (sc_controls_.empty()) {
         lv_obj_t *lbl = lv_label_create(cont);
         lv_label_set_text(lbl, "No controls found.");
-        lv_obj_set_pos(lbl, 8, 40);
+        apply_fixed_label_box(lbl, SC_MARGIN_X, 40, SC_DETAIL_TEXT_W, false);
         lv_obj_set_style_text_color(lbl, lv_color_hex(0x888888), LV_PART_MAIN);
         lv_obj_set_style_text_font(lbl, &lv_font_montserrat_12, LV_PART_MAIN);
 
         lv_obj_t *hint = lv_label_create(cont);
         lv_label_set_text(hint, "ESC: back");
-        lv_obj_set_pos(hint, 8, LIST_H - 14);
+        apply_fixed_label_box(hint, SC_MARGIN_X, LIST_H - 14, SC_BOTTOM_HINT_W, false);
         lv_obj_set_style_text_color(hint, lv_color_hex(0x555555), LV_PART_MAIN);
         lv_obj_set_style_text_font(hint, &lv_font_montserrat_10, LV_PART_MAIN);
         return;
@@ -3160,9 +3239,7 @@ void build_soundcard_controls_view()
         // Left: control name
         lv_obj_t *name_lbl = lv_label_create(cont);
         lv_label_set_text(name_lbl, ctrl.name.c_str());
-        lv_obj_set_pos(name_lbl, 12, y + 2);
-        lv_obj_set_width(name_lbl, 180);
-        lv_label_set_long_mode(name_lbl, LV_LABEL_LONG_CLIP);
+        apply_fixed_label_box(name_lbl, SC_CTRL_NAME_X, y + 2, SC_CTRL_NAME_W, sel);
         lv_obj_set_style_text_color(name_lbl, lv_color_hex(sel ? 0xFFFFFF : 0xCCCCCC), LV_PART_MAIN);
         lv_obj_set_style_text_font(name_lbl, &lv_font_montserrat_12, LV_PART_MAIN);
 
@@ -3170,9 +3247,7 @@ void build_soundcard_controls_view()
         if (!ctrl.current_str.empty()) {
             lv_obj_t *val_lbl = lv_label_create(cont);
             lv_label_set_text(val_lbl, ctrl.current_str.c_str());
-            lv_obj_set_pos(val_lbl, 196, y + 2);
-            lv_obj_set_width(val_lbl, SCREEN_W - 200);
-            lv_label_set_long_mode(val_lbl, LV_LABEL_LONG_CLIP);
+            apply_fixed_label_box(val_lbl, SC_CTRL_VALUE_X, y + 2, SC_CTRL_VALUE_W, sel);
             lv_obj_set_style_text_color(val_lbl, lv_color_hex(sel ? 0xAADDFF : 0x888888), LV_PART_MAIN);
             lv_obj_set_style_text_font(val_lbl, &lv_font_montserrat_10, LV_PART_MAIN);
         }
@@ -3192,7 +3267,7 @@ void build_soundcard_controls_view()
 
     lv_obj_t *hint = lv_label_create(cont);
     lv_label_set_text(hint, "OK: edit  ESC: back");
-    lv_obj_set_pos(hint, 8, LIST_H - 14);
+    apply_fixed_label_box(hint, SC_MARGIN_X, LIST_H - 14, SC_BOTTOM_HINT_W, false);
     lv_obj_set_style_text_color(hint, lv_color_hex(0x555555), LV_PART_MAIN);
     lv_obj_set_style_text_font(hint, &lv_font_montserrat_10, LV_PART_MAIN);
 }
@@ -3210,9 +3285,7 @@ void build_soundcard_detail_view()
     // Control name (header)
     lv_obj_t *name_lbl = lv_label_create(cont);
     lv_label_set_text(name_lbl, sc_detail_.name.c_str());
-    lv_obj_set_pos(name_lbl, 8, 4);
-    lv_obj_set_width(name_lbl, SCREEN_W - 16);
-    lv_label_set_long_mode(name_lbl, LV_LABEL_LONG_CLIP);
+    apply_fixed_label_box(name_lbl, SC_MARGIN_X, 4, SC_DETAIL_TEXT_W, true);
     lv_obj_set_style_text_color(name_lbl, lv_color_hex(0x58A6FF), LV_PART_MAIN);
     lv_obj_set_style_text_font(name_lbl, launcher_fonts().get("Montserrat-Bold.ttf", 14, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN);
 
@@ -3222,16 +3295,14 @@ void build_soundcard_detail_view()
                   "Limits: %d - %d", sc_detail_.min_val, sc_detail_.max_val);
     lv_obj_t *limits_lbl = lv_label_create(cont);
     lv_label_set_text(limits_lbl, info_buf);
-    lv_obj_set_pos(limits_lbl, 8, 26);
+    apply_fixed_label_box(limits_lbl, SC_MARGIN_X, 26, SC_DETAIL_TEXT_W, false);
     lv_obj_set_style_text_color(limits_lbl, lv_color_hex(0xAAAAAA), LV_PART_MAIN);
     lv_obj_set_style_text_font(limits_lbl, &lv_font_montserrat_12, LV_PART_MAIN);
 
     if (!sc_detail_.current_str.empty()) {
         lv_obj_t *cur_lbl = lv_label_create(cont);
         lv_label_set_text(cur_lbl, sc_detail_.current_str.c_str());
-        lv_obj_set_pos(cur_lbl, 8, 44);
-        lv_obj_set_width(cur_lbl, SCREEN_W - 16);
-        lv_label_set_long_mode(cur_lbl, LV_LABEL_LONG_CLIP);
+        apply_fixed_label_box(cur_lbl, SC_MARGIN_X, 44, SC_DETAIL_TEXT_W, true);
         lv_obj_set_style_text_color(cur_lbl, lv_color_hex(0xCCCCCC), LV_PART_MAIN);
         lv_obj_set_style_text_font(cur_lbl, &lv_font_montserrat_12, LV_PART_MAIN);
     }
@@ -3248,7 +3319,7 @@ void build_soundcard_detail_view()
     // "New value:" label
     lv_obj_t *new_lbl = lv_label_create(cont);
     lv_label_set_text(new_lbl, "New value:");
-    lv_obj_set_pos(new_lbl, 8, 72);
+    apply_fixed_label_box(new_lbl, SC_MARGIN_X, 72, SC_INPUT_X - SC_MARGIN_X - 4, false);
     lv_obj_set_style_text_color(new_lbl, lv_color_hex(0xCCCCCC), LV_PART_MAIN);
     lv_obj_set_style_text_font(new_lbl, &lv_font_montserrat_12, LV_PART_MAIN);
 
@@ -3256,9 +3327,7 @@ void build_soundcard_detail_view()
     sc_cursor_vis_ = true;
     sc_input_lbl_ = lv_label_create(cont);
     sc_input_update_display();
-    lv_obj_set_pos(sc_input_lbl_, 100, 70);
-    lv_obj_set_width(sc_input_lbl_, 150);
-    lv_label_set_long_mode(sc_input_lbl_, LV_LABEL_LONG_CLIP);
+    apply_fixed_label_box(sc_input_lbl_, SC_INPUT_X, 70, SC_INPUT_W, false);
     lv_obj_set_style_text_color(sc_input_lbl_, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
     lv_obj_set_style_text_font(sc_input_lbl_, &lv_font_montserrat_14, LV_PART_MAIN);
 
@@ -3275,14 +3344,14 @@ void build_soundcard_detail_view()
                   sc_detail_.min_val, sc_detail_.max_val);
     sc_hint_lbl2_ = lv_label_create(cont);
     lv_label_set_text(sc_hint_lbl2_, range_buf);
-    lv_obj_set_pos(sc_hint_lbl2_, 8, 92);
+    apply_fixed_label_box(sc_hint_lbl2_, SC_MARGIN_X, 92, SC_DETAIL_TEXT_W, false);
     lv_obj_set_style_text_color(sc_hint_lbl2_, lv_color_hex(0x666666), LV_PART_MAIN);
     lv_obj_set_style_text_font(sc_hint_lbl2_, &lv_font_montserrat_10, LV_PART_MAIN);
 
     // Bottom hint
     lv_obj_t *hint = lv_label_create(cont);
     lv_label_set_text(hint, "0-9:type  BS:del  OK:apply  ESC:back");
-    lv_obj_set_pos(hint, 8, LIST_H - 14);
+    apply_fixed_label_box(hint, SC_MARGIN_X, LIST_H - 14, SC_BOTTOM_HINT_W, true);
     lv_obj_set_style_text_color(hint, lv_color_hex(0x555555), LV_PART_MAIN);
     lv_obj_set_style_text_font(hint, &lv_font_montserrat_10, LV_PART_MAIN);
 }
