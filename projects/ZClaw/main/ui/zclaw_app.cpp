@@ -9,11 +9,18 @@
 #include "hal_lvgl_bsp.h"
 #include "cp0_lvgl_file.hpp"
 #include "keyboard_input.h"
+#include "zclaw_client.h"
+#include "zclaw_fonts.hpp"
 
 #include <linux/input.h>
 
+#include <chrono>
 #include <cstdio>
+#include <cstdlib>
+#include <condition_variable>
 #include <fstream>
+#include <mutex>
+#include <pthread.h>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -52,9 +59,10 @@ class ZClawApp
     static constexpr lv_coord_t USER_BUBBLE_PAD_Y = 6;
     static constexpr lv_coord_t CHAT_ROW_W = 296;
     static constexpr int SETTINGS_ROW_MAX = 5;
-    static constexpr const char *PROVIDERS_CONFIG_PATH = "~/.zeroclaw/zclaw_providers.tsv";
 
     enum class SettingsView {
+        Setup,
+        Authorization,
         Main,
         Providers,
         ProviderDetail
@@ -71,15 +79,20 @@ class ZClawApp
 
     enum class InputMode {
         Chat,
-        ProviderEdit
+        ProviderEdit,
+        PairingCode
     };
 
-    struct ProviderConfig {
-        std::string alias;
-        std::string family;
-        std::string model;
-        std::string uri;
-        std::string api_key;
+    struct AsyncResult {
+        ZClawApp *self = nullptr;
+        std::string text;
+        bool ok = false;
+        UiConfig config;
+    };
+
+    struct ApprovalPromptData {
+        ZClawApp *self = nullptr;
+        ZClawApprovalRequest request;
     };
 
     lv_obj_t *screen_ = nullptr;
@@ -97,6 +110,10 @@ class ZClawApp
     lv_obj_t *send_button_ = nullptr;
     lv_obj_t *input_dialog_ = nullptr;
     lv_obj_t *input_textarea_ = nullptr;
+    lv_obj_t *approval_dialog_ = nullptr;
+    lv_obj_t *approval_tool_label_ = nullptr;
+    lv_obj_t *approval_summary_label_ = nullptr;
+    lv_obj_t *approval_buttons_[3] = {};
     lv_obj_t *settings_panel_ = nullptr;
     lv_obj_t *settings_header_label_ = nullptr;
     lv_obj_t *settings_hint_label_ = nullptr;
@@ -114,22 +131,38 @@ class ZClawApp
     int provider_detail_index_ = -1;
     ProviderEditField provider_edit_field_ = ProviderEditField::None;
     InputMode input_mode_ = InputMode::Chat;
+    UiConfig ui_config_;
     std::vector<ProviderConfig> providers_;
     std::string avatar_path_;
     std::string sparkles_path_;
     std::string send_button_path_;
     uint32_t reply_seed_ = 0;
+    bool request_in_flight_ = false;
+    bool setup_in_flight_ = false;
+    std::mutex approval_mutex_;
+    std::condition_variable approval_cv_;
+    std::string pending_approval_id_;
+    std::string pending_approval_tool_;
+    std::string pending_approval_decision_;
+    bool approval_waiting_ = false;
+    int approval_selected_ = 0;
+    ZClawClient client_;
+    zclaw::FontManager fonts_;
 
 public:
     ZClawApp()
     {
         root_screen_ = lv_screen_active();
+        fonts_.init();
         avatar_path_ = cp0_file_path("zclaw_avatar_16.png");
         sparkles_path_ = cp0_file_path("zclaw_sparkles_10.png");
         send_button_path_ = cp0_file_path("zclaw_send_button_18.png");
         load_providers();
+        load_ui_config();
         create_ui();
         event_handler_init();
+        if (first_run_needed())
+            open_setup_panel();
     }
 
 private:
@@ -231,10 +264,20 @@ private:
         return fields;
     }
 
+    static std::string display_text_compat(const std::string &text)
+    {
+        return text;
+    }
+
+    bool first_run_needed() const
+    {
+        return ZClawClient::first_run_needed(ui_config_);
+    }
+
     void load_providers()
     {
         providers_.clear();
-        std::ifstream file(PROVIDERS_CONFIG_PATH);
+        std::ifstream file(ZClawClient::providers_config_path());
         std::string line;
         while (std::getline(file, line)) {
             if (line.empty())
@@ -259,7 +302,8 @@ private:
 
     void save_providers()
     {
-        std::ofstream file(PROVIDERS_CONFIG_PATH, std::ios::trunc);
+        ZClawClient::ensure_storage_dir();
+        std::ofstream file(ZClawClient::providers_config_path(), std::ios::trunc);
         if (!file)
             return;
         for (const ProviderConfig &provider : providers_) {
@@ -269,6 +313,42 @@ private:
                  << encode_field(provider.uri) << '\t'
                  << encode_field(provider.api_key) << '\n';
         }
+    }
+
+    void load_ui_config()
+    {
+        std::ifstream file(ZClawClient::ui_config_path());
+        std::string line;
+        while (std::getline(file, line)) {
+            std::vector<std::string> fields = split_tab_line(line);
+            if (fields.size() < 2)
+                continue;
+            const std::string key = decode_field(fields[0]);
+            const std::string value = decode_field(fields[1]);
+            if (key == "webhook_url")
+                ui_config_.webhook_url = value;
+            else if (key == "agent_alias")
+                ui_config_.agent_alias = value.empty() ? "zclaw" : value;
+            else if (key == "webhook_secret")
+                ui_config_.webhook_secret = value;
+            else if (key == "bearer_token")
+                ui_config_.bearer_token = value;
+            else if (key == "setup_complete")
+                ui_config_.setup_complete = value == "1";
+        }
+    }
+
+    void save_ui_config()
+    {
+        ZClawClient::ensure_storage_dir();
+        std::ofstream file(ZClawClient::ui_config_path(), std::ios::trunc);
+        if (!file)
+            return;
+        file << encode_field("webhook_url") << '\t' << encode_field(ui_config_.webhook_url) << '\n'
+             << encode_field("agent_alias") << '\t' << encode_field(ui_config_.agent_alias) << '\n'
+             << encode_field("webhook_secret") << '\t' << encode_field(ui_config_.webhook_secret) << '\n'
+             << encode_field("bearer_token") << '\t' << encode_field(ui_config_.bearer_token) << '\n'
+             << encode_field("setup_complete") << '\t' << (ui_config_.setup_complete ? "1" : "0") << '\n';
     }
 
     static const char *provider_field_name(ProviderEditField field)
@@ -336,15 +416,15 @@ private:
         static constexpr lv_coord_t AVATAR_SIZE = 16;
         static constexpr lv_coord_t STATUS_SIZE = 6;
         static constexpr lv_coord_t DOT_SIZE = 2;
-        const lv_coord_t name_h = lv_font_get_line_height(&lv_font_montserrat_12);
-        const lv_coord_t status_h = lv_font_get_line_height(&lv_font_montserrat_10);
+        const lv_coord_t name_h = lv_font_get_line_height(fonts_.font_12());
+        const lv_coord_t status_h = lv_font_get_line_height(fonts_.font_10());
 
         lv_obj_t *bar = make_box(screen_, 0, 0, SCREEN_W, BAR_H, COLOR_BAR);
         make_zclaw_avatar(bar, 12, centered_y(BAR_H, AVATAR_SIZE), AVATAR_SIZE);
 
         make_box(bar, 34, centered_y(BAR_H, STATUS_SIZE), STATUS_SIZE, STATUS_SIZE, COLOR_ONLINE, STATUS_SIZE / 2);
-        make_label(bar, "ZClaw", 47, centered_y(BAR_H, name_h), 42, name_h, &lv_font_montserrat_12, COLOR_TEXT);
-        make_label(bar, "Online", 89, centered_y(BAR_H, status_h), 48, status_h, &lv_font_montserrat_10, COLOR_ONLINE);
+        make_label(bar, "ZClaw", 47, centered_y(BAR_H, name_h), 42, name_h, fonts_.font_12(), COLOR_TEXT);
+        make_label(bar, "Online", 89, centered_y(BAR_H, status_h), 48, status_h, fonts_.font_10(), COLOR_ONLINE);
 
         const lv_coord_t ellipsis_y = centered_y(BAR_H, DOT_SIZE);
         make_box(bar, 295, ellipsis_y, DOT_SIZE, DOT_SIZE, COLOR_MUTED, DOT_SIZE / 2);
@@ -391,7 +471,7 @@ private:
         input_box_ = make_box(input_bar_, 10, 3, 274, 16, COLOR_PANEL, 8);
         input_sparkle_ = make_sparkle(input_box_, 8, 3);
         input_label_ = make_label(input_box_, "Press Enter to ask", 26, 3, 180, 10,
-                                  &lv_font_montserrat_10, COLOR_DIM);
+                                  fonts_.font_10(), COLOR_DIM);
 
         send_button_ = make_send_button(input_bar_, 292, 2);
     }
@@ -401,8 +481,8 @@ private:
         lv_obj_t *row = make_box(parent, 12, y, 296, 26, COLOR_PANEL, 8);
         lv_obj_set_style_border_width(row, 1, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_border_color(row, lv_color_hex(COLOR_PANEL), LV_PART_MAIN | LV_STATE_DEFAULT);
-        make_label(row, title, 10, 5, 160, 14, &lv_font_montserrat_10, COLOR_TEXT);
-        settings_values_[index] = make_label(row, value, 168, 5, 118, 14, &lv_font_montserrat_10,
+        make_label(row, title, 10, 5, 160, 14, fonts_.font_10(), COLOR_TEXT);
+        settings_values_[index] = make_label(row, value, 168, 5, 118, 14, fonts_.font_10(),
                                              COLOR_MUTED, LV_TEXT_ALIGN_RIGHT);
         make_box(row, 8, 23, 280, 1, COLOR_PANEL_LINE);
         settings_rows_[index] = row;
@@ -462,15 +542,43 @@ private:
         settings_view_ = SettingsView::Main;
         clear_settings_rows();
         set_settings_header("ZClaw Settings", "Tab / Esc");
+        add_settings_row("Setup", ui_config_.setup_complete ? "Done" : "Run");
+        add_settings_row("Authorization", ui_config_.bearer_token.empty() ? "Pair" : "Paired");
         add_settings_row("Providers", "Manage");
-        add_settings_row("Model", providers_.empty() ? "None" : providers_[0].model.c_str());
-        add_settings_row("Status", "Online");
-        add_settings_row("Input", "Enter");
-        add_settings_row("Replies", "Random");
+        add_settings_row("Agent", ui_config_.agent_alias.c_str());
+        add_settings_row("Transport", ui_config_.bearer_token.empty() ? "Webhook" : "WS");
         if (settings_selected_ >= settings_row_count_)
             settings_selected_ = settings_row_count_ - 1;
         if (settings_selected_ < 0)
             settings_selected_ = 0;
+        update_settings_selection();
+    }
+
+    void render_authorization()
+    {
+        settings_view_ = SettingsView::Authorization;
+        clear_settings_rows();
+        set_settings_header("Authorization", "Enter / Esc");
+        add_settings_row("Pair Code", "Enter");
+        add_settings_row("Token", ui_config_.bearer_token.empty() ? "Missing" : "Saved");
+        add_settings_row("Agent", ui_config_.agent_alias.c_str());
+        add_settings_row("Approvals", ui_config_.bearer_token.empty() ? "Off" : "WS");
+        add_settings_row("Clear Token", "-");
+        settings_selected_ = 0;
+        update_settings_selection();
+    }
+
+    void render_setup()
+    {
+        settings_view_ = SettingsView::Setup;
+        clear_settings_rows();
+        set_settings_header("Quickstart", "Enter / Esc");
+        add_settings_row("Run Quickstart", setup_in_flight_ ? "Working" : "Start");
+        add_settings_row("ZeroClaw Bin", "Managed");
+        add_settings_row("Provider", providers_.empty() ? "None" : providers_[0].alias.c_str());
+        add_settings_row("Agent", ui_config_.agent_alias.c_str());
+        add_settings_row("Token", ui_config_.bearer_token.empty() ? "Pair" : "Saved");
+        settings_selected_ = 0;
         update_settings_selection();
     }
 
@@ -538,12 +646,22 @@ private:
         static constexpr lv_coord_t BAR_H = 20;
         lv_obj_t *bar = make_box(settings_panel_, 0, 0, SCREEN_W, BAR_H, COLOR_BAR);
         settings_header_label_ = make_label(bar, "ZClaw Settings", 12, 4, 160, 12,
-                                            &lv_font_montserrat_12, COLOR_TEXT);
+                                            fonts_.font_12(), COLOR_TEXT);
         settings_hint_label_ = make_label(bar, "Tab / Esc", 214, 5, 94, 10,
-                                          &lv_font_montserrat_10, COLOR_DIM, LV_TEXT_ALIGN_RIGHT);
+                                          fonts_.font_10(), COLOR_DIM, LV_TEXT_ALIGN_RIGHT);
 
         settings_selected_ = 0;
         render_settings_main();
+    }
+
+    void open_setup_panel()
+    {
+        if (settings_panel_open() || settings_animating_)
+            return;
+        close_input_dialog();
+        create_settings_panel();
+        render_setup();
+        animate_settings_panel(SCREEN_W, 0, false);
     }
 
     static void static_settings_anim_done(lv_anim_t *a)
@@ -657,6 +775,32 @@ private:
         input_textarea_ = nullptr;
     }
 
+    void close_approval_dialog()
+    {
+        if (!approval_dialog_)
+            return;
+        lv_obj_del(approval_dialog_);
+        approval_dialog_ = nullptr;
+        approval_tool_label_ = nullptr;
+        approval_summary_label_ = nullptr;
+        for (auto *&button : approval_buttons_)
+            button = nullptr;
+        approval_selected_ = 0;
+    }
+
+    void clear_pending_approval()
+    {
+        {
+            std::lock_guard<std::mutex> lock(approval_mutex_);
+            pending_approval_id_.clear();
+            pending_approval_tool_.clear();
+            pending_approval_decision_.clear();
+            approval_waiting_ = false;
+        }
+        approval_cv_.notify_all();
+        close_approval_dialog();
+    }
+
     void clear_obj(lv_obj_t *&obj)
     {
         if (!obj)
@@ -669,7 +813,7 @@ private:
                               lv_coord_t w, lv_coord_t h, uint32_t color,
                               lv_text_align_t align = LV_TEXT_ALIGN_LEFT)
     {
-        lv_obj_t *label = make_label(parent, text, x, y, w, h, &lv_font_montserrat_10, color, align);
+        lv_obj_t *label = make_label(parent, text, x, y, w, h, fonts_.font_10(), color, align);
         lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
         return label;
     }
@@ -717,7 +861,8 @@ private:
         static constexpr lv_coord_t text_w = 168;
         static constexpr lv_coord_t pad_x = 10;
         static constexpr lv_coord_t pad_y = 6;
-        const lv_point_t text_size = measure_text_box(text, &lv_font_montserrat_10, text_w);
+        const std::string display_text = display_text_compat(text ? text : "");
+        const lv_point_t text_size = measure_text_box(display_text.c_str(), fonts_.font_10(), text_w);
         lv_coord_t bubble_h = text_size.y + pad_y * 2;
         if (bubble_h < 41)
             bubble_h = 41;
@@ -725,14 +870,16 @@ private:
         lv_obj_t *row = make_message_row(bubble_h, LV_FLEX_ALIGN_START);
         make_zclaw_avatar(row, 0, 0, 16);
         reply_bubble_ = make_bubble(row, bubble_w, bubble_h, COLOR_PANEL, false);
-        reply_label_ = make_chat_label(reply_bubble_, text, pad_x, pad_y, text_w, bubble_h - pad_y * 2, 0xFFFFFF);
+        reply_label_ = make_chat_label(reply_bubble_, display_text.c_str(), pad_x, pad_y, text_w,
+                                       bubble_h - pad_y * 2, 0xFFFFFF);
         scroll_chat_to_bottom();
     }
 
     void append_user_message(const std::string &text)
     {
+        const std::string display_text = display_text_compat(text);
         const lv_coord_t text_max_w = USER_BUBBLE_MAX_W - USER_BUBBLE_PAD_X * 2;
-        const lv_point_t text_size = measure_text_box(text.c_str(), &lv_font_montserrat_10, text_max_w);
+        const lv_point_t text_size = measure_text_box(display_text.c_str(), fonts_.font_10(), text_max_w);
         lv_coord_t bubble_w = text_size.x + USER_BUBBLE_PAD_X * 2;
         lv_coord_t bubble_h = text_size.y + USER_BUBBLE_PAD_Y * 2;
         if (bubble_w < USER_BUBBLE_MIN_W)
@@ -744,7 +891,7 @@ private:
 
         lv_obj_t *row = make_message_row(bubble_h, LV_FLEX_ALIGN_END);
         user_bubble_ = make_bubble(row, bubble_w, bubble_h, COLOR_INDIGO, true);
-        user_label_ = make_chat_label(user_bubble_, text.c_str(), USER_BUBBLE_PAD_X, USER_BUBBLE_PAD_Y,
+        user_label_ = make_chat_label(user_bubble_, display_text.c_str(), USER_BUBBLE_PAD_X, USER_BUBBLE_PAD_Y,
                                       bubble_w - USER_BUBBLE_PAD_X * 2,
                                       bubble_h - USER_BUBBLE_PAD_Y * 2,
                                       0xFFFFFF, LV_TEXT_ALIGN_LEFT);
@@ -766,7 +913,7 @@ private:
         lv_obj_set_style_border_width(input_dialog_, 1, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_border_color(input_dialog_, lv_color_hex(COLOR_PANEL_LINE), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_text_color(input_dialog_, lv_color_hex(COLOR_TEXT), LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_text_font(input_dialog_, &lv_font_montserrat_10, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_text_font(input_dialog_, fonts_.font_10(), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_pad_all(input_dialog_, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
 
         lv_obj_t *content = lv_msgbox_get_content(input_dialog_);
@@ -784,7 +931,7 @@ private:
         lv_obj_set_style_bg_opa(input_textarea_, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_border_width(input_textarea_, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_text_color(input_textarea_, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_text_font(input_textarea_, &lv_font_montserrat_10, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_text_font(input_textarea_, fonts_.font_10(), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_pad_all(input_textarea_, 8, LV_PART_MAIN | LV_STATE_DEFAULT);
         if (!textarea_cursor_style_inited_) {
             lv_style_init(&textarea_cursor_style_);
@@ -817,21 +964,258 @@ private:
         append_user_message(text);
     }
 
-    const char *random_reply()
+    void publish_approval_prompt(const ZClawApprovalRequest &request)
     {
-        static constexpr const char *replies[] = {
-            "Got it. Checking now.",
-            "I can help with that.",
-            "Done. What should I do next?",
-            "Received your request."
-        };
-        ++reply_seed_;
-        return replies[(reply_seed_ + lv_tick_get()) % (sizeof(replies) / sizeof(replies[0]))];
+        {
+            std::lock_guard<std::mutex> lock(approval_mutex_);
+            pending_approval_id_ = request.request_id;
+            pending_approval_tool_ = request.tool;
+        }
+
+        close_approval_dialog();
+        approval_dialog_ = make_box(lv_layer_top(), 42, 30, 236, 110, COLOR_BAR, 8);
+        lv_obj_set_style_border_width(approval_dialog_, 1, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_border_color(approval_dialog_, lv_color_hex(COLOR_PURPLE), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_move_foreground(approval_dialog_);
+
+        make_box(approval_dialog_, 0, 0, 236, 20, COLOR_PANEL, 8);
+        make_label(approval_dialog_, "Permission", 10, 5, 120, 12, fonts_.font_12(), COLOR_TEXT);
+        make_label(approval_dialog_, "Esc", 194, 6, 28, 10, fonts_.font_10(), COLOR_DIM, LV_TEXT_ALIGN_RIGHT);
+
+        approval_tool_label_ = make_label(approval_dialog_, request.tool.c_str(), 12, 27, 212, 14,
+                                          fonts_.font_12(), COLOR_TEXT);
+        approval_summary_label_ = make_label(approval_dialog_, request.summary.c_str(), 12, 45, 212, 30,
+                                             fonts_.font_10(), COLOR_MUTED);
+        make_box(approval_dialog_, 0, 78, 236, 1, COLOR_PANEL_LINE);
+
+        static constexpr const char *labels[] = {"Yes", "Always", "No"};
+        static constexpr uint32_t colors[] = {COLOR_ONLINE, COLOR_PURPLE, COLOR_DIM};
+        for (int i = 0; i < 3; ++i) {
+            approval_buttons_[i] = make_box(approval_dialog_, 12 + i * 72, 86, 68, 17, COLOR_PANEL, 5);
+            lv_obj_set_style_border_width(approval_buttons_[i], 1, LV_PART_MAIN | LV_STATE_DEFAULT);
+            make_label(approval_buttons_[i], labels[i], 0, 4, 68, 10,
+                       fonts_.font_10(), colors[i], LV_TEXT_ALIGN_CENTER);
+        }
+        approval_selected_ = 0;
+        update_approval_buttons();
     }
 
-    void show_random_reply()
+    void update_approval_buttons()
     {
-        append_ai_message(random_reply());
+        for (int i = 0; i < 3; ++i) {
+            if (!approval_buttons_[i])
+                continue;
+            const bool selected = i == approval_selected_;
+            lv_obj_set_style_bg_color(approval_buttons_[i],
+                                      lv_color_hex(selected ? 0x2B2B4A : COLOR_PANEL),
+                                      LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_obj_set_style_border_color(approval_buttons_[i],
+                                          lv_color_hex(selected ? COLOR_TEXT : COLOR_PANEL_LINE),
+                                          LV_PART_MAIN | LV_STATE_DEFAULT);
+        }
+    }
+
+    void move_approval_selection(int delta)
+    {
+        approval_selected_ += delta;
+        if (approval_selected_ < 0)
+            approval_selected_ = 2;
+        if (approval_selected_ > 2)
+            approval_selected_ = 0;
+        update_approval_buttons();
+    }
+
+    const char *selected_approval_decision() const
+    {
+        if (approval_selected_ == 1)
+            return "always";
+        if (approval_selected_ == 2)
+            return "deny";
+        return "approve";
+    }
+
+    static void approval_prompt_async(void *data)
+    {
+        ApprovalPromptData *prompt = static_cast<ApprovalPromptData *>(data);
+        if (!prompt)
+            return;
+        if (prompt->self)
+            prompt->self->publish_approval_prompt(prompt->request);
+        delete prompt;
+    }
+
+    void post_approval_prompt(const ZClawApprovalRequest &request)
+    {
+        ApprovalPromptData *prompt = new ApprovalPromptData();
+        prompt->self = this;
+        prompt->request = request;
+        lv_async_call(approval_prompt_async, prompt);
+    }
+
+    static void approval_close_async(void *data)
+    {
+        ZClawApp *self = static_cast<ZClawApp *>(data);
+        if (self)
+            self->clear_pending_approval();
+    }
+
+    void post_approval_close()
+    {
+        lv_async_call(approval_close_async, this);
+    }
+
+    bool answer_pending_approval(const char *decision)
+    {
+        {
+            std::lock_guard<std::mutex> lock(approval_mutex_);
+            if (pending_approval_id_.empty())
+                return false;
+            pending_approval_decision_ = decision ? decision : "deny";
+            approval_waiting_ = false;
+            pending_approval_id_.clear();
+            pending_approval_tool_.clear();
+        }
+        approval_cv_.notify_all();
+        close_approval_dialog();
+        return true;
+    }
+
+    std::string await_approval_decision(const ZClawApprovalRequest &request)
+    {
+        const int timeout_secs = request.timeout_secs <= 0 ? 120 : request.timeout_secs;
+        {
+            std::lock_guard<std::mutex> lock(approval_mutex_);
+            approval_waiting_ = true;
+            pending_approval_decision_.clear();
+        }
+        post_approval_prompt(request);
+
+        std::unique_lock<std::mutex> lock(approval_mutex_);
+        if (timeout_secs <= 0)
+            return "deny";
+        const bool answered = approval_cv_.wait_for(
+            lock, std::chrono::seconds(timeout_secs),
+            [&] { return !approval_waiting_; });
+        std::string decision = answered ? pending_approval_decision_ : "deny";
+        approval_waiting_ = false;
+        pending_approval_decision_.clear();
+        pending_approval_id_.clear();
+        pending_approval_tool_.clear();
+        lock.unlock();
+        if (!answered) {
+            post_approval_close();
+        }
+        return decision.empty() ? "deny" : decision;
+    }
+
+    static void chat_async_done(void *data)
+    {
+        AsyncResult *result = static_cast<AsyncResult *>(data);
+        if (!result)
+            return;
+        if (result->self)
+            result->self->finish_chat_result(result->text);
+        delete result;
+    }
+
+    static void *chat_thread_main(void *data)
+    {
+        AsyncResult *result = static_cast<AsyncResult *>(data);
+        if (!result || !result->self)
+            return nullptr;
+        ZClawClientResult client_result = result->self->client_.send_chat(
+            result->self->ui_config_, result->text,
+            [self = result->self](const ZClawApprovalRequest &request) {
+                return self->await_approval_decision(request);
+            });
+        result->text = client_result.text;
+        result->ok = client_result.ok;
+        result->config = client_result.config;
+        lv_async_call(chat_async_done, result);
+        return nullptr;
+    }
+
+    void request_webhook_reply(const std::string &message)
+    {
+        if (request_in_flight_) {
+            append_ai_message("I am still waiting for ZeroClaw.");
+            return;
+        }
+        if (first_run_needed()) {
+            append_ai_message("Run quickstart before chatting.");
+            open_setup_panel();
+            return;
+        }
+
+        request_in_flight_ = true;
+        append_ai_message("Thinking...");
+        AsyncResult *result = new AsyncResult();
+        result->self = this;
+        result->text = message;
+        pthread_t thread_id{};
+        if (pthread_create(&thread_id, nullptr, chat_thread_main, result) != 0) {
+            delete result;
+            request_in_flight_ = false;
+            append_ai_message("Could not start webhook request.");
+            return;
+        }
+        pthread_detach(thread_id);
+    }
+
+    void finish_chat_result(const std::string &text)
+    {
+        request_in_flight_ = false;
+        append_ai_message(text.c_str());
+    }
+
+    static void pairing_async_done(void *data)
+    {
+        AsyncResult *result = static_cast<AsyncResult *>(data);
+        if (!result)
+            return;
+        if (result->self)
+            result->self->finish_pairing_result(result->ok, result->text, result->config);
+        delete result;
+    }
+
+    static void *pairing_thread_main(void *data)
+    {
+        AsyncResult *result = static_cast<AsyncResult *>(data);
+        if (!result || !result->self)
+            return nullptr;
+        ZClawClientResult client_result = result->self->client_.pair_with_code(
+            result->self->ui_config_, result->text);
+        result->text = client_result.text;
+        result->ok = client_result.ok;
+        result->config = client_result.config;
+        lv_async_call(pairing_async_done, result);
+        return nullptr;
+    }
+
+    void start_pairing(const std::string &code)
+    {
+        append_ai_message("Pairing with ZeroClaw...");
+        AsyncResult *result = new AsyncResult();
+        result->self = this;
+        result->text = code;
+        pthread_t thread_id{};
+        if (pthread_create(&thread_id, nullptr, pairing_thread_main, result) != 0) {
+            delete result;
+            append_ai_message("Could not start pairing request.");
+            return;
+        }
+        pthread_detach(thread_id);
+    }
+
+    void finish_pairing_result(bool ok, const std::string &text, const UiConfig &config)
+    {
+        if (ok) {
+            ui_config_ = config;
+            save_ui_config();
+        }
+        append_ai_message(text.c_str());
+        if (settings_panel_open() && settings_view_ == SettingsView::Authorization)
+            render_authorization();
     }
 
     void scroll_chat(int delta)
@@ -961,13 +1345,94 @@ private:
         render_provider_detail();
     }
 
+    static void setup_async_done(void *data)
+    {
+        AsyncResult *result = static_cast<AsyncResult *>(data);
+        if (!result)
+            return;
+        if (result->self)
+            result->self->finish_setup_result(result->ok, result->text, result->config);
+        delete result;
+    }
+
+    static void *setup_thread_main(void *data)
+    {
+        AsyncResult *result = static_cast<AsyncResult *>(data);
+        if (!result || !result->self)
+            return nullptr;
+        ZClawClientResult client_result = result->self->client_.run_setup(
+            result->self->ui_config_, result->self->providers_);
+        result->text = client_result.text;
+        result->ok = client_result.ok;
+        result->config = client_result.config;
+        lv_async_call(setup_async_done, result);
+        return nullptr;
+    }
+
+    void start_setup()
+    {
+        if (setup_in_flight_)
+            return;
+        setup_in_flight_ = true;
+        append_ai_message("Configuring ZeroClaw service...");
+        render_setup();
+        AsyncResult *result = new AsyncResult();
+        result->self = this;
+        pthread_t thread_id{};
+        if (pthread_create(&thread_id, nullptr, setup_thread_main, result) != 0) {
+            delete result;
+            setup_in_flight_ = false;
+            append_ai_message("Could not start setup thread.");
+            render_setup();
+            return;
+        }
+        pthread_detach(thread_id);
+    }
+
+    void finish_setup_result(bool ok, const std::string &text, const UiConfig &config)
+    {
+        setup_in_flight_ = false;
+        if (ok) {
+            ui_config_ = config;
+            save_providers();
+            save_ui_config();
+        }
+        append_ai_message(text.c_str());
+        if (ok && settings_panel_open() && settings_view_ == SettingsView::Setup) {
+            render_setup();
+            close_settings_panel();
+        }
+    }
+
     void activate_settings_selection()
     {
         if (!settings_panel_open())
             return;
 
+        if (settings_view_ == SettingsView::Setup) {
+            if (settings_selected_ == 0)
+                start_setup();
+            return;
+        }
+
+        if (settings_view_ == SettingsView::Authorization) {
+            if (settings_selected_ == 0) {
+                open_text_dialog("Pairing code", "", InputMode::PairingCode);
+            } else if (settings_selected_ == 4) {
+                ui_config_.bearer_token.clear();
+                save_ui_config();
+                append_ai_message("Authorization token cleared.");
+                render_authorization();
+            }
+            return;
+        }
+
         if (settings_view_ == SettingsView::Main) {
             if (settings_selected_ == 0) {
+                render_setup();
+            } else if (settings_selected_ == 1) {
+                render_authorization();
+            } else if (settings_selected_ == 2) {
                 provider_selected_ = 0;
                 provider_scroll_ = 0;
                 render_settings_providers();
@@ -993,7 +1458,9 @@ private:
 
     void settings_back()
     {
-        if (settings_view_ == SettingsView::ProviderDetail) {
+        if (settings_view_ == SettingsView::Setup || settings_view_ == SettingsView::Authorization) {
+            close_settings_panel();
+        } else if (settings_view_ == SettingsView::ProviderDetail) {
             provider_detail_index_ = -1;
             render_settings_providers();
         } else if (settings_view_ == SettingsView::Providers) {
@@ -1018,6 +1485,15 @@ private:
             return;
         }
 
+        if (input_mode_ == InputMode::PairingCode) {
+            const std::string value = text ? text : "";
+            close_input_dialog();
+            input_mode_ = InputMode::Chat;
+            if (!value.empty())
+                start_pairing(value);
+            return;
+        }
+
         if (!text || !text[0]) {
             close_input_dialog();
             return;
@@ -1026,14 +1502,15 @@ private:
         const std::string sent = text;
         close_input_dialog();
         show_sent_message(sent);
-        show_random_reply();
+        request_webhook_reply(sent);
     }
 
     void append_input(const char *utf8)
     {
         if (!input_dialog_open() || !utf8 || !utf8[0])
             return;
-        lv_textarea_add_text(input_textarea_, utf8);
+        const std::string display_text = display_text_compat(utf8);
+        lv_textarea_add_text(input_textarea_, display_text.c_str());
     }
 
     void event_handler_init()
@@ -1113,6 +1590,39 @@ private:
             }
             return;
         }
+
+        {
+            std::lock_guard<std::mutex> lock(approval_mutex_);
+            if (!pending_approval_id_.empty()) {
+                if (key == KEY_ENTER || key == KEY_Y || key == KEY_A || key == KEY_N) {
+                    // Unlock before recording the decision.
+                } else if (key == KEY_ESC || key == KEY_BACKSPACE) {
+                    // Unlock before recording the decision.
+                } else if (key == KEY_LEFT || key == KEY_RIGHT) {
+                    // Unlock before moving visual selection.
+                } else {
+                    return;
+                }
+            }
+        }
+        if (key == KEY_LEFT) {
+            move_approval_selection(-1);
+            return;
+        }
+        if (key == KEY_RIGHT) {
+            move_approval_selection(1);
+            return;
+        }
+        if (key == KEY_ENTER && answer_pending_approval(selected_approval_decision()))
+            return;
+        if (key == KEY_Y && answer_pending_approval("approve"))
+            return;
+        if (key == KEY_A && answer_pending_approval("always"))
+            return;
+        if (key == KEY_N && answer_pending_approval("deny"))
+            return;
+        if ((key == KEY_ESC || key == KEY_BACKSPACE) && answer_pending_approval("deny"))
+            return;
 
         if (key == KEY_TAB) {
             if (settings_panel_open())
