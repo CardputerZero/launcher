@@ -1,22 +1,47 @@
 import os
+import shutil
 
 Import('env')
 with open(env['PROJECT_TOOL_S']) as f:
     exec(f.read())
 
+cpp_httplib = wget_github("https://github.com/yhirose/cpp-httplib.git")
+
 SRCS = Glob('src/*.c*')
 SRCS += append_srcs_dir(ADir('ui'))
 
-INCLUDE = [ADir('.'), ADir('include'), ADir('ui')]
+INCLUDE = [ADir('.'), ADir('include'), ADir('ui'), cpp_httplib]
 PRIVATE_INCLUDE = []
-REQUIREMENTS = ['cp0_lvgl', 'lvgl_component', 'pthread', 'Sigslot', 'eventpp', 'RadioLib']
+REQUIREMENTS = ['cp0_lvgl', 'lvgl_component', 'pthread', 'Sigslot', 'eventpp', 'RadioLib', 'ssl', 'crypto']
 STATIC_LIB = []
 DYNAMIC_LIB = []
-DEFINITIONS = []
+DEFINITIONS = ['-DCPPHTTPLIB_OPENSSL_SUPPORT']
 DEFINITIONS_PRIVATE = []
 LDFLAGS = []
 LINK_SEARCH_PATH = []
-STATIC_FILES = [ADir('../APPLaunch')]
+STATIC_FILES = []
+
+PROJECT_ROOT = os.path.abspath(os.path.join(os.getcwd(), ".."))
+ZCLAW_STATIC_ROOT = os.path.join(PROJECT_ROOT, "APPLaunch")
+APPLAUNCH_STATIC_ROOT = os.path.abspath(os.path.join(PROJECT_ROOT, "..", "APPLaunch", "APPLaunch"))
+STAGED_STATIC_ROOT = os.path.abspath(os.path.join("build", "static"))
+STAGED_APPLAUNCH = os.path.join(STAGED_STATIC_ROOT, "APPLaunch")
+
+
+def stage_zclaw_static_files():
+    if os.path.exists(STAGED_APPLAUNCH):
+        shutil.rmtree(STAGED_APPLAUNCH)
+    shutil.copytree(ZCLAW_STATIC_ROOT, STAGED_APPLAUNCH)
+    dst_fonts = os.path.join(STAGED_APPLAUNCH, "share", "font")
+    os.makedirs(dst_fonts, exist_ok=True)
+    shutil.copy2(
+        os.path.join(APPLAUNCH_STATIC_ROOT, "share", "font", "AlibabaPuHuiTi-3-55-Regular.ttf"),
+        os.path.join(dst_fonts, "AlibabaPuHuiTi-3-55-Regular.ttf"),
+    )
+
+
+stage_zclaw_static_files()
+STATIC_FILES += [(STAGED_APPLAUNCH, "APPLaunch")]
 
 lvgl_component = list(filter(lambda x: x['target'] == 'lvgl_component', env['COMPONENTS']))[0]
 toolchain_sysroot = os.environ.get('CONFIG_TOOLCHAIN_SYSROOT', '') or '/'
