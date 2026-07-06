@@ -27,6 +27,8 @@
 namespace {
 constexpr size_t kHomeCarouselSlotCount = 5;
 constexpr int kHomeCarouselCenterSlot = 2;
+constexpr uint32_t kBuiltinEscForceCloseMs = 3000;
+constexpr uint32_t kBuiltinEscPollMs = 100;
 
 using BuiltinAppAppender = void (*)(std::list<app> &apps, const AppDescriptor &desc);
 
@@ -138,6 +140,8 @@ void Launch::bind_ui()
         // Create a 3s LVGL timer to periodically check directory changes
         release_watch_timer();
         watch_timer_ = lv_timer_create(app_dir_watch_cb, 3000, this);
+        if (!esc_hold_timer_)
+            esc_hold_timer_ = lv_timer_create(esc_hold_timer_cb, kBuiltinEscPollMs, this);
 
     }
 
@@ -158,6 +162,9 @@ void Launch::lv_go_back_home(void *arg)
         lv_refr_now(NULL);
         if (self->app_Page)
             self->app_Page.reset();
+        self->esc_hold_active_ = false;
+        self->esc_hold_start_tick_ = 0;
+        self->force_home_pending_ = false;
         SLOGI("[HOME] lv_go_back_home done, on launcher home");
     }
 
@@ -177,6 +184,8 @@ void Launch::launch_Exec_in_terminal(const std::string &exec, bool sysplause)
         lv_refr_now(NULL);
         auto p = std::make_shared<UISTPage>();
         app_Page = p;
+        force_home_pending_ = false;
+        esc_hold_active_ = false;
         lv_disp_load_scr(p->screen());
         lv_indev_set_group(lv_indev_get_next(NULL), p->input_group());
         p->navigate_home = std::bind(&Launch::go_back_home, this);
@@ -411,6 +420,17 @@ void Launch::release_watch_timer()
         }
     }
 
+void Launch::release_esc_hold_timer()
+    {
+        if (esc_hold_timer_) {
+            lv_timer_delete(esc_hold_timer_);
+            esc_hold_timer_ = nullptr;
+        }
+        esc_hold_active_ = false;
+        esc_hold_start_tick_ = 0;
+        force_home_pending_ = false;
+    }
+
     // ============================================================
     // Refresh home carousel slots from current_app
     // ============================================================
@@ -466,6 +486,43 @@ void Launch::app_dir_watch_cb(lv_timer_t *timer)
         {
             SLOGI("app_dir_watch_cb: applications dir changed, reloading...");
             self->applications_reload();
+        }
+    }
+
+void Launch::esc_hold_timer_cb(lv_timer_t *timer)
+    {
+        auto *self = static_cast<Launch *>(lv_timer_get_user_data(timer));
+        if (!self)
+            return;
+
+        if (!self->app_Page || LVGL_RUN_FLAGE == 0) {
+            self->esc_hold_active_ = false;
+            self->esc_hold_start_tick_ = 0;
+            return;
+        }
+
+        if (!LVGL_HOME_KEY_FLAG) {
+            self->esc_hold_active_ = false;
+            self->esc_hold_start_tick_ = 0;
+            return;
+        }
+
+        if (!self->esc_hold_active_) {
+            self->esc_hold_active_ = true;
+            self->esc_hold_start_tick_ = lv_tick_get();
+            if (self->esc_hold_start_tick_ == 0)
+                self->esc_hold_start_tick_ = 1;
+            return;
+        }
+
+        if (self->force_home_pending_)
+            return;
+
+        if (lv_tick_elaps(self->esc_hold_start_tick_) >= kBuiltinEscForceCloseMs) {
+            SLOGW("[HOME] ESC held for %u ms, forcing built-in page home",
+                  (unsigned)kBuiltinEscForceCloseMs);
+            self->force_home_pending_ = true;
+            self->go_back_home();
         }
     }
 
@@ -537,6 +594,8 @@ app::app(std::string name,
         lv_refr_now(NULL);
         auto p = std::make_shared<PageT>();
         self->app_Page = p;
+        self->force_home_pending_ = false;
+        self->esc_hold_active_ = false;
         lv_disp_load_scr(p->screen());
         lv_indev_set_group(lv_indev_get_next(NULL),
                            p->input_group());
@@ -554,6 +613,7 @@ app::app(std::string name,
 Launch::~Launch()
 {
     launcher_app_registry_set_changed_callback(nullptr, nullptr);
+    release_esc_hold_timer();
     release_watch_timer();
     release_dir_watcher();
 }
