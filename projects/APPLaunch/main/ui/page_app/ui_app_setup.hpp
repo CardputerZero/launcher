@@ -48,7 +48,7 @@
 
 class UISetupPage : public AppPage
 {
-    enum class ViewState { MAIN, SUB, VALUE_SELECT, WIFI_LIST, WIFI_PW, BT_LIST,
+    enum class ViewState { MAIN, SUB, VALUE_SELECT, WIFI_LIST, WIFI_PW, BT_LIST, BT_ALIAS,
                            SOUNDCARD_CARDS, SOUNDCARD_CONTROLS, SOUNDCARD_DETAIL,
                            USB_GUIDE };
 
@@ -130,6 +130,11 @@ private:
     bool bt_discovery_active_ = false;
     bool bt_named_only_ = true;
     bool bt_action_busy_ = false;
+    std::string bt_alias_ = "CardputerZero";
+    bool bt_discoverable_ = false;
+    std::string bt_alias_input_;
+    lv_obj_t *bt_alias_input_lbl_ = nullptr;
+    lv_obj_t *bt_alias_hint_lbl_ = nullptr;
 
     // Brightness
     int bright_val_ = 75;
@@ -381,6 +386,8 @@ private:
             bt_named_only_ = config_get_int("bt_named_only", 1) != 0;
             m.sub_items = {
                 {"Power",  true, false, [this]() { bt_toggle_power(); }},
+                {"Alias: CardputerZero", false, false, [this]() { enter_bt_alias(); }},
+                {"Discoverable", true, false, [this]() { bt_toggle_discoverable(); }},
                 {"Named Only", true, bt_named_only_, [this]() { bt_toggle_named_only(); }},
                 {"Connected", false, false, [this]() { enter_bt_devices(); }},
                 {"Scan",   false, false, [this]() { enter_bt_scan(); }},
@@ -636,6 +643,118 @@ private:
         bt_list_sel_ = 0;
         bt_refresh_devices();
         build_bt_list();
+    }
+
+    void enter_bt_alias()
+    {
+        stop_bt_scan_timer();
+        refresh_bt_status();
+        bt_alias_input_ = bt_alias_.empty() ? "CardputerZero" : bt_alias_;
+        view_state_ = ViewState::BT_ALIAS;
+        build_bt_alias_view();
+    }
+
+    static bool bt_alias_char_allowed(unsigned char ch)
+    {
+        return ch >= 0x20 && ch != '\t' && ch != '\r' && ch != '\n';
+    }
+
+    std::string bt_alias_sanitized() const
+    {
+        std::string out;
+        for (unsigned char ch : bt_alias_input_) {
+            if (bt_alias_char_allowed(ch))
+                out += static_cast<char>(ch);
+            if (out.size() >= CP0_BT_NAME_MAX - 1)
+                break;
+        }
+        return out.empty() ? "CardputerZero" : out;
+    }
+
+    void build_bt_alias_view()
+    {
+        lv_obj_t *cont = ui_obj_["list_cont"];
+        lv_obj_clean(cont);
+        bt_alias_input_lbl_ = nullptr;
+        bt_alias_hint_lbl_ = nullptr;
+
+        lv_obj_t *title = lv_label_create(cont);
+        lv_label_set_text(title, "Bluetooth Name");
+        lv_obj_set_pos(title, 10, 10);
+        lv_obj_set_style_text_color(title, lv_color_hex(0x58A6FF), LV_PART_MAIN);
+        lv_obj_set_style_text_font(title, &lv_font_montserrat_12, LV_PART_MAIN);
+
+        lv_obj_t *name_label = lv_label_create(cont);
+        lv_label_set_text(name_label, "Alias:");
+        lv_obj_set_pos(name_label, 10, 38);
+        lv_obj_set_style_text_color(name_label, lv_color_hex(0xCCCCCC), LV_PART_MAIN);
+        lv_obj_set_style_text_font(name_label, &lv_font_montserrat_12, LV_PART_MAIN);
+
+        bt_alias_input_lbl_ = lv_label_create(cont);
+        lv_obj_set_pos(bt_alias_input_lbl_, 64, 36);
+        lv_obj_set_width(bt_alias_input_lbl_, 236);
+        lv_label_set_long_mode(bt_alias_input_lbl_, LV_LABEL_LONG_CLIP);
+        lv_obj_set_style_text_color(bt_alias_input_lbl_, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+        lv_obj_set_style_text_font(bt_alias_input_lbl_, &lv_font_montserrat_14, LV_PART_MAIN);
+        bt_alias_update_display();
+
+        bt_alias_hint_lbl_ = lv_label_create(cont);
+        lv_label_set_text(bt_alias_hint_lbl_, "OK:set  BS:del  ESC:cancel");
+        lv_obj_set_pos(bt_alias_hint_lbl_, 10, 70);
+        lv_obj_set_style_text_color(bt_alias_hint_lbl_, lv_color_hex(0x555555), LV_PART_MAIN);
+        lv_obj_set_style_text_font(bt_alias_hint_lbl_, &lv_font_montserrat_10, LV_PART_MAIN);
+    }
+
+    void bt_alias_update_display()
+    {
+        if (!bt_alias_input_lbl_)
+            return;
+        std::string display = bt_alias_input_ + "_";
+        lv_label_set_text(bt_alias_input_lbl_, display.c_str());
+    }
+
+    void handle_bt_alias_key(uint32_t key)
+    {
+        if (key == KEY_ESC || key == KEY_LEFT) {
+            play_back();
+            view_state_ = ViewState::SUB;
+            build_sub_view();
+            return;
+        }
+        if (key == KEY_ENTER || key == KEY_RIGHT) {
+            std::string alias = bt_alias_sanitized();
+            if (bt_alias_hint_lbl_) {
+                lv_label_set_text(bt_alias_hint_lbl_, "Setting alias...");
+                lv_obj_set_style_text_color(bt_alias_hint_lbl_, lv_color_hex(0xFFAA00), LV_PART_MAIN);
+                lv_refr_now(NULL);
+            }
+            int ret = bt_set_alias(alias);
+            if (ret == 0) {
+                bt_alias_ = alias;
+                refresh_bt_status();
+                view_state_ = ViewState::SUB;
+                build_sub_view();
+            } else if (bt_alias_hint_lbl_) {
+                lv_label_set_text(bt_alias_hint_lbl_, "Set failed");
+                lv_obj_set_style_text_color(bt_alias_hint_lbl_, lv_color_hex(0xFF4444), LV_PART_MAIN);
+            }
+            return;
+        }
+        if (key == KEY_BACKSPACE) {
+            if (!bt_alias_input_.empty())
+                bt_alias_input_.pop_back();
+            bt_alias_update_display();
+            return;
+        }
+        if (cur_elm_ && cur_elm_->utf8[0] && bt_alias_input_.size() < CP0_BT_NAME_MAX - 1) {
+            const char *p = cur_elm_->utf8;
+            while (*p && bt_alias_input_.size() < CP0_BT_NAME_MAX - 1) {
+                unsigned char ch = static_cast<unsigned char>(*p++);
+                if (bt_alias_char_allowed(ch))
+                    bt_alias_input_ += static_cast<char>(ch);
+            }
+            bt_alias_update_display();
+        }
     }
 
     void enter_bt_scan()
@@ -1369,6 +1488,10 @@ private:
         st = {};
         st.powered = std::atoi(cols[0].c_str());
         bt_copy_string(st.address, sizeof(st.address), cols[1]);
+        if (cols.size() >= 3)
+            st.discoverable = std::atoi(cols[2].c_str());
+        if (cols.size() >= 4)
+            bt_copy_string(st.alias, sizeof(st.alias), cols[3]);
         return true;
     }
 
@@ -1425,6 +1548,16 @@ private:
         return bt_api_int({"BtPower", std::to_string(on)});
     }
 
+    static int bt_set_alias(const std::string &alias)
+    {
+        return bt_api_int({"BtAlias", alias});
+    }
+
+    static int bt_set_discoverable(int on)
+    {
+        return bt_api_int({"BtDiscoverable", std::to_string(on)});
+    }
+
     static int bt_device_command(const char *cmd, const char *address)
     {
         return bt_api_int({cmd ? std::string(cmd) : std::string(),
@@ -1448,6 +1581,10 @@ private:
         for (auto &m : menu_items_) {
             if (m.label != "Bluetooth") continue;
             m.sub_items[0].toggle_state = st.powered != 0;
+            bt_discoverable_ = st.discoverable != 0;
+            bt_alias_ = st.alias[0] ? st.alias : "CardputerZero";
+            m.sub_items[1].label = "Alias: " + bt_alias_;
+            m.sub_items[2].toggle_state = bt_discoverable_;
             break;
         }
     }
@@ -1468,13 +1605,26 @@ private:
     {
         for (auto &m : menu_items_) {
             if (m.label != "Bluetooth") continue;
-            bt_named_only_ = m.sub_items[1].toggle_state;
+            bt_named_only_ = m.sub_items[3].toggle_state;
             config_set_int("bt_named_only", bt_named_only_ ? 1 : 0);
             config_save();
             break;
         }
         if (view_state_ == ViewState::BT_LIST)
             build_bt_list();
+    }
+
+    void bt_toggle_discoverable()
+    {
+        for (auto &m : menu_items_) {
+            if (m.label != "Bluetooth") continue;
+            bt_discoverable_ = m.sub_items[2].toggle_state;
+            if (bt_set_discoverable(bt_discoverable_ ? 1 : 0) != 0) {
+                m.sub_items[2].toggle_state = !bt_discoverable_;
+                bt_discoverable_ = m.sub_items[2].toggle_state;
+            }
+            break;
+        }
     }
 
     void start_bt_scan_timer()
@@ -2629,6 +2779,7 @@ private:
         else if (view_state_ == ViewState::VALUE_SELECT) build_value_view();
         else if (view_state_ == ViewState::WIFI_LIST) build_wifi_list();
         else if (view_state_ == ViewState::BT_LIST) build_bt_list();
+        else if (view_state_ == ViewState::BT_ALIAS) build_bt_alias_view();
         else if (view_state_ == ViewState::SOUNDCARD_CARDS) build_soundcard_cards_view();
         else if (view_state_ == ViewState::SOUNDCARD_CONTROLS) build_soundcard_controls_view();
         else if (view_state_ == ViewState::SOUNDCARD_DETAIL) build_soundcard_detail_view();
@@ -2772,6 +2923,9 @@ private:
                 handle_bt_list_key(key);
             else if (released && key != KEY_UP && key != KEY_DOWN)
                 handle_bt_list_key(key);
+            break;
+        case ViewState::BT_ALIAS:
+            if (released) handle_bt_alias_key(key);
             break;
         case ViewState::SOUNDCARD_CARDS:
             if (pressed && (key == KEY_UP || key == KEY_DOWN))
