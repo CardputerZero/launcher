@@ -169,19 +169,24 @@ public:
     void enter_adjust(UISetupPage &page, int field);
     void apply_value(UISetupPage &page);
     void commit_to_hardware(UISetupPage &page);
-    void enter_write_confirm(UISetupPage &page);
+    void show_write_confirm(UISetupPage &page);
+    void close_write_confirm();
+    void handle_write_confirm_key(UISetupPage &page, uint32_t key);
     bool is_dirty() const { return dirty_; }
     bool ntp_on() const { return ntp_on_; }
-    bool exit_confirm() const { return exit_confirm_; }
-    void set_exit_confirm(bool value) { exit_confirm_ = value; }
+    bool write_confirm_active() const { return confirm_overlay_ != nullptr; }
     void clear_dirty() { dirty_ = false; }
 private:
     void update_labels(UISetupPage &page);
+    void update_write_confirm_buttons();
     int values_[6] = {2026, 1, 1, 0, 0, 0};
     int field_ = 0;
     bool ntp_on_ = true;
     bool dirty_ = false;
-    bool exit_confirm_ = false;
+    int confirm_sel_ = 1;
+    lv_obj_t *confirm_overlay_ = nullptr;
+    lv_obj_t *confirm_yes_lbl_ = nullptr;
+    lv_obj_t *confirm_no_lbl_ = nullptr;
 };
 
 class About {
@@ -373,6 +378,7 @@ public:
         stop_power_timer();
         info_.stop_timer();
         bluetooth_.stop_scan_timer();
+        rtc_.close_write_confirm();
     }
 
 private:
@@ -544,12 +550,6 @@ private:
         } else if (val_title_ == "Year" || val_title_ == "Month" || val_title_ == "Day" ||
                    val_title_ == "Hour" || val_title_ == "Minute" || val_title_ == "Second") {
             rtc_.apply_value(*this);
-        } else if (val_title_ == "Write RTC?") {
-            if (val_sel_idx_ == 0)
-                rtc_.commit_to_hardware(*this);
-            else
-                rtc_.refresh_values(*this);
-            rtc_.clear_dirty();
         }
     }
 
@@ -1275,6 +1275,12 @@ private:
         uint32_t key = elm->key_code;
         key = remap_fzxc(key);
 
+        if (rtc_.write_confirm_active()) {
+            if (released)
+                rtc_.handle_write_confirm_key(*this, key);
+            return;
+        }
+
         // For held keys (pressed), only handle UP/DOWN with throttle
         if (pressed) {
             if (key != KEY_UP && key != KEY_DOWN) return;
@@ -1408,7 +1414,7 @@ private:
             play_back();
             info_.stop_timer();
             if (item.label == "RTC" && rtc_.is_dirty()) {
-                rtc_.enter_write_confirm(*this);
+                rtc_.show_write_confirm(*this);
                 break;
             }
             view_state_ = ViewState::MAIN;
@@ -1432,7 +1438,6 @@ private:
             break;
         case KEY_ENTER:
         case KEY_RIGHT: {
-            bool was_rtc_exit_confirm = rtc_.exit_confirm();
             apply_value_selection();
             // After reboot/shutdown, don't animate back — the system is going down.
             if (val_title_ == "Reboot?" || val_title_ == "Shutdown?" || val_title_ == "Run Setup?") {
@@ -1447,25 +1452,12 @@ private:
                 lv_refr_now(NULL);
                 break;
             }
-            if (was_rtc_exit_confirm) {
-                rtc_.set_exit_confirm(false);
-                view_state_ = ViewState::MAIN;
-                transition_back_level();
-                break;
-            }
             view_state_ = ViewState::SUB;
             transition_back_level();
             break;
         }
         case KEY_ESC:
         case KEY_LEFT:
-            if (rtc_.exit_confirm()) {
-                rtc_.set_exit_confirm(false);
-                rtc_.refresh_values(*this);
-                view_state_ = ViewState::MAIN;
-                transition_back_level();
-                break;
-            }
             view_state_ = ViewState::SUB;
             transition_back_level();
             break;
@@ -2272,14 +2264,119 @@ void RTC::commit_to_hardware(UISetupPage &page)
     });
 }
 
-void RTC::enter_write_confirm(UISetupPage &page)
+void RTC::show_write_confirm(UISetupPage &page)
 {
-    exit_confirm_ = true;
-    page.val_title_ = "Write RTC?";
-    page.val_options_ = {"Yes", "No"};
-    page.val_sel_idx_ = 1;
-    page.view_state_ = UISetupPage::ViewState::VALUE_SELECT;
-    page.transition_enter_level();
+    if (confirm_overlay_)
+        return;
+
+    confirm_sel_ = 1;
+    lv_obj_t *layer = lv_layer_top();
+
+    confirm_overlay_ = lv_obj_create(layer);
+    lv_obj_remove_style_all(confirm_overlay_);
+    lv_obj_set_size(confirm_overlay_, UISetupPage::SCREEN_W, UISetupPage::SCREEN_H + 20);
+    lv_obj_set_pos(confirm_overlay_, 0, 0);
+    lv_obj_set_style_bg_color(confirm_overlay_, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_opa(confirm_overlay_, LV_OPA_60, 0);
+    lv_obj_clear_flag(confirm_overlay_, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(confirm_overlay_, LV_OBJ_FLAG_CLICKABLE);
+
+    lv_obj_t *box = lv_obj_create(confirm_overlay_);
+    lv_obj_remove_style_all(box);
+    lv_obj_set_size(box, 230, 86);
+    lv_obj_align(box, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_set_style_bg_color(box, lv_color_hex(0x1A1A2E), 0);
+    lv_obj_set_style_bg_opa(box, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(box, 6, 0);
+    lv_obj_set_style_border_color(box, lv_color_hex(0x3A5A8A), 0);
+    lv_obj_set_style_border_width(box, 1, 0);
+    lv_obj_set_style_pad_all(box, 0, 0);
+    lv_obj_clear_flag(box, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(box, LV_OBJ_FLAG_CLICKABLE);
+
+    lv_obj_t *title = lv_label_create(box);
+    lv_label_set_text(title, "Write hardware RTC?");
+    lv_obj_set_style_text_color(title, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_set_style_text_font(title, launcher_fonts().get("Montserrat-Bold.ttf", 14, LV_FREETYPE_FONT_STYLE_BOLD), 0);
+    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 10);
+
+    lv_obj_t *hint = lv_label_create(box);
+    lv_label_set_text(hint, "OK:confirm  ESC:no");
+    lv_obj_set_style_text_color(hint, lv_color_hex(0x888888), 0);
+    lv_obj_set_style_text_font(hint, &lv_font_montserrat_10, 0);
+    lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, -7);
+
+    confirm_yes_lbl_ = lv_label_create(box);
+    lv_label_set_text(confirm_yes_lbl_, "Yes");
+    lv_obj_set_style_text_font(confirm_yes_lbl_, launcher_fonts().get("Montserrat-Bold.ttf", 16, LV_FREETYPE_FONT_STYLE_BOLD), 0);
+    lv_obj_align(confirm_yes_lbl_, LV_ALIGN_CENTER, -42, 8);
+
+    confirm_no_lbl_ = lv_label_create(box);
+    lv_label_set_text(confirm_no_lbl_, "No");
+    lv_obj_set_style_text_font(confirm_no_lbl_, launcher_fonts().get("Montserrat-Bold.ttf", 16, LV_FREETYPE_FONT_STYLE_BOLD), 0);
+    lv_obj_align(confirm_no_lbl_, LV_ALIGN_CENTER, 42, 8);
+
+    update_write_confirm_buttons();
+    lv_obj_move_foreground(confirm_overlay_);
+    lv_refr_now(NULL);
+}
+
+void RTC::close_write_confirm()
+{
+    if (confirm_overlay_) {
+        lv_obj_del(confirm_overlay_);
+        confirm_overlay_ = nullptr;
+    }
+    confirm_yes_lbl_ = nullptr;
+    confirm_no_lbl_ = nullptr;
+}
+
+void RTC::update_write_confirm_buttons()
+{
+    if (!confirm_yes_lbl_ || !confirm_no_lbl_)
+        return;
+    lv_obj_set_style_text_color(confirm_yes_lbl_,
+                                lv_color_hex(confirm_sel_ == 0 ? 0x00CC66 : 0x888888), 0);
+    lv_obj_set_style_text_color(confirm_no_lbl_,
+                                lv_color_hex(confirm_sel_ == 1 ? 0x00CC66 : 0x888888), 0);
+}
+
+void RTC::handle_write_confirm_key(UISetupPage &page, uint32_t key)
+{
+    switch (key) {
+    case KEY_LEFT:
+    case KEY_UP:
+        confirm_sel_ = 0;
+        update_write_confirm_buttons();
+        break;
+    case KEY_RIGHT:
+    case KEY_DOWN:
+        confirm_sel_ = 1;
+        update_write_confirm_buttons();
+        break;
+    case KEY_ENTER:
+        page.play_enter();
+        close_write_confirm();
+        if (confirm_sel_ == 0) {
+            commit_to_hardware(page);
+        } else {
+            refresh_values(page);
+        }
+        dirty_ = false;
+        page.view_state_ = UISetupPage::ViewState::MAIN;
+        page.build_main_view();
+        break;
+    case KEY_ESC:
+        page.play_back();
+        close_write_confirm();
+        refresh_values(page);
+        dirty_ = false;
+        page.view_state_ = UISetupPage::ViewState::MAIN;
+        page.build_main_view();
+        break;
+    default:
+        break;
+    }
 }
 
 void Developer::append(UISetupPage &p, std::vector<MenuItem> &menu)
