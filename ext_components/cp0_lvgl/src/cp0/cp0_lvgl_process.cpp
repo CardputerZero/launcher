@@ -239,7 +239,9 @@ public:
 #endif
     }
 
-    // Run a command via `sudo -S -- argv...`, feeding `password\n` to stdin.
+    // Run a command via `sudo -k -S -- argv...`, feeding `password\n` to stdin.
+    // -k avoids reusing sudo's timestamp cache, so each prompt verifies the
+    // password the user just typed instead of accepting a previous success.
     // Returns the child's exit code, or a negative errno on fork/pipe failure.
     int run_sudo(const std::string &password, const std::vector<std::string> &argv)
     {
@@ -250,8 +252,8 @@ public:
         if (argv.empty() || argv[0].empty())
             return -EINVAL;
 
-        // Build: sudo -S -- <argv>
-        std::vector<std::string> sudo_argv = {"sudo", "-S", "--"};
+        // Build: sudo -k -S -- <argv>
+        std::vector<std::string> sudo_argv = {"sudo", "-k", "-S", "--"};
         sudo_argv.insert(sudo_argv.end(), argv.begin(), argv.end());
 
         int stdin_pipe[2];
