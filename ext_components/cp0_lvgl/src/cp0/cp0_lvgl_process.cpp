@@ -528,16 +528,16 @@ private:
                 } else if (home_status == 1) {
                     if (*home_key_flag) {
                         auto elapsed = std::chrono::steady_clock::now() - home_start;
-                        if (std::chrono::duration_cast<std::chrono::seconds>(elapsed).count() >= 5) {
+                        if (std::chrono::duration_cast<std::chrono::seconds>(elapsed).count() >= 3) {
                             home_status = 2;
-                            kill(pid, SIGINT);
+                            kill(pid, SIGTERM);
                         }
                     } else {
                         home_status = 0;
                     }
                 } else if (home_status == 2) {
                     auto elapsed = std::chrono::steady_clock::now() - home_start;
-                    if (std::chrono::duration_cast<std::chrono::seconds>(elapsed).count() >= 8) {
+                    if (std::chrono::duration_cast<std::chrono::seconds>(elapsed).count() >= 5) {
                         kill(pid, SIGKILL);
                         waitpid(pid, &status, 0);
                         break;
@@ -624,7 +624,7 @@ private:
                     auto t0 = std::chrono::steady_clock::now();
                     while (waitpid(pid, &status, WNOHANG) == 0) {
                         if (std::chrono::duration_cast<std::chrono::seconds>(
-                                std::chrono::steady_clock::now() - t0).count() >= 3) {
+                                std::chrono::steady_clock::now() - t0).count() >= 2) {
                             killpg(pid, SIGKILL);
                             waitpid(pid, &status, 0);
                             break;

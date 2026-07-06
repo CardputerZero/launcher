@@ -11,7 +11,7 @@
  *
  * Behavior:
  *   (a) ESC held continuously for >= 1.5s -> show
- *       "Hold ESC 5s to return home" for ~1.5s. Short taps (released
+ *       "Hold ESC 3s to return home" for ~1.5s. Short taps (released
  *       before 1.5s) show nothing, so a quick "back" press inside
  *       an app no longer flashes the return-home toast.
  *   (b) Single press of SHIFT (Aa / KEY_LEFTSHIFT) or SYM (physical
@@ -70,7 +70,7 @@
 
 #define HINT_SHOW_MS        1500
 #define HINT_ESC_HOLD_MS    1500  /* how long ESC must be held before the
-                                   * "long-press 5s to return home" toast
+                                   * "long-press 3s to return home" toast
                                    * appears. Short taps stay silent. */
 #define HINT_ESC_POLL_MS    100   /* how often we re-check "is ESC still
                                    * held and past the threshold?". */
@@ -126,7 +126,7 @@ static void esc_poll_timer_cb(lv_timer_t *t)
 
     uint32_t elapsed = lv_tick_elaps(s_esc_down_tick);
     if (elapsed >= HINT_ESC_HOLD_MS) {
-        show_hint("Hold ESC 5s to return home");
+        show_hint("Hold ESC 3s to return home");
         s_esc_hint_shown = true;
         /* One-shot per hold: don't keep re-triggering show_hint every
          * 100ms while the user continues to hold ESC past 1.5s. The
