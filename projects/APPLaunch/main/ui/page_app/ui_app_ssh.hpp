@@ -58,6 +58,7 @@ private:
     int active_field_ = 0;
     ViewState view_state_ = ViewState::INPUT;
     std::shared_ptr<UISTPage> terminal_page_;
+    bool terminal_return_pending_ = false;
 
     // ==================== keycode to char ====================
     static char keycode_to_char(uint32_t key)
@@ -234,21 +235,39 @@ private:
 
         // Restore the SSH input view when the embedded terminal exits.
         terminal_page_->navigate_home = [this]() {
-            // Return to the SSH input view
-            terminal_page_.reset();
-            view_state_ = ViewState::INPUT;
-            // Switch screen back to our root
-            lv_disp_load_scr(this->screen());
-            lv_indev_set_group(lv_indev_get_next(NULL), this->input_group());
+            if (terminal_return_pending_)
+                return;
+            terminal_return_pending_ = true;
+            lv_async_call(UISSHPage::static_restore_input_view, this);
         };
 
         // Switch to terminal screen
         view_state_ = ViewState::TERMINAL;
+        terminal_return_pending_ = false;
         lv_disp_load_scr(terminal_page_->screen());
         lv_indev_set_group(lv_indev_get_next(NULL), terminal_page_->input_group());
 
         // Launch ssh command
         terminal_page_->exec(cmd);
+    }
+
+    static void static_restore_input_view(void *user)
+    {
+        auto *self = static_cast<UISSHPage *>(user);
+        if (self)
+            self->restore_input_view();
+    }
+
+    void restore_input_view()
+    {
+        lv_disp_load_scr(this->screen());
+        lv_indev_t *indev = lv_indev_get_next(NULL);
+        if (indev)
+            lv_indev_set_group(indev, this->input_group());
+
+        terminal_page_.reset();
+        view_state_ = ViewState::INPUT;
+        terminal_return_pending_ = false;
     }
 
     // ==================== event binding ====================

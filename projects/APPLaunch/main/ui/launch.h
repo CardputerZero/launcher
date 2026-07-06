@@ -64,6 +64,7 @@ private:
     void inotify_init_watch();
     void release_dir_watcher();
     void release_watch_timer();
+    void release_esc_hold_timer();
     void refresh_home_carousel();
     void applications_reload();
     void rebuild_builtin_apps();
@@ -72,12 +73,17 @@ private:
 
     static void lv_go_back_home(void *arg);
     static void app_dir_watch_cb(lv_timer_t *timer);
+    static void esc_hold_timer_cb(lv_timer_t *timer);
     static void app_registry_changed_cb(void *user_data);
 
     std::weak_ptr<UILaunchPage> launch_page_;
     int current_app = 2;
     cp0_watcher_t dir_watcher_ = NULL;
     lv_timer_t *watch_timer_ = nullptr;
+    lv_timer_t *esc_hold_timer_ = nullptr;
+    uint32_t esc_hold_start_tick_ = 0;
+    bool esc_hold_active_ = false;
+    bool force_home_pending_ = false;
     int fixed_count = 0;
     bool bound_ = false;
     std::list<app> app_list;
