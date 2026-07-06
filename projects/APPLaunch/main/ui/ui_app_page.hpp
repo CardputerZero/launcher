@@ -142,6 +142,48 @@ inline int radio_set_enabled(bool enabled)
 
 } // namespace launcher_wifi
 
+namespace launcher_battery_ui {
+
+constexpr int kLowBatteryBlinkThreshold = 3;
+constexpr uint32_t kLowBatteryBlinkMs = 450;
+
+inline bool should_blink(int soc)
+{
+    return soc < kLowBatteryBlinkThreshold;
+}
+
+inline void blink_opa_exec_cb(void *obj, int32_t opa)
+{
+    lv_obj_set_style_opa(static_cast<lv_obj_t *>(obj), static_cast<lv_opa_t>(opa),
+                         LV_PART_MAIN | LV_STATE_DEFAULT);
+}
+
+inline void set_blink(lv_obj_t *battery_panel, bool enabled, bool &active)
+{
+    if (!battery_panel || enabled == active)
+        return;
+
+    active = enabled;
+    lv_anim_del(battery_panel, blink_opa_exec_cb);
+    if (enabled) {
+        lv_obj_set_style_opa(battery_panel, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_anim_t a;
+        lv_anim_init(&a);
+        lv_anim_set_var(&a, battery_panel);
+        lv_anim_set_values(&a, LV_OPA_COVER, LV_OPA_20);
+        lv_anim_set_time(&a, kLowBatteryBlinkMs);
+        lv_anim_set_playback_time(&a, kLowBatteryBlinkMs);
+        lv_anim_set_repeat_count(&a, LV_ANIM_REPEAT_INFINITE);
+        lv_anim_set_path_cb(&a, lv_anim_path_linear);
+        lv_anim_set_exec_cb(&a, blink_opa_exec_cb);
+        lv_anim_start(&a);
+    } else {
+        lv_obj_set_style_opa(battery_panel, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_DEFAULT);
+    }
+}
+
+} // namespace launcher_battery_ui
+
 class UIAppTopBar
 {
 public:
@@ -238,6 +280,7 @@ public:
         if (battery_bar_)
             lv_bar_set_value(battery_bar_, soc, LV_ANIM_OFF);
         set_battery_charging((bat.flags & 1) != 0);
+        set_battery_low_blink(launcher_battery_ui::should_blink(soc));
     }
 
     void update_status()
@@ -261,6 +304,7 @@ private:
     lv_obj_t *eth_icon_ = nullptr;
     int height_ = 20;
     bool battery_charging_ = false;
+    bool battery_low_blink_ = false;
 
     static lv_font_t *top_title_font()
     {
@@ -380,6 +424,11 @@ private:
         lv_label_set_text(power_label_, "--");
         lv_obj_set_style_text_color(power_label_, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_text_opa(power_label_, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+    }
+
+    void set_battery_low_blink(bool enabled)
+    {
+        launcher_battery_ui::set_blink(battery_panel_, enabled, battery_low_blink_);
     }
 
     void set_battery_charging(bool charging)
@@ -685,6 +734,7 @@ private:
     lv_timer_t *time_timer_ = nullptr;
     lv_timer_t *status_timer_ = nullptr;
     bool ui_TOP_charging = false;
+    bool ui_TOP_battery_low_blink = false;
 
 public:
     lv_obj_t *ui_APP_Container = nullptr;
@@ -763,6 +813,7 @@ public:
             lv_obj_set_style_text_font(ui_TOP_power_Label, LV_FONT_DEFAULT, LV_PART_MAIN | LV_STATE_DEFAULT);
             const bool charging = (bat.flags & 1) != 0;
             set_home_battery_charging(charging);
+            set_home_battery_low_blink(launcher_battery_ui::should_blink(soc));
 
             uint32_t color = 0x66CC33;
             if (soc <= 20)
@@ -898,6 +949,11 @@ private:
         lv_obj_set_size(ui_APP_Container, 320, 150);
         lv_obj_set_pos(ui_APP_Container, 0, 20);
         lv_obj_clear_flag(ui_APP_Container, (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE)); /// Flags
+    }
+
+    void set_home_battery_low_blink(bool enabled)
+    {
+        launcher_battery_ui::set_blink(ui_TOP_battery_panel, enabled, ui_TOP_battery_low_blink);
     }
 
     void set_home_battery_charging(bool charging)
