@@ -1140,6 +1140,23 @@ private:
     int rtc_values_[6] = {2026, 1, 1, 0, 0, 0}; // Y/M/D/H/Min/S
     int rtc_field_ = 0;
     bool rtc_ntp_on_ = true; // cached NTP state; manual set only allowed when off
+    bool rtc_dirty_ = false;
+    bool rtc_exit_confirm_ = false;
+
+    void update_rtc_labels()
+    {
+        for (auto &m : menu_items_) {
+            if (m.label != "RTC") continue;
+            m.sub_items[0].toggle_state = rtc_ntp_on_;
+            char buf[32];
+            const char *names[] = {"Year", "Month", "Day", "Hour", "Minute", "Second"};
+            for (int i = 0; i < 6; ++i) {
+                snprintf(buf, sizeof(buf), "%s: %d", names[i], rtc_values_[i]);
+                m.sub_items[i + 1].label = buf;
+            }
+            break;
+        }
+    }
 
     void refresh_rtc_values()
     {
@@ -1154,18 +1171,8 @@ private:
             rtc_values_[4] = t->tm_min;
             rtc_values_[5] = t->tm_sec;
         }
-        // Update labels. sub_items[0] is the NTP toggle; date fields follow.
-        for (auto &m : menu_items_) {
-            if (m.label != "RTC") continue;
-            m.sub_items[0].toggle_state = rtc_ntp_on_;
-            char buf[32];
-            const char *names[] = {"Year", "Month", "Day", "Hour", "Minute", "Second"};
-            for (int i = 0; i < 6; ++i) {
-                snprintf(buf, sizeof(buf), "%s: %d", names[i], rtc_values_[i]);
-                m.sub_items[i + 1].label = buf;
-            }
-            break;
-        }
+        rtc_dirty_ = false;
+        update_rtc_labels();
     }
 
     void ntp_toggle()
@@ -1209,21 +1216,44 @@ private:
     {
         int new_val = atoi(val_options_[val_sel_idx_].c_str());
         rtc_values_[rtc_field_] = new_val;
+        rtc_dirty_ = true;
+        update_rtc_labels();
+
         char timestamp[32];
         snprintf(timestamp, sizeof(timestamp), "%04d-%02d-%02d %02d:%02d:%02d",
                  rtc_values_[0], rtc_values_[1], rtc_values_[2],
                  rtc_values_[3], rtc_values_[4], rtc_values_[5]);
 
-        // Build a combined shell command: set system clock then sync to hardware RTC.
-        // Timestamp format is always "YYYY-MM-DD HH:MM:SS" — safe to single-quote.
-        char shell_cmd[128];
-        snprintf(shell_cmd, sizeof(shell_cmd),
-                 "date -s '%s' && hwclock -w", timestamp);
+        // Update the system clock immediately for each field change. Hardware
+        // RTC sync is delayed until the user leaves RTC and confirms it.
+        char shell_cmd[96];
+        snprintf(shell_cmd, sizeof(shell_cmd), "date -s '%s'", timestamp);
 
         SudoPrompt::show({"sh", "-c", shell_cmd}, [this](int code) {
+            if (code == 0) {
+                update_datetime_status();
+            } else {
+                refresh_rtc_values();
+            }
+        });
+    }
+
+    void commit_rtc_values_to_hardware()
+    {
+        SudoPrompt::show({"hwclock", "-w"}, [this](int code) {
             refresh_rtc_values();
             update_datetime_status();
         });
+    }
+
+    void enter_rtc_write_confirm()
+    {
+        rtc_exit_confirm_ = true;
+        val_title_ = "Write RTC?";
+        val_options_ = {"Yes", "No"};
+        val_sel_idx_ = 1; // default to No
+        view_state_ = ViewState::VALUE_SELECT;
+        transition_enter_level();
     }
 
     void save_app_toggle(const std::string &config_key)
@@ -2154,6 +2184,12 @@ private:
         } else if (val_title_ == "Year" || val_title_ == "Month" || val_title_ == "Day" ||
                    val_title_ == "Hour" || val_title_ == "Minute" || val_title_ == "Second") {
             apply_rtc_value();
+        } else if (val_title_ == "Write RTC?") {
+            if (val_sel_idx_ == 0)
+                commit_rtc_values_to_hardware();
+            else
+                refresh_rtc_values();
+            rtc_dirty_ = false;
         } else if (val_title_ == "Reboot?" || val_title_ == "Shutdown?" || val_title_ == "Run Setup?") {
             if (val_sel_idx_ == 0 && confirm_action_) confirm_action_(); // "Yes"
         } else if (val_title_ == "BQ Calib") {
@@ -3021,6 +3057,10 @@ private:
         case KEY_LEFT:
             play_back();
             stop_info_timer();
+            if (item.label == "RTC" && rtc_dirty_) {
+                enter_rtc_write_confirm();
+                break;
+            }
             view_state_ = ViewState::MAIN;
             build_main_view();
             break;
@@ -3041,7 +3081,8 @@ private:
             if (val_sel_idx_ < val_count - 1) { ++val_sel_idx_; build_value_view(); }
             break;
         case KEY_ENTER:
-        case KEY_RIGHT:
+        case KEY_RIGHT: {
+            bool was_rtc_exit_confirm = rtc_exit_confirm_;
             apply_value_selection();
             // After reboot/shutdown, don't animate back — the system is going down.
             if (val_title_ == "Reboot?" || val_title_ == "Shutdown?" || val_title_ == "Run Setup?") {
@@ -3056,11 +3097,25 @@ private:
                 lv_refr_now(NULL);
                 break;
             }
+            if (was_rtc_exit_confirm) {
+                rtc_exit_confirm_ = false;
+                view_state_ = ViewState::MAIN;
+                transition_back_level();
+                break;
+            }
             view_state_ = ViewState::SUB;
             transition_back_level();
             break;
+        }
         case KEY_ESC:
         case KEY_LEFT:
+            if (rtc_exit_confirm_) {
+                rtc_exit_confirm_ = false;
+                refresh_rtc_values();
+                view_state_ = ViewState::MAIN;
+                transition_back_level();
+                break;
+            }
             view_state_ = ViewState::SUB;
             transition_back_level();
             break;
