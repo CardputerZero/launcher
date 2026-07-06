@@ -87,7 +87,7 @@ static std::string nth_arg(const std::list<std::string> &arg, size_t index)
 static std::string encode_bt_status(const cp0_bt_status_t &st)
 {
     std::ostringstream oss;
-    oss << st.powered << '\t' << st.address;
+    oss << st.powered << '\t' << st.address << '\t' << st.discoverable << '\t' << st.alias;
     return oss.str();
 }
 
@@ -192,6 +192,25 @@ public:
             return -1;
         dbus_bool_t powered = on ? TRUE : FALSE;
         return set_property_bool(adapter.c_str(), kAdapterIface, "Powered", powered) ? 0 : -1;
+    }
+
+    int set_discoverable(int on)
+    {
+        std::string adapter = adapter_path();
+        if (adapter.empty())
+            return -1;
+        dbus_bool_t discoverable = on ? TRUE : FALSE;
+        return set_property_bool(adapter.c_str(), kAdapterIface, "Discoverable", discoverable) ? 0 : -1;
+    }
+
+    int set_alias(const char *alias)
+    {
+        if (!alias || !alias[0])
+            return -1;
+        std::string adapter = adapter_path();
+        if (adapter.empty())
+            return -1;
+        return set_property_string(adapter.c_str(), kAdapterIface, "Alias", alias) ? 0 : -1;
     }
 
     int start_discovery()
@@ -343,6 +362,23 @@ private:
         return send_blocking(msg.get());
     }
 
+    bool set_property_string(const char *path, const char *iface, const char *property, const char *value)
+    {
+        ScopedMessage msg(dbus_message_new_method_call(kBluezService, path, kPropertiesIface, "Set"));
+        if (!msg)
+            return false;
+        DBusMessageIter iter;
+        dbus_message_iter_init_append(msg.get(), &iter);
+        const char *iface_ptr = iface;
+        const char *prop_ptr = property;
+        const char *value_ptr = value ? value : "";
+        if (!dbus_message_iter_append_basic(&iter, DBUS_TYPE_STRING, &iface_ptr) ||
+            !dbus_message_iter_append_basic(&iter, DBUS_TYPE_STRING, &prop_ptr) ||
+            !append_basic_variant(&iter, DBUS_TYPE_STRING_AS_STRING, DBUS_TYPE_STRING, &value_ptr))
+            return false;
+        return send_blocking(msg.get());
+    }
+
     std::string adapter_path()
     {
         ManagedSnapshot snapshot;
@@ -461,6 +497,14 @@ private:
                     const char *address = "";
                     dbus_message_iter_get_basic(&value, &address);
                     copy_string(status.address, sizeof(status.address), address ? address : "");
+                } else if (!std::strcmp(name, "Discoverable") && iter_is_type(&value, DBUS_TYPE_BOOLEAN)) {
+                    dbus_bool_t discoverable = FALSE;
+                    dbus_message_iter_get_basic(&value, &discoverable);
+                    status.discoverable = discoverable ? 1 : 0;
+                } else if (!std::strcmp(name, "Alias") && iter_is_type(&value, DBUS_TYPE_STRING)) {
+                    const char *alias = "";
+                    dbus_message_iter_get_basic(&value, &alias);
+                    copy_string(status.alias, sizeof(status.alias), alias ? alias : "");
                 }
             }
             dbus_message_iter_next(&props);
@@ -658,6 +702,10 @@ static void bt_api_call(std::list<std::string> arg, std::function<void(int, std:
         report(callback, 0, encode_bt_status(client().status()));
     } else if (cmd == "BtPower") {
         report(callback, client().set_power(std::atoi(nth_arg(arg, 1).c_str())), "");
+    } else if (cmd == "BtAlias") {
+        report(callback, client().set_alias(nth_arg(arg, 1).c_str()), "");
+    } else if (cmd == "BtDiscoverable") {
+        report(callback, client().set_discoverable(std::atoi(nth_arg(arg, 1).c_str())), "");
     } else if (cmd == "BtScan") {
         int max_count = arg.size() >= 2 ? std::atoi(nth_arg(arg, 1).c_str()) : CP0_BT_DEVICE_MAX;
         std::vector<cp0_bt_device_t> devices(std::max(0, max_count));

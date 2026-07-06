@@ -59,6 +59,10 @@ public:
             report(callback, 0, encode_bt_status(bt_get_status()));
         } else if (cmd == "BtPower") {
             report(callback, bt_set_power(std::atoi(nth_arg(arg, 1).c_str())), "");
+        } else if (cmd == "BtAlias") {
+            report(callback, bt_set_alias(nth_arg(arg, 1).c_str()), "");
+        } else if (cmd == "BtDiscoverable") {
+            report(callback, bt_set_discoverable(std::atoi(nth_arg(arg, 1).c_str())), "");
         } else if (cmd == "BtScan") {
             int max_count = arg.size() >= 2 ? std::atoi(nth_arg(arg, 1).c_str()) : CP0_BT_DEVICE_MAX;
             std::vector<cp0_bt_device_t> devices(std::max(0, max_count));
@@ -159,7 +163,7 @@ private:
     static std::string encode_bt_status(const cp0_bt_status_t &st)
     {
         std::ostringstream oss;
-        oss << st.powered << '\t' << st.address;
+        oss << st.powered << '\t' << st.address << '\t' << st.discoverable << '\t' << st.alias;
         return oss.str();
     }
 
@@ -200,11 +204,15 @@ private:
         hal_bt_status_t hal = hal_bt_get_status();
         cp0_bt_status_t st{};
         st.powered = hal.powered;
+        st.discoverable = hal.discoverable;
         copy_string(st.address, sizeof(st.address), hal.address);
+        copy_string(st.alias, sizeof(st.alias), hal.alias);
         return st;
     }
 
     int bt_set_power(int on) { return hal_bt_set_power(on); }
+    int bt_set_alias(const char *alias) { (void)alias; return 0; }
+    int bt_set_discoverable(int on) { (void)on; return 0; }
 
     int bt_scan(cp0_bt_device_t *out, int max_devices)
     {
@@ -277,6 +285,12 @@ private:
         while (std::getline(lines, line)) {
             if (line.find("Powered:") != std::string::npos)
                 st.powered = line.find("yes") != std::string::npos ? 1 : 0;
+            if (line.find("Discoverable:") != std::string::npos)
+                st.discoverable = line.find("yes") != std::string::npos ? 1 : 0;
+            std::string alias_marker = "Alias: ";
+            size_t alias_pos = line.find(alias_marker);
+            if (alias_pos != std::string::npos)
+                copy_string(st.alias, sizeof(st.alias), line.substr(alias_pos + alias_marker.size()));
             std::string marker = "Controller ";
             size_t pos = line.find(marker);
             if (pos != std::string::npos) {
@@ -294,6 +308,27 @@ private:
     {
         const char *argv_on[] = {"bluetoothctl", "power", "on", nullptr};
         const char *argv_off[] = {"bluetoothctl", "power", "off", nullptr};
+        char output[1024] = {};
+        int ret = cp0_process_capture_argv(on ? argv_on : argv_off, output, sizeof(output));
+        if (ret != 0)
+            return -1;
+        std::string data(output);
+        return (data.find("succeeded") != std::string::npos || data.find("Changing") != std::string::npos) ? 0 : -1;
+    }
+
+    int bt_set_alias(const char *alias)
+    {
+        if (!alias || !alias[0])
+            return -1;
+        const char *argv[] = {"bluetoothctl", "system-alias", alias, nullptr};
+        char output[1024] = {};
+        return cp0_process_capture_argv(argv, output, sizeof(output)) == 0 ? 0 : -1;
+    }
+
+    int bt_set_discoverable(int on)
+    {
+        const char *argv_on[] = {"bluetoothctl", "discoverable", "on", nullptr};
+        const char *argv_off[] = {"bluetoothctl", "discoverable", "off", nullptr};
         char output[1024] = {};
         int ret = cp0_process_capture_argv(on ? argv_on : argv_off, output, sizeof(output));
         if (ret != 0)
@@ -452,7 +487,9 @@ extern "C" hal_bt_status_t hal_bt_get_status(void)
 {
     hal_bt_status_t st{};
     st.powered = 0;
+    st.discoverable = 0;
     std::strncpy(st.address, "00:00:00:00:00:00", sizeof(st.address) - 1);
+    std::strncpy(st.alias, "CardputerZero", sizeof(st.alias) - 1);
     return st;
 }
 
