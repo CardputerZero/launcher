@@ -38,6 +38,310 @@
 #include "hal_lvgl_bsp.h"
 #include "../app_registry.h"
 
+
+class UISetupPage;
+
+namespace setting {
+
+struct SubItem {
+    std::string label;
+    bool is_toggle;
+    bool toggle_state;
+    std::function<void()> action;
+};
+
+struct MenuItem {
+    std::string label;
+    std::vector<SubItem> sub_items;
+    std::function<void()> on_enter;
+    std::function<void(uint32_t key)> custom_key_handler;
+};
+
+class Launcher {
+public:
+    static void append(UISetupPage &p, std::vector<MenuItem> &menu);
+    static void save_app_toggle(UISetupPage &page, const std::string &config_key);
+};
+
+class Boot {
+public:
+    static void append(UISetupPage &p, std::vector<MenuItem> &menu);
+    static void factory_reset();
+    static void rearm_oobe_and_reboot();
+};
+
+class Screen {
+public:
+    static void append(UISetupPage &p, std::vector<MenuItem> &menu);
+    void enter_brightness_adjust(UISetupPage &page);
+    void apply_value(UISetupPage &page);
+    static int backlight_read();
+    static int backlight_max();
+private:
+    int bright_val_ = 75;
+};
+
+class WiFi {
+public:
+    static void append(UISetupPage &p, std::vector<MenuItem> &menu);
+    void enter_scan(UISetupPage &page);
+    void build_list(UISetupPage &page);
+    void handle_list_key(UISetupPage &page, uint32_t key);
+    void refresh_radio(UISetupPage &page);
+    void toggle_enable(UISetupPage &page);
+    void try_connect(UISetupPage &page, int idx);
+    void show_connecting(UISetupPage &page, const char *ssid);
+    void show_error(UISetupPage &page, const char *msg);
+    void forget_selected(UISetupPage &page);
+    bool has_saved_profile(const char *ssid);
+    void show_pw_input(UISetupPage &page);
+    void handle_pw_key(UISetupPage &page, uint32_t key);
+    void pw_update_display();
+    void do_scan();
+private:
+    cp0_wifi_ap_t aps_[CP0_WIFI_AP_MAX];
+    int ap_count_ = 0;
+    int list_sel_ = 0;
+    std::string pw_ssid_;
+    std::string pw_buf_;
+    lv_obj_t *pw_input_lbl_ = nullptr;
+    lv_obj_t *pw_hint_lbl_ = nullptr;
+};
+
+class Speaker {
+public:
+    static void append(UISetupPage &p, std::vector<MenuItem> &menu);
+    void enter_volume_adjust(UISetupPage &page);
+    void apply_value(UISetupPage &page);
+private:
+    int vol_val_ = 39;
+};
+
+class Camera {
+public:
+    static void append(UISetupPage &p, std::vector<MenuItem> &menu);
+    void enter_resolution(UISetupPage &page);
+    void apply_value(UISetupPage &page);
+};
+
+class Info {
+public:
+    static void append(UISetupPage &p, std::vector<MenuItem> &menu);
+    void refresh_values(UISetupPage &page);
+    void start_timer(UISetupPage &page);
+    void stop_timer();
+    void enter_bq_calibrate(UISetupPage &page);
+    void apply_bq_calibrate(UISetupPage &page);
+    void reset_visible_labels();
+    void track_visible_label(int index, lv_obj_t *label, bool focused, const std::string &text);
+    void refresh_visible_labels(UISetupPage &page);
+private:
+    lv_timer_t *timer_ = nullptr;
+    lv_obj_t *sub_labels_[4] = {};
+    bool sub_label_focused_[4] = {};
+    std::string visible_text_[4];
+};
+
+class Developer {
+public:
+    static void append(UISetupPage &p, std::vector<MenuItem> &menu);
+    void toggle_adb(UISetupPage &page);
+    void refresh_adb_status(UISetupPage &page);
+    void enter_usb_guide(UISetupPage &page, bool enabling);
+    void build_usb_guide_view(UISetupPage &page);
+    void stop_usb_guide_anims();
+    void handle_usb_guide_key(UISetupPage &page, uint32_t key);
+private:
+    static constexpr const char *kAdbHelper = "/usr/share/APPLaunch/adb/cardputer-adb";
+    static lv_obj_t *guide_chip(lv_obj_t *parent, int x, int y, int w, int h,
+                                uint32_t bg, uint32_t border, int radius, int border_w);
+    static lv_obj_t *guide_label(lv_obj_t *parent, int x, int y, const char *txt,
+                                 uint32_t color, const lv_font_t *font);
+    bool usb_guide_enabling_ = true;
+    lv_obj_t *usb_guide_knob_ = nullptr;
+};
+
+class RTC {
+public:
+    static void append(UISetupPage &p, std::vector<MenuItem> &menu);
+    void refresh_values(UISetupPage &page);
+    void toggle_ntp(UISetupPage &page);
+    void enter_adjust(UISetupPage &page, int field);
+    void apply_value(UISetupPage &page);
+    void commit_to_hardware(UISetupPage &page);
+    void enter_write_confirm(UISetupPage &page);
+    bool is_dirty() const { return dirty_; }
+    bool ntp_on() const { return ntp_on_; }
+    bool exit_confirm() const { return exit_confirm_; }
+    void set_exit_confirm(bool value) { exit_confirm_ = value; }
+    void clear_dirty() { dirty_ = false; }
+private:
+    void update_labels(UISetupPage &page);
+    int values_[6] = {2026, 1, 1, 0, 0, 0};
+    int field_ = 0;
+    bool ntp_on_ = true;
+    bool dirty_ = false;
+    bool exit_confirm_ = false;
+};
+
+class About {
+public:
+    static void append(UISetupPage &p, std::vector<MenuItem> &menu);
+    static void refresh_info(UISetupPage &page);
+};
+
+class Help {
+public:
+    static void append(UISetupPage &p, std::vector<MenuItem> &menu);
+    static void enter_page(UISetupPage &page);
+};
+
+class ExtPort {
+public:
+    static void append(UISetupPage &p, std::vector<MenuItem> &menu);
+};
+
+class Ethernet {
+public:
+    static void append(UISetupPage &p, std::vector<MenuItem> &menu);
+    static void refresh_info(UISetupPage &page);
+};
+
+class Account {
+public:
+    static void append(UISetupPage &p, std::vector<MenuItem> &menu);
+    static void refresh_info(UISetupPage &page);
+};
+
+class Update {
+public:
+    static void append(UISetupPage &p, std::vector<MenuItem> &menu);
+    static void refresh_version_info(UISetupPage &page);
+    static void check_system_update();
+    static void update_launcher();
+};
+
+class Bluetooth {
+    struct ListRow {
+        int device_index;
+        const char *title;
+        bool is_header;
+    };
+    enum class ListMode { Managed, Scan };
+
+public:
+    static void append(UISetupPage &p, std::vector<MenuItem> &menu);
+    void enter_devices(UISetupPage &page);
+    void enter_alias(UISetupPage &page);
+    void build_alias_view(UISetupPage &page);
+    void handle_alias_key(UISetupPage &page, uint32_t key);
+    void enter_scan(UISetupPage &page);
+    void build_list(UISetupPage &page);
+    void handle_list_key(UISetupPage &page, uint32_t key);
+    void refresh_status(UISetupPage &page);
+    void toggle_power(UISetupPage &page);
+    void toggle_named_only(UISetupPage &page);
+    void toggle_discoverable(UISetupPage &page);
+    void start_scan_timer(UISetupPage &page);
+    void stop_scan_timer();
+    void refresh_devices();
+    void do_scan(UISetupPage &page);
+
+private:
+    static bool alias_char_allowed(unsigned char ch);
+    std::string alias_sanitized() const;
+    void alias_update_display();
+    void rebuild_rows();
+    bool should_hide_device(const cp0_bt_device_t &dev) const;
+    static std::string normalized_mac_text(const char *text);
+    int selected_device_index() const;
+    void select_next_device(int direction);
+    void show_action(UISetupPage &page, const char *msg, uint32_t color = 0x58A6FF);
+    void activate_selected(UISetupPage &page);
+    void remove_selected(UISetupPage &page);
+    static void copy_string(char *dst, size_t dst_size, const std::string &src);
+    static std::vector<std::string> split_char(const std::string &line, char delimiter);
+    static bool decode_status(const std::string &data, cp0_bt_status_t &st);
+    static int decode_devices(const std::string &data, cp0_bt_device_t *out, int max_devices);
+    static int api_int(std::list<std::string> args, int default_value = -1);
+    static cp0_bt_status_t get_status();
+    static int set_power(int on);
+    static int set_alias(const std::string &alias);
+    static int set_discoverable(int on);
+    static int device_command(const char *cmd, const char *address);
+    static int device_list(const char *cmd, cp0_bt_device_t *out, int max_devices);
+
+    cp0_bt_device_t devices_[CP0_BT_DEVICE_MAX];
+    int device_count_ = 0;
+    int list_sel_ = 0;
+    std::vector<ListRow> rows_;
+    ListMode list_mode_ = ListMode::Managed;
+    lv_timer_t *scan_timer_ = nullptr;
+    bool discovery_active_ = false;
+    bool named_only_ = true;
+    bool action_busy_ = false;
+    std::string alias_ = "CardputerZero";
+    bool discoverable_ = false;
+    std::string alias_input_;
+    lv_obj_t *alias_input_lbl_ = nullptr;
+    lv_obj_t *alias_hint_lbl_ = nullptr;
+};
+
+class SoundCard {
+    struct Card {
+        int index = 0;
+        std::string name;
+    };
+
+    struct Control {
+        std::string name;
+        std::string type;
+        int min_val = 0;
+        int max_val = 0;
+        int step = 1;
+        std::string current_str;
+        int current_val = 0;
+    };
+
+public:
+    static void append(UISetupPage &p, std::vector<MenuItem> &menu);
+    void enter_cards(UISetupPage &page);
+    void enter_controls(UISetupPage &page);
+    void enter_detail(UISetupPage &page);
+    void build_cards_view(UISetupPage &page);
+    void build_controls_view(UISetupPage &page);
+    void build_detail_view(UISetupPage &page);
+    void handle_cards_key(UISetupPage &page, uint32_t key);
+    void handle_controls_key(UISetupPage &page, uint32_t key);
+    void handle_detail_key(UISetupPage &page, uint32_t key);
+
+private:
+    static std::string trim(const std::string &s);
+    static bool parse_limits(const std::string &line, int &mn, int &mx);
+    static int parse_current_val(const std::string &line);
+    static std::string extract_value_str(const std::string &line);
+    static bool is_value_line(const std::string &tl);
+    void input_update_display();
+    void cursor_stop();
+    void apply_value(UISetupPage &page);
+
+    std::vector<Card> cards_;
+    std::vector<Control> controls_;
+    int card_sel_ = 0;
+    int ctrl_sel_ = 0;
+    int card_idx_ = -1;
+    Control detail_;
+    std::string input_buf_;
+    lv_obj_t *input_lbl_ = nullptr;
+    lv_obj_t *hint_lbl_ = nullptr;
+    lv_timer_t *cursor_timer_ = nullptr;
+    bool cursor_vis_ = true;
+};
+
+void build_menu(UISetupPage &page);
+
+} // namespace setting
+
 // ============================================================
 //  System settings screen  UISetupPage  (Carousel Design)
 //  Screen: 320x170 (top bar20px, body 320x150)
@@ -52,27 +356,8 @@ class UISetupPage : public AppPage
                            SOUNDCARD_CARDS, SOUNDCARD_CONTROLS, SOUNDCARD_DETAIL,
                            USB_GUIDE };
 
-    struct SubItem {
-        std::string label;
-        bool is_toggle;
-        bool toggle_state;
-        std::function<void()> action;
-    };
-
-    struct MenuItem {
-        std::string label;
-        std::vector<SubItem> sub_items;
-        std::function<void()> on_enter;
-        std::function<void(uint32_t key)> custom_key_handler;
-    };
-
-    struct BtListRow {
-        int device_index;
-        const char *title;
-        bool is_header;
-    };
-
-    enum class BtListMode { Managed, Scan };
+    using SubItem = setting::SubItem;
+    using MenuItem = setting::MenuItem;
 
 public:
     UISetupPage() : AppPage()
@@ -86,18 +371,45 @@ public:
     ~UISetupPage()
     {
         stop_power_timer();
-        stop_bt_scan_timer();
+        info_.stop_timer();
+        bluetooth_.stop_scan_timer();
     }
 
 private:
     std::vector<MenuItem> menu_items_;
+    friend class setting::Launcher;
+    friend class setting::Boot;
+    friend class setting::Screen;
+    friend class setting::WiFi;
+    friend class setting::Speaker;
+    friend class setting::Camera;
+    friend class setting::Info;
+    friend class setting::Developer;
+    friend class setting::RTC;
+    friend class setting::About;
+    friend class setting::Help;
+    friend class setting::ExtPort;
+    friend class setting::Ethernet;
+    friend class setting::Account;
+    friend class setting::Update;
+    friend class setting::Bluetooth;
+    friend class setting::SoundCard;
+    friend void setting::build_menu(UISetupPage &page);
+
+    setting::Screen screen_;
+    setting::WiFi wifi_;
+    setting::Speaker speaker_;
+    setting::Camera camera_;
+    setting::Info info_;
+    setting::Developer developer_;
+    setting::RTC rtc_;
+    setting::Bluetooth bluetooth_;
+    setting::SoundCard soundcard_;
+
     int selected_idx_ = 2;
     int sub_selected_idx_ = 0;
     ViewState view_state_ = ViewState::MAIN;
     std::unordered_map<std::string, lv_obj_t *> ui_obj_;
-    lv_obj_t *info_sub_labels_[4] = {};
-    bool info_sub_label_focused_[4] = {};
-    std::string info_visible_text_[4];
 
     // Image paths
     std::string img_arrow_up_;
@@ -106,46 +418,12 @@ private:
     std::string img_ok_;
     std::string img_cross_;
 
-    // USB-mode guidance screen (shown when a reboot is required to switch dwc2).
-    // Drawn natively with LVGL objects + lv_anim (no GIF) so it stays crisp.
-    bool usb_guide_enabling_ = true;
-    lv_obj_t *usb_guide_knob_ = nullptr;
-
-    // WiFi state
-    cp0_wifi_ap_t wifi_aps_[CP0_WIFI_AP_MAX];
-    int wifi_ap_count_ = 0;
-    std::string wifi_pw_ssid_;
-    std::string wifi_pw_buf_;
-    lv_obj_t *pw_input_lbl_ = nullptr;
-    lv_obj_t *pw_hint_lbl_ = nullptr;
     struct key_item *cur_elm_ = nullptr;
-
-    // Bluetooth state
-    cp0_bt_device_t bt_devices_[CP0_BT_DEVICE_MAX];
-    int bt_device_count_ = 0;
-    int bt_list_sel_ = 0;
-    std::vector<BtListRow> bt_rows_;
-    BtListMode bt_list_mode_ = BtListMode::Managed;
-    lv_timer_t *bt_scan_timer_ = nullptr;
-    bool bt_discovery_active_ = false;
-    bool bt_named_only_ = true;
-    bool bt_action_busy_ = false;
-    std::string bt_alias_ = "CardputerZero";
-    bool bt_discoverable_ = false;
-    std::string bt_alias_input_;
-    lv_obj_t *bt_alias_input_lbl_ = nullptr;
-    lv_obj_t *bt_alias_hint_lbl_ = nullptr;
-
-    // Brightness
-    int bright_val_ = 75;
 
     // Value select (3rd level)
     int val_sel_idx_ = 0;
     std::vector<std::string> val_options_;
     std::string val_title_;
-
-    // Volume
-    int vol_val_ = 39;
 
     // Power timer
     lv_timer_t *pwr_timer_ = nullptr;
@@ -227,1525 +505,14 @@ private:
     // ==================== Menu init ====================
     void menu_init()
     {
-        // --- Launcher (app enable/disable, OX toggle with persistence) ---
-        {
-            MenuItem m;
-            m.label = "Launcher";
-            std::size_t app_count = 0;
-            const AppDescriptor *apps = launcher_app_registry_entries(&app_count);
-            for (std::size_t i = 0; i < app_count; ++i) {
-                const AppDescriptor &desc = apps[i];
-                if (!desc.configurable)
-                    continue;
-                bool enabled = launcher_app_registry_is_enabled(desc);
-                m.sub_items.push_back({desc.label, true, enabled,
-                    [this, key = std::string(desc.config_key)]() { save_app_toggle(key); }});
-            }
-            menu_items_.push_back(m);
-        }
-        // --- Boot (with confirmation via value select) ---
-        {
-            MenuItem m;
-            m.label = "Boot";
-            m.sub_items = {
-                {"Reboot",   false, false, [this]() { enter_confirm_action("Reboot?", [this](){ cp0_system_reboot(); }); }},
-                {"Shutdown", false, false, [this]() { enter_confirm_action("Shutdown?", [this](){ cp0_system_shutdown(); }); }},
-            };
-            menu_items_.push_back(m);
-        }
-        // --- Screen ---
-        {
-            MenuItem m;
-            m.label = "Screen";
-            m.sub_items = {
-                {"Brightness", false, false, [this]() { enter_brightness_adjust(); }},
-            };
-            menu_items_.push_back(m);
-        }
-        // --- WiFi ---
-        {
-            MenuItem m;
-            m.label = "WiFi";
-            m.sub_items = {
-                {"Power",   true,  false, [this]() { wifi_toggle_enable(); }},
-                {"Scan",    false, false, [this]() { enter_wifi_scan(); }},
-            };
-            m.on_enter = [this]() { refresh_wifi_radio(); };
-            menu_items_.push_back(m);
-        }
-        // --- Speaker ---
-        {
-            MenuItem m;
-            m.label = "Speaker";
-            m.sub_items = {
-                {"Volume", false, false, [this]() { enter_volume_adjust(); }},
-            };
-            menu_items_.push_back(m);
-        }
-        // --- Camera ---
-        {
-            MenuItem m;
-            m.label = "Camera";
-            m.sub_items = {
-                {"Resolution", false, false, [this]() { enter_camera_resolution(); }},
-            };
-            menu_items_.push_back(m);
-        }
-        // --- Info (auto-refresh with timer) ---
-        {
-            MenuItem m;
-            m.label = "Info";
-            m.sub_items = {
-                {"Battery: --%",     false, false, nullptr},
-                {"Temp: --C",        false, false, nullptr},
-                {"Current: --mA",    false, false, nullptr},
-                {"Voltage: --V",     false, false, nullptr},
-                {"BQ Calibrate",     false, false, [this]() { enter_bq_calibrate(); }},
-            };
-            m.on_enter = [this]() { refresh_info_values(); start_info_timer(); };
-            menu_items_.push_back(m);
-        }
-        // --- About ---
-        {
-            MenuItem m;
-            m.label = "About";
-            m.sub_items = {
-                {"CardputerZero",    false, false, nullptr},
-                {"LVGL 9.x",        false, false, nullptr},
-                {"",                 false, false, nullptr},
-                {"",                 false, false, nullptr},
-            };
-            m.on_enter = [this]() { refresh_about_info(); };
-            menu_items_.push_back(m);
-        }
-        // --- Help ---
-        {
-            MenuItem m;
-            m.label = "Help";
-            m.sub_items = {
-                {"View Help", false, false, [this]() { enter_help_page(); }},
-            };
-            menu_items_.push_back(m);
-        }
-        // --- ExtPort ---
-        {
-            MenuItem m;
-            m.label = "ExtPort";
-            bool usb_en = config_get_int("extport_usb", 1) != 0;
-            bool vout_en = config_get_int("extport_5vout", 1) != 0;
-            m.sub_items = {
-                {"GROVE5V", true, usb_en, [this]() {
-                    bool en = menu_items_[selected_idx_].sub_items[0].toggle_state;
-                    config_set_int("extport_usb", en ? 1 : 0);
-                    gpio_set("GROVE5V", en ? 1 : 0);
-                    config_save();
-                }},
-                {"EXT5V",   true, vout_en, [this]() {
-                    bool en = menu_items_[selected_idx_].sub_items[1].toggle_state;
-                    config_set_int("extport_5vout", en ? 1 : 0);
-                    gpio_set("EXT5V", en ? 1 : 0);
-                    config_save();
-                }},
-            };
-            menu_items_.push_back(m);
-        }
-        // --- Developer (developer options: ADB USB debug bridge, ON by default) ---
-        {
-            MenuItem m;
-            m.label = "Developer";
-            // ADB is OFF by default: enabling it switches the USB controller to
-            // peripheral mode, which disables the onboard USB hub (keyboard/mouse
-            // and other peripherals). It must stay opt-in.
-            bool adb_en = config_get_int("adb_debug", 0) != 0;
-            m.sub_items = {
-                {"ADB", true, adb_en, [this]() { adb_toggle(); }},
-            };
-            m.on_enter = [this]() { refresh_adb_status(); };
-            menu_items_.push_back(m);
-        }
-        // --- RTC ---
-        {
-            MenuItem m;
-            m.label = "RTC";
-            m.sub_items = {
-                {"NTP",    true,  true,  [this]() { ntp_toggle(); }},
-                {"Year",   false, false, [this]() { enter_rtc_adjust(0); }},
-                {"Month",  false, false, [this]() { enter_rtc_adjust(1); }},
-                {"Day",    false, false, [this]() { enter_rtc_adjust(2); }},
-                {"Hour",   false, false, [this]() { enter_rtc_adjust(3); }},
-                {"Minute", false, false, [this]() { enter_rtc_adjust(4); }},
-                {"Second", false, false, [this]() { enter_rtc_adjust(5); }},
-            };
-            m.on_enter = [this]() { refresh_rtc_values(); };
-            menu_items_.push_back(m);
-        }
-        // --- Bluetooth ---
-        {
-            MenuItem m;
-            m.label = "Bluetooth";
-            bt_named_only_ = config_get_int("bt_named_only", 1) != 0;
-            m.sub_items = {
-                {"Power",  true, false, [this]() { bt_toggle_power(); }},
-                {"Alias: CardputerZero", false, false, [this]() { enter_bt_alias(); }},
-                {"Discoverable", true, false, [this]() { bt_toggle_discoverable(); }},
-                {"Named Only", true, bt_named_only_, [this]() { bt_toggle_named_only(); }},
-                {"Connected", false, false, [this]() { enter_bt_devices(); }},
-                {"Scan",   false, false, [this]() { enter_bt_scan(); }},
-            };
-            m.on_enter = [this]() { refresh_bt_status(); };
-            menu_items_.push_back(m);
-        }
-        // --- Ethernet ---
-        {
-            MenuItem m;
-            m.label = "Ethernet";
-            m.sub_items = {
-                {"IP: --",      false, false, nullptr},
-                {"Gateway: --", false, false, nullptr},
-                {"MAC: --",     false, false, nullptr},
-            };
-            m.on_enter = [this]() { refresh_ethernet_info(); };
-            menu_items_.push_back(m);
-        }
-        // --- Account ---
-        {
-            MenuItem m;
-            m.label = "Account";
-            m.sub_items = {
-                {"Username", false, false, nullptr},
-                {"Password", false, false, nullptr},
-                {"Hostname", false, false, nullptr},
-            };
-            m.on_enter = [this]() { refresh_account_info(); };
-            menu_items_.push_back(m);
-        }
-        // --- Update ---
-        {
-            MenuItem m;
-            m.label = "Update";
-            m.sub_items = {
-                {"Check System",   false, false, [this]() { check_system_update(); }},
-                {"Update Launcher", false, false, [this]() { update_launcher(); }},
-                {"Version: --",    false, false, nullptr},
-            };
-            m.on_enter = [this]() { refresh_version_info(); };
-            menu_items_.push_back(m);
-        }
-        // --- SoundCard ---
-        {
-            MenuItem m;
-            m.label = "SoundCard";
-            // Single sub-item acts as an entry point into the full-screen card browser
-            m.sub_items = {
-                {"Open Mixer", false, false, [this]() { sc_enter_cards(); }},
-            };
-            menu_items_.push_back(m);
-        }
+        setting::build_menu(*this);
     }
-
-    // ==================== Placeholder functions for new menus ====================
-    void enter_volume_adjust()
-    {
-        val_title_ = "Volume";
-        val_options_ = {"100%", "75%", "50%", "25%", "0%"};
-        vol_val_ = config_get_int("volume", audio_volume_read());
-        int pct = vol_val_;
-        if (pct >= 87) val_sel_idx_ = 0;
-        else if (pct >= 62) val_sel_idx_ = 1;
-        else if (pct >= 37) val_sel_idx_ = 2;
-        else if (pct >= 12) val_sel_idx_ = 3;
-        else val_sel_idx_ = 4;
-        view_state_ = ViewState::VALUE_SELECT;
-        transition_enter_level();
-    }
-
-    void enter_camera_resolution()
-    {
-        val_title_ = "Resolution";
-        val_options_ = {"1280x720", "640x480"};
-        val_sel_idx_ = (config_get_int("camera.resolution.width", 1280) == 640) ? 1 : 0;
-        view_state_ = ViewState::VALUE_SELECT;
-        transition_enter_level();
-    }
-
-    void enter_startup_select()
-    {
-        val_title_ = "Startup";
-        val_options_ = {"Launcher", "CLI"};
-        val_sel_idx_ = config_get_int("startup_mode", 0);
-        view_state_ = ViewState::VALUE_SELECT;
-        transition_enter_level();
-    }
-
-    int wifi_list_sel_ = 0;
-
-    void enter_wifi_scan()
-    {
-        wifi_do_scan();
-        wifi_list_sel_ = 0;
-        view_state_ = ViewState::WIFI_LIST;
-        build_wifi_list();
-    }
-
-    void build_wifi_list()
-    {
-        lv_obj_t *cont = ui_obj_["list_cont"];
-        lv_obj_clean(cont);
-
-        // Title + current connection status
-        lv_obj_t *title = lv_label_create(cont);
-        {
-            cp0_wifi_status_t ws = launcher_wifi::get_status();
-            static char title_buf[128];
-            if (ws.connected)
-                snprintf(title_buf, sizeof(title_buf), "Connected WiFi: %.64s  %.40s", ws.ssid, ws.ip);
-            else
-                snprintf(title_buf, sizeof(title_buf), "WiFi: Not connected");
-            lv_label_set_text(title, title_buf);
-        }
-        lv_obj_set_pos(title, 8, 2);
-        lv_obj_set_style_text_color(title, lv_color_hex(0x58A6FF), LV_PART_MAIN);
-        lv_obj_set_style_text_font(title, launcher_fonts().get("Montserrat-Bold.ttf", 12, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN);
-        // The connected-WiFi line (SSID + IP) can overflow off-screen (#66). Clamp it to a
-        // fixed box and marquee-scroll when wider than the threshold so it stays fully readable.
-        apply_overflow_handling(title, 8, WIFI_TITLE_BOX_W, true);
-
-        // Column headers
-        lv_obj_t *h1 = lv_label_create(cont);
-        lv_label_set_text(h1, "SSID");
-        lv_obj_set_pos(h1, 8, 18);
-        lv_obj_set_style_text_color(h1, lv_color_hex(0x888888), LV_PART_MAIN);
-        lv_obj_set_style_text_font(h1, &lv_font_montserrat_10, LV_PART_MAIN);
-
-        lv_obj_t *h2 = lv_label_create(cont);
-        lv_label_set_text(h2, "Security");
-        lv_obj_set_pos(h2, 180, 18);
-        lv_obj_set_style_text_color(h2, lv_color_hex(0x888888), LV_PART_MAIN);
-        lv_obj_set_style_text_font(h2, &lv_font_montserrat_10, LV_PART_MAIN);
-
-        lv_obj_t *h3 = lv_label_create(cont);
-        lv_label_set_text(h3, "Signal");
-        lv_obj_set_pos(h3, 270, 18);
-        lv_obj_set_style_text_color(h3, lv_color_hex(0x888888), LV_PART_MAIN);
-        lv_obj_set_style_text_font(h3, &lv_font_montserrat_10, LV_PART_MAIN);
-
-        if (wifi_ap_count_ == 0) {
-            lv_obj_t *empty = lv_label_create(cont);
-            lv_label_set_text(empty, "No networks found. Press R to rescan.");
-            lv_obj_set_pos(empty, 8, 50);
-            lv_obj_set_style_text_color(empty, lv_color_hex(0x666666), LV_PART_MAIN);
-            lv_obj_set_style_text_font(empty, &lv_font_montserrat_12, LV_PART_MAIN);
-            return;
-        }
-
-        // List items (show up to 5 visible, scrolled)
-        int visible = 5;
-        int offset = wifi_list_sel_ - visible / 2;
-        if (offset < 0) offset = 0;
-        if (offset > wifi_ap_count_ - visible) offset = wifi_ap_count_ - visible;
-        if (offset < 0) offset = 0;
-
-        for (int vi = 0; vi < visible && (vi + offset) < wifi_ap_count_; ++vi) {
-            int ai = vi + offset;
-            bool sel = (ai == wifi_list_sel_);
-            cp0_wifi_ap_t *ap = &wifi_aps_[ai];
-            int y = 30 + vi * 22;
-
-            // Selection highlight
-            if (sel) {
-                lv_obj_t *bg = lv_obj_create(cont);
-                lv_obj_set_size(bg, SCREEN_W - 8, 20);
-                lv_obj_set_pos(bg, 4, y);
-                lv_obj_set_style_radius(bg, 2, LV_PART_MAIN);
-                lv_obj_set_style_bg_color(bg, lv_color_hex(0x1F3A5F), LV_PART_MAIN);
-                lv_obj_set_style_bg_opa(bg, 255, LV_PART_MAIN);
-                lv_obj_set_style_border_width(bg, 0, LV_PART_MAIN);
-                lv_obj_clear_flag(bg, LV_OBJ_FLAG_SCROLLABLE);
-            }
-
-            uint32_t tc = sel ? 0xFFFFFF : 0xCCCCCC;
-            if (ap->in_use) tc = 0x58A6FF;
-
-            // SSID (append * if we have a saved password for it)
-            lv_obj_t *ssid_lbl = lv_label_create(cont);
-            static char ssid_buf[CP0_WIFI_SSID_MAX + 4];
-            if (wifi_has_saved_profile(ap->ssid))
-                snprintf(ssid_buf, sizeof(ssid_buf), "%s *", ap->ssid);
-            else
-                snprintf(ssid_buf, sizeof(ssid_buf), "%s", ap->ssid);
-            lv_label_set_text(ssid_lbl, ssid_buf);
-            lv_obj_set_pos(ssid_lbl, 8, y + 2);
-            lv_obj_set_style_text_color(ssid_lbl, lv_color_hex(tc), LV_PART_MAIN);
-            lv_obj_set_style_text_font(ssid_lbl, &lv_font_montserrat_12, LV_PART_MAIN);
-            lv_obj_set_width(ssid_lbl, 165);
-            lv_label_set_long_mode(ssid_lbl, LV_LABEL_LONG_CLIP);
-
-            // Security
-            lv_obj_t *sec = lv_label_create(cont);
-            lv_label_set_text(sec, ap->security[0] ? ap->security : "Open");
-            lv_obj_set_pos(sec, 180, y + 2);
-            lv_obj_set_style_text_color(sec, lv_color_hex(tc), LV_PART_MAIN);
-            lv_obj_set_style_text_font(sec, &lv_font_montserrat_10, LV_PART_MAIN);
-
-            // Signal
-            char sig_buf[16];
-            snprintf(sig_buf, sizeof(sig_buf), "%d%%", ap->signal);
-            lv_obj_t *sig = lv_label_create(cont);
-            lv_label_set_text(sig, sig_buf);
-            lv_obj_set_pos(sig, 275, y + 2);
-            lv_obj_set_style_text_color(sig, lv_color_hex(tc), LV_PART_MAIN);
-            lv_obj_set_style_text_font(sig, &lv_font_montserrat_10, LV_PART_MAIN);
-        }
-
-        // Hint
-        lv_obj_t *hint = lv_label_create(cont);
-        lv_label_set_text(hint, "OK:connect  R:rescan  D:forget  ESC:back");
-        lv_obj_set_pos(hint, 8, LIST_H - 14);
-        lv_obj_set_style_text_color(hint, lv_color_hex(0x555555), LV_PART_MAIN);
-        lv_obj_set_style_text_font(hint, &lv_font_montserrat_10, LV_PART_MAIN);
-    }
-
-    void handle_wifi_list_key(uint32_t key)
-    {
-        switch (key) {
-        case KEY_UP:
-            if (wifi_list_sel_ > 0) { --wifi_list_sel_; build_wifi_list(); }
-            break;
-        case KEY_DOWN:
-            if (wifi_list_sel_ < wifi_ap_count_ - 1) { ++wifi_list_sel_; build_wifi_list(); }
-            break;
-        case KEY_ENTER:
-            if (wifi_ap_count_ > 0) wifi_try_connect(wifi_list_sel_);
-            break;
-        case KEY_R:
-            wifi_do_scan();
-            wifi_list_sel_ = 0;
-            build_wifi_list();
-            break;
-        case KEY_D:
-            if (wifi_ap_count_ > 0) wifi_forget_selected();
-            break;
-        case KEY_ESC:
-        case KEY_LEFT:
-            view_state_ = ViewState::SUB;
-            build_sub_view();
-            break;
-        default:
-            break;
-        }
-    }
-
-    void enter_bt_devices()
-    {
-        stop_bt_scan_timer();
-        bt_list_mode_ = BtListMode::Managed;
-        view_state_ = ViewState::BT_LIST;
-        bt_list_sel_ = 0;
-        bt_refresh_devices();
-        build_bt_list();
-    }
-
-    void enter_bt_alias()
-    {
-        stop_bt_scan_timer();
-        refresh_bt_status();
-        bt_alias_input_ = bt_alias_.empty() ? "CardputerZero" : bt_alias_;
-        view_state_ = ViewState::BT_ALIAS;
-        build_bt_alias_view();
-    }
-
-    static bool bt_alias_char_allowed(unsigned char ch)
-    {
-        return ch >= 0x20 && ch != '\t' && ch != '\r' && ch != '\n';
-    }
-
-    std::string bt_alias_sanitized() const
-    {
-        std::string out;
-        for (unsigned char ch : bt_alias_input_) {
-            if (bt_alias_char_allowed(ch))
-                out += static_cast<char>(ch);
-            if (out.size() >= CP0_BT_NAME_MAX - 1)
-                break;
-        }
-        return out.empty() ? "CardputerZero" : out;
-    }
-
-    void build_bt_alias_view()
-    {
-        lv_obj_t *cont = ui_obj_["list_cont"];
-        lv_obj_clean(cont);
-        bt_alias_input_lbl_ = nullptr;
-        bt_alias_hint_lbl_ = nullptr;
-
-        lv_obj_t *title = lv_label_create(cont);
-        lv_label_set_text(title, "Bluetooth Name");
-        lv_obj_set_pos(title, 10, 10);
-        lv_obj_set_style_text_color(title, lv_color_hex(0x58A6FF), LV_PART_MAIN);
-        lv_obj_set_style_text_font(title, &lv_font_montserrat_12, LV_PART_MAIN);
-
-        lv_obj_t *name_label = lv_label_create(cont);
-        lv_label_set_text(name_label, "Alias:");
-        lv_obj_set_pos(name_label, 10, 38);
-        lv_obj_set_style_text_color(name_label, lv_color_hex(0xCCCCCC), LV_PART_MAIN);
-        lv_obj_set_style_text_font(name_label, &lv_font_montserrat_12, LV_PART_MAIN);
-
-        bt_alias_input_lbl_ = lv_label_create(cont);
-        lv_obj_set_pos(bt_alias_input_lbl_, 64, 36);
-        lv_obj_set_width(bt_alias_input_lbl_, 236);
-        lv_label_set_long_mode(bt_alias_input_lbl_, LV_LABEL_LONG_CLIP);
-        lv_obj_set_style_text_color(bt_alias_input_lbl_, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
-        lv_obj_set_style_text_font(bt_alias_input_lbl_, &lv_font_montserrat_14, LV_PART_MAIN);
-        bt_alias_update_display();
-
-        bt_alias_hint_lbl_ = lv_label_create(cont);
-        lv_label_set_text(bt_alias_hint_lbl_, "OK:set  BS:del  ESC:cancel");
-        lv_obj_set_pos(bt_alias_hint_lbl_, 10, 70);
-        lv_obj_set_style_text_color(bt_alias_hint_lbl_, lv_color_hex(0x555555), LV_PART_MAIN);
-        lv_obj_set_style_text_font(bt_alias_hint_lbl_, &lv_font_montserrat_10, LV_PART_MAIN);
-    }
-
-    void bt_alias_update_display()
-    {
-        if (!bt_alias_input_lbl_)
-            return;
-        std::string display = bt_alias_input_ + "_";
-        lv_label_set_text(bt_alias_input_lbl_, display.c_str());
-    }
-
-    void handle_bt_alias_key(uint32_t key)
-    {
-        if (key == KEY_ESC || key == KEY_LEFT) {
-            play_back();
-            view_state_ = ViewState::SUB;
-            build_sub_view();
-            return;
-        }
-        if (key == KEY_ENTER || key == KEY_RIGHT) {
-            std::string alias = bt_alias_sanitized();
-            if (bt_alias_hint_lbl_) {
-                lv_label_set_text(bt_alias_hint_lbl_, "Setting alias...");
-                lv_obj_set_style_text_color(bt_alias_hint_lbl_, lv_color_hex(0xFFAA00), LV_PART_MAIN);
-                lv_refr_now(NULL);
-            }
-            int ret = bt_set_alias(alias);
-            if (ret == 0) {
-                bt_alias_ = alias;
-                refresh_bt_status();
-                view_state_ = ViewState::SUB;
-                build_sub_view();
-            } else if (bt_alias_hint_lbl_) {
-                lv_label_set_text(bt_alias_hint_lbl_, "Set failed");
-                lv_obj_set_style_text_color(bt_alias_hint_lbl_, lv_color_hex(0xFF4444), LV_PART_MAIN);
-            }
-            return;
-        }
-        if (key == KEY_BACKSPACE) {
-            if (!bt_alias_input_.empty())
-                bt_alias_input_.pop_back();
-            bt_alias_update_display();
-            return;
-        }
-        if (cur_elm_ && cur_elm_->utf8[0] && bt_alias_input_.size() < CP0_BT_NAME_MAX - 1) {
-            const char *p = cur_elm_->utf8;
-            while (*p && bt_alias_input_.size() < CP0_BT_NAME_MAX - 1) {
-                unsigned char ch = static_cast<unsigned char>(*p++);
-                if (bt_alias_char_allowed(ch))
-                    bt_alias_input_ += static_cast<char>(ch);
-            }
-            bt_alias_update_display();
-        }
-    }
-
-    void enter_bt_scan()
-    {
-        bt_list_mode_ = BtListMode::Scan;
-        view_state_ = ViewState::BT_LIST;
-        bt_list_sel_ = 0;
-        start_bt_scan_timer();
-    }
-
-    void build_bt_list()
-    {
-        lv_obj_t *cont = ui_obj_["list_cont"];
-        lv_obj_clean(cont);
-        rebuild_bt_rows();
-
-        cp0_bt_status_t st = bt_get_status();
-        char title_buf[96];
-        snprintf(title_buf, sizeof(title_buf), "%s: %s  %.24s",
-                 bt_list_mode_ == BtListMode::Scan ? "Scan" : "Connected",
-                 st.powered ? "On" : "Off", st.address[0] ? st.address : "--");
-        lv_obj_t *title = lv_label_create(cont);
-        lv_label_set_text(title, title_buf);
-        lv_obj_set_pos(title, 8, 2);
-        lv_obj_set_style_text_color(title, lv_color_hex(0x58A6FF), LV_PART_MAIN);
-        lv_obj_set_style_text_font(title, launcher_fonts().get("Montserrat-Bold.ttf", 12, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN);
-        apply_overflow_handling(title, 8, WIFI_TITLE_BOX_W, true);
-
-        if (bt_rows_.empty()) {
-            lv_obj_t *empty = lv_label_create(cont);
-            if (!st.powered)
-                lv_label_set_text(empty, "Bluetooth is off. Enable Power first.");
-            else if (bt_list_mode_ == BtListMode::Scan)
-                lv_label_set_text(empty, "Scanning...");
-            else
-                lv_label_set_text(empty, "No connected devices.");
-            lv_obj_set_pos(empty, 8, 50);
-            lv_obj_set_width(empty, 300);
-            lv_label_set_long_mode(empty, LV_LABEL_LONG_WRAP);
-            lv_obj_set_style_text_color(empty, lv_color_hex(0x666666), LV_PART_MAIN);
-            lv_obj_set_style_text_font(empty, &lv_font_montserrat_12, LV_PART_MAIN);
-        }
-
-        constexpr int list_y = 22;
-        constexpr int row_step = 20;
-        constexpr int hint_y = LIST_H - 14;
-        constexpr int list_bottom_gap = 8;
-        int visible = (hint_y - list_bottom_gap - list_y) / row_step;
-        if (visible < 1) visible = 1;
-        int offset = bt_list_sel_ - visible / 2;
-        if (offset < 0) offset = 0;
-        if (offset > (int)bt_rows_.size() - visible) offset = (int)bt_rows_.size() - visible;
-        if (offset < 0) offset = 0;
-
-        for (int vi = 0; vi < visible && (vi + offset) < (int)bt_rows_.size(); ++vi) {
-            int row_index = vi + offset;
-            const BtListRow &row = bt_rows_[row_index];
-            int y = list_y + vi * row_step;
-
-            if (row.is_header) {
-                lv_obj_t *header = lv_label_create(cont);
-                lv_label_set_text(header, row.title);
-                lv_obj_set_pos(header, 8, y + 3);
-                lv_obj_set_style_text_color(header, lv_color_hex(0x888888), LV_PART_MAIN);
-                lv_obj_set_style_text_font(header, launcher_fonts().get("Montserrat-Bold.ttf", 10, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN);
-                continue;
-            }
-
-            bool sel = (row_index == bt_list_sel_);
-            cp0_bt_device_t *dev = &bt_devices_[row.device_index];
-
-            if (sel) {
-                lv_obj_t *bg = lv_obj_create(cont);
-                lv_obj_set_size(bg, SCREEN_W - 8, 20);
-                lv_obj_set_pos(bg, 4, y);
-                lv_obj_set_style_radius(bg, 2, LV_PART_MAIN);
-                lv_obj_set_style_bg_color(bg, lv_color_hex(0x1F3A5F), LV_PART_MAIN);
-                lv_obj_set_style_bg_opa(bg, 255, LV_PART_MAIN);
-                lv_obj_set_style_border_width(bg, 0, LV_PART_MAIN);
-                lv_obj_clear_flag(bg, LV_OBJ_FLAG_SCROLLABLE);
-            }
-
-            uint32_t tc = dev->connected ? 0x58A6FF : (sel ? 0xFFFFFF : 0xCCCCCC);
-            lv_obj_t *name = lv_label_create(cont);
-            lv_label_set_text(name, dev->name[0] ? dev->name : dev->address);
-            lv_obj_set_pos(name, 8, y + 1);
-            lv_obj_set_width(name, 150);
-            lv_label_set_long_mode(name, LV_LABEL_LONG_CLIP);
-            lv_obj_set_style_text_color(name, lv_color_hex(tc), LV_PART_MAIN);
-            lv_obj_set_style_text_font(name, &lv_font_montserrat_12, LV_PART_MAIN);
-
-            lv_obj_t *addr = lv_label_create(cont);
-            lv_label_set_text(addr, dev->address);
-            lv_obj_set_pos(addr, 8, y + 12);
-            lv_obj_set_width(addr, 190);
-            lv_label_set_long_mode(addr, LV_LABEL_LONG_CLIP);
-            lv_obj_set_style_text_color(addr, lv_color_hex(sel ? 0xBBBBBB : 0x777777), LV_PART_MAIN);
-            lv_obj_set_style_text_font(addr, &lv_font_montserrat_10, LV_PART_MAIN);
-
-            char state_buf[32];
-            if (dev->connected)
-                snprintf(state_buf, sizeof(state_buf), "Connected");
-            else if (dev->paired)
-                snprintf(state_buf, sizeof(state_buf), "Paired");
-            else
-                snprintf(state_buf, sizeof(state_buf), "%d", dev->rssi);
-            lv_obj_t *state = lv_label_create(cont);
-            lv_label_set_text(state, state_buf);
-            lv_obj_set_pos(state, 226, y + 4);
-            lv_obj_set_width(state, 88);
-            lv_label_set_long_mode(state, LV_LABEL_LONG_CLIP);
-            lv_obj_set_style_text_align(state, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
-            lv_obj_set_style_text_color(state, lv_color_hex(tc), LV_PART_MAIN);
-            lv_obj_set_style_text_font(state, &lv_font_montserrat_10, LV_PART_MAIN);
-        }
-
-        lv_obj_t *hint = lv_label_create(cont);
-        lv_label_set_text(hint, bt_list_mode_ == BtListMode::Scan
-                                     ? "OK:act R:restart ESC:back"
-                                     : "OK:disconnect D:remove ESC:back");
-        lv_obj_set_pos(hint, 8, hint_y);
-        lv_obj_set_width(hint, 304);
-        lv_label_set_long_mode(hint, LV_LABEL_LONG_CLIP);
-        lv_obj_set_style_text_color(hint, lv_color_hex(0x555555), LV_PART_MAIN);
-        lv_obj_set_style_text_font(hint, &lv_font_montserrat_10, LV_PART_MAIN);
-    }
-
-    void rebuild_bt_rows()
-    {
-        bt_rows_.clear();
-        if (bt_list_mode_ == BtListMode::Managed) {
-            bool has_connected = false;
-            for (int i = 0; i < bt_device_count_; ++i) {
-                if (bt_should_hide_device(bt_devices_[i]))
-                    continue;
-                if (bt_devices_[i].connected) {
-                    if (!has_connected) {
-                        bt_rows_.push_back({-1, "Connected Devices", true});
-                        has_connected = true;
-                    }
-                    bt_rows_.push_back({i, nullptr, false});
-                }
-            }
-        } else {
-            bool has_devices = false;
-            for (int i = 0; i < bt_device_count_; ++i) {
-                if (bt_should_hide_device(bt_devices_[i]))
-                    continue;
-                if (!has_devices) {
-                    bt_rows_.push_back({-1, "Discovered Devices", true});
-                    has_devices = true;
-                }
-                bt_rows_.push_back({i, nullptr, false});
-            }
-        }
-        if (bt_list_sel_ >= (int)bt_rows_.size())
-            bt_list_sel_ = bt_rows_.empty() ? 0 : (int)bt_rows_.size() - 1;
-        if (!bt_rows_.empty() && bt_rows_[bt_list_sel_].is_header)
-            bt_select_next_device(1);
-    }
-
-    bool bt_should_hide_device(const cp0_bt_device_t &dev) const
-    {
-        if (!bt_named_only_)
-            return false;
-        if (!dev.name[0])
-            return true;
-        std::string name_hex = bt_normalized_mac_text(dev.name);
-        std::string addr_hex = bt_normalized_mac_text(dev.address);
-        return !name_hex.empty() && (name_hex == addr_hex || name_hex.size() == 12);
-    }
-
-    static std::string bt_normalized_mac_text(const char *text)
-    {
-        std::string out;
-        if (!text)
-            return out;
-        for (const unsigned char *p = reinterpret_cast<const unsigned char *>(text); *p; ++p) {
-            if (std::isxdigit(*p))
-                out.push_back((char)std::tolower(*p));
-            else if (*p != ':' && *p != '-' && *p != '_' && *p != ' ')
-                return std::string();
-        }
-        return out;
-    }
-
-    int bt_selected_device_index() const
-    {
-        if (bt_list_sel_ < 0 || bt_list_sel_ >= (int)bt_rows_.size())
-            return -1;
-        return bt_rows_[bt_list_sel_].is_header ? -1 : bt_rows_[bt_list_sel_].device_index;
-    }
-
-    void bt_select_next_device(int direction)
-    {
-        if (bt_rows_.empty())
-            return;
-        int idx = bt_list_sel_;
-        for (int steps = 0; steps < (int)bt_rows_.size(); ++steps) {
-            idx += direction;
-            if (idx < 0 || idx >= (int)bt_rows_.size())
-                return;
-            if (!bt_rows_[idx].is_header) {
-                bt_list_sel_ = idx;
-                return;
-            }
-        }
-    }
-
-    void bt_show_action(const char *msg, uint32_t color = 0x58A6FF)
-    {
-        lv_obj_t *cont = ui_obj_["list_cont"];
-        lv_obj_clean(cont);
-        lv_obj_t *lbl = lv_label_create(cont);
-        lv_label_set_text(lbl, msg);
-        lv_obj_set_pos(lbl, 8, 60);
-        lv_obj_set_style_text_color(lbl, lv_color_hex(color), LV_PART_MAIN);
-        lv_obj_set_style_text_font(lbl, &lv_font_montserrat_14, LV_PART_MAIN);
-        lv_refr_now(NULL);
-    }
-
-    void bt_activate_selected()
-    {
-        if (bt_action_busy_)
-            return;
-        int dev_index = bt_selected_device_index();
-        if (dev_index < 0)
-            return;
-        cp0_bt_device_t dev = bt_devices_[dev_index];
-        bool from_scan = bt_list_mode_ == BtListMode::Scan;
-        if (from_scan)
-            stop_bt_scan_timer();
-        bt_action_busy_ = true;
-        if (dev.connected)
-            bt_show_action("Disconnecting...");
-        else if (dev.paired)
-            bt_show_action("Connecting...");
-        else
-            bt_show_action("Pairing...");
-
-        struct BtActionResult {
-            UISetupPage *self;
-            int ret;
-            bool from_scan;
-        };
-
-        std::thread([this, dev, from_scan]() {
-            int ret = -1;
-            if (dev.connected) {
-                ret = bt_device_command("BtDisconnect", dev.address);
-            } else if (dev.paired) {
-                ret = bt_device_command("BtConnect", dev.address);
-            } else {
-                ret = bt_device_command("BtPair", dev.address);
-                if (ret == 0)
-                    ret = bt_device_command("BtConnect", dev.address);
-            }
-
-            BtActionResult *result = new BtActionResult{this, ret, from_scan};
-            lv_async_call([](void *user) {
-                BtActionResult *result = static_cast<BtActionResult *>(user);
-                UISetupPage *self = result->self;
-                if (self) {
-                    self->bt_action_busy_ = false;
-                    if (result->ret != 0) {
-                        self->bt_show_action("Bluetooth action failed", 0xFF4444);
-                    } else if (result->from_scan) {
-                        self->bt_list_mode_ = BtListMode::Managed;
-                    }
-                    self->bt_refresh_devices();
-                    if (self->view_state_ == ViewState::BT_LIST)
-                        self->build_bt_list();
-                }
-                delete result;
-            }, result);
-        }).detach();
-    }
-
-    void bt_remove_selected()
-    {
-        int dev_index = bt_selected_device_index();
-        if (dev_index < 0)
-            return;
-        bt_show_action("Removing...");
-        int ret = bt_device_command("BtRemove", bt_devices_[dev_index].address);
-        if (ret != 0) {
-            bt_show_action("Remove failed", 0xFF4444);
-            usleep(1200000);
-        }
-        bt_refresh_devices();
-        build_bt_list();
-    }
-
-    void handle_bt_list_key(uint32_t key)
-    {
-        switch (key) {
-        case KEY_UP:
-            bt_select_next_device(-1);
-            build_bt_list();
-            break;
-        case KEY_DOWN:
-            bt_select_next_device(1);
-            build_bt_list();
-            break;
-        case KEY_ENTER:
-            bt_activate_selected();
-            break;
-        case KEY_D:
-            if (bt_list_mode_ == BtListMode::Managed)
-                bt_remove_selected();
-            break;
-        case KEY_R:
-            if (bt_list_mode_ == BtListMode::Scan) {
-                start_bt_scan_timer();
-            } else {
-                bt_refresh_devices();
-                build_bt_list();
-            }
-            break;
-        case KEY_ESC:
-        case KEY_LEFT:
-            stop_bt_scan_timer();
-            view_state_ = ViewState::SUB;
-            build_sub_view();
-            break;
-        default:
-            break;
-        }
-    }
-
-    void refresh_info_values()
-    {
-        for (auto &m : menu_items_) {
-            if (m.label != "Info") continue;
-            cp0_battery_info_t bat = cp0_battery_read();
-            char buf[64];
-            snprintf(buf, sizeof(buf), "Battery: %d%%", bat.valid ? bat.soc : 0);
-            m.sub_items[0].label = buf;
-            snprintf(buf, sizeof(buf), "Temp: %.1fC", bat.valid ? bat.temperature_c10 / 10.0 : 0.0);
-            m.sub_items[1].label = buf;
-            if (bat.valid && bat.current_ma != INT32_MIN) {
-                snprintf(buf, sizeof(buf), "Current: %dmA", bat.current_ma);
-            } else {
-                snprintf(buf, sizeof(buf), "Current: --mA");
-            }
-            m.sub_items[2].label = buf;
-            snprintf(buf, sizeof(buf), "Voltage: %.2fV", bat.valid ? bat.voltage_mv / 1000.0 : 0.0);
-            m.sub_items[3].label = buf;
-            break;
-        }
-        // Refresh visible Info labels in place. Rebuilding the sub view every second
-        // recreates marquee labels and restarts LV_LABEL_LONG_SCROLL_CIRCULAR.
-        if (view_state_ == ViewState::SUB) refresh_visible_info_labels();
-    }
-
-    void refresh_visible_info_labels()
-    {
-        if (selected_idx_ < 0 || selected_idx_ >= (int)menu_items_.size())
-            return;
-
-        MenuItem &item = menu_items_[selected_idx_];
-        if (item.label != "Info")
-            return;
-
-        for (int i = 0; i < 4 && i < (int)item.sub_items.size(); ++i) {
-            lv_obj_t *lbl = info_sub_labels_[i];
-            if (!lbl)
-                continue;
-
-            const char *new_text = item.sub_items[i].label.c_str();
-            if (info_visible_text_[i] == new_text)
-                continue;
-
-            lv_label_set_text(lbl, new_text);
-            info_visible_text_[i] = new_text;
-            apply_overflow_centered(lbl, SUB_CENTER_X,
-                                    info_sub_label_focused_[i] ? 80 : VALUE_BOX_W,
-                                    info_sub_label_focused_[i]);
-        }
-    }
-
-    // ==================== RTC ====================
-    int rtc_values_[6] = {2026, 1, 1, 0, 0, 0}; // Y/M/D/H/Min/S
-    int rtc_field_ = 0;
-    bool rtc_ntp_on_ = true; // cached NTP state; manual set only allowed when off
-    bool rtc_dirty_ = false;
-    bool rtc_exit_confirm_ = false;
-
-    void update_rtc_labels()
-    {
-        for (auto &m : menu_items_) {
-            if (m.label != "RTC") continue;
-            m.sub_items[0].toggle_state = rtc_ntp_on_;
-            char buf[32];
-            const char *names[] = {"Year", "Month", "Day", "Hour", "Minute", "Second"};
-            for (int i = 0; i < 6; ++i) {
-                snprintf(buf, sizeof(buf), "%s: %d", names[i], rtc_values_[i]);
-                m.sub_items[i + 1].label = buf;
-            }
-            break;
-        }
-    }
-
-    void refresh_rtc_values()
-    {
-        rtc_ntp_on_ = cp0_time_ntp_get() == 1;
-        time_t now = time(NULL);
-        struct tm *t = localtime(&now);
-        if (t) {
-            rtc_values_[0] = t->tm_year + 1900;
-            rtc_values_[1] = t->tm_mon + 1;
-            rtc_values_[2] = t->tm_mday;
-            rtc_values_[3] = t->tm_hour;
-            rtc_values_[4] = t->tm_min;
-            rtc_values_[5] = t->tm_sec;
-        }
-        rtc_dirty_ = false;
-        update_rtc_labels();
-    }
-
-    void ntp_toggle()
-    {
-        for (auto &m : menu_items_) {
-            if (m.label != "RTC") continue;
-            bool on = m.sub_items[0].toggle_state; // already flipped by handler
-            cp0_time_ntp_set(on ? 1 : 0);
-            break;
-        }
-        refresh_rtc_values();
-    }
-
-    void enter_rtc_adjust(int field)
-    {
-        // Manual time can only persist while NTP auto-sync is off.
-        if (rtc_ntp_on_)
-            return;
-        rtc_field_ = field;
-        const char *names[] = {"Year", "Month", "Day", "Hour", "Minute", "Second"};
-        val_title_ = names[field];
-
-        // Generate valid range: all values in range, current in the middle
-        int cur = rtc_values_[field];
-        int mins[] = {2000, 1, 1, 0, 0, 0};
-        int maxs[] = {2099, 12, 31, 23, 59, 59};
-
-        val_options_.clear();
-        for (int v = mins[field]; v <= maxs[field]; ++v) {
-            char buf[16];
-            snprintf(buf, sizeof(buf), "%d", v);
-            val_options_.push_back(buf);
-        }
-        // Set selection to current value
-        val_sel_idx_ = cur - mins[field];
-        view_state_ = ViewState::VALUE_SELECT;
-        transition_enter_level();
-    }
-
-    void apply_rtc_value()
-    {
-        int new_val = atoi(val_options_[val_sel_idx_].c_str());
-        rtc_values_[rtc_field_] = new_val;
-        rtc_dirty_ = true;
-        update_rtc_labels();
-
-        char timestamp[32];
-        snprintf(timestamp, sizeof(timestamp), "%04d-%02d-%02d %02d:%02d:%02d",
-                 rtc_values_[0], rtc_values_[1], rtc_values_[2],
-                 rtc_values_[3], rtc_values_[4], rtc_values_[5]);
-
-        // Update the system clock immediately for each field change. Hardware
-        // RTC sync is delayed until the user leaves RTC and confirms it.
-        char shell_cmd[96];
-        snprintf(shell_cmd, sizeof(shell_cmd), "date -s '%s'", timestamp);
-
-        SudoPrompt::show({"sh", "-c", shell_cmd}, [this](int code) {
-            if (code == 0) {
-                update_datetime_status();
-            } else {
-                refresh_rtc_values();
-            }
-        });
-    }
-
-    void commit_rtc_values_to_hardware()
-    {
-        SudoPrompt::show({"hwclock", "-w"}, [this](int code) {
-            refresh_rtc_values();
-            update_datetime_status();
-        });
-    }
-
-    void enter_rtc_write_confirm()
-    {
-        rtc_exit_confirm_ = true;
-        val_title_ = "Write RTC?";
-        val_options_ = {"Yes", "No"};
-        val_sel_idx_ = 1; // default to No
-        view_state_ = ViewState::VALUE_SELECT;
-        transition_enter_level();
-    }
-
-    void save_app_toggle(const std::string &config_key)
-    {
-        // Locate the Launcher menu by label instead of assuming a fixed index,
-        // so reordering the menu list can't desync the toggle from its app.
-        int launcher_idx = find_menu("Launcher");
-        if (launcher_idx < 0)
-            return;
-        MenuItem &launcher_menu = menu_items_[launcher_idx];
-
-        std::size_t app_count = 0;
-        const AppDescriptor *apps = launcher_app_registry_entries(&app_count);
-        int visible_idx = 0;
-        for (std::size_t i = 0; i < app_count; ++i) {
-            const AppDescriptor &desc = apps[i];
-            if (!desc.configurable)
-                continue;
-            if (config_key == desc.config_key) {
-                if (visible_idx >= (int)launcher_menu.sub_items.size())
-                    return;
-                bool enabled = launcher_menu.sub_items[visible_idx].toggle_state;
-                launcher_app_registry_set_enabled(desc, enabled);
-                config_save();
-                launcher_app_registry_notify_changed();
-                return;
-            }
-            ++visible_idx;
-        }
-    }
-
-    // ==================== ADB debug (USB) ====================
-    // Device-side helper shipped inside the APPLaunch resource tree. It installs
-    // adbd, embeds the default authorized key, brands the USB gadget as
-    // "CardputerZero", and starts adbd.service. It exits 10 when the USB
-    // controller had to be switched to peripheral mode and a reboot is required.
-    static constexpr const char *kAdbHelper = "/usr/share/APPLaunch/adb/cardputer-adb";
 
     int find_menu(const char *label)
     {
         for (size_t i = 0; i < menu_items_.size(); ++i)
             if (menu_items_[i].label == label) return (int)i;
         return -1;
-    }
-
-    void adb_toggle()
-    {
-        int idx = find_menu("Developer");
-        if (idx < 0) return;
-        // The key handler has already flipped the toggle; read the desired state.
-        bool want_on = menu_items_[idx].sub_items[0].toggle_state;
-
-        const char *argv[] = {"sudo", kAdbHelper, want_on ? "enable" : "disable", nullptr};
-        int rc = cp0_process_run_argv(argv, 0 /* foreground: we need the exit code */);
-
-        // rc == 10: the USB controller (dwc2) had to change dr_mode in config.txt
-        // (host<->peripheral). That only takes effect after a reboot, so guide the
-        // user through the physical switch and offer to reboot. This happens on
-        // BOTH directions: enabling switches host->peripheral, disabling switches
-        // it back so the onboard hub/peripherals work again.
-        if (rc == 10) {
-            config_set_int("adb_debug", want_on ? 1 : 0);
-            config_save();
-            enter_usb_guide(want_on);
-            return;
-        }
-        if (rc != 0) {
-            // Failed — revert; the key handler redraws the sub view afterwards.
-            menu_items_[idx].sub_items[0].toggle_state = !want_on;
-            return;
-        }
-        config_set_int("adb_debug", want_on ? 1 : 0);
-        config_save();
-    }
-
-    // Sync the toggle with the real adbd.service state when the menu is opened.
-    void refresh_adb_status()
-    {
-        int idx = find_menu("Developer");
-        if (idx < 0) return;
-        char out[64] = {0};
-        const char *argv[] = {"systemctl", "is-active", "adbd.service", nullptr};
-        cp0_process_capture_argv(argv, out, sizeof(out));
-        bool active = (std::strncmp(out, "active", 6) == 0);
-        menu_items_[idx].sub_items[0].toggle_state = active;
-        config_set_int("adb_debug", active ? 1 : 0);
-    }
-
-    // Full-screen animated guide shown when the USB controller has to switch
-    // dwc2 dr_mode (a reboot is required). It plays a GIF that tells the user to
-    // flip the left USB switch, which port to use, and that peripherals are
-    // temporarily unavailable. OK reboots now; ESC postpones.
-    void enter_usb_guide(bool enabling)
-    {
-        usb_guide_enabling_ = enabling;
-        // Defer the actual build one cycle so the trailing build_sub_view() from
-        // the key handler does not clobber this view.
-        lv_timer_t *t = lv_timer_create([](lv_timer_t *timer) {
-            UISetupPage *self = (UISetupPage *)lv_timer_get_user_data(timer);
-            lv_timer_delete(timer);
-            self->build_usb_guide_view();
-        }, 60, this);
-        lv_timer_set_repeat_count(t, 1);
-    }
-
-    // Small helper: a filled, rounded "chip" used for the board/switch/ports.
-    static lv_obj_t *guide_chip(lv_obj_t *parent, int x, int y, int w, int h,
-                                uint32_t bg, uint32_t border, int radius = 5,
-                                int border_w = 2)
-    {
-        lv_obj_t *o = lv_obj_create(parent);
-        lv_obj_set_pos(o, x, y);
-        lv_obj_set_size(o, w, h);
-        lv_obj_set_style_radius(o, radius, LV_PART_MAIN);
-        lv_obj_set_style_bg_color(o, lv_color_hex(bg), LV_PART_MAIN);
-        lv_obj_set_style_bg_opa(o, LV_OPA_COVER, LV_PART_MAIN);
-        lv_obj_set_style_border_color(o, lv_color_hex(border), LV_PART_MAIN);
-        lv_obj_set_style_border_width(o, border_w, LV_PART_MAIN);
-        lv_obj_set_style_pad_all(o, 0, LV_PART_MAIN);
-        lv_obj_clear_flag(o, LV_OBJ_FLAG_SCROLLABLE);
-        return o;
-    }
-
-    static lv_obj_t *guide_label(lv_obj_t *parent, int x, int y, const char *txt,
-                                 uint32_t color, const lv_font_t *font)
-    {
-        lv_obj_t *l = lv_label_create(parent);
-        lv_label_set_text(l, txt);
-        lv_obj_set_pos(l, x, y);
-        lv_obj_set_style_text_color(l, lv_color_hex(color), LV_PART_MAIN);
-        lv_obj_set_style_text_font(l, font, LV_PART_MAIN);
-        return l;
-    }
-
-    // Draw the USB-mode guidance natively (crisp vector-style shapes + lv_anim).
-    void build_usb_guide_view()
-    {
-        view_state_ = ViewState::USB_GUIDE;
-        usb_guide_knob_ = nullptr;
-        lv_obj_t *cont = ui_obj_["list_cont"];
-        lv_obj_clean(cont);
-
-        const bool en = usb_guide_enabling_;
-        const uint32_t C_GREEN = 0x46DC87, C_YEL = 0xF0C850, C_RED = 0xEB5F5F;
-        const uint32_t C_WHITE = 0xECECEC, C_GREY = 0x9A9AA0;
-        const lv_font_t *f_title = launcher_fonts().get("Montserrat-Bold.ttf", 13,
-                                                        LV_FREETYPE_FONT_STYLE_BOLD);
-        const lv_font_t *f_msg = &lv_font_montserrat_10;
-
-        // Title
-        guide_label(cont, 8, 2,
-                    en ? "Enable ADB - switch USB to device" : "Disable ADB - switch USB to HUB",
-                    C_WHITE, f_title ? f_title : &lv_font_montserrat_12);
-
-        // Board
-        guide_chip(cont, 86, 24, 146, 50, 0x282A30, 0x5A5C64, 6, 2);
-        guide_label(cont, 120, 28, "CardputerZero", C_GREY, f_msg);
-
-        // ---- Top-right USB-C port with a cable plugged in ----
-        guide_chip(cont, 218, 30, 12, 12, 0x101012, 0x5A5C64, 3, 2);  // socket
-        guide_chip(cont, 228, 32, 22, 8, 0xCDCDD2, 0xCDCDD2, 2, 0);   // plug (inserted)
-        guide_chip(cont, 250, 34, 60, 4, 0x6A6C72, 0x6A6C72, 2, 0);   // cable
-        guide_label(cont, 232, 42, "USB-C", C_GREEN, f_msg);
-
-        // ---- Left slide switch (side view), narrow thumb ----
-        guide_chip(cont, 24, 28, 32, 44, 0x1A1A1C, 0x5A5C64, 6, 2);   // housing
-        guide_chip(cont, 33, 33, 14, 34, 0x0E0E10, 0x0E0E10, 4, 0);   // track slot
-        guide_label(cont, 26, 14, "HUB", en ? C_RED : C_GREEN, f_msg);
-        guide_label(cont, 28, 72, "USB", en ? C_GREEN : C_GREY, f_msg);
-        const int thumb_top = 34, thumb_bot = 54;
-        usb_guide_knob_ = guide_chip(cont, 32, en ? thumb_top : thumb_bot, 16, 10,
-                                     C_GREEN, 0x2A6F49, 3, 1);
-
-        // ---- Messages ----
-        int y = 80;
-        if (en) {
-            guide_label(cont, 8, y,      "1  Slide LEFT switch  HUB -> USB", C_WHITE, f_msg);
-            guide_label(cont, 8, y + 15, "2  USB hub & peripherals turn OFF", C_YEL, f_msg);
-            guide_label(cont, 8, y + 30, "3  Cable -> top-right USB-C port", C_GREEN, f_msg);
-        } else {
-            guide_label(cont, 8, y,      "1  Slide LEFT switch  USB -> HUB", C_WHITE, f_msg);
-            guide_label(cont, 8, y + 15, "2  USB hub & peripherals come back", C_GREEN, f_msg);
-            guide_label(cont, 8, y + 30, "3  Reboot to apply the change", C_YEL, f_msg);
-        }
-
-        // Footer
-        guide_label(cont, 8, LIST_H - 16, "OK: reboot now     ESC: later", C_GREY,
-                    &lv_font_montserrat_10);
-
-        // ---- Animation: the switch thumb slides toward its target, ping-pong ----
-        lv_anim_t a;
-        lv_anim_init(&a);
-        lv_anim_set_var(&a, usb_guide_knob_);
-        lv_anim_set_values(&a, en ? thumb_top : thumb_bot, en ? thumb_bot : thumb_top);
-        lv_anim_set_time(&a, 650);
-        lv_anim_set_playback_time(&a, 650);
-        lv_anim_set_repeat_count(&a, LV_ANIM_REPEAT_INFINITE);
-        lv_anim_set_path_cb(&a, lv_anim_path_ease_in_out);
-        lv_anim_set_exec_cb(&a, [](void *var, int32_t v) {
-            lv_obj_set_y((lv_obj_t *)var, v);
-        });
-        lv_anim_start(&a);
-    }
-
-    void stop_usb_guide_anims()
-    {
-        if (usb_guide_knob_) lv_anim_del(usb_guide_knob_, nullptr);
-        usb_guide_knob_ = nullptr;
-    }
-
-    void handle_usb_guide_key(uint32_t key)
-    {
-        switch (key) {
-        case KEY_ENTER:
-        case KEY_RIGHT: {
-            stop_usb_guide_anims();
-            lv_obj_t *cont = ui_obj_["list_cont"];
-            lv_obj_clean(cont);
-            lv_obj_t *lbl = lv_label_create(cont);
-            lv_label_set_text(lbl, "Rebooting...");
-            lv_obj_center(lbl);
-            cp0_system_reboot();
-            break;
-        }
-        case KEY_ESC:
-        case KEY_LEFT:
-            // Postpone: the dr_mode change is already written to config.txt and
-            // will take effect on the next boot. Return to the sub view.
-            stop_usb_guide_anims();
-            view_state_ = ViewState::SUB;
-            build_sub_view();
-            break;
-        default:
-            break;
-        }
-    }
-
-    // ==================== Bluetooth ====================
-    static void bt_copy_string(char *dst, size_t dst_size, const std::string &src)
-    {
-        if (!dst || dst_size == 0)
-            return;
-        std::strncpy(dst, src.c_str(), dst_size - 1);
-        dst[dst_size - 1] = '\0';
-    }
-
-    static std::vector<std::string> bt_split_char(const std::string &line, char delimiter)
-    {
-        std::vector<std::string> cols;
-        std::string item;
-        std::istringstream iss(line);
-        while (std::getline(iss, item, delimiter))
-            cols.push_back(item);
-        return cols;
-    }
-
-    static bool bt_decode_status(const std::string &data, cp0_bt_status_t &st)
-    {
-        auto cols = bt_split_char(data, '\t');
-        if (cols.size() < 2)
-            return false;
-        st = {};
-        st.powered = std::atoi(cols[0].c_str());
-        bt_copy_string(st.address, sizeof(st.address), cols[1]);
-        if (cols.size() >= 3)
-            st.discoverable = std::atoi(cols[2].c_str());
-        if (cols.size() >= 4)
-            bt_copy_string(st.alias, sizeof(st.alias), cols[3]);
-        return true;
-    }
-
-    static int bt_decode_devices(const std::string &data, cp0_bt_device_t *out, int max_devices)
-    {
-        if (!out || max_devices <= 0)
-            return 0;
-        int count = 0;
-        std::istringstream lines(data);
-        std::string line;
-        while (count < max_devices && std::getline(lines, line)) {
-            if (!line.empty() && line.back() == '\r')
-                line.pop_back();
-            auto cols = bt_split_char(line, '\t');
-            if (cols.size() < 4 || cols[0].empty())
-                continue;
-            cp0_bt_device_t dev{};
-            bt_copy_string(dev.address, sizeof(dev.address), cols[0]);
-            dev.rssi = std::atoi(cols[1].c_str());
-            dev.connected = std::atoi(cols[2].c_str());
-            if (cols.size() >= 6) {
-                dev.paired = std::atoi(cols[3].c_str());
-                dev.trusted = std::atoi(cols[4].c_str());
-                bt_copy_string(dev.name, sizeof(dev.name), cols[5]);
-            } else {
-                bt_copy_string(dev.name, sizeof(dev.name), cols[3]);
-            }
-            out[count++] = dev;
-        }
-        return count;
-    }
-
-    static int bt_api_int(std::list<std::string> args, int default_value = -1)
-    {
-        int result = default_value;
-        cp0_signal_bt_api(std::move(args), [&](int code, std::string) {
-            result = code;
-        });
-        return result;
-    }
-
-    static cp0_bt_status_t bt_get_status()
-    {
-        cp0_bt_status_t st{};
-        cp0_signal_bt_api({"BtStatus"}, [&](int code, std::string data) {
-            if (code == 0)
-                bt_decode_status(data, st);
-        });
-        return st;
-    }
-
-    static int bt_set_power(int on)
-    {
-        return bt_api_int({"BtPower", std::to_string(on)});
-    }
-
-    static int bt_set_alias(const std::string &alias)
-    {
-        return bt_api_int({"BtAlias", alias});
-    }
-
-    static int bt_set_discoverable(int on)
-    {
-        return bt_api_int({"BtDiscoverable", std::to_string(on)});
-    }
-
-    static int bt_device_command(const char *cmd, const char *address)
-    {
-        return bt_api_int({cmd ? std::string(cmd) : std::string(),
-                           address ? std::string(address) : std::string()});
-    }
-
-    static int bt_device_list(const char *cmd, cp0_bt_device_t *out, int max_devices)
-    {
-        int count = 0;
-        cp0_signal_bt_api({cmd ? std::string(cmd) : std::string(), std::to_string(max_devices)},
-                          [&](int code, std::string data) {
-                              count = out && max_devices > 0 ? bt_decode_devices(data, out, max_devices) : code;
-                          });
-        return count;
-    }
-
-    void refresh_bt_status()
-    {
-        cp0_bt_status_t st = bt_get_status();
-        // Find Bluetooth menu and update Power toggle state
-        for (auto &m : menu_items_) {
-            if (m.label != "Bluetooth") continue;
-            m.sub_items[0].toggle_state = st.powered != 0;
-            bt_discoverable_ = st.discoverable != 0;
-            bt_alias_ = st.alias[0] ? st.alias : "CardputerZero";
-            m.sub_items[1].label = "Alias: " + bt_alias_;
-            m.sub_items[2].toggle_state = bt_discoverable_;
-            break;
-        }
-    }
-
-    void bt_toggle_power()
-    {
-        for (auto &m : menu_items_) {
-            if (m.label != "Bluetooth") continue;
-            bool on = m.sub_items[0].toggle_state;
-            if (!on)
-                stop_bt_scan_timer();
-            bt_set_power(on ? 1 : 0);
-            break;
-        }
-    }
-
-    void bt_toggle_named_only()
-    {
-        for (auto &m : menu_items_) {
-            if (m.label != "Bluetooth") continue;
-            bt_named_only_ = m.sub_items[3].toggle_state;
-            config_set_int("bt_named_only", bt_named_only_ ? 1 : 0);
-            config_save();
-            break;
-        }
-        if (view_state_ == ViewState::BT_LIST)
-            build_bt_list();
-    }
-
-    void bt_toggle_discoverable()
-    {
-        for (auto &m : menu_items_) {
-            if (m.label != "Bluetooth") continue;
-            bt_discoverable_ = m.sub_items[2].toggle_state;
-            if (bt_set_discoverable(bt_discoverable_ ? 1 : 0) != 0) {
-                m.sub_items[2].toggle_state = !bt_discoverable_;
-                bt_discoverable_ = m.sub_items[2].toggle_state;
-            }
-            break;
-        }
-    }
-
-    void start_bt_scan_timer()
-    {
-        stop_bt_scan_timer();
-        bt_discovery_active_ = bt_api_int({"BtDiscoveryStart"}, 0) == 0;
-        bt_refresh_devices();
-        build_bt_list();
-        if (!bt_discovery_active_)
-            return;
-        bt_scan_timer_ = lv_timer_create([](lv_timer_t *t) {
-            UISetupPage *self = (UISetupPage *)lv_timer_get_user_data(t);
-            if (!self || self->view_state_ != ViewState::BT_LIST || self->bt_list_mode_ != BtListMode::Scan)
-                return;
-            self->bt_refresh_devices();
-            self->build_bt_list();
-        }, 1000, this);
-    }
-
-    void stop_bt_scan_timer()
-    {
-        if (bt_scan_timer_) {
-            lv_timer_delete(bt_scan_timer_);
-            bt_scan_timer_ = nullptr;
-        }
-        if (bt_discovery_active_) {
-            bt_api_int({"BtDiscoveryStop"}, 0);
-            bt_discovery_active_ = false;
-        }
-    }
-
-    void bt_refresh_devices()
-    {
-        if (bt_list_mode_ == BtListMode::Managed)
-            bt_device_count_ = bt_device_list("BtConnectedList", bt_devices_, CP0_BT_DEVICE_MAX);
-        else
-            bt_device_count_ = bt_device_list("BtList", bt_devices_, CP0_BT_DEVICE_MAX);
-        if (bt_device_count_ < 0)
-            bt_device_count_ = 0;
-        if (bt_device_count_ == 0)
-            bt_list_sel_ = 0;
-    }
-
-    // ==================== Ethernet ====================
-    void refresh_ethernet_info()
-    {
-        for (auto &m : menu_items_) {
-            if (m.label != "Ethernet") continue;
-            cp0_eth_info_t info;
-            cp0_network_default_info_read(&info);
-            m.sub_items[0].label = std::string("IP: ") + info.ipv4;
-            m.sub_items[1].label = std::string("GW: ") + info.gateway;
-            m.sub_items[2].label = std::string("MAC: ") + info.mac;
-            break;
-        }
-    }
-
-    // ==================== Account ====================
-    void refresh_account_info()
-    {
-        for (auto &m : menu_items_) {
-            if (m.label != "Account") continue;
-            cp0_account_info_t info;
-            cp0_account_info_read(&info);
-            m.sub_items[0].label = std::string("User: ") + info.user;
-            m.sub_items[1].label = "Password: ****";
-            m.sub_items[2].label = std::string("Host: ") + info.hostname;
-            break;
-        }
-    }
-
-    // ==================== Update ====================
-    void refresh_version_info()
-    {
-        for (auto &m : menu_items_) {
-            if (m.label != "Update") continue;
-            m.sub_items[2].label = std::string("Version: ") + LAUNCHER_GIT_COMMIT;
-            break;
-        }
-    }
-
-    void check_system_update()
-    {
-        // Run apt update check in background
-        cp0_system_apt_update_background();
-        // TODO: show result in UI
-    }
-
-    void update_launcher()
-    {
-        cp0_system_update_launcher_background();
     }
 
     // ==================== Confirm action (Reboot/Shutdown) ====================
@@ -1761,439 +528,28 @@ private:
         transition_enter_level();
     }
 
-    // ==================== Info timer (auto-refresh) ====================
-    lv_timer_t *info_timer_ = nullptr;
-
-    void start_info_timer()
-    {
-        stop_info_timer();
-        info_timer_ = lv_timer_create([](lv_timer_t *t) {
-            UISetupPage *self = (UISetupPage *)lv_timer_get_user_data(t);
-            if (self && self->view_state_ == ViewState::SUB) self->refresh_info_values();
-        }, 1000, this);
-    }
-
-    void stop_info_timer()
-    {
-        if (info_timer_) { lv_timer_delete(info_timer_); info_timer_ = nullptr; }
-    }
-
-    // ==================== BQ27220 Calibration ====================
-    void enter_bq_calibrate()
-    {
-        val_title_ = "BQ Calib";
-        val_options_ = {"Enter CAL", "CC Offset", "Board Offset", "Exit CAL"};
-        val_sel_idx_ = 0;
-        view_state_ = ViewState::VALUE_SELECT;
-        transition_enter_level();
-    }
-
-    void apply_bq_calibrate()
-    {
-        cp0_bq27220_calibrate(val_sel_idx_);
-    }
-
-    // ==================== About ====================
-    void refresh_about_info()
-    {
-        for (auto &m : menu_items_) {
-            if (m.label != "About") continue;
-            m.sub_items[0].label = "M5CardputerZero";
-            m.sub_items[1].label = "LVGL: 9.x";
-            char buf[64];
-            snprintf(buf, sizeof(buf), "Build: %s", __DATE__);
-            m.sub_items[2].label = buf;
-            snprintf(buf, sizeof(buf), "Commit: %s", LAUNCHER_GIT_COMMIT);
-            m.sub_items[3].label = buf;
-            break;
-        }
-    }
-
-    // ==================== Help page (full-screen like WiFi scan) ===========
-    void enter_help_page()
-    {
-        view_state_ = ViewState::WIFI_LIST; // reuse WIFI_LIST view state for ESC handling
-        lv_obj_t *cont = ui_obj_["list_cont"];
-        lv_obj_clean(cont);
-
-        int y = 4;
-        auto add_line = [&](const char *text, uint32_t color, const lv_font_t *font) {
-            lv_obj_t *lbl = lv_label_create(cont);
-            lv_label_set_text(lbl, text);
-            lv_obj_set_pos(lbl, 8, y);
-            lv_obj_set_width(lbl, 300);
-            lv_label_set_long_mode(lbl, LV_LABEL_LONG_WRAP);
-            lv_obj_set_style_text_color(lbl, lv_color_hex(color), LV_PART_MAIN);
-            lv_obj_set_style_text_font(lbl, font, LV_PART_MAIN);
-            lv_obj_update_layout(lbl);
-            y += lv_obj_get_height(lbl) + 3;
-        };
-
-        add_line("Help", 0x58A6FF, launcher_fonts().get("Montserrat-Bold.ttf", 16, LV_FREETYPE_FONT_STYLE_BOLD));
-        add_line("Screenshot: Ctrl+Alt+S", 0xCCCCCC, &lv_font_montserrat_12);
-        add_line("  Saved to ~/Screenshots", 0x888888, &lv_font_montserrat_10);
-        add_line("Home: Hold ESC 3s", 0xCCCCCC, &lv_font_montserrat_12);
-        add_line("Navigate: Arrow keys / OK / ESC", 0xCCCCCC, &lv_font_montserrat_12);
-        add_line("WiFi: Setting > WiFi > Scan", 0xCCCCCC, &lv_font_montserrat_12);
-
-        // Footer
-        lv_obj_t *hint = lv_label_create(cont);
-        lv_label_set_text(hint, "ESC: back");
-        lv_obj_set_pos(hint, 8, LIST_H - 14);
-        lv_obj_set_style_text_color(hint, lv_color_hex(0x555555), LV_PART_MAIN);
-        lv_obj_set_style_text_font(hint, &lv_font_montserrat_10, LV_PART_MAIN);
-    }
-
-    // ==================== Bluetooth scan ====================
-    void bt_do_scan_impl()
-    {
-        enter_bt_scan();
-    }
-
-    void factory_reset()
-    {
-        remove("/var/lib/applaunch/settings");
-        cp0_system_reboot();
-    }
-
-    // Re-arm the first-boot setup wizard (OOBE) so it replays once on the next
-    // boot, then reboot. LaunchWizard (root system service) detects this marker,
-    // shows the OOBE, and clears it when finished — so configured devices can
-    // simulate the first-run experience on demand.
-    void rearm_oobe_and_reboot()
-    {
-#ifndef _WIN32
-        mkdir("/var/lib/applaunch", 0755);
-#endif
-        FILE *f = fopen("/var/lib/applaunch/run-oobe", "w");
-        if (f) fclose(f);
-        cp0_system_reboot();
-    }
-
-    // ==================== WiFi functions ====================
-    void wifi_do_scan()
-    {
-        wifi_ap_count_ = launcher_wifi::scan(wifi_aps_, CP0_WIFI_AP_MAX);
-    }
-
-    void refresh_wifi_radio()
-    {
-        for (auto &m : menu_items_) {
-            if (m.label != "WiFi") continue;
-            m.sub_items[0].toggle_state = launcher_wifi::radio_enabled() != 0;
-            break;
-        }
-    }
-
-    void wifi_toggle_enable()
-    {
-        for (auto &m : menu_items_) {
-            if (m.label != "WiFi") continue;
-            // Same NetworkManager radio control used by nmtui: nmcli radio wifi on/off.
-            bool on = m.sub_items[0].toggle_state;
-            launcher_wifi::radio_set_enabled(on);
-            m.sub_items[0].toggle_state = launcher_wifi::radio_enabled() != 0;
-            break;
-        }
-    }
-
-    void handle_wifi_custom_key(uint32_t key)
-    {
-        (void)key;
-    }
-
-    void wifi_try_connect(int idx)
-    {
-        if (idx < 0 || idx >= wifi_ap_count_) return;
-        cp0_wifi_ap_t *ap = &wifi_aps_[idx];
-        if (ap->in_use) return;
-
-        bool needs_password = false;
-        int ret = -1;
-        if (strcmp(ap->security, "Open") == 0 || ap->security[0] == 0) {
-            wifi_show_connecting(ap->ssid);
-            ret = launcher_wifi::connect(ap->ssid, NULL);
-        } else if (wifi_has_saved_profile(ap->ssid)) {
-            wifi_show_connecting(ap->ssid);
-            ret = launcher_wifi::connect(ap->ssid, NULL);
-            if (ret != 0) {
-                // Saved profile failed to connect (e.g. stale/wrong password). Fall
-                // back to asking for the password again instead of silently erroring,
-                // so the user can re-enter it until the connection succeeds (#69).
-                needs_password = true;
-                wifi_pw_ssid_ = ap->ssid;
-                wifi_pw_buf_.clear();
-                show_wifi_pw_input();
-            }
-        } else {
-            needs_password = true;
-            wifi_pw_ssid_ = ap->ssid;
-            wifi_pw_buf_.clear();
-            show_wifi_pw_input();
-        }
-        if (!needs_password) {
-            if (ret != 0) {
-                // Connection failed — show error briefly then rebuild list
-                wifi_show_error("Connection failed");
-            }
-            wifi_do_scan();
-            build_wifi_list();
-        }
-    }
-
-    void wifi_show_connecting(const char *ssid)
-    {
-        lv_obj_t *cont = ui_obj_["list_cont"];
-        lv_obj_clean(cont);
-        static char msg[128];
-        snprintf(msg, sizeof(msg), "Connecting to %s...", ssid);
-        lv_obj_t *lbl = lv_label_create(cont);
-        lv_label_set_text(lbl, msg);
-        lv_obj_set_pos(lbl, 8, 60);
-        lv_obj_set_style_text_color(lbl, lv_color_hex(0x58A6FF), LV_PART_MAIN);
-        lv_obj_set_style_text_font(lbl, &lv_font_montserrat_14, LV_PART_MAIN);
-        lv_refr_now(NULL);
-    }
-
-    void wifi_show_error(const char *msg)
-    {
-        lv_obj_t *cont = ui_obj_["list_cont"];
-        lv_obj_clean(cont);
-        lv_obj_t *lbl = lv_label_create(cont);
-        lv_label_set_text(lbl, msg);
-        lv_obj_set_pos(lbl, 8, 60);
-        lv_obj_set_style_text_color(lbl, lv_color_hex(0xFF4444), LV_PART_MAIN);
-        lv_obj_set_style_text_font(lbl, &lv_font_montserrat_14, LV_PART_MAIN);
-        lv_refr_now(NULL);
-        usleep(2000000); // show error for 2 seconds before rebuilding list
-    }
-
-    void wifi_forget_selected()
-    {
-        if (wifi_list_sel_ < 0 || wifi_list_sel_ >= wifi_ap_count_) return;
-        cp0_wifi_ap_t *ap = &wifi_aps_[wifi_list_sel_];
-
-        if (!wifi_has_saved_profile(ap->ssid)) {
-            wifi_show_error("No saved password for this network");
-            wifi_do_scan();
-            build_wifi_list();
-            return;
-        }
-
-        // Show confirm then delete
-        char msg[128];
-        snprintf(msg, sizeof(msg), "Forget '%s'?", ap->ssid);
-        lv_obj_t *cont = ui_obj_["list_cont"];
-        lv_obj_clean(cont);
-        lv_obj_t *lbl = lv_label_create(cont);
-        lv_label_set_text(lbl, msg);
-        lv_obj_set_pos(lbl, 8, 50);
-        lv_obj_set_style_text_color(lbl, lv_color_hex(0xFFAA00), LV_PART_MAIN);
-        lv_obj_set_style_text_font(lbl, &lv_font_montserrat_14, LV_PART_MAIN);
-        lv_obj_t *hint = lv_label_create(cont);
-        lv_label_set_text(hint, "OK:confirm  ESC:cancel");
-        lv_obj_set_pos(hint, 8, 75);
-        lv_obj_set_style_text_color(hint, lv_color_hex(0x888888), LV_PART_MAIN);
-        lv_obj_set_style_text_font(hint, &lv_font_montserrat_10, LV_PART_MAIN);
-        lv_refr_now(NULL);
-
-        // Block and wait for confirm key (simple blocking confirm)
-        // We reuse the WIFI_LIST view state but override next key handling
-        wifi_pw_ssid_ = ap->ssid;  // stash SSID for confirm
-        view_state_ = ViewState::WIFI_PW;  // hijack PW state for confirm
-        // Override: next KEY_ENTER in pw handler will do the delete
-        // Actually — simpler: just do it immediately (user already pressed F
-        // which is intentional). Delete + refresh.
-        launcher_wifi::profile_forget(ap->ssid);
-
-        // If currently connected to this SSID, disconnect
-        if (ap->in_use) {
-            launcher_wifi::profile_disconnect_active();
-        }
-
-        // Show success briefly
-        lv_obj_clean(cont);
-        lbl = lv_label_create(cont);
-        snprintf(msg, sizeof(msg), "Forgot '%s'", ap->ssid);
-        lv_label_set_text(lbl, msg);
-        lv_obj_set_pos(lbl, 8, 60);
-        lv_obj_set_style_text_color(lbl, lv_color_hex(0x33CC33), LV_PART_MAIN);
-        lv_obj_set_style_text_font(lbl, &lv_font_montserrat_14, LV_PART_MAIN);
-        lv_refr_now(NULL);
-        usleep(1500000);
-
-        view_state_ = ViewState::WIFI_LIST;
-        wifi_do_scan();
-        build_wifi_list();
-    }
-
-    bool wifi_has_saved_profile(const char *ssid)
-    {
-        return launcher_wifi::profile_exists(ssid) != 0;
-    }
-
-    void show_wifi_pw_input()
-    {
-        view_state_ = ViewState::WIFI_PW;
-        lv_obj_t *cont = ui_obj_["list_cont"];
-        lv_obj_clean(cont);
-
-        lv_obj_t *title = lv_label_create(cont);
-        char buf[128];
-        snprintf(buf, sizeof(buf), "Connect: %s", wifi_pw_ssid_.c_str());
-        lv_label_set_text(title, buf);
-        lv_obj_set_pos(title, 10, 10);
-        lv_obj_set_style_text_color(title, lv_color_hex(0x58A6FF), LV_PART_MAIN);
-        lv_obj_set_style_text_font(title, &lv_font_montserrat_12, LV_PART_MAIN);
-
-        lv_obj_t *pw_label = lv_label_create(cont);
-        lv_label_set_text(pw_label, "Password:");
-        lv_obj_set_pos(pw_label, 10, 35);
-        lv_obj_set_style_text_color(pw_label, lv_color_hex(0xCCCCCC), LV_PART_MAIN);
-        lv_obj_set_style_text_font(pw_label, &lv_font_montserrat_12, LV_PART_MAIN);
-
-        pw_input_lbl_ = lv_label_create(cont);
-        lv_label_set_text(pw_input_lbl_, "_");
-        lv_obj_set_pos(pw_input_lbl_, 90, 35);
-        lv_obj_set_width(pw_input_lbl_, 200);
-        lv_label_set_long_mode(pw_input_lbl_, LV_LABEL_LONG_CLIP);
-        lv_obj_set_style_text_color(pw_input_lbl_, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
-        lv_obj_set_style_text_font(pw_input_lbl_, &lv_font_montserrat_14, LV_PART_MAIN);
-
-        pw_hint_lbl_ = lv_label_create(cont);
-        lv_label_set_text(pw_hint_lbl_, "Type pw, OK:connect, ESC:cancel");
-        lv_obj_set_pos(pw_hint_lbl_, 10, 65);
-        lv_obj_set_style_text_color(pw_hint_lbl_, lv_color_hex(0x555555), LV_PART_MAIN);
-        lv_obj_set_style_text_font(pw_hint_lbl_, &lv_font_montserrat_10, LV_PART_MAIN);
-    }
-
-    void handle_wifi_pw_key(uint32_t key)
-    {
-        if (key == KEY_ESC) {
-            view_state_ = ViewState::WIFI_LIST;
-            rebuild_view();
-            return;
-        }
-        if (key == KEY_ENTER) {
-            if (pw_hint_lbl_) lv_label_set_text(pw_hint_lbl_, "Connecting...");
-            lv_refr_now(NULL);
-            int ret = launcher_wifi::connect(wifi_pw_ssid_.c_str(), wifi_pw_buf_.c_str());
-            if (ret != 0) {
-                // Connection failed — delete the broken profile that nmcli just
-                // saved with the wrong password, so next attempt won't reuse it.
-                launcher_wifi::profile_forget(wifi_pw_ssid_.c_str());
-
-                if (pw_hint_lbl_) {
-                    lv_label_set_text(pw_hint_lbl_, "Failed! Wrong password? Try again.");
-                    lv_obj_set_style_text_color(pw_hint_lbl_, lv_color_hex(0xFF4444), LV_PART_MAIN);
-                }
-                wifi_pw_buf_.clear();
-                wifi_pw_update_display();
-                return;
-            }
-            view_state_ = ViewState::WIFI_LIST;
-            wifi_do_scan();
-            rebuild_view();
-            return;
-        }
-        if (key == KEY_BACKSPACE) {
-            if (!wifi_pw_buf_.empty()) wifi_pw_buf_.pop_back();
-            wifi_pw_update_display();
-            return;
-        }
-        if (cur_elm_ && cur_elm_->utf8[0]) {
-            wifi_pw_buf_ += cur_elm_->utf8;
-            wifi_pw_update_display();
-        }
-    }
-
-    void wifi_pw_update_display()
-    {
-        if (!pw_input_lbl_) return;
-        std::string display = wifi_pw_buf_ + "_";
-        lv_label_set_text(pw_input_lbl_, display.c_str());
-    }
-
-    // ==================== Volume (via value select) ====================
-    void apply_volume()
-    {
-        int pcts[] = {100, 75, 50, 25, 0};
-        int new_val = pcts[val_sel_idx_];
-        audio_volume_write(new_val);
-        config_set_int("volume", new_val);
-        config_save();
-    }
-
-    // ==================== Brightness ====================
-    int settings_backlight_read()
-    {
-        int value = -1;
-        cp0_signal_settings_api({"BacklightRead"}, [&](int code, std::string data) {
-            if (code == 0) value = std::atoi(data.c_str());
-        });
-        return value;
-    }
-
-    int settings_backlight_max()
-    {
-        int value = 100;
-        cp0_signal_settings_api({"BacklightMax"}, [&](int code, std::string data) {
-            if (code == 0) value = std::atoi(data.c_str());
-        });
-        return value;
-    }
-
-    void enter_brightness_adjust()
-    {
-        val_title_ = "Brightness";
-        val_options_ = {"100%", "75%", "50%", "25%"};
-        bright_val_ = settings_backlight_read();
-        int mx = settings_backlight_max();
-        int pct = mx > 0 ? bright_val_ * 100 / mx : 100;
-        if (pct >= 87) val_sel_idx_ = 0;
-        else if (pct >= 62) val_sel_idx_ = 1;
-        else if (pct >= 37) val_sel_idx_ = 2;
-        else val_sel_idx_ = 3;
-        view_state_ = ViewState::VALUE_SELECT;
-        transition_enter_level();
-    }
-
     void apply_value_selection()
     {
         if (val_title_ == "Brightness") {
-            int mx = settings_backlight_max();
-            int pcts[] = {100, 75, 50, 25};
-            int new_val = mx * pcts[val_sel_idx_] / 100;
-            if (new_val < 1) new_val = 1;
-            cp0_backlight_write(new_val);
-            config_set_int("brightness", new_val);
-            config_save();
+            screen_.apply_value(*this);
         } else if (val_title_ == "Volume") {
-            apply_volume();
+            speaker_.apply_value(*this);
         } else if (val_title_ == "Resolution") {
-            // Publish the real width/height to the shared user config the
-            // camera app reads (camera.resolution.{width,height}).
-            int width = 1280, height = 720;
-            if (val_sel_idx_ == 1) { width = 640; height = 480; }
-            config_set_int("camera.resolution.width", width);
-            config_set_int("camera.resolution.height", height);
-            config_save();
-        } else if (val_title_ == "Startup") {
-            config_set_int("startup_mode", val_sel_idx_);
-            config_save();
+            camera_.apply_value(*this);
+        } else if (val_title_ == "BQ Calib") {
+            info_.apply_bq_calibrate(*this);
+        } else if (val_title_ == "Reboot?" || val_title_ == "Shutdown?" || val_title_ == "Run Setup?") {
+            if (val_sel_idx_ == 0 && confirm_action_) confirm_action_();
+            confirm_action_ = nullptr;
         } else if (val_title_ == "Year" || val_title_ == "Month" || val_title_ == "Day" ||
                    val_title_ == "Hour" || val_title_ == "Minute" || val_title_ == "Second") {
-            apply_rtc_value();
+            rtc_.apply_value(*this);
         } else if (val_title_ == "Write RTC?") {
             if (val_sel_idx_ == 0)
-                commit_rtc_values_to_hardware();
+                rtc_.commit_to_hardware(*this);
             else
-                refresh_rtc_values();
-            rtc_dirty_ = false;
-        } else if (val_title_ == "Reboot?" || val_title_ == "Shutdown?" || val_title_ == "Run Setup?") {
-            if (val_sel_idx_ == 0 && confirm_action_) confirm_action_(); // "Yes"
-        } else if (val_title_ == "BQ Calib") {
-            apply_bq_calibrate();
+                rtc_.refresh_values(*this);
+            rtc_.clear_dirty();
         }
     }
 
@@ -2585,11 +941,7 @@ private:
     void build_sub_view()
     {
         lv_obj_t *cont = ui_obj_["list_cont"];
-        for (int i = 0; i < 4; ++i) {
-            info_sub_labels_[i] = nullptr;
-            info_sub_label_focused_[i] = false;
-            info_visible_text_[i].clear();
-        }
+        info_.reset_visible_labels();
         lv_obj_clean(cont);
 
         MenuItem &item = menu_items_[selected_idx_];
@@ -2645,9 +997,7 @@ private:
             bool focused_row = (vi == sub_center_vi);
             apply_overflow_centered(lbl, SUB_CENTER_X, focused_row ? 80 : VALUE_BOX_W, focused_row);
             if (item.label == "Info" && si >= 0 && si < 4) {
-                info_sub_labels_[si] = lbl;
-                info_sub_label_focused_[si] = focused_row;
-                info_visible_text_[si] = sub.label;
+                info_.track_visible_label(si, lbl, focused_row, sub.label);
             }
             lv_obj_update_layout(lbl);
             int lx = lv_obj_get_x(lbl);
@@ -2704,7 +1054,7 @@ private:
             lv_label_set_text(hint, cur_sub.toggle_state ? "ok:show all" : "ok:named");
         else if (cur_sub.is_toggle)
             lv_label_set_text(hint, cur_sub.toggle_state ? "ok:hide" : "ok:show");
-        else if (item.label == "RTC" && rtc_ntp_on_)
+        else if (item.label == "RTC" && rtc_.ntp_on())
             lv_label_set_text(hint, "ntp on");
         else
             lv_label_set_text(hint, "ok:enter");
@@ -2813,12 +1163,12 @@ private:
         if (view_state_ == ViewState::MAIN) build_main_view();
         else if (view_state_ == ViewState::SUB) build_sub_view();
         else if (view_state_ == ViewState::VALUE_SELECT) build_value_view();
-        else if (view_state_ == ViewState::WIFI_LIST) build_wifi_list();
-        else if (view_state_ == ViewState::BT_LIST) build_bt_list();
-        else if (view_state_ == ViewState::BT_ALIAS) build_bt_alias_view();
-        else if (view_state_ == ViewState::SOUNDCARD_CARDS) build_soundcard_cards_view();
-        else if (view_state_ == ViewState::SOUNDCARD_CONTROLS) build_soundcard_controls_view();
-        else if (view_state_ == ViewState::SOUNDCARD_DETAIL) build_soundcard_detail_view();
+        else if (view_state_ == ViewState::WIFI_LIST) wifi_.build_list(*this);
+        else if (view_state_ == ViewState::BT_LIST) bluetooth_.build_list(*this);
+        else if (view_state_ == ViewState::BT_ALIAS) bluetooth_.build_alias_view(*this);
+        else if (view_state_ == ViewState::SOUNDCARD_CARDS) soundcard_.build_cards_view(*this);
+        else if (view_state_ == ViewState::SOUNDCARD_CONTROLS) soundcard_.build_controls_view(*this);
+        else if (view_state_ == ViewState::SOUNDCARD_DETAIL) soundcard_.build_detail_view(*this);
     }
 
     // Bounce animation for orange arrows (small Y displacement + return)
@@ -2947,39 +1297,39 @@ private:
         case ViewState::WIFI_LIST:
             // UP/DOWN: only on pressed (throttled above). Other keys: only on released.
             if (pressed && (key == KEY_UP || key == KEY_DOWN))
-                handle_wifi_list_key(key);
+                wifi_.handle_list_key(*this, key);
             else if (released && key != KEY_UP && key != KEY_DOWN)
-                handle_wifi_list_key(key);
+                wifi_.handle_list_key(*this, key);
             break;
         case ViewState::WIFI_PW:
-            if (released) handle_wifi_pw_key(key);
+            if (released) wifi_.handle_pw_key(*this, key);
             break;
         case ViewState::BT_LIST:
             if (pressed && (key == KEY_UP || key == KEY_DOWN))
-                handle_bt_list_key(key);
+                bluetooth_.handle_list_key(*this, key);
             else if (released && key != KEY_UP && key != KEY_DOWN)
-                handle_bt_list_key(key);
+                bluetooth_.handle_list_key(*this, key);
             break;
         case ViewState::BT_ALIAS:
-            if (released) handle_bt_alias_key(key);
+            if (released) bluetooth_.handle_alias_key(*this, key);
             break;
         case ViewState::SOUNDCARD_CARDS:
             if (pressed && (key == KEY_UP || key == KEY_DOWN))
-                handle_soundcard_cards_key(key);
+                soundcard_.handle_cards_key(*this, key);
             else if (released && key != KEY_UP && key != KEY_DOWN)
-                handle_soundcard_cards_key(key);
+                soundcard_.handle_cards_key(*this, key);
             break;
         case ViewState::SOUNDCARD_CONTROLS:
             if (pressed && (key == KEY_UP || key == KEY_DOWN))
-                handle_soundcard_controls_key(key);
+                soundcard_.handle_controls_key(*this, key);
             else if (released && key != KEY_UP && key != KEY_DOWN)
-                handle_soundcard_controls_key(key);
+                soundcard_.handle_controls_key(*this, key);
             break;
         case ViewState::SOUNDCARD_DETAIL:
-            if (released) handle_soundcard_detail_key(key);
+            if (released) soundcard_.handle_detail_key(*this, key);
             break;
         case ViewState::USB_GUIDE:
-            if (released) handle_usb_guide_key(key);
+            if (released) developer_.handle_usb_guide_key(*this, key);
             break;
         }
     }
@@ -3056,9 +1406,9 @@ private:
         case KEY_ESC:
         case KEY_LEFT:
             play_back();
-            stop_info_timer();
-            if (item.label == "RTC" && rtc_dirty_) {
-                enter_rtc_write_confirm();
+            info_.stop_timer();
+            if (item.label == "RTC" && rtc_.is_dirty()) {
+                rtc_.enter_write_confirm(*this);
                 break;
             }
             view_state_ = ViewState::MAIN;
@@ -3082,7 +1432,7 @@ private:
             break;
         case KEY_ENTER:
         case KEY_RIGHT: {
-            bool was_rtc_exit_confirm = rtc_exit_confirm_;
+            bool was_rtc_exit_confirm = rtc_.exit_confirm();
             apply_value_selection();
             // After reboot/shutdown, don't animate back — the system is going down.
             if (val_title_ == "Reboot?" || val_title_ == "Shutdown?" || val_title_ == "Run Setup?") {
@@ -3098,7 +1448,7 @@ private:
                 break;
             }
             if (was_rtc_exit_confirm) {
-                rtc_exit_confirm_ = false;
+                rtc_.set_exit_confirm(false);
                 view_state_ = ViewState::MAIN;
                 transition_back_level();
                 break;
@@ -3109,9 +1459,9 @@ private:
         }
         case KEY_ESC:
         case KEY_LEFT:
-            if (rtc_exit_confirm_) {
-                rtc_exit_confirm_ = false;
-                refresh_rtc_values();
+            if (rtc_.exit_confirm()) {
+                rtc_.set_exit_confirm(false);
+                rtc_.refresh_values(*this);
                 view_state_ = ViewState::MAIN;
                 transition_back_level();
                 break;
@@ -3124,46 +1474,1843 @@ private:
         }
     }
 
-    // ==================== SoundCard ====================
-// ====================================================================
-//  State added to UISetupPage (included in private section)
-// ====================================================================
 
-struct ScCard {
-    int         index = 0;
-    std::string name;
 };
 
-struct ScCtrl {
-    std::string name;
-    std::string type;
-    int         min_val    = 0;
-    int         max_val    = 0;
-    int         step       = 1;
-    std::string current_str;
-    int         current_val = 0;
-};
 
-// Sound card navigation state
-std::vector<ScCard> sc_cards_;
-std::vector<ScCtrl> sc_controls_;
-int  sc_card_sel_   = 0;
-int  sc_ctrl_sel_   = 0;
-int  sc_card_idx_   = -1;
+namespace setting {
 
-// Detail / input state
-ScCtrl      sc_detail_;
-std::string sc_input_buf_;
-lv_obj_t   *sc_input_lbl_   = nullptr;
-lv_obj_t   *sc_hint_lbl2_   = nullptr;
-lv_timer_t *sc_cursor_timer_ = nullptr;
-bool        sc_cursor_vis_   = true;
+void Launcher::append(UISetupPage &p, std::vector<MenuItem> &menu)
+{
+    UISetupPage *page = &p;
+    MenuItem m;
+    m.label = "Launcher";
+    std::size_t app_count = 0;
+    const AppDescriptor *apps = launcher_app_registry_entries(&app_count);
+    for (std::size_t i = 0; i < app_count; ++i) {
+        const AppDescriptor &desc = apps[i];
+        if (!desc.configurable)
+            continue;
+        bool enabled = launcher_app_registry_is_enabled(desc);
+        m.sub_items.push_back({desc.label, true, enabled,
+            [page, key = std::string(desc.config_key)]() { Launcher::save_app_toggle(*page, key); }});
+    }
+    menu.push_back(m);
+}
 
-// ====================================================================
-//  Parsing helpers (static member functions)
-// ====================================================================
+void Launcher::save_app_toggle(UISetupPage &page, const std::string &config_key)
+{
+    int launcher_idx = page.find_menu("Launcher");
+    if (launcher_idx < 0)
+        return;
+    MenuItem &launcher_menu = page.menu_items_[launcher_idx];
 
-static std::string sc_trim(const std::string &s)
+    std::size_t app_count = 0;
+    const AppDescriptor *apps = launcher_app_registry_entries(&app_count);
+    int visible_idx = 0;
+    for (std::size_t i = 0; i < app_count; ++i) {
+        const AppDescriptor &desc = apps[i];
+        if (!desc.configurable)
+            continue;
+        if (config_key == desc.config_key) {
+            if (visible_idx >= (int)launcher_menu.sub_items.size())
+                return;
+            bool enabled = launcher_menu.sub_items[visible_idx].toggle_state;
+            launcher_app_registry_set_enabled(desc, enabled);
+            UISetupPage::config_save();
+            launcher_app_registry_notify_changed();
+            return;
+        }
+        ++visible_idx;
+    }
+}
+
+void Boot::factory_reset()
+{
+    remove("/var/lib/applaunch/settings");
+    cp0_system_reboot();
+}
+
+void Boot::append(UISetupPage &p, std::vector<MenuItem> &menu)
+{
+    UISetupPage *page = &p;
+    MenuItem m;
+    m.label = "Boot";
+    m.sub_items = {
+        {"Reboot", false, false, [page]() {
+            page->enter_confirm_action("Reboot?", [page](){ cp0_system_reboot(); });
+        }},
+        {"Shutdown", false, false, [page]() {
+            page->enter_confirm_action("Shutdown?", [page](){ cp0_system_shutdown(); });
+        }},
+    };
+    menu.push_back(m);
+}
+
+void Boot::rearm_oobe_and_reboot()
+{
+#ifndef _WIN32
+    mkdir("/var/lib/applaunch", 0755);
+#endif
+    FILE *f = fopen("/var/lib/applaunch/run-oobe", "w");
+    if (f) fclose(f);
+    cp0_system_reboot();
+}
+
+void Screen::append(UISetupPage &p, std::vector<MenuItem> &menu)
+{
+    UISetupPage *page = &p;
+    MenuItem m;
+    m.label = "Screen";
+    m.sub_items = {{"Brightness", false, false, [page]() { page->screen_.enter_brightness_adjust(*page); }}};
+    menu.push_back(m);
+}
+
+int Screen::backlight_read()
+{
+    int value = -1;
+    cp0_signal_settings_api({"BacklightRead"}, [&](int code, std::string data) {
+        if (code == 0) value = std::atoi(data.c_str());
+    });
+    return value;
+}
+
+int Screen::backlight_max()
+{
+    int value = 100;
+    cp0_signal_settings_api({"BacklightMax"}, [&](int code, std::string data) {
+        if (code == 0) value = std::atoi(data.c_str());
+    });
+    return value;
+}
+
+void Screen::enter_brightness_adjust(UISetupPage &page)
+{
+    page.val_title_ = "Brightness";
+    page.val_options_ = {"100%", "75%", "50%", "25%"};
+    bright_val_ = backlight_read();
+    int mx = backlight_max();
+    int pct = mx > 0 ? bright_val_ * 100 / mx : 100;
+    if (pct >= 87) page.val_sel_idx_ = 0;
+    else if (pct >= 62) page.val_sel_idx_ = 1;
+    else if (pct >= 37) page.val_sel_idx_ = 2;
+    else page.val_sel_idx_ = 3;
+    page.view_state_ = UISetupPage::ViewState::VALUE_SELECT;
+    page.transition_enter_level();
+}
+
+void Screen::apply_value(UISetupPage &page)
+{
+    int mx = backlight_max();
+    int pcts[] = {100, 75, 50, 25};
+    int new_val = mx * pcts[page.val_sel_idx_] / 100;
+    if (new_val < 1) new_val = 1;
+    cp0_backlight_write(new_val);
+    UISetupPage::config_set_int("brightness", new_val);
+    UISetupPage::config_save();
+}
+
+void Speaker::append(UISetupPage &p, std::vector<MenuItem> &menu)
+{
+    UISetupPage *page = &p;
+    MenuItem m;
+    m.label = "Speaker";
+    m.sub_items = {{"Volume", false, false, [page]() { page->speaker_.enter_volume_adjust(*page); }}};
+    menu.push_back(m);
+}
+
+void Speaker::enter_volume_adjust(UISetupPage &page)
+{
+    page.val_title_ = "Volume";
+    page.val_options_ = {"100%", "75%", "50%", "25%", "0%"};
+    vol_val_ = UISetupPage::config_get_int("volume", UISetupPage::audio_volume_read());
+    int pct = vol_val_;
+    if (pct >= 87) page.val_sel_idx_ = 0;
+    else if (pct >= 62) page.val_sel_idx_ = 1;
+    else if (pct >= 37) page.val_sel_idx_ = 2;
+    else if (pct >= 12) page.val_sel_idx_ = 3;
+    else page.val_sel_idx_ = 4;
+    page.view_state_ = UISetupPage::ViewState::VALUE_SELECT;
+    page.transition_enter_level();
+}
+
+void Speaker::apply_value(UISetupPage &page)
+{
+    int pcts[] = {100, 75, 50, 25, 0};
+    int new_val = pcts[page.val_sel_idx_];
+    UISetupPage::audio_volume_write(new_val);
+    UISetupPage::config_set_int("volume", new_val);
+    UISetupPage::config_save();
+}
+
+void Camera::append(UISetupPage &p, std::vector<MenuItem> &menu)
+{
+    UISetupPage *page = &p;
+    MenuItem m;
+    m.label = "Camera";
+    m.sub_items = {{"Resolution", false, false, [page]() { page->camera_.enter_resolution(*page); }}};
+    menu.push_back(m);
+}
+
+void Camera::enter_resolution(UISetupPage &page)
+{
+    page.val_title_ = "Resolution";
+    page.val_options_ = {"1280x720", "640x480"};
+    page.val_sel_idx_ = (UISetupPage::config_get_int("camera.resolution.width", 1280) == 640) ? 1 : 0;
+    page.view_state_ = UISetupPage::ViewState::VALUE_SELECT;
+    page.transition_enter_level();
+}
+
+void Camera::apply_value(UISetupPage &page)
+{
+    int width = 1280, height = 720;
+    if (page.val_sel_idx_ == 1) { width = 640; height = 480; }
+    UISetupPage::config_set_int("camera.resolution.width", width);
+    UISetupPage::config_set_int("camera.resolution.height", height);
+    UISetupPage::config_save();
+}
+
+void WiFi::append(UISetupPage &p, std::vector<MenuItem> &menu)
+{
+    UISetupPage *page = &p;
+    MenuItem m;
+    m.label = "WiFi";
+    m.sub_items = {
+        {"Power", true, false, [page]() { page->wifi_.toggle_enable(*page); }},
+        {"Scan", false, false, [page]() { page->wifi_.enter_scan(*page); }},
+    };
+    m.on_enter = [page]() { page->wifi_.refresh_radio(*page); };
+    menu.push_back(m);
+}
+
+void WiFi::do_scan()
+{
+    ap_count_ = launcher_wifi::scan(aps_, CP0_WIFI_AP_MAX);
+}
+
+void WiFi::enter_scan(UISetupPage &page)
+{
+    do_scan();
+    list_sel_ = 0;
+    page.view_state_ = UISetupPage::ViewState::WIFI_LIST;
+    build_list(page);
+}
+
+void WiFi::refresh_radio(UISetupPage &page)
+{
+    for (auto &m : page.menu_items_) {
+        if (m.label != "WiFi") continue;
+        m.sub_items[0].toggle_state = launcher_wifi::radio_enabled() != 0;
+        break;
+    }
+}
+
+void WiFi::toggle_enable(UISetupPage &page)
+{
+    for (auto &m : page.menu_items_) {
+        if (m.label != "WiFi") continue;
+        bool on = m.sub_items[0].toggle_state;
+        launcher_wifi::radio_set_enabled(on);
+        m.sub_items[0].toggle_state = launcher_wifi::radio_enabled() != 0;
+        break;
+    }
+}
+
+void WiFi::build_list(UISetupPage &page)
+{
+    lv_obj_t *cont = page.ui_obj_["list_cont"];
+    lv_obj_clean(cont);
+
+    lv_obj_t *title = lv_label_create(cont);
+    {
+        cp0_wifi_status_t ws = launcher_wifi::get_status();
+        static char title_buf[128];
+        if (ws.connected)
+            snprintf(title_buf, sizeof(title_buf), "Connected WiFi: %.64s  %.40s", ws.ssid, ws.ip);
+        else
+            snprintf(title_buf, sizeof(title_buf), "WiFi: Not connected");
+        lv_label_set_text(title, title_buf);
+    }
+    lv_obj_set_pos(title, 8, 2);
+    lv_obj_set_style_text_color(title, lv_color_hex(0x58A6FF), LV_PART_MAIN);
+    lv_obj_set_style_text_font(title, launcher_fonts().get("Montserrat-Bold.ttf", 12, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN);
+    UISetupPage::apply_overflow_handling(title, 8, UISetupPage::WIFI_TITLE_BOX_W, true);
+
+    lv_obj_t *h1 = lv_label_create(cont);
+    lv_label_set_text(h1, "SSID");
+    lv_obj_set_pos(h1, 8, 18);
+    lv_obj_set_style_text_color(h1, lv_color_hex(0x888888), LV_PART_MAIN);
+    lv_obj_set_style_text_font(h1, &lv_font_montserrat_10, LV_PART_MAIN);
+
+    lv_obj_t *h2 = lv_label_create(cont);
+    lv_label_set_text(h2, "Security");
+    lv_obj_set_pos(h2, 180, 18);
+    lv_obj_set_style_text_color(h2, lv_color_hex(0x888888), LV_PART_MAIN);
+    lv_obj_set_style_text_font(h2, &lv_font_montserrat_10, LV_PART_MAIN);
+
+    lv_obj_t *h3 = lv_label_create(cont);
+    lv_label_set_text(h3, "Signal");
+    lv_obj_set_pos(h3, 270, 18);
+    lv_obj_set_style_text_color(h3, lv_color_hex(0x888888), LV_PART_MAIN);
+    lv_obj_set_style_text_font(h3, &lv_font_montserrat_10, LV_PART_MAIN);
+
+    if (ap_count_ == 0) {
+        lv_obj_t *empty = lv_label_create(cont);
+        lv_label_set_text(empty, "No networks found. Press R to rescan.");
+        lv_obj_set_pos(empty, 8, 50);
+        lv_obj_set_style_text_color(empty, lv_color_hex(0x666666), LV_PART_MAIN);
+        lv_obj_set_style_text_font(empty, &lv_font_montserrat_12, LV_PART_MAIN);
+        return;
+    }
+
+    int visible = 5;
+    int offset = list_sel_ - visible / 2;
+    if (offset < 0) offset = 0;
+    if (offset > ap_count_ - visible) offset = ap_count_ - visible;
+    if (offset < 0) offset = 0;
+
+    for (int vi = 0; vi < visible && (vi + offset) < ap_count_; ++vi) {
+        int ai = vi + offset;
+        bool sel = (ai == list_sel_);
+        cp0_wifi_ap_t *ap = &aps_[ai];
+        int y = 30 + vi * 22;
+
+        if (sel) {
+            lv_obj_t *bg = lv_obj_create(cont);
+            lv_obj_set_size(bg, UISetupPage::SCREEN_W - 8, 20);
+            lv_obj_set_pos(bg, 4, y);
+            lv_obj_set_style_radius(bg, 2, LV_PART_MAIN);
+            lv_obj_set_style_bg_color(bg, lv_color_hex(0x1F3A5F), LV_PART_MAIN);
+            lv_obj_set_style_bg_opa(bg, 255, LV_PART_MAIN);
+            lv_obj_set_style_border_width(bg, 0, LV_PART_MAIN);
+            lv_obj_clear_flag(bg, LV_OBJ_FLAG_SCROLLABLE);
+        }
+
+        uint32_t tc = sel ? 0xFFFFFF : 0xCCCCCC;
+        if (ap->in_use) tc = 0x58A6FF;
+
+        lv_obj_t *ssid_lbl = lv_label_create(cont);
+        static char ssid_buf[CP0_WIFI_SSID_MAX + 4];
+        if (has_saved_profile(ap->ssid))
+            snprintf(ssid_buf, sizeof(ssid_buf), "%s *", ap->ssid);
+        else
+            snprintf(ssid_buf, sizeof(ssid_buf), "%s", ap->ssid);
+        lv_label_set_text(ssid_lbl, ssid_buf);
+        lv_obj_set_pos(ssid_lbl, 8, y + 2);
+        lv_obj_set_style_text_color(ssid_lbl, lv_color_hex(tc), LV_PART_MAIN);
+        lv_obj_set_style_text_font(ssid_lbl, &lv_font_montserrat_12, LV_PART_MAIN);
+        lv_obj_set_width(ssid_lbl, 165);
+        lv_label_set_long_mode(ssid_lbl, LV_LABEL_LONG_CLIP);
+
+        lv_obj_t *sec = lv_label_create(cont);
+        lv_label_set_text(sec, ap->security[0] ? ap->security : "Open");
+        lv_obj_set_pos(sec, 180, y + 2);
+        lv_obj_set_style_text_color(sec, lv_color_hex(tc), LV_PART_MAIN);
+        lv_obj_set_style_text_font(sec, &lv_font_montserrat_10, LV_PART_MAIN);
+
+        char sig_buf[16];
+        snprintf(sig_buf, sizeof(sig_buf), "%d%%", ap->signal);
+        lv_obj_t *sig = lv_label_create(cont);
+        lv_label_set_text(sig, sig_buf);
+        lv_obj_set_pos(sig, 275, y + 2);
+        lv_obj_set_style_text_color(sig, lv_color_hex(tc), LV_PART_MAIN);
+        lv_obj_set_style_text_font(sig, &lv_font_montserrat_10, LV_PART_MAIN);
+    }
+
+    lv_obj_t *hint = lv_label_create(cont);
+    lv_label_set_text(hint, "OK:connect  R:rescan  D:forget  ESC:back");
+    lv_obj_set_pos(hint, 8, UISetupPage::LIST_H - 14);
+    lv_obj_set_style_text_color(hint, lv_color_hex(0x555555), LV_PART_MAIN);
+    lv_obj_set_style_text_font(hint, &lv_font_montserrat_10, LV_PART_MAIN);
+}
+
+void WiFi::handle_list_key(UISetupPage &page, uint32_t key)
+{
+    switch (key) {
+    case KEY_UP:
+        if (list_sel_ > 0) { --list_sel_; build_list(page); }
+        break;
+    case KEY_DOWN:
+        if (list_sel_ < ap_count_ - 1) { ++list_sel_; build_list(page); }
+        break;
+    case KEY_ENTER:
+        if (ap_count_ > 0) try_connect(page, list_sel_);
+        break;
+    case KEY_R:
+        do_scan();
+        list_sel_ = 0;
+        build_list(page);
+        break;
+    case KEY_D:
+        if (ap_count_ > 0) forget_selected(page);
+        break;
+    case KEY_ESC:
+    case KEY_LEFT:
+        page.view_state_ = UISetupPage::ViewState::SUB;
+        page.build_sub_view();
+        break;
+    default:
+        break;
+    }
+}
+
+void WiFi::try_connect(UISetupPage &page, int idx)
+{
+    if (idx < 0 || idx >= ap_count_) return;
+    cp0_wifi_ap_t *ap = &aps_[idx];
+    if (ap->in_use) return;
+
+    bool needs_password = false;
+    int ret = -1;
+    if (strcmp(ap->security, "Open") == 0 || ap->security[0] == 0) {
+        show_connecting(page, ap->ssid);
+        ret = launcher_wifi::connect(ap->ssid, NULL);
+    } else if (has_saved_profile(ap->ssid)) {
+        show_connecting(page, ap->ssid);
+        ret = launcher_wifi::connect(ap->ssid, NULL);
+        if (ret != 0) {
+            needs_password = true;
+            pw_ssid_ = ap->ssid;
+            pw_buf_.clear();
+            show_pw_input(page);
+        }
+    } else {
+        needs_password = true;
+        pw_ssid_ = ap->ssid;
+        pw_buf_.clear();
+        show_pw_input(page);
+    }
+    if (!needs_password) {
+        if (ret != 0)
+            show_error(page, "Connection failed");
+        do_scan();
+        build_list(page);
+    }
+}
+
+void WiFi::show_connecting(UISetupPage &page, const char *ssid)
+{
+    lv_obj_t *cont = page.ui_obj_["list_cont"];
+    lv_obj_clean(cont);
+    static char msg[128];
+    snprintf(msg, sizeof(msg), "Connecting to %s...", ssid);
+    lv_obj_t *lbl = lv_label_create(cont);
+    lv_label_set_text(lbl, msg);
+    lv_obj_set_pos(lbl, 8, 60);
+    lv_obj_set_style_text_color(lbl, lv_color_hex(0x58A6FF), LV_PART_MAIN);
+    lv_obj_set_style_text_font(lbl, &lv_font_montserrat_14, LV_PART_MAIN);
+    lv_refr_now(NULL);
+}
+
+void WiFi::show_error(UISetupPage &page, const char *msg)
+{
+    lv_obj_t *cont = page.ui_obj_["list_cont"];
+    lv_obj_clean(cont);
+    lv_obj_t *lbl = lv_label_create(cont);
+    lv_label_set_text(lbl, msg);
+    lv_obj_set_pos(lbl, 8, 60);
+    lv_obj_set_style_text_color(lbl, lv_color_hex(0xFF4444), LV_PART_MAIN);
+    lv_obj_set_style_text_font(lbl, &lv_font_montserrat_14, LV_PART_MAIN);
+    lv_refr_now(NULL);
+    usleep(2000000);
+}
+
+void WiFi::forget_selected(UISetupPage &page)
+{
+    if (list_sel_ < 0 || list_sel_ >= ap_count_) return;
+    cp0_wifi_ap_t *ap = &aps_[list_sel_];
+
+    if (!has_saved_profile(ap->ssid)) {
+        show_error(page, "No saved password for this network");
+        do_scan();
+        build_list(page);
+        return;
+    }
+
+    char msg[128];
+    snprintf(msg, sizeof(msg), "Forget '%s'?", ap->ssid);
+    lv_obj_t *cont = page.ui_obj_["list_cont"];
+    lv_obj_clean(cont);
+    lv_obj_t *lbl = lv_label_create(cont);
+    lv_label_set_text(lbl, msg);
+    lv_obj_set_pos(lbl, 8, 50);
+    lv_obj_set_style_text_color(lbl, lv_color_hex(0xFFAA00), LV_PART_MAIN);
+    lv_obj_set_style_text_font(lbl, &lv_font_montserrat_14, LV_PART_MAIN);
+    lv_obj_t *hint = lv_label_create(cont);
+    lv_label_set_text(hint, "OK:confirm  ESC:cancel");
+    lv_obj_set_pos(hint, 8, 75);
+    lv_obj_set_style_text_color(hint, lv_color_hex(0x888888), LV_PART_MAIN);
+    lv_obj_set_style_text_font(hint, &lv_font_montserrat_10, LV_PART_MAIN);
+    lv_refr_now(NULL);
+
+    pw_ssid_ = ap->ssid;
+    page.view_state_ = UISetupPage::ViewState::WIFI_PW;
+    launcher_wifi::profile_forget(ap->ssid);
+    if (ap->in_use)
+        launcher_wifi::profile_disconnect_active();
+
+    lv_obj_clean(cont);
+    lbl = lv_label_create(cont);
+    snprintf(msg, sizeof(msg), "Forgot '%s'", ap->ssid);
+    lv_label_set_text(lbl, msg);
+    lv_obj_set_pos(lbl, 8, 60);
+    lv_obj_set_style_text_color(lbl, lv_color_hex(0x33CC33), LV_PART_MAIN);
+    lv_obj_set_style_text_font(lbl, &lv_font_montserrat_14, LV_PART_MAIN);
+    lv_refr_now(NULL);
+    usleep(1500000);
+
+    page.view_state_ = UISetupPage::ViewState::WIFI_LIST;
+    do_scan();
+    build_list(page);
+}
+
+bool WiFi::has_saved_profile(const char *ssid)
+{
+    return launcher_wifi::profile_exists(ssid) != 0;
+}
+
+void WiFi::show_pw_input(UISetupPage &page)
+{
+    page.view_state_ = UISetupPage::ViewState::WIFI_PW;
+    lv_obj_t *cont = page.ui_obj_["list_cont"];
+    lv_obj_clean(cont);
+
+    lv_obj_t *title = lv_label_create(cont);
+    char buf[128];
+    snprintf(buf, sizeof(buf), "Connect: %s", pw_ssid_.c_str());
+    lv_label_set_text(title, buf);
+    lv_obj_set_pos(title, 10, 10);
+    lv_obj_set_style_text_color(title, lv_color_hex(0x58A6FF), LV_PART_MAIN);
+    lv_obj_set_style_text_font(title, &lv_font_montserrat_12, LV_PART_MAIN);
+
+    lv_obj_t *pw_label = lv_label_create(cont);
+    lv_label_set_text(pw_label, "Password:");
+    lv_obj_set_pos(pw_label, 10, 35);
+    lv_obj_set_style_text_color(pw_label, lv_color_hex(0xCCCCCC), LV_PART_MAIN);
+    lv_obj_set_style_text_font(pw_label, &lv_font_montserrat_12, LV_PART_MAIN);
+
+    pw_input_lbl_ = lv_label_create(cont);
+    lv_label_set_text(pw_input_lbl_, "_");
+    lv_obj_set_pos(pw_input_lbl_, 90, 35);
+    lv_obj_set_width(pw_input_lbl_, 200);
+    lv_label_set_long_mode(pw_input_lbl_, LV_LABEL_LONG_CLIP);
+    lv_obj_set_style_text_color(pw_input_lbl_, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+    lv_obj_set_style_text_font(pw_input_lbl_, &lv_font_montserrat_14, LV_PART_MAIN);
+
+    pw_hint_lbl_ = lv_label_create(cont);
+    lv_label_set_text(pw_hint_lbl_, "Type pw, OK:connect, ESC:cancel");
+    lv_obj_set_pos(pw_hint_lbl_, 10, 65);
+    lv_obj_set_style_text_color(pw_hint_lbl_, lv_color_hex(0x555555), LV_PART_MAIN);
+    lv_obj_set_style_text_font(pw_hint_lbl_, &lv_font_montserrat_10, LV_PART_MAIN);
+}
+
+void WiFi::handle_pw_key(UISetupPage &page, uint32_t key)
+{
+    if (key == KEY_ESC) {
+        page.view_state_ = UISetupPage::ViewState::WIFI_LIST;
+        page.rebuild_view();
+        return;
+    }
+    if (key == KEY_ENTER) {
+        if (pw_hint_lbl_) lv_label_set_text(pw_hint_lbl_, "Connecting...");
+        lv_refr_now(NULL);
+        int ret = launcher_wifi::connect(pw_ssid_.c_str(), pw_buf_.c_str());
+        if (ret != 0) {
+            launcher_wifi::profile_forget(pw_ssid_.c_str());
+            if (pw_hint_lbl_) {
+                lv_label_set_text(pw_hint_lbl_, "Failed! Wrong password? Try again.");
+                lv_obj_set_style_text_color(pw_hint_lbl_, lv_color_hex(0xFF4444), LV_PART_MAIN);
+            }
+            pw_buf_.clear();
+            pw_update_display();
+            return;
+        }
+        page.view_state_ = UISetupPage::ViewState::WIFI_LIST;
+        do_scan();
+        page.rebuild_view();
+        return;
+    }
+    if (key == KEY_BACKSPACE) {
+        if (!pw_buf_.empty()) pw_buf_.pop_back();
+        pw_update_display();
+        return;
+    }
+    if (page.cur_elm_ && page.cur_elm_->utf8[0]) {
+        pw_buf_ += page.cur_elm_->utf8;
+        pw_update_display();
+    }
+}
+
+void WiFi::pw_update_display()
+{
+    if (!pw_input_lbl_) return;
+    std::string display = pw_buf_ + "_";
+    lv_label_set_text(pw_input_lbl_, display.c_str());
+}
+
+void Info::append(UISetupPage &p, std::vector<MenuItem> &menu)
+{
+    UISetupPage *page = &p;
+    MenuItem m;
+    m.label = "Info";
+    m.sub_items = {
+        {"Battery: --%", false, false, nullptr},
+        {"Temp: --C", false, false, nullptr},
+        {"Current: --mA", false, false, nullptr},
+        {"Voltage: --V", false, false, nullptr},
+        {"BQ Calibrate", false, false, [page]() { page->info_.enter_bq_calibrate(*page); }},
+    };
+    m.on_enter = [page]() { page->info_.refresh_values(*page); page->info_.start_timer(*page); };
+    menu.push_back(m);
+}
+
+void Info::refresh_values(UISetupPage &page)
+{
+    for (auto &m : page.menu_items_) {
+        if (m.label != "Info") continue;
+        cp0_battery_info_t bat = cp0_battery_read();
+        char buf[64];
+        snprintf(buf, sizeof(buf), "Battery: %d%%", bat.valid ? bat.soc : 0);
+        m.sub_items[0].label = buf;
+        snprintf(buf, sizeof(buf), "Temp: %.1fC", bat.valid ? bat.temperature_c10 / 10.0 : 0.0);
+        m.sub_items[1].label = buf;
+        if (bat.valid && bat.current_ma != INT32_MIN)
+            snprintf(buf, sizeof(buf), "Current: %dmA", bat.current_ma);
+        else
+            snprintf(buf, sizeof(buf), "Current: --mA");
+        m.sub_items[2].label = buf;
+        snprintf(buf, sizeof(buf), "Voltage: %.2fV", bat.valid ? bat.voltage_mv / 1000.0 : 0.0);
+        m.sub_items[3].label = buf;
+        break;
+    }
+    if (page.view_state_ == UISetupPage::ViewState::SUB) refresh_visible_labels(page);
+}
+
+void Info::reset_visible_labels()
+{
+    for (int i = 0; i < 4; ++i) {
+        sub_labels_[i] = nullptr;
+        sub_label_focused_[i] = false;
+        visible_text_[i].clear();
+    }
+}
+
+void Info::track_visible_label(int index, lv_obj_t *label, bool focused, const std::string &text)
+{
+    if (index < 0 || index >= 4)
+        return;
+
+    sub_labels_[index] = label;
+    sub_label_focused_[index] = focused;
+    visible_text_[index] = text;
+}
+
+void Info::refresh_visible_labels(UISetupPage &page)
+{
+    if (page.selected_idx_ < 0 || page.selected_idx_ >= (int)page.menu_items_.size())
+        return;
+
+    MenuItem &item = page.menu_items_[page.selected_idx_];
+    if (item.label != "Info")
+        return;
+
+    for (int i = 0; i < 4 && i < (int)item.sub_items.size(); ++i) {
+        lv_obj_t *lbl = sub_labels_[i];
+        if (!lbl)
+            continue;
+
+        const char *new_text = item.sub_items[i].label.c_str();
+        if (visible_text_[i] == new_text)
+            continue;
+
+        lv_label_set_text(lbl, new_text);
+        visible_text_[i] = new_text;
+        page.apply_overflow_centered(lbl, UISetupPage::SUB_CENTER_X,
+                                     sub_label_focused_[i] ? 80 : UISetupPage::VALUE_BOX_W,
+                                     sub_label_focused_[i]);
+    }
+}
+
+void Info::start_timer(UISetupPage &page)
+{
+    stop_timer();
+    timer_ = lv_timer_create([](lv_timer_t *t) {
+        UISetupPage *self = (UISetupPage *)lv_timer_get_user_data(t);
+        if (self && self->view_state_ == UISetupPage::ViewState::SUB)
+            self->info_.refresh_values(*self);
+    }, 1000, &page);
+}
+
+void Info::stop_timer()
+{
+    if (timer_) { lv_timer_delete(timer_); timer_ = nullptr; }
+}
+
+void Info::enter_bq_calibrate(UISetupPage &page)
+{
+    page.val_title_ = "BQ Calib";
+    page.val_options_ = {"Enter CAL", "CC Offset", "Board Offset", "Exit CAL"};
+    page.val_sel_idx_ = 0;
+    page.view_state_ = UISetupPage::ViewState::VALUE_SELECT;
+    page.transition_enter_level();
+}
+
+void Info::apply_bq_calibrate(UISetupPage &page)
+{
+    cp0_bq27220_calibrate(page.val_sel_idx_);
+}
+
+void RTC::append(UISetupPage &p, std::vector<MenuItem> &menu)
+{
+    UISetupPage *page = &p;
+    MenuItem m;
+    m.label = "RTC";
+    m.sub_items = {
+        {"NTP", true, true, [page]() { page->rtc_.toggle_ntp(*page); }},
+        {"Year", false, false, [page]() { page->rtc_.enter_adjust(*page, 0); }},
+        {"Month", false, false, [page]() { page->rtc_.enter_adjust(*page, 1); }},
+        {"Day", false, false, [page]() { page->rtc_.enter_adjust(*page, 2); }},
+        {"Hour", false, false, [page]() { page->rtc_.enter_adjust(*page, 3); }},
+        {"Minute", false, false, [page]() { page->rtc_.enter_adjust(*page, 4); }},
+        {"Second", false, false, [page]() { page->rtc_.enter_adjust(*page, 5); }},
+    };
+    m.on_enter = [page]() { page->rtc_.refresh_values(*page); };
+    menu.push_back(m);
+}
+
+void RTC::update_labels(UISetupPage &page)
+{
+    for (auto &m : page.menu_items_) {
+        if (m.label != "RTC") continue;
+        m.sub_items[0].toggle_state = ntp_on_;
+        char buf[32];
+        const char *names[] = {"Year", "Month", "Day", "Hour", "Minute", "Second"};
+        for (int i = 0; i < 6; ++i) {
+            snprintf(buf, sizeof(buf), "%s: %d", names[i], values_[i]);
+            m.sub_items[i + 1].label = buf;
+        }
+        break;
+    }
+}
+
+void RTC::refresh_values(UISetupPage &page)
+{
+    ntp_on_ = cp0_time_ntp_get() == 1;
+    time_t now = time(NULL);
+    struct tm *t = localtime(&now);
+    if (t) {
+        values_[0] = t->tm_year + 1900;
+        values_[1] = t->tm_mon + 1;
+        values_[2] = t->tm_mday;
+        values_[3] = t->tm_hour;
+        values_[4] = t->tm_min;
+        values_[5] = t->tm_sec;
+    }
+    dirty_ = false;
+    update_labels(page);
+}
+
+void RTC::toggle_ntp(UISetupPage &page)
+{
+    for (auto &m : page.menu_items_) {
+        if (m.label != "RTC") continue;
+        bool on = m.sub_items[0].toggle_state;
+        cp0_time_ntp_set(on ? 1 : 0);
+        break;
+    }
+    refresh_values(page);
+}
+
+void RTC::enter_adjust(UISetupPage &page, int field)
+{
+    if (ntp_on_)
+        return;
+    field_ = field;
+    const char *names[] = {"Year", "Month", "Day", "Hour", "Minute", "Second"};
+    page.val_title_ = names[field];
+    int cur = values_[field];
+    int mins[] = {2000, 1, 1, 0, 0, 0};
+    int maxs[] = {2099, 12, 31, 23, 59, 59};
+
+    page.val_options_.clear();
+    for (int v = mins[field]; v <= maxs[field]; ++v) {
+        char buf[16];
+        snprintf(buf, sizeof(buf), "%d", v);
+        page.val_options_.push_back(buf);
+    }
+    page.val_sel_idx_ = cur - mins[field];
+    page.view_state_ = UISetupPage::ViewState::VALUE_SELECT;
+    page.transition_enter_level();
+}
+
+void RTC::apply_value(UISetupPage &page)
+{
+    int new_val = atoi(page.val_options_[page.val_sel_idx_].c_str());
+    values_[field_] = new_val;
+    dirty_ = true;
+    update_labels(page);
+
+    char timestamp[32];
+    snprintf(timestamp, sizeof(timestamp), "%04d-%02d-%02d %02d:%02d:%02d",
+             values_[0], values_[1], values_[2], values_[3], values_[4], values_[5]);
+    char shell_cmd[96];
+    snprintf(shell_cmd, sizeof(shell_cmd), "date -s '%s'", timestamp);
+
+    SudoPrompt::show({"sh", "-c", shell_cmd}, [this, &page](int code) {
+        if (code == 0)
+            page.update_datetime_status();
+        else
+            refresh_values(page);
+    });
+}
+
+void RTC::commit_to_hardware(UISetupPage &page)
+{
+    SudoPrompt::show({"hwclock", "-w"}, [this, &page](int code) {
+        refresh_values(page);
+        page.update_datetime_status();
+    });
+}
+
+void RTC::enter_write_confirm(UISetupPage &page)
+{
+    exit_confirm_ = true;
+    page.val_title_ = "Write RTC?";
+    page.val_options_ = {"Yes", "No"};
+    page.val_sel_idx_ = 1;
+    page.view_state_ = UISetupPage::ViewState::VALUE_SELECT;
+    page.transition_enter_level();
+}
+
+void Developer::append(UISetupPage &p, std::vector<MenuItem> &menu)
+{
+    UISetupPage *page = &p;
+    MenuItem m;
+    m.label = "Developer";
+    bool adb_en = UISetupPage::config_get_int("adb_debug", 0) != 0;
+    m.sub_items = {{"ADB", true, adb_en, [page]() { page->developer_.toggle_adb(*page); }}};
+    m.on_enter = [page]() { page->developer_.refresh_adb_status(*page); };
+    menu.push_back(m);
+}
+
+void Developer::toggle_adb(UISetupPage &page)
+{
+    int idx = page.find_menu("Developer");
+    if (idx < 0) return;
+    bool want_on = page.menu_items_[idx].sub_items[0].toggle_state;
+    const char *argv[] = {"sudo", kAdbHelper, want_on ? "enable" : "disable", nullptr};
+    int rc = cp0_process_run_argv(argv, 0);
+    if (rc == 10) {
+        UISetupPage::config_set_int("adb_debug", want_on ? 1 : 0);
+        UISetupPage::config_save();
+        enter_usb_guide(page, want_on);
+        return;
+    }
+    if (rc != 0) {
+        page.menu_items_[idx].sub_items[0].toggle_state = !want_on;
+        return;
+    }
+    UISetupPage::config_set_int("adb_debug", want_on ? 1 : 0);
+    UISetupPage::config_save();
+}
+
+void Developer::refresh_adb_status(UISetupPage &page)
+{
+    int idx = page.find_menu("Developer");
+    if (idx < 0) return;
+    char out[64] = {0};
+    const char *argv[] = {"systemctl", "is-active", "adbd.service", nullptr};
+    cp0_process_capture_argv(argv, out, sizeof(out));
+    bool active = (std::strncmp(out, "active", 6) == 0);
+    page.menu_items_[idx].sub_items[0].toggle_state = active;
+    UISetupPage::config_set_int("adb_debug", active ? 1 : 0);
+}
+
+void Developer::enter_usb_guide(UISetupPage &page, bool enabling)
+{
+    usb_guide_enabling_ = enabling;
+    lv_timer_t *t = lv_timer_create([](lv_timer_t *timer) {
+        UISetupPage *self = (UISetupPage *)lv_timer_get_user_data(timer);
+        lv_timer_delete(timer);
+        self->developer_.build_usb_guide_view(*self);
+    }, 60, &page);
+    lv_timer_set_repeat_count(t, 1);
+}
+
+lv_obj_t *Developer::guide_chip(lv_obj_t *parent, int x, int y, int w, int h,
+                                uint32_t bg, uint32_t border, int radius, int border_w)
+{
+    lv_obj_t *o = lv_obj_create(parent);
+    lv_obj_set_pos(o, x, y);
+    lv_obj_set_size(o, w, h);
+    lv_obj_set_style_radius(o, radius, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(o, lv_color_hex(bg), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(o, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_border_color(o, lv_color_hex(border), LV_PART_MAIN);
+    lv_obj_set_style_border_width(o, border_w, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(o, 0, LV_PART_MAIN);
+    lv_obj_clear_flag(o, LV_OBJ_FLAG_SCROLLABLE);
+    return o;
+}
+
+lv_obj_t *Developer::guide_label(lv_obj_t *parent, int x, int y, const char *txt,
+                                 uint32_t color, const lv_font_t *font)
+{
+    lv_obj_t *l = lv_label_create(parent);
+    lv_label_set_text(l, txt);
+    lv_obj_set_pos(l, x, y);
+    lv_obj_set_style_text_color(l, lv_color_hex(color), LV_PART_MAIN);
+    lv_obj_set_style_text_font(l, font, LV_PART_MAIN);
+    return l;
+}
+
+void Developer::build_usb_guide_view(UISetupPage &page)
+{
+    page.view_state_ = UISetupPage::ViewState::USB_GUIDE;
+    usb_guide_knob_ = nullptr;
+    lv_obj_t *cont = page.ui_obj_["list_cont"];
+    lv_obj_clean(cont);
+    const bool en = usb_guide_enabling_;
+    const uint32_t C_GREEN = 0x46DC87, C_YEL = 0xF0C850, C_RED = 0xEB5F5F;
+    const uint32_t C_WHITE = 0xECECEC, C_GREY = 0x9A9AA0;
+    const lv_font_t *f_title = launcher_fonts().get("Montserrat-Bold.ttf", 13, LV_FREETYPE_FONT_STYLE_BOLD);
+    const lv_font_t *f_msg = &lv_font_montserrat_10;
+
+    guide_label(cont, 8, 2, en ? "Enable ADB - switch USB to device" : "Disable ADB - switch USB to HUB",
+                C_WHITE, f_title ? f_title : &lv_font_montserrat_12);
+    guide_chip(cont, 86, 24, 146, 50, 0x282A30, 0x5A5C64, 6, 2);
+    guide_label(cont, 120, 28, "CardputerZero", C_GREY, f_msg);
+    guide_chip(cont, 218, 30, 12, 12, 0x101012, 0x5A5C64, 3, 2);
+    guide_chip(cont, 228, 32, 22, 8, 0xCDCDD2, 0xCDCDD2, 2, 0);
+    guide_chip(cont, 250, 34, 60, 4, 0x6A6C72, 0x6A6C72, 2, 0);
+    guide_label(cont, 232, 42, "USB-C", C_GREEN, f_msg);
+    guide_chip(cont, 24, 28, 32, 44, 0x1A1A1C, 0x5A5C64, 6, 2);
+    guide_chip(cont, 33, 33, 14, 34, 0x0E0E10, 0x0E0E10, 4, 0);
+    guide_label(cont, 26, 14, "HUB", en ? C_RED : C_GREEN, f_msg);
+    guide_label(cont, 28, 72, "USB", en ? C_GREEN : C_GREY, f_msg);
+    const int thumb_top = 34, thumb_bot = 54;
+    usb_guide_knob_ = guide_chip(cont, 32, en ? thumb_top : thumb_bot, 16, 10, C_GREEN, 0x2A6F49, 3, 1);
+
+    int y = 80;
+    if (en) {
+        guide_label(cont, 8, y,      "1  Slide LEFT switch  HUB -> USB", C_WHITE, f_msg);
+        guide_label(cont, 8, y + 15, "2  USB hub & peripherals turn OFF", C_YEL, f_msg);
+        guide_label(cont, 8, y + 30, "3  Cable -> top-right USB-C port", C_GREEN, f_msg);
+    } else {
+        guide_label(cont, 8, y,      "1  Slide LEFT switch  USB -> HUB", C_WHITE, f_msg);
+        guide_label(cont, 8, y + 15, "2  USB hub & peripherals come back", C_GREEN, f_msg);
+        guide_label(cont, 8, y + 30, "3  Reboot to apply the change", C_YEL, f_msg);
+    }
+    guide_label(cont, 8, UISetupPage::LIST_H - 16, "OK: reboot now     ESC: later", C_GREY, &lv_font_montserrat_10);
+
+    lv_anim_t a;
+    lv_anim_init(&a);
+    lv_anim_set_var(&a, usb_guide_knob_);
+    lv_anim_set_values(&a, en ? thumb_top : thumb_bot, en ? thumb_bot : thumb_top);
+    lv_anim_set_time(&a, 650);
+    lv_anim_set_playback_time(&a, 650);
+    lv_anim_set_repeat_count(&a, LV_ANIM_REPEAT_INFINITE);
+    lv_anim_set_path_cb(&a, lv_anim_path_ease_in_out);
+    lv_anim_set_exec_cb(&a, [](void *var, int32_t v) { lv_obj_set_y((lv_obj_t *)var, v); });
+    lv_anim_start(&a);
+}
+
+void Developer::stop_usb_guide_anims()
+{
+    if (usb_guide_knob_) lv_anim_del(usb_guide_knob_, nullptr);
+    usb_guide_knob_ = nullptr;
+}
+
+void Developer::handle_usb_guide_key(UISetupPage &page, uint32_t key)
+{
+    switch (key) {
+    case KEY_ENTER:
+    case KEY_RIGHT: {
+        stop_usb_guide_anims();
+        lv_obj_t *cont = page.ui_obj_["list_cont"];
+        lv_obj_clean(cont);
+        lv_obj_t *lbl = lv_label_create(cont);
+        lv_label_set_text(lbl, "Rebooting...");
+        lv_obj_center(lbl);
+        cp0_system_reboot();
+        break;
+    }
+    case KEY_ESC:
+    case KEY_LEFT:
+        stop_usb_guide_anims();
+        page.view_state_ = UISetupPage::ViewState::SUB;
+        page.build_sub_view();
+        break;
+    default:
+        break;
+    }
+}
+
+void About::append(UISetupPage &p, std::vector<MenuItem> &menu)
+{
+    UISetupPage *page = &p;
+    MenuItem m;
+    m.label = "About";
+    m.sub_items = {
+        {"CardputerZero", false, false, nullptr},
+        {"LVGL 9.x", false, false, nullptr},
+        {"", false, false, nullptr},
+        {"", false, false, nullptr},
+    };
+    m.on_enter = [page]() { About::refresh_info(*page); };
+    menu.push_back(m);
+}
+
+void About::refresh_info(UISetupPage &page)
+{
+    for (auto &m : page.menu_items_) {
+        if (m.label != "About") continue;
+        m.sub_items[0].label = "M5CardputerZero";
+        m.sub_items[1].label = "LVGL: 9.x";
+        char buf[64];
+        snprintf(buf, sizeof(buf), "Build: %s", __DATE__);
+        m.sub_items[2].label = buf;
+        snprintf(buf, sizeof(buf), "Commit: %s", LAUNCHER_GIT_COMMIT);
+        m.sub_items[3].label = buf;
+        break;
+    }
+}
+
+void Help::append(UISetupPage &p, std::vector<MenuItem> &menu)
+{
+    UISetupPage *page = &p;
+    MenuItem m;
+    m.label = "Help";
+    m.sub_items = {{"View Help", false, false, [page]() { Help::enter_page(*page); }}};
+    menu.push_back(m);
+}
+
+void Help::enter_page(UISetupPage &page)
+{
+    page.view_state_ = UISetupPage::ViewState::WIFI_LIST;
+    lv_obj_t *cont = page.ui_obj_["list_cont"];
+    lv_obj_clean(cont);
+
+    int y = 4;
+    auto add_line = [&](const char *text, uint32_t color, const lv_font_t *font) {
+        lv_obj_t *lbl = lv_label_create(cont);
+        lv_label_set_text(lbl, text);
+        lv_obj_set_pos(lbl, 8, y);
+        lv_obj_set_width(lbl, 300);
+        lv_label_set_long_mode(lbl, LV_LABEL_LONG_WRAP);
+        lv_obj_set_style_text_color(lbl, lv_color_hex(color), LV_PART_MAIN);
+        lv_obj_set_style_text_font(lbl, font, LV_PART_MAIN);
+        lv_obj_update_layout(lbl);
+        y += lv_obj_get_height(lbl) + 3;
+    };
+
+    add_line("Help", 0x58A6FF, launcher_fonts().get("Montserrat-Bold.ttf", 16, LV_FREETYPE_FONT_STYLE_BOLD));
+    add_line("Screenshot: Ctrl+Alt+S", 0xCCCCCC, &lv_font_montserrat_12);
+    add_line("  Saved to ~/Screenshots", 0x888888, &lv_font_montserrat_10);
+    add_line("Home: Hold ESC 3s", 0xCCCCCC, &lv_font_montserrat_12);
+    add_line("Navigate: Arrow keys / OK / ESC", 0xCCCCCC, &lv_font_montserrat_12);
+    add_line("WiFi: Setting > WiFi > Scan", 0xCCCCCC, &lv_font_montserrat_12);
+
+    lv_obj_t *hint = lv_label_create(cont);
+    lv_label_set_text(hint, "ESC: back");
+    lv_obj_set_pos(hint, 8, UISetupPage::LIST_H - 14);
+    lv_obj_set_style_text_color(hint, lv_color_hex(0x555555), LV_PART_MAIN);
+    lv_obj_set_style_text_font(hint, &lv_font_montserrat_10, LV_PART_MAIN);
+}
+
+void ExtPort::append(UISetupPage &p, std::vector<MenuItem> &menu)
+{
+    UISetupPage *page = &p;
+    MenuItem m;
+    m.label = "ExtPort";
+    bool usb_en = UISetupPage::config_get_int("extport_usb", 1) != 0;
+    bool vout_en = UISetupPage::config_get_int("extport_5vout", 1) != 0;
+    m.sub_items = {
+        {"GROVE5V", true, usb_en, [page]() {
+            bool en = page->menu_items_[page->selected_idx_].sub_items[0].toggle_state;
+            UISetupPage::config_set_int("extport_usb", en ? 1 : 0);
+            UISetupPage::gpio_set("GROVE5V", en ? 1 : 0);
+            UISetupPage::config_save();
+        }},
+        {"EXT5V", true, vout_en, [page]() {
+            bool en = page->menu_items_[page->selected_idx_].sub_items[1].toggle_state;
+            UISetupPage::config_set_int("extport_5vout", en ? 1 : 0);
+            UISetupPage::gpio_set("EXT5V", en ? 1 : 0);
+            UISetupPage::config_save();
+        }},
+    };
+    menu.push_back(m);
+}
+
+void Ethernet::append(UISetupPage &p, std::vector<MenuItem> &menu)
+{
+    UISetupPage *page = &p;
+    MenuItem m;
+    m.label = "Ethernet";
+    m.sub_items = {
+        {"IP: --", false, false, nullptr},
+        {"Gateway: --", false, false, nullptr},
+        {"MAC: --", false, false, nullptr},
+    };
+    m.on_enter = [page]() { Ethernet::refresh_info(*page); };
+    menu.push_back(m);
+}
+
+void Ethernet::refresh_info(UISetupPage &page)
+{
+    for (auto &m : page.menu_items_) {
+        if (m.label != "Ethernet") continue;
+        cp0_eth_info_t info;
+        cp0_network_default_info_read(&info);
+        m.sub_items[0].label = std::string("IP: ") + info.ipv4;
+        m.sub_items[1].label = std::string("GW: ") + info.gateway;
+        m.sub_items[2].label = std::string("MAC: ") + info.mac;
+        break;
+    }
+}
+
+void Account::append(UISetupPage &p, std::vector<MenuItem> &menu)
+{
+    UISetupPage *page = &p;
+    MenuItem m;
+    m.label = "Account";
+    m.sub_items = {
+        {"Username", false, false, nullptr},
+        {"Password", false, false, nullptr},
+        {"Hostname", false, false, nullptr},
+    };
+    m.on_enter = [page]() { Account::refresh_info(*page); };
+    menu.push_back(m);
+}
+
+void Account::refresh_info(UISetupPage &page)
+{
+    for (auto &m : page.menu_items_) {
+        if (m.label != "Account") continue;
+        cp0_account_info_t info;
+        cp0_account_info_read(&info);
+        m.sub_items[0].label = std::string("User: ") + info.user;
+        m.sub_items[1].label = "Password: ****";
+        m.sub_items[2].label = std::string("Host: ") + info.hostname;
+        break;
+    }
+}
+
+void Update::append(UISetupPage &p, std::vector<MenuItem> &menu)
+{
+    UISetupPage *page = &p;
+    MenuItem m;
+    m.label = "Update";
+    m.sub_items = {
+        {"Check System", false, false, []() { Update::check_system_update(); }},
+        {"Update Launcher", false, false, []() { Update::update_launcher(); }},
+        {"Version: --", false, false, nullptr},
+    };
+    m.on_enter = [page]() { Update::refresh_version_info(*page); };
+    menu.push_back(m);
+}
+
+void Update::refresh_version_info(UISetupPage &page)
+{
+    for (auto &m : page.menu_items_) {
+        if (m.label != "Update") continue;
+        m.sub_items[2].label = std::string("Version: ") + LAUNCHER_GIT_COMMIT;
+        break;
+    }
+}
+
+void Update::check_system_update()
+{
+    cp0_system_apt_update_background();
+}
+
+void Update::update_launcher()
+{
+    cp0_system_update_launcher_background();
+}
+
+
+void Bluetooth::append(UISetupPage &p, std::vector<MenuItem> &menu)
+{
+    UISetupPage *page = &p;
+    Bluetooth *bt = &page->bluetooth_;
+    MenuItem m;
+    m.label = "Bluetooth";
+    bt->named_only_ = UISetupPage::config_get_int("bt_named_only", 1) != 0;
+    m.sub_items = {
+        {"Power", true, false, [bt, page]() { bt->toggle_power(*page); }},
+        {"Alias: CardputerZero", false, false, [bt, page]() { bt->enter_alias(*page); }},
+        {"Discoverable", true, false, [bt, page]() { bt->toggle_discoverable(*page); }},
+        {"Named Only", true, bt->named_only_, [bt, page]() { bt->toggle_named_only(*page); }},
+        {"Connected", false, false, [bt, page]() { bt->enter_devices(*page); }},
+        {"Scan", false, false, [bt, page]() { bt->enter_scan(*page); }},
+    };
+    m.on_enter = [bt, page]() { bt->refresh_status(*page); };
+    menu.push_back(m);
+}
+
+
+
+void Bluetooth::enter_devices(UISetupPage &page)
+{
+    stop_scan_timer();
+    list_mode_ = ListMode::Managed;
+    page.view_state_ = UISetupPage::ViewState::BT_LIST;
+    list_sel_ = 0;
+    refresh_devices();
+    build_list(page);
+}
+
+void Bluetooth::enter_alias(UISetupPage &page)
+{
+    stop_scan_timer();
+    refresh_status(page);
+    alias_input_ = alias_.empty() ? "CardputerZero" : alias_;
+    page.view_state_ = UISetupPage::ViewState::BT_ALIAS;
+    build_alias_view(page);
+}
+
+bool Bluetooth::alias_char_allowed(unsigned char ch)
+{
+    return std::isprint(ch) && ch != '\t' && ch != '\n' && ch != '\r';
+}
+
+std::string Bluetooth::alias_sanitized() const
+{
+    std::string out;
+    out.reserve(alias_input_.size());
+    for (unsigned char ch : alias_input_) {
+        if (alias_char_allowed(ch))
+            out.push_back(static_cast<char>(ch));
+    }
+    if (out.empty())
+        out = "CardputerZero";
+    return out.substr(0, CP0_BT_NAME_MAX - 1);
+}
+
+void Bluetooth::build_alias_view(UISetupPage &page)
+{
+    lv_obj_t *cont = page.ui_obj_["list_cont"];
+    lv_obj_clean(cont);
+    alias_input_lbl_ = nullptr;
+    alias_hint_lbl_ = nullptr;
+
+    lv_obj_t *title = lv_label_create(cont);
+    lv_label_set_text(title, "Bluetooth Name");
+    lv_obj_set_pos(title, 10, 10);
+    lv_obj_set_style_text_color(title, lv_color_hex(0x58A6FF), LV_PART_MAIN);
+    lv_obj_set_style_text_font(title, &lv_font_montserrat_14, LV_PART_MAIN);
+
+    lv_obj_t *label = lv_label_create(cont);
+    lv_label_set_text(label, "Name:");
+    lv_obj_set_pos(label, 10, 38);
+    lv_obj_set_style_text_color(label, lv_color_hex(0xCCCCCC), LV_PART_MAIN);
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_12, LV_PART_MAIN);
+
+    alias_input_lbl_ = lv_label_create(cont);
+    lv_obj_set_pos(alias_input_lbl_, 64, 36);
+    lv_obj_set_width(alias_input_lbl_, 236);
+    lv_label_set_long_mode(alias_input_lbl_, LV_LABEL_LONG_CLIP);
+    lv_obj_set_style_text_color(alias_input_lbl_, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+    lv_obj_set_style_text_font(alias_input_lbl_, &lv_font_montserrat_14, LV_PART_MAIN);
+    alias_update_display();
+
+    alias_hint_lbl_ = lv_label_create(cont);
+    lv_label_set_text(alias_hint_lbl_, "OK:set  BS:del  ESC:cancel");
+    lv_obj_set_pos(alias_hint_lbl_, 10, 70);
+    lv_obj_set_style_text_color(alias_hint_lbl_, lv_color_hex(0x555555), LV_PART_MAIN);
+    lv_obj_set_style_text_font(alias_hint_lbl_, &lv_font_montserrat_10, LV_PART_MAIN);
+}
+
+void Bluetooth::alias_update_display()
+{
+    if (!alias_input_lbl_)
+        return;
+    std::string display = alias_input_ + "_";
+    lv_label_set_text(alias_input_lbl_, display.c_str());
+}
+
+void Bluetooth::handle_alias_key(UISetupPage &page, uint32_t key)
+{
+    if (key == KEY_ESC || key == KEY_LEFT) {
+        page.play_back();
+        page.view_state_ = UISetupPage::ViewState::SUB;
+        page.build_sub_view();
+        return;
+    }
+    if (key == KEY_ENTER || key == KEY_RIGHT) {
+        std::string alias = alias_sanitized();
+        if (alias_hint_lbl_) {
+            lv_label_set_text(alias_hint_lbl_, "Setting alias...");
+            lv_obj_set_style_text_color(alias_hint_lbl_, lv_color_hex(0xFFAA00), LV_PART_MAIN);
+            lv_refr_now(NULL);
+        }
+        int ret = set_alias(alias);
+        if (ret == 0) {
+            alias_ = alias;
+            refresh_status(page);
+            page.view_state_ = UISetupPage::ViewState::SUB;
+            page.build_sub_view();
+        } else if (alias_hint_lbl_) {
+            lv_label_set_text(alias_hint_lbl_, "Set failed");
+            lv_obj_set_style_text_color(alias_hint_lbl_, lv_color_hex(0xFF4444), LV_PART_MAIN);
+        }
+        return;
+    }
+    if (key == KEY_BACKSPACE) {
+        if (!alias_input_.empty())
+            alias_input_.pop_back();
+        alias_update_display();
+        return;
+    }
+    if (page.cur_elm_ && page.cur_elm_->utf8[0] && alias_input_.size() < CP0_BT_NAME_MAX - 1) {
+        const char *text = page.cur_elm_->utf8;
+        while (*text && alias_input_.size() < CP0_BT_NAME_MAX - 1) {
+            unsigned char ch = static_cast<unsigned char>(*text++);
+            if (alias_char_allowed(ch))
+                alias_input_ += static_cast<char>(ch);
+        }
+        alias_update_display();
+    }
+}
+
+void Bluetooth::enter_scan(UISetupPage &page)
+{
+    list_mode_ = ListMode::Scan;
+    page.view_state_ = UISetupPage::ViewState::BT_LIST;
+    list_sel_ = 0;
+    start_scan_timer(page);
+}
+
+void Bluetooth::build_list(UISetupPage &page)
+{
+    lv_obj_t *cont = page.ui_obj_["list_cont"];
+    lv_obj_clean(cont);
+    rebuild_rows();
+
+    cp0_bt_status_t st = get_status();
+    char title_buf[96];
+    snprintf(title_buf, sizeof(title_buf), "%s: %s  %.24s",
+             list_mode_ == ListMode::Scan ? "Scan" : "Connected",
+             st.powered ? "On" : "Off", st.address[0] ? st.address : "--");
+    lv_obj_t *title = lv_label_create(cont);
+    lv_label_set_text(title, title_buf);
+    lv_obj_set_pos(title, 8, 2);
+    lv_obj_set_style_text_color(title, lv_color_hex(0x58A6FF), LV_PART_MAIN);
+    lv_obj_set_style_text_font(title, launcher_fonts().get("Montserrat-Bold.ttf", 12, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN);
+    UISetupPage::apply_overflow_handling(title, 8, UISetupPage::WIFI_TITLE_BOX_W, true);
+
+    if (rows_.empty()) {
+        lv_obj_t *empty = lv_label_create(cont);
+        if (!st.powered)
+            lv_label_set_text(empty, "Bluetooth is off. Enable Power first.");
+        else if (list_mode_ == ListMode::Scan)
+            lv_label_set_text(empty, "Scanning...");
+        else
+            lv_label_set_text(empty, "No connected devices.");
+        lv_obj_set_pos(empty, 8, 50);
+        lv_obj_set_width(empty, 300);
+        lv_label_set_long_mode(empty, LV_LABEL_LONG_WRAP);
+        lv_obj_set_style_text_color(empty, lv_color_hex(0x666666), LV_PART_MAIN);
+        lv_obj_set_style_text_font(empty, &lv_font_montserrat_12, LV_PART_MAIN);
+    }
+
+    constexpr int list_y = 22;
+    constexpr int row_step = 20;
+    constexpr int hint_y = UISetupPage::LIST_H - 14;
+    constexpr int list_bottom_gap = 8;
+    int visible = (hint_y - list_bottom_gap - list_y) / row_step;
+    if (visible < 1) visible = 1;
+    int offset = list_sel_ - visible / 2;
+    if (offset < 0) offset = 0;
+    if (offset > (int)rows_.size() - visible) offset = (int)rows_.size() - visible;
+    if (offset < 0) offset = 0;
+
+    for (int vi = 0; vi < visible && (vi + offset) < (int)rows_.size(); ++vi) {
+        int row_index = vi + offset;
+        const ListRow &row = rows_[row_index];
+        int y = list_y + vi * row_step;
+
+        if (row.is_header) {
+            lv_obj_t *header = lv_label_create(cont);
+            lv_label_set_text(header, row.title);
+            lv_obj_set_pos(header, 8, y + 3);
+            lv_obj_set_style_text_color(header, lv_color_hex(0x888888), LV_PART_MAIN);
+            lv_obj_set_style_text_font(header, launcher_fonts().get("Montserrat-Bold.ttf", 10, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN);
+            continue;
+        }
+
+        bool sel = (row_index == list_sel_);
+        cp0_bt_device_t *dev = &devices_[row.device_index];
+        if (sel) {
+            lv_obj_t *bg = lv_obj_create(cont);
+            lv_obj_set_size(bg, UISetupPage::SCREEN_W - 8, 20);
+            lv_obj_set_pos(bg, 4, y);
+            lv_obj_set_style_radius(bg, 2, LV_PART_MAIN);
+            lv_obj_set_style_bg_color(bg, lv_color_hex(0x1F3A5F), LV_PART_MAIN);
+            lv_obj_set_style_bg_opa(bg, 255, LV_PART_MAIN);
+            lv_obj_set_style_border_width(bg, 0, LV_PART_MAIN);
+            lv_obj_clear_flag(bg, LV_OBJ_FLAG_SCROLLABLE);
+        }
+
+        uint32_t tc = dev->connected ? 0x58A6FF : (sel ? 0xFFFFFF : 0xCCCCCC);
+        lv_obj_t *name = lv_label_create(cont);
+        lv_label_set_text(name, dev->name[0] ? dev->name : dev->address);
+        lv_obj_set_pos(name, 8, y + 1);
+        lv_obj_set_width(name, 150);
+        lv_label_set_long_mode(name, LV_LABEL_LONG_CLIP);
+        lv_obj_set_style_text_color(name, lv_color_hex(tc), LV_PART_MAIN);
+        lv_obj_set_style_text_font(name, &lv_font_montserrat_12, LV_PART_MAIN);
+
+        lv_obj_t *addr = lv_label_create(cont);
+        lv_label_set_text(addr, dev->address);
+        lv_obj_set_pos(addr, 8, y + 12);
+        lv_obj_set_width(addr, 190);
+        lv_label_set_long_mode(addr, LV_LABEL_LONG_CLIP);
+        lv_obj_set_style_text_color(addr, lv_color_hex(sel ? 0xBBBBBB : 0x777777), LV_PART_MAIN);
+        lv_obj_set_style_text_font(addr, &lv_font_montserrat_10, LV_PART_MAIN);
+
+        char state_buf[32];
+        if (dev->connected)
+            snprintf(state_buf, sizeof(state_buf), "Connected");
+        else if (dev->paired)
+            snprintf(state_buf, sizeof(state_buf), "Paired");
+        else
+            snprintf(state_buf, sizeof(state_buf), "%d", dev->rssi);
+        lv_obj_t *state = lv_label_create(cont);
+        lv_label_set_text(state, state_buf);
+        lv_obj_set_pos(state, 226, y + 4);
+        lv_obj_set_width(state, 88);
+        lv_label_set_long_mode(state, LV_LABEL_LONG_CLIP);
+        lv_obj_set_style_text_align(state, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
+        lv_obj_set_style_text_color(state, lv_color_hex(tc), LV_PART_MAIN);
+        lv_obj_set_style_text_font(state, &lv_font_montserrat_10, LV_PART_MAIN);
+    }
+
+    lv_obj_t *hint = lv_label_create(cont);
+    lv_label_set_text(hint, list_mode_ == ListMode::Scan
+                                 ? "OK:act R:restart ESC:back"
+                                 : "OK:disconnect D:remove ESC:back");
+    lv_obj_set_pos(hint, 8, hint_y);
+    lv_obj_set_width(hint, 304);
+    lv_label_set_long_mode(hint, LV_LABEL_LONG_CLIP);
+    lv_obj_set_style_text_color(hint, lv_color_hex(0x555555), LV_PART_MAIN);
+    lv_obj_set_style_text_font(hint, &lv_font_montserrat_10, LV_PART_MAIN);
+}
+
+void Bluetooth::rebuild_rows()
+{
+    rows_.clear();
+    if (list_mode_ == ListMode::Managed) {
+        bool has_connected = false;
+        for (int i = 0; i < device_count_; ++i) {
+            if (should_hide_device(devices_[i]))
+                continue;
+            if (devices_[i].connected) {
+                if (!has_connected) {
+                    rows_.push_back({-1, "Connected Devices", true});
+                    has_connected = true;
+                }
+                rows_.push_back({i, nullptr, false});
+            }
+        }
+    } else {
+        bool has_devices = false;
+        for (int i = 0; i < device_count_; ++i) {
+            if (should_hide_device(devices_[i]))
+                continue;
+            if (!has_devices) {
+                rows_.push_back({-1, "Discovered Devices", true});
+                has_devices = true;
+            }
+            rows_.push_back({i, nullptr, false});
+        }
+    }
+    if (list_sel_ >= (int)rows_.size())
+        list_sel_ = rows_.empty() ? 0 : (int)rows_.size() - 1;
+    if (!rows_.empty() && rows_[list_sel_].is_header)
+        select_next_device(1);
+}
+
+bool Bluetooth::should_hide_device(const cp0_bt_device_t &dev) const
+{
+    if (!named_only_)
+        return false;
+    if (!dev.name[0])
+        return true;
+    std::string name_hex = normalized_mac_text(dev.name);
+    std::string addr_hex = normalized_mac_text(dev.address);
+    return !name_hex.empty() && (name_hex == addr_hex || name_hex.size() == 12);
+}
+
+std::string Bluetooth::normalized_mac_text(const char *text)
+{
+    std::string out;
+    if (!text)
+        return out;
+    for (const unsigned char *p = reinterpret_cast<const unsigned char *>(text); *p; ++p) {
+        if (std::isxdigit(*p))
+            out.push_back((char)std::tolower(*p));
+        else if (*p != ':' && *p != '-' && *p != '_' && *p != ' ')
+            return std::string();
+    }
+    return out;
+}
+
+int Bluetooth::selected_device_index() const
+{
+    if (list_sel_ < 0 || list_sel_ >= (int)rows_.size())
+        return -1;
+    return rows_[list_sel_].is_header ? -1 : rows_[list_sel_].device_index;
+}
+
+void Bluetooth::select_next_device(int direction)
+{
+    if (rows_.empty())
+        return;
+    int idx = list_sel_;
+    for (int steps = 0; steps < (int)rows_.size(); ++steps) {
+        idx += direction;
+        if (idx < 0 || idx >= (int)rows_.size())
+            return;
+        if (!rows_[idx].is_header) {
+            list_sel_ = idx;
+            return;
+        }
+    }
+}
+
+void Bluetooth::show_action(UISetupPage &page, const char *msg, uint32_t color)
+{
+    lv_obj_t *cont = page.ui_obj_["list_cont"];
+    lv_obj_clean(cont);
+    lv_obj_t *lbl = lv_label_create(cont);
+    lv_label_set_text(lbl, msg);
+    lv_obj_set_pos(lbl, 8, 60);
+    lv_obj_set_style_text_color(lbl, lv_color_hex(color), LV_PART_MAIN);
+    lv_obj_set_style_text_font(lbl, &lv_font_montserrat_14, LV_PART_MAIN);
+    lv_refr_now(NULL);
+}
+
+void Bluetooth::activate_selected(UISetupPage &page)
+{
+    if (action_busy_)
+        return;
+    int dev_index = selected_device_index();
+    if (dev_index < 0)
+        return;
+    cp0_bt_device_t dev = devices_[dev_index];
+    bool from_scan = list_mode_ == ListMode::Scan;
+    if (from_scan)
+        stop_scan_timer();
+    action_busy_ = true;
+    if (dev.connected)
+        show_action(page, "Disconnecting...");
+    else if (dev.paired)
+        show_action(page, "Connecting...");
+    else
+        show_action(page, "Pairing...");
+
+    struct BtActionResult {
+        Bluetooth *bt;
+        UISetupPage *page;
+        int ret;
+        bool from_scan;
+    };
+
+    std::thread([this, &page, dev, from_scan]() {
+        int ret = -1;
+        if (dev.connected) {
+            ret = device_command("BtDisconnect", dev.address);
+        } else if (dev.paired) {
+            ret = device_command("BtConnect", dev.address);
+        } else {
+            ret = device_command("BtPair", dev.address);
+            if (ret == 0)
+                ret = device_command("BtConnect", dev.address);
+        }
+
+        BtActionResult *result = new BtActionResult{this, &page, ret, from_scan};
+        lv_async_call([](void *user) {
+            BtActionResult *result = static_cast<BtActionResult *>(user);
+            Bluetooth *bt = result->bt;
+            UISetupPage *page = result->page;
+            if (bt && page) {
+                bt->action_busy_ = false;
+                if (result->ret != 0) {
+                    bt->show_action(*page, "Bluetooth action failed", 0xFF4444);
+                } else if (result->from_scan) {
+                    bt->list_mode_ = ListMode::Managed;
+                }
+                bt->refresh_devices();
+                if (page->view_state_ == UISetupPage::ViewState::BT_LIST)
+                    bt->build_list(*page);
+            }
+            delete result;
+        }, result);
+    }).detach();
+}
+
+void Bluetooth::remove_selected(UISetupPage &page)
+{
+    int dev_index = selected_device_index();
+    if (dev_index < 0)
+        return;
+    show_action(page, "Removing...");
+    int ret = device_command("BtRemove", devices_[dev_index].address);
+    if (ret != 0) {
+        show_action(page, "Remove failed", 0xFF4444);
+        usleep(1200000);
+    }
+    refresh_devices();
+    build_list(page);
+}
+
+void Bluetooth::handle_list_key(UISetupPage &page, uint32_t key)
+{
+    switch (key) {
+    case KEY_UP:
+        select_next_device(-1);
+        build_list(page);
+        break;
+    case KEY_DOWN:
+        select_next_device(1);
+        build_list(page);
+        break;
+    case KEY_ENTER:
+        activate_selected(page);
+        break;
+    case KEY_D:
+        if (list_mode_ == ListMode::Managed)
+            remove_selected(page);
+        break;
+    case KEY_R:
+        if (list_mode_ == ListMode::Scan) {
+            start_scan_timer(page);
+        } else {
+            refresh_devices();
+            build_list(page);
+        }
+        break;
+    case KEY_ESC:
+    case KEY_LEFT:
+        stop_scan_timer();
+        page.view_state_ = UISetupPage::ViewState::SUB;
+        page.build_sub_view();
+        break;
+    default:
+        break;
+    }
+}
+
+void Bluetooth::copy_string(char *dst, size_t dst_size, const std::string &src)
+{
+    if (!dst || dst_size == 0)
+        return;
+    std::snprintf(dst, dst_size, "%s", src.c_str());
+}
+
+std::vector<std::string> Bluetooth::split_char(const std::string &line, char delimiter)
+{
+    std::vector<std::string> cols;
+    std::string item;
+    std::istringstream row(line);
+    while (std::getline(row, item, delimiter))
+        cols.push_back(item);
+    return cols;
+}
+
+bool Bluetooth::decode_status(const std::string &data, cp0_bt_status_t &st)
+{
+    auto cols = split_char(data, '\t');
+    if (cols.size() < 3)
+        return false;
+    st.powered = std::atoi(cols[0].c_str());
+    copy_string(st.address, sizeof(st.address), cols[1]);
+    st.discoverable = std::atoi(cols[2].c_str());
+    if (cols.size() >= 4)
+        copy_string(st.alias, sizeof(st.alias), cols[3]);
+    return true;
+}
+
+int Bluetooth::decode_devices(const std::string &data, cp0_bt_device_t *out, int max_devices)
+{
+    if (!out || max_devices <= 0)
+        return 0;
+    int count = 0;
+    std::istringstream lines(data);
+    std::string line;
+    while (count < max_devices && std::getline(lines, line)) {
+        if (line.empty())
+            continue;
+        auto cols = split_char(line, '\t');
+        if (cols.size() < 4)
+            continue;
+        cp0_bt_device_t dev{};
+        copy_string(dev.address, sizeof(dev.address), cols[0]);
+        dev.paired = std::atoi(cols[1].c_str());
+        dev.connected = std::atoi(cols[2].c_str());
+        dev.rssi = std::atoi(cols[3].c_str());
+        if (cols.size() >= 6)
+            copy_string(dev.name, sizeof(dev.name), cols[5]);
+        else if (cols.size() >= 4)
+            copy_string(dev.name, sizeof(dev.name), cols[3]);
+        out[count++] = dev;
+    }
+    return count;
+}
+
+int Bluetooth::api_int(std::list<std::string> args, int default_value)
+{
+    int ret = default_value;
+    cp0_signal_bt_api(std::move(args), [&](int code, std::string) {
+        ret = code;
+    });
+    return ret;
+}
+
+cp0_bt_status_t Bluetooth::get_status()
+{
+    cp0_bt_status_t st{};
+    cp0_signal_bt_api({"BtStatus"}, [&](int code, std::string data) {
+        if (code == 0)
+            decode_status(data, st);
+    });
+    return st;
+}
+
+int Bluetooth::set_power(int on)
+{
+    return api_int({"BtPower", std::to_string(on)});
+}
+
+int Bluetooth::set_alias(const std::string &alias)
+{
+    return api_int({"BtAlias", alias});
+}
+
+int Bluetooth::set_discoverable(int on)
+{
+    return api_int({"BtDiscoverable", std::to_string(on)});
+}
+
+int Bluetooth::device_command(const char *cmd, const char *address)
+{
+    return api_int({cmd ? std::string(cmd) : std::string(),
+                   address ? std::string(address) : std::string()});
+}
+
+int Bluetooth::device_list(const char *cmd, cp0_bt_device_t *out, int max_devices)
+{
+    int count = 0;
+    cp0_signal_bt_api({cmd ? std::string(cmd) : std::string(), std::to_string(max_devices)},
+                      [&](int code, std::string data) {
+                          count = out && max_devices > 0 ? decode_devices(data, out, max_devices) : code;
+                      });
+    return count;
+}
+
+void Bluetooth::refresh_status(UISetupPage &page)
+{
+    cp0_bt_status_t st = get_status();
+    for (auto &m : page.menu_items_) {
+        if (m.label != "Bluetooth") continue;
+        m.sub_items[0].toggle_state = st.powered != 0;
+        discoverable_ = st.discoverable != 0;
+        alias_ = st.alias[0] ? st.alias : "CardputerZero";
+        m.sub_items[1].label = "Alias: " + alias_;
+        m.sub_items[2].toggle_state = discoverable_;
+        break;
+    }
+}
+
+void Bluetooth::toggle_power(UISetupPage &page)
+{
+    for (auto &m : page.menu_items_) {
+        if (m.label != "Bluetooth") continue;
+        bool on = m.sub_items[0].toggle_state;
+        if (!on)
+            stop_scan_timer();
+        set_power(on ? 1 : 0);
+        refresh_status(page);
+        break;
+    }
+}
+
+void Bluetooth::toggle_named_only(UISetupPage &page)
+{
+    for (auto &m : page.menu_items_) {
+        if (m.label != "Bluetooth") continue;
+        named_only_ = m.sub_items[3].toggle_state;
+        UISetupPage::config_set_int("bt_named_only", named_only_ ? 1 : 0);
+        UISetupPage::config_save();
+        break;
+    }
+    if (page.view_state_ == UISetupPage::ViewState::BT_LIST)
+        build_list(page);
+}
+
+void Bluetooth::toggle_discoverable(UISetupPage &page)
+{
+    for (auto &m : page.menu_items_) {
+        if (m.label != "Bluetooth") continue;
+        discoverable_ = m.sub_items[2].toggle_state;
+        if (set_discoverable(discoverable_ ? 1 : 0) != 0) {
+            m.sub_items[2].toggle_state = !discoverable_;
+            discoverable_ = m.sub_items[2].toggle_state;
+        }
+        break;
+    }
+}
+
+void Bluetooth::start_scan_timer(UISetupPage &page)
+{
+    stop_scan_timer();
+    discovery_active_ = api_int({"BtDiscoveryStart"}, 0) == 0;
+    refresh_devices();
+    build_list(page);
+    if (!discovery_active_)
+        return;
+    scan_timer_ = lv_timer_create([](lv_timer_t *t) {
+        UISetupPage *self = (UISetupPage *)lv_timer_get_user_data(t);
+        if (!self || self->view_state_ != UISetupPage::ViewState::BT_LIST ||
+            self->bluetooth_.list_mode_ != ListMode::Scan)
+            return;
+        self->bluetooth_.refresh_devices();
+        self->bluetooth_.build_list(*self);
+    }, 2500, &page);
+}
+
+void Bluetooth::stop_scan_timer()
+{
+    if (scan_timer_) {
+        lv_timer_delete(scan_timer_);
+        scan_timer_ = nullptr;
+    }
+    if (discovery_active_) {
+        api_int({"BtDiscoveryStop"}, 0);
+        discovery_active_ = false;
+    }
+}
+
+void Bluetooth::refresh_devices()
+{
+    if (list_mode_ == ListMode::Managed)
+        device_count_ = device_list("BtConnectedList", devices_, CP0_BT_DEVICE_MAX);
+    else
+        device_count_ = device_list("BtList", devices_, CP0_BT_DEVICE_MAX);
+    if (device_count_ < 0)
+        device_count_ = 0;
+    if (device_count_ == 0)
+        list_sel_ = 0;
+}
+
+void Bluetooth::do_scan(UISetupPage &page)
+{
+    enter_scan(page);
+}
+
+std::string SoundCard::trim(const std::string &s)
 {
     size_t a = s.find_first_not_of(" \t\r\n");
     if (a == std::string::npos) return {};
@@ -3171,7 +3318,7 @@ static std::string sc_trim(const std::string &s)
     return s.substr(a, b - a + 1);
 }
 
-static bool sc_parse_limits(const std::string &line, int &mn, int &mx)
+bool SoundCard::parse_limits(const std::string &line, int &mn, int &mx)
 {
     size_t p = line.find("Limits:");
     if (p == std::string::npos) return false;
@@ -3186,7 +3333,7 @@ static bool sc_parse_limits(const std::string &line, int &mn, int &mx)
     return false;
 }
 
-static int sc_parse_current_val(const std::string &line)
+int SoundCard::parse_current_val(const std::string &line)
 {
     size_t p = line.find(": ");
     if (p == std::string::npos) return -1;
@@ -3195,7 +3342,7 @@ static int sc_parse_current_val(const std::string &line)
     return -1;
 }
 
-static std::string sc_extract_value_str(const std::string &line)
+std::string SoundCard::extract_value_str(const std::string &line)
 {
     static const char *pfx[] = {
         "Mono:", "Front Left:", "Front Right:", "Rear Left:", "Rear Right:",
@@ -3204,12 +3351,12 @@ static std::string sc_extract_value_str(const std::string &line)
     };
     for (int i = 0; pfx[i]; ++i) {
         size_t p = line.find(pfx[i]);
-        if (p != std::string::npos) return sc_trim(line.substr(p));
+        if (p != std::string::npos) return trim(line.substr(p));
     }
-    return sc_trim(line);
+    return trim(line);
 }
 
-static bool sc_is_value_line(const std::string &tl)
+bool SoundCard::is_value_line(const std::string &tl)
 {
     static const char *pfx[] = {
         "Mono:", "Front Left:", "Front Right:", "Rear Left:", "Rear Right:",
@@ -3225,9 +3372,9 @@ static bool sc_is_value_line(const std::string &tl)
 //  Helpers
 // ====================================================================
 
-void sc_enter_cards()
+void SoundCard::enter_cards(UISetupPage &page)
 {
-    sc_cards_.clear();
+    cards_.clear();
     cp0_signal_soundcard_api({"ListCards"}, [this](int code, std::string data) {
         if (code != 0) return;
         std::istringstream lines(data);
@@ -3236,23 +3383,23 @@ void sc_enter_cards()
             if (line.empty()) continue;
             size_t tab = line.find('\t');
             if (tab == std::string::npos) continue;
-            ScCard c;
+            SoundCard::Card c;
             c.index = std::atoi(line.substr(0, tab).c_str());
             c.name  = line.substr(tab + 1);
-            sc_cards_.push_back(std::move(c));
+            cards_.push_back(std::move(c));
         }
     });
-    sc_card_sel_ = 0;
-    view_state_ = ViewState::SOUNDCARD_CARDS;
-    transition_enter_level();
+    card_sel_ = 0;
+    page.view_state_ = UISetupPage::ViewState::SOUNDCARD_CARDS;
+    page.transition_enter_level();
 }
 
-void sc_enter_controls()
+void SoundCard::enter_controls(UISetupPage &page)
 {
-    if (sc_cards_.empty()) return;
-    sc_card_idx_ = sc_cards_[sc_card_sel_].index;
-    sc_controls_.clear();
-    cp0_signal_soundcard_api({"ListControls", std::to_string(sc_card_idx_)},
+    if (cards_.empty()) return;
+    card_idx_ = cards_[card_sel_].index;
+    controls_.clear();
+    cp0_signal_soundcard_api({"ListControls", std::to_string(card_idx_)},
         [this](int code, std::string data) {
             if (code != 0) return;
             std::istringstream lines(data);
@@ -3264,7 +3411,7 @@ void sc_enter_controls()
                 std::istringstream row(line);
                 while (std::getline(row, item, '\t')) cols.push_back(item);
                 if (cols.size() < 7) continue;
-                ScCtrl c;
+                SoundCard::Control c;
                 c.name        = cols[0];
                 c.type        = cols[1];
                 c.min_val     = std::atoi(cols[2].c_str());
@@ -3272,93 +3419,93 @@ void sc_enter_controls()
                 c.step        = std::atoi(cols[4].c_str());
                 c.current_str = cols[5];
                 c.current_val = std::atoi(cols[6].c_str());
-                sc_controls_.push_back(std::move(c));
+                controls_.push_back(std::move(c));
             }
         });
-    sc_ctrl_sel_ = 0;
-    view_state_  = ViewState::SOUNDCARD_CONTROLS;
-    transition_enter_level();
+    ctrl_sel_ = 0;
+    page.view_state_  = UISetupPage::ViewState::SOUNDCARD_CONTROLS;
+    page.transition_enter_level();
 }
 
-void sc_enter_detail()
+void SoundCard::enter_detail(UISetupPage &page)
 {
-    if (sc_controls_.empty()) return;
-    const auto &ctrl = sc_controls_[sc_ctrl_sel_];
-    sc_detail_ = ScCtrl{};
-    sc_detail_.name = ctrl.name;
-    cp0_signal_soundcard_api({"GetControlDetail", std::to_string(sc_card_idx_), ctrl.name},
+    if (controls_.empty()) return;
+    const auto &ctrl = controls_[ctrl_sel_];
+    detail_ = SoundCard::Control{};
+    detail_.name = ctrl.name;
+    cp0_signal_soundcard_api({"GetControlDetail", std::to_string(card_idx_), ctrl.name},
         [this, &ctrl](int code, std::string data) {
-            if (code != 0) { sc_detail_ = ctrl; return; }
+            if (code != 0) { detail_ = ctrl; return; }
             std::istringstream ss(data);
             std::string line;
             while (std::getline(ss, line)) {
-                std::string tl = sc_trim(line);
+                std::string tl = trim(line);
                 if (tl.rfind("Capabilities:", 0) == 0)
-                    sc_detail_.type = (tl.find("enum") != std::string::npos) ? "ENUMERATED" : "INTEGER";
+                    detail_.type = (tl.find("enum") != std::string::npos) ? "ENUMERATED" : "INTEGER";
                 else if (tl.rfind("Limits:", 0) == 0)
-                    sc_parse_limits(tl, sc_detail_.min_val, sc_detail_.max_val);
-                else if (sc_detail_.current_str.empty() && sc_is_value_line(tl)) {
-                    sc_detail_.current_str = sc_extract_value_str(tl);
-                    int v = sc_parse_current_val(tl);
-                    if (v >= 0) sc_detail_.current_val = v;
+                    parse_limits(tl, detail_.min_val, detail_.max_val);
+                else if (detail_.current_str.empty() && is_value_line(tl)) {
+                    detail_.current_str = extract_value_str(tl);
+                    int v = parse_current_val(tl);
+                    if (v >= 0) detail_.current_val = v;
                 }
             }
         });
-    if (sc_detail_.max_val == 0 && ctrl.max_val != 0) {
-        sc_detail_.min_val = ctrl.min_val;
-        sc_detail_.max_val = ctrl.max_val;
+    if (detail_.max_val == 0 && ctrl.max_val != 0) {
+        detail_.min_val = ctrl.min_val;
+        detail_.max_val = ctrl.max_val;
     }
-    sc_input_buf_.clear();
-    sc_input_lbl_  = nullptr;
-    sc_hint_lbl2_  = nullptr;
-    view_state_    = ViewState::SOUNDCARD_DETAIL;
-    transition_enter_level();
+    input_buf_.clear();
+    input_lbl_  = nullptr;
+    hint_lbl_  = nullptr;
+    page.view_state_    = UISetupPage::ViewState::SOUNDCARD_DETAIL;
+    page.transition_enter_level();
 }
 
 // ====================================================================
 //  Build: card list view
 // ====================================================================
-void build_soundcard_cards_view()
+void SoundCard::build_cards_view(UISetupPage &page)
 {
-    lv_obj_t *cont = ui_obj_["list_cont"];
+    lv_obj_t *cont = page.ui_obj_["list_cont"];
     lv_obj_clean(cont);
 
     // Title
     lv_obj_t *title = lv_label_create(cont);
     lv_label_set_text(title, "Sound Cards");
-    apply_fixed_label_box(title, SC_MARGIN_X, 4, SC_DETAIL_TEXT_W, false);
+    UISetupPage::apply_fixed_label_box(title, UISetupPage::SC_MARGIN_X, 4, UISetupPage::SC_DETAIL_TEXT_W, false);
     lv_obj_set_style_text_color(title, lv_color_hex(0x58A6FF), LV_PART_MAIN);
     lv_obj_set_style_text_font(title, launcher_fonts().get("Montserrat-Bold.ttf", 14, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN);
 
-    if (sc_cards_.empty()) {
+    if (cards_.empty()) {
         lv_obj_t *lbl = lv_label_create(cont);
         lv_label_set_text(lbl, "No ALSA cards found.");
-        apply_fixed_label_box(lbl, SC_MARGIN_X, 40, SC_DETAIL_TEXT_W, false);
+        UISetupPage::apply_fixed_label_box(lbl, UISetupPage::SC_MARGIN_X, 40, UISetupPage::SC_DETAIL_TEXT_W, false);
         lv_obj_set_style_text_color(lbl, lv_color_hex(0x888888), LV_PART_MAIN);
         lv_obj_set_style_text_font(lbl, &lv_font_montserrat_12, LV_PART_MAIN);
 
         lv_obj_t *hint = lv_label_create(cont);
         lv_label_set_text(hint, "ESC: back");
-        apply_fixed_label_box(hint, SC_MARGIN_X, LIST_H - 14, SC_BOTTOM_HINT_W, false);
+        UISetupPage::apply_fixed_label_box(hint, UISetupPage::SC_MARGIN_X, UISetupPage::LIST_H - 14, UISetupPage::SC_BOTTOM_HINT_W, false);
         lv_obj_set_style_text_color(hint, lv_color_hex(0x555555), LV_PART_MAIN);
         lv_obj_set_style_text_font(hint, &lv_font_montserrat_10, LV_PART_MAIN);
         return;
     }
 
     int visible = 5;
-    int total   = (int)sc_cards_.size();
-    int offset  = sc_card_sel_ - visible / 2;
+    int total   = (int)cards_.size();
+    int offset  = card_sel_ - visible / 2;
     if (offset < 0) offset = 0;
     if (total > visible && offset > total - visible) offset = total - visible;
 
     for (int vi = 0; vi < visible && (vi + offset) < total; ++vi) {
         int ai  = vi + offset;
-        bool sel = (ai == sc_card_sel_);
+        bool sel = (ai == card_sel_);
         int  y   = 22 + vi * 22;
 
         if (sel) {
             lv_obj_t *bg = lv_obj_create(cont);
-            lv_obj_set_size(bg, SCREEN_W - 8, 20);
+            lv_obj_set_size(bg, UISetupPage::SCREEN_W - 8, 20);
             lv_obj_set_pos(bg, 4, y);
             lv_obj_set_style_radius(bg, 2, LV_PART_MAIN);
             lv_obj_set_style_bg_color(bg, lv_color_hex(0x1F3A5F), LV_PART_MAIN);
@@ -3368,15 +3515,15 @@ void build_soundcard_cards_view()
         }
 
         lv_obj_t *lbl = lv_label_create(cont);
-        lv_label_set_text(lbl, sc_cards_[ai].name.c_str());
-        apply_fixed_label_box(lbl, SC_ROW_X, y + 2, SC_CARD_NAME_W, sel);
+        lv_label_set_text(lbl, cards_[ai].name.c_str());
+        UISetupPage::apply_fixed_label_box(lbl, UISetupPage::SC_ROW_X, y + 2, UISetupPage::SC_CARD_NAME_W, sel);
         lv_obj_set_style_text_color(lbl, lv_color_hex(sel ? 0xFFFFFF : 0xCCCCCC), LV_PART_MAIN);
         lv_obj_set_style_text_font(lbl, &lv_font_montserrat_12, LV_PART_MAIN);
     }
 
     lv_obj_t *hint = lv_label_create(cont);
     lv_label_set_text(hint, "OK: open  ESC: back");
-    apply_fixed_label_box(hint, SC_MARGIN_X, LIST_H - 14, SC_BOTTOM_HINT_W, false);
+    UISetupPage::apply_fixed_label_box(hint, UISetupPage::SC_MARGIN_X, UISetupPage::LIST_H - 14, UISetupPage::SC_BOTTOM_HINT_W, false);
     lv_obj_set_style_text_color(hint, lv_color_hex(0x555555), LV_PART_MAIN);
     lv_obj_set_style_text_font(hint, &lv_font_montserrat_10, LV_PART_MAIN);
 }
@@ -3384,53 +3531,53 @@ void build_soundcard_cards_view()
 // ====================================================================
 //  Build: control list view
 // ====================================================================
-void build_soundcard_controls_view()
+void SoundCard::build_controls_view(UISetupPage &page)
 {
-    lv_obj_t *cont = ui_obj_["list_cont"];
+    lv_obj_t *cont = page.ui_obj_["list_cont"];
     lv_obj_clean(cont);
 
     // Title: card name
     char title_buf[80];
-    if (!sc_cards_.empty() && sc_card_sel_ < (int)sc_cards_.size())
-        std::snprintf(title_buf, sizeof(title_buf), "%s", sc_cards_[sc_card_sel_].name.c_str());
+    if (!cards_.empty() && card_sel_ < (int)cards_.size())
+        std::snprintf(title_buf, sizeof(title_buf), "%s", cards_[card_sel_].name.c_str());
     else
-        std::snprintf(title_buf, sizeof(title_buf), "Card %d", sc_card_idx_);
+        std::snprintf(title_buf, sizeof(title_buf), "Card %d", card_idx_);
 
     lv_obj_t *title = lv_label_create(cont);
     lv_label_set_text(title, title_buf);
-    apply_fixed_label_box(title, SC_MARGIN_X, 4, SC_DETAIL_TEXT_W, true);
+    UISetupPage::apply_fixed_label_box(title, UISetupPage::SC_MARGIN_X, 4, UISetupPage::SC_DETAIL_TEXT_W, true);
     lv_obj_set_style_text_color(title, lv_color_hex(0x58A6FF), LV_PART_MAIN);
     lv_obj_set_style_text_font(title, launcher_fonts().get("Montserrat-Bold.ttf", 12, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN);
 
-    if (sc_controls_.empty()) {
+    if (controls_.empty()) {
         lv_obj_t *lbl = lv_label_create(cont);
         lv_label_set_text(lbl, "No controls found.");
-        apply_fixed_label_box(lbl, SC_MARGIN_X, 40, SC_DETAIL_TEXT_W, false);
+        UISetupPage::apply_fixed_label_box(lbl, UISetupPage::SC_MARGIN_X, 40, UISetupPage::SC_DETAIL_TEXT_W, false);
         lv_obj_set_style_text_color(lbl, lv_color_hex(0x888888), LV_PART_MAIN);
         lv_obj_set_style_text_font(lbl, &lv_font_montserrat_12, LV_PART_MAIN);
 
         lv_obj_t *hint = lv_label_create(cont);
         lv_label_set_text(hint, "ESC: back");
-        apply_fixed_label_box(hint, SC_MARGIN_X, LIST_H - 14, SC_BOTTOM_HINT_W, false);
+        UISetupPage::apply_fixed_label_box(hint, UISetupPage::SC_MARGIN_X, UISetupPage::LIST_H - 14, UISetupPage::SC_BOTTOM_HINT_W, false);
         lv_obj_set_style_text_color(hint, lv_color_hex(0x555555), LV_PART_MAIN);
         lv_obj_set_style_text_font(hint, &lv_font_montserrat_10, LV_PART_MAIN);
         return;
     }
 
     int visible = 5;
-    int total   = (int)sc_controls_.size();
-    int offset  = sc_ctrl_sel_ - visible / 2;
+    int total   = (int)controls_.size();
+    int offset  = ctrl_sel_ - visible / 2;
     if (offset < 0) offset = 0;
     if (total > visible && offset > total - visible) offset = total - visible;
 
     for (int vi = 0; vi < visible && (vi + offset) < total; ++vi) {
         int ai  = vi + offset;
-        bool sel = (ai == sc_ctrl_sel_);
+        bool sel = (ai == ctrl_sel_);
         int  y   = 20 + vi * 22;
 
         if (sel) {
             lv_obj_t *bg = lv_obj_create(cont);
-            lv_obj_set_size(bg, SCREEN_W - 8, 20);
+            lv_obj_set_size(bg, UISetupPage::SCREEN_W - 8, 20);
             lv_obj_set_pos(bg, 4, y);
             lv_obj_set_style_radius(bg, 2, LV_PART_MAIN);
             lv_obj_set_style_bg_color(bg, lv_color_hex(0x1F3A5F), LV_PART_MAIN);
@@ -3439,12 +3586,12 @@ void build_soundcard_controls_view()
             lv_obj_clear_flag(bg, LV_OBJ_FLAG_SCROLLABLE);
         }
 
-        const auto &ctrl = sc_controls_[ai];
+        const auto &ctrl = controls_[ai];
 
         // Left: control name
         lv_obj_t *name_lbl = lv_label_create(cont);
         lv_label_set_text(name_lbl, ctrl.name.c_str());
-        apply_fixed_label_box(name_lbl, SC_CTRL_NAME_X, y + 2, SC_CTRL_NAME_W, sel);
+        UISetupPage::apply_fixed_label_box(name_lbl, UISetupPage::SC_CTRL_NAME_X, y + 2, UISetupPage::SC_CTRL_NAME_W, sel);
         lv_obj_set_style_text_color(name_lbl, lv_color_hex(sel ? 0xFFFFFF : 0xCCCCCC), LV_PART_MAIN);
         lv_obj_set_style_text_font(name_lbl, &lv_font_montserrat_12, LV_PART_MAIN);
 
@@ -3452,27 +3599,27 @@ void build_soundcard_controls_view()
         if (!ctrl.current_str.empty()) {
             lv_obj_t *val_lbl = lv_label_create(cont);
             lv_label_set_text(val_lbl, ctrl.current_str.c_str());
-            apply_fixed_label_box(val_lbl, SC_CTRL_VALUE_X, y + 2, SC_CTRL_VALUE_W, sel);
+            UISetupPage::apply_fixed_label_box(val_lbl, UISetupPage::SC_CTRL_VALUE_X, y + 2, UISetupPage::SC_CTRL_VALUE_W, sel);
             lv_obj_set_style_text_color(val_lbl, lv_color_hex(sel ? 0xAADDFF : 0x888888), LV_PART_MAIN);
             lv_obj_set_style_text_font(val_lbl, &lv_font_montserrat_10, LV_PART_MAIN);
         }
     }
 
     // Scroll arrows
-    if (sc_ctrl_sel_ > 0) {
+    if (ctrl_sel_ > 0) {
         lv_obj_t *a = lv_img_create(cont);
-        lv_img_set_src(a, img_arrow_up_.c_str());
-        lv_obj_set_pos(a, SCREEN_W / 2 - 8, 2);
+        lv_img_set_src(a, page.img_arrow_up_.c_str());
+        lv_obj_set_pos(a, UISetupPage::SCREEN_W / 2 - 8, 2);
     }
-    if (sc_ctrl_sel_ < total - 1) {
+    if (ctrl_sel_ < total - 1) {
         lv_obj_t *a = lv_img_create(cont);
-        lv_img_set_src(a, img_arrow_down_.c_str());
-        lv_obj_set_pos(a, SCREEN_W / 2 - 8, LIST_H - 28);
+        lv_img_set_src(a, page.img_arrow_down_.c_str());
+        lv_obj_set_pos(a, UISetupPage::SCREEN_W / 2 - 8, UISetupPage::LIST_H - 28);
     }
 
     lv_obj_t *hint = lv_label_create(cont);
     lv_label_set_text(hint, "OK: edit  ESC: back");
-    apply_fixed_label_box(hint, SC_MARGIN_X, LIST_H - 14, SC_BOTTOM_HINT_W, false);
+    UISetupPage::apply_fixed_label_box(hint, UISetupPage::SC_MARGIN_X, UISetupPage::LIST_H - 14, UISetupPage::SC_BOTTOM_HINT_W, false);
     lv_obj_set_style_text_color(hint, lv_color_hex(0x555555), LV_PART_MAIN);
     lv_obj_set_style_text_font(hint, &lv_font_montserrat_10, LV_PART_MAIN);
 }
@@ -3480,41 +3627,41 @@ void build_soundcard_controls_view()
 // ====================================================================
 //  Build: detail / input view
 // ====================================================================
-void build_soundcard_detail_view()
+void SoundCard::build_detail_view(UISetupPage &page)
 {
-    lv_obj_t *cont = ui_obj_["list_cont"];
+    lv_obj_t *cont = page.ui_obj_["list_cont"];
     lv_obj_clean(cont);
-    sc_input_lbl_ = nullptr;
-    sc_hint_lbl2_ = nullptr;
+    input_lbl_ = nullptr;
+    hint_lbl_ = nullptr;
 
     // Control name (header)
     lv_obj_t *name_lbl = lv_label_create(cont);
-    lv_label_set_text(name_lbl, sc_detail_.name.c_str());
-    apply_fixed_label_box(name_lbl, SC_MARGIN_X, 4, SC_DETAIL_TEXT_W, true);
+    lv_label_set_text(name_lbl, detail_.name.c_str());
+    UISetupPage::apply_fixed_label_box(name_lbl, UISetupPage::SC_MARGIN_X, 4, UISetupPage::SC_DETAIL_TEXT_W, true);
     lv_obj_set_style_text_color(name_lbl, lv_color_hex(0x58A6FF), LV_PART_MAIN);
     lv_obj_set_style_text_font(name_lbl, launcher_fonts().get("Montserrat-Bold.ttf", 14, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN);
 
     // Info block: Limits + current value
     char info_buf[128];
     std::snprintf(info_buf, sizeof(info_buf),
-                  "Limits: %d - %d", sc_detail_.min_val, sc_detail_.max_val);
+                  "Limits: %d - %d", detail_.min_val, detail_.max_val);
     lv_obj_t *limits_lbl = lv_label_create(cont);
     lv_label_set_text(limits_lbl, info_buf);
-    apply_fixed_label_box(limits_lbl, SC_MARGIN_X, 26, SC_DETAIL_TEXT_W, false);
+    UISetupPage::apply_fixed_label_box(limits_lbl, UISetupPage::SC_MARGIN_X, 26, UISetupPage::SC_DETAIL_TEXT_W, false);
     lv_obj_set_style_text_color(limits_lbl, lv_color_hex(0xAAAAAA), LV_PART_MAIN);
     lv_obj_set_style_text_font(limits_lbl, &lv_font_montserrat_12, LV_PART_MAIN);
 
-    if (!sc_detail_.current_str.empty()) {
+    if (!detail_.current_str.empty()) {
         lv_obj_t *cur_lbl = lv_label_create(cont);
-        lv_label_set_text(cur_lbl, sc_detail_.current_str.c_str());
-        apply_fixed_label_box(cur_lbl, SC_MARGIN_X, 44, SC_DETAIL_TEXT_W, true);
+        lv_label_set_text(cur_lbl, detail_.current_str.c_str());
+        UISetupPage::apply_fixed_label_box(cur_lbl, UISetupPage::SC_MARGIN_X, 44, UISetupPage::SC_DETAIL_TEXT_W, true);
         lv_obj_set_style_text_color(cur_lbl, lv_color_hex(0xCCCCCC), LV_PART_MAIN);
         lv_obj_set_style_text_font(cur_lbl, &lv_font_montserrat_12, LV_PART_MAIN);
     }
 
     // Separator line
     lv_obj_t *sep = lv_obj_create(cont);
-    lv_obj_set_size(sep, SCREEN_W - 16, 1);
+    lv_obj_set_size(sep, UISetupPage::SCREEN_W - 16, 1);
     lv_obj_set_pos(sep, 8, 64);
     lv_obj_set_style_bg_color(sep, lv_color_hex(0x333333), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(sep, 255, LV_PART_MAIN);
@@ -3524,169 +3671,169 @@ void build_soundcard_detail_view()
     // "New value:" label
     lv_obj_t *new_lbl = lv_label_create(cont);
     lv_label_set_text(new_lbl, "New value:");
-    apply_fixed_label_box(new_lbl, SC_MARGIN_X, 72, SC_INPUT_X - SC_MARGIN_X - 4, false);
+    UISetupPage::apply_fixed_label_box(new_lbl, UISetupPage::SC_MARGIN_X, 72, UISetupPage::SC_INPUT_X - UISetupPage::SC_MARGIN_X - 4, false);
     lv_obj_set_style_text_color(new_lbl, lv_color_hex(0xCCCCCC), LV_PART_MAIN);
     lv_obj_set_style_text_font(new_lbl, &lv_font_montserrat_12, LV_PART_MAIN);
 
     // Input field (digits + cursor)
-    sc_cursor_vis_ = true;
-    sc_input_lbl_ = lv_label_create(cont);
-    sc_input_update_display();
-    apply_fixed_label_box(sc_input_lbl_, SC_INPUT_X, 70, SC_INPUT_W, false);
-    lv_obj_set_style_text_color(sc_input_lbl_, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
-    lv_obj_set_style_text_font(sc_input_lbl_, &lv_font_montserrat_14, LV_PART_MAIN);
+    cursor_vis_ = true;
+    input_lbl_ = lv_label_create(cont);
+    input_update_display();
+    UISetupPage::apply_fixed_label_box(input_lbl_, UISetupPage::SC_INPUT_X, 70, UISetupPage::SC_INPUT_W, false);
+    lv_obj_set_style_text_color(input_lbl_, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+    lv_obj_set_style_text_font(input_lbl_, &lv_font_montserrat_14, LV_PART_MAIN);
 
     // Blinking cursor timer (500 ms period)
-    sc_cursor_timer_ = lv_timer_create([](lv_timer_t *timer) {
-        auto *self = static_cast<UISetupPage *>(lv_timer_get_user_data(timer));
-        self->sc_cursor_vis_ = !self->sc_cursor_vis_;
-        self->sc_input_update_display();
+    cursor_timer_ = lv_timer_create([](lv_timer_t *timer) {
+        auto *self = static_cast<SoundCard *>(lv_timer_get_user_data(timer));
+        self->cursor_vis_ = !self->cursor_vis_;
+        self->input_update_display();
     }, 500, this);
 
     // Range hint below input
     char range_buf[64];
     std::snprintf(range_buf, sizeof(range_buf), "Range: %d ~ %d",
-                  sc_detail_.min_val, sc_detail_.max_val);
-    sc_hint_lbl2_ = lv_label_create(cont);
-    lv_label_set_text(sc_hint_lbl2_, range_buf);
-    apply_fixed_label_box(sc_hint_lbl2_, SC_MARGIN_X, 92, SC_DETAIL_TEXT_W, false);
-    lv_obj_set_style_text_color(sc_hint_lbl2_, lv_color_hex(0x666666), LV_PART_MAIN);
-    lv_obj_set_style_text_font(sc_hint_lbl2_, &lv_font_montserrat_10, LV_PART_MAIN);
+                  detail_.min_val, detail_.max_val);
+    hint_lbl_ = lv_label_create(cont);
+    lv_label_set_text(hint_lbl_, range_buf);
+    UISetupPage::apply_fixed_label_box(hint_lbl_, UISetupPage::SC_MARGIN_X, 92, UISetupPage::SC_DETAIL_TEXT_W, false);
+    lv_obj_set_style_text_color(hint_lbl_, lv_color_hex(0x666666), LV_PART_MAIN);
+    lv_obj_set_style_text_font(hint_lbl_, &lv_font_montserrat_10, LV_PART_MAIN);
 
     // Bottom hint
     lv_obj_t *hint = lv_label_create(cont);
     lv_label_set_text(hint, "0-9:type  BS:del  OK:apply  ESC:back");
-    apply_fixed_label_box(hint, SC_MARGIN_X, LIST_H - 14, SC_BOTTOM_HINT_W, true);
+    UISetupPage::apply_fixed_label_box(hint, UISetupPage::SC_MARGIN_X, UISetupPage::LIST_H - 14, UISetupPage::SC_BOTTOM_HINT_W, true);
     lv_obj_set_style_text_color(hint, lv_color_hex(0x555555), LV_PART_MAIN);
     lv_obj_set_style_text_font(hint, &lv_font_montserrat_10, LV_PART_MAIN);
 }
 
-void sc_input_update_display()
+void SoundCard::input_update_display()
 {
-    if (!sc_input_lbl_) return;
-    std::string disp = sc_input_buf_ + (sc_cursor_vis_ ? "_" : " ");
-    lv_label_set_text(sc_input_lbl_, disp.c_str());
+    if (!input_lbl_) return;
+    std::string disp = input_buf_ + (cursor_vis_ ? "_" : " ");
+    lv_label_set_text(input_lbl_, disp.c_str());
 }
 
-void sc_cursor_stop()
+void SoundCard::cursor_stop()
 {
-    if (sc_cursor_timer_) {
-        lv_timer_del(sc_cursor_timer_);
-        sc_cursor_timer_ = nullptr;
+    if (cursor_timer_) {
+        lv_timer_del(cursor_timer_);
+        cursor_timer_ = nullptr;
     }
-    sc_cursor_vis_ = true;
+    cursor_vis_ = true;
 }
 
 // Apply the typed value via cp0_signal_soundcard_api
-void sc_apply_value()
+void SoundCard::apply_value(UISetupPage &page)
 {
-    if (sc_input_buf_.empty()) return;
+    if (input_buf_.empty()) return;
 
-    int new_val = std::atoi(sc_input_buf_.c_str());
+    int new_val = std::atoi(input_buf_.c_str());
     // Clamp to declared limits when they are known
-    if (sc_detail_.max_val > sc_detail_.min_val) {
-        if (new_val < sc_detail_.min_val) new_val = sc_detail_.min_val;
-        if (new_val > sc_detail_.max_val) new_val = sc_detail_.max_val;
+    if (detail_.max_val > detail_.min_val) {
+        if (new_val < detail_.min_val) new_val = detail_.min_val;
+        if (new_val > detail_.max_val) new_val = detail_.max_val;
     }
 
     // Visual feedback while applying
-    if (sc_hint_lbl2_) {
-        lv_label_set_text(sc_hint_lbl2_, "Applying...");
-        lv_obj_set_style_text_color(sc_hint_lbl2_, lv_color_hex(0xFFAA00), LV_PART_MAIN);
+    if (hint_lbl_) {
+        lv_label_set_text(hint_lbl_, "Applying...");
+        lv_obj_set_style_text_color(hint_lbl_, lv_color_hex(0xFFAA00), LV_PART_MAIN);
         lv_refr_now(NULL);
     }
 
     int rc = -1;
     cp0_signal_soundcard_api(
-        {"SetControl", std::to_string(sc_card_idx_), sc_detail_.name, std::to_string(new_val)},
+        {"SetControl", std::to_string(card_idx_), detail_.name, std::to_string(new_val)},
         [&rc](int code, std::string) { rc = code; });
 
-    if (sc_hint_lbl2_) {
+    if (hint_lbl_) {
         if (rc == 0) {
-            lv_label_set_text(sc_hint_lbl2_, "Applied OK");
-            lv_obj_set_style_text_color(sc_hint_lbl2_, lv_color_hex(0x33CC33), LV_PART_MAIN);
+            lv_label_set_text(hint_lbl_, "Applied OK");
+            lv_obj_set_style_text_color(hint_lbl_, lv_color_hex(0x33CC33), LV_PART_MAIN);
         } else {
-            lv_label_set_text(sc_hint_lbl2_, "Error (check amixer)");
-            lv_obj_set_style_text_color(sc_hint_lbl2_, lv_color_hex(0xFF4444), LV_PART_MAIN);
+            lv_label_set_text(hint_lbl_, "Error (check amixer)");
+            lv_obj_set_style_text_color(hint_lbl_, lv_color_hex(0xFF4444), LV_PART_MAIN);
         }
         lv_refr_now(NULL);
     }
 
     // Refresh the control list entry with the new value
-    if (rc == 0 && sc_ctrl_sel_ < (int)sc_controls_.size()) {
+    if (rc == 0 && ctrl_sel_ < (int)controls_.size()) {
         char val_str[32];
         std::snprintf(val_str, sizeof(val_str), "%d", new_val);
-        sc_controls_[sc_ctrl_sel_].current_val = new_val;
-        sc_controls_[sc_ctrl_sel_].current_str = val_str;
+        controls_[ctrl_sel_].current_val = new_val;
+        controls_[ctrl_sel_].current_str = val_str;
     }
 
     // Go back to control list after a short pause
-    sc_cursor_stop();
-    sc_input_lbl_  = nullptr;
-    sc_hint_lbl2_  = nullptr;
-    view_state_ = ViewState::SOUNDCARD_CONTROLS;
+    cursor_stop();
+    input_lbl_  = nullptr;
+    hint_lbl_  = nullptr;
+    page.view_state_ = UISetupPage::ViewState::SOUNDCARD_CONTROLS;
     lv_timer_t *t = lv_timer_create([](lv_timer_t *timer) {
         auto *self = static_cast<UISetupPage *>(lv_timer_get_user_data(timer));
         lv_timer_del(timer);
         self->transition_back_level();
-    }, 900, this);
+    }, 900, &page);
     (void)t;
 }
 
 // ====================================================================
 //  Key handlers
 // ====================================================================
-void handle_soundcard_cards_key(uint32_t key)
+void SoundCard::handle_cards_key(UISetupPage &page, uint32_t key)
 {
-    int total = (int)sc_cards_.size();
+    int total = (int)cards_.size();
     switch (key) {
     case KEY_UP:
-        if (sc_card_sel_ > 0) { --sc_card_sel_; build_soundcard_cards_view(); }
+        if (card_sel_ > 0) { --card_sel_; build_cards_view(page); }
         break;
     case KEY_DOWN:
-        if (sc_card_sel_ < total - 1) { ++sc_card_sel_; build_soundcard_cards_view(); }
+        if (card_sel_ < total - 1) { ++card_sel_; build_cards_view(page); }
         break;
     case KEY_ENTER:
     case KEY_RIGHT:
-        if (total > 0) { play_enter(); sc_enter_controls(); }
+        if (total > 0) { page.play_enter(); enter_controls(page); }
         break;
     case KEY_ESC:
     case KEY_LEFT:
-        play_back();
-        view_state_ = ViewState::SUB;
-        transition_back_level();
+        page.play_back();
+        page.view_state_ = UISetupPage::ViewState::SUB;
+        page.transition_back_level();
         break;
     default:
         break;
     }
 }
 
-void handle_soundcard_controls_key(uint32_t key)
+void SoundCard::handle_controls_key(UISetupPage &page, uint32_t key)
 {
-    int total = (int)sc_controls_.size();
+    int total = (int)controls_.size();
     switch (key) {
     case KEY_UP:
-        if (sc_ctrl_sel_ > 0) { --sc_ctrl_sel_; build_soundcard_controls_view(); }
+        if (ctrl_sel_ > 0) { --ctrl_sel_; build_controls_view(page); }
         break;
     case KEY_DOWN:
-        if (sc_ctrl_sel_ < total - 1) { ++sc_ctrl_sel_; build_soundcard_controls_view(); }
+        if (ctrl_sel_ < total - 1) { ++ctrl_sel_; build_controls_view(page); }
         break;
     case KEY_ENTER:
     case KEY_RIGHT:
-        if (total > 0) { play_enter(); sc_enter_detail(); }
+        if (total > 0) { page.play_enter(); enter_detail(page); }
         break;
     case KEY_ESC:
     case KEY_LEFT:
-        play_back();
-        view_state_ = ViewState::SOUNDCARD_CARDS;
-        transition_back_level();
+        page.play_back();
+        page.view_state_ = UISetupPage::ViewState::SOUNDCARD_CARDS;
+        page.transition_back_level();
         break;
     default:
         break;
     }
 }
 
-void handle_soundcard_detail_key(uint32_t key)
+void SoundCard::handle_detail_key(UISetupPage &page, uint32_t key)
 {
     // Digit keys: accumulate input
     if (key == KEY_0 || (key >= KEY_1 && key <= KEY_9)) {
@@ -3695,41 +3842,73 @@ void handle_soundcard_detail_key(uint32_t key)
         int digit = -1;
         if (key == KEY_0)         digit = 0;
         else if (key >= KEY_1 && key <= KEY_9) digit = (int)(key - KEY_1 + 1);
-        if (digit >= 0 && sc_input_buf_.size() < 8) {
-            sc_input_buf_ += (char)('0' + digit);
-            sc_input_update_display();
+        if (digit >= 0 && input_buf_.size() < 8) {
+            input_buf_ += (char)('0' + digit);
+            input_update_display();
         }
         return;
     }
 
     switch (key) {
     case KEY_BACKSPACE:
-        if (!sc_input_buf_.empty()) {
-            sc_input_buf_.pop_back();
-            sc_input_update_display();
+        if (!input_buf_.empty()) {
+            input_buf_.pop_back();
+            input_update_display();
         }
         break;
     case KEY_ENTER:
     case KEY_RIGHT:
-        sc_apply_value();
+        apply_value(page);
         break;
     case KEY_ESC:
     case KEY_LEFT:
-        sc_cursor_stop();
-        play_back();
-        view_state_ = ViewState::SOUNDCARD_CONTROLS;
-        transition_back_level();
+        cursor_stop();
+        page.play_back();
+        page.view_state_ = UISetupPage::ViewState::SOUNDCARD_CONTROLS;
+        page.transition_back_level();
         break;
     default:
-        // Also accept typed digit characters forwarded via cur_elm_->utf8
-        if (cur_elm_ && cur_elm_->utf8[0] >= '0' && cur_elm_->utf8[0] <= '9') {
-            if (sc_input_buf_.size() < 8) {
-                sc_input_buf_ += cur_elm_->utf8[0];
-                sc_input_update_display();
+        // Also accept typed digit characters forwarded via page.cur_elm_->utf8
+        if (page.cur_elm_ && page.cur_elm_->utf8[0] >= '0' && page.cur_elm_->utf8[0] <= '9') {
+            if (input_buf_.size() < 8) {
+                input_buf_ += page.cur_elm_->utf8[0];
+                input_update_display();
             }
         }
         break;
     }
 }
 
-};
+
+void SoundCard::append(UISetupPage &p, std::vector<MenuItem> &menu)
+{
+    UISetupPage *page = &p;
+    MenuItem m;
+    m.label = "SoundCard";
+    m.sub_items = {{"Open Mixer", false, false, [page]() { page->soundcard_.enter_cards(*page); }}};
+    menu.push_back(m);
+}
+
+void build_menu(UISetupPage &page)
+{
+    page.menu_items_.clear();
+    Launcher::append(page, page.menu_items_);
+    Boot::append(page, page.menu_items_);
+    Screen::append(page, page.menu_items_);
+    WiFi::append(page, page.menu_items_);
+    Speaker::append(page, page.menu_items_);
+    Camera::append(page, page.menu_items_);
+    Info::append(page, page.menu_items_);
+    About::append(page, page.menu_items_);
+    Help::append(page, page.menu_items_);
+    ExtPort::append(page, page.menu_items_);
+    Developer::append(page, page.menu_items_);
+    RTC::append(page, page.menu_items_);
+    Bluetooth::append(page, page.menu_items_);
+    Ethernet::append(page, page.menu_items_);
+    Account::append(page, page.menu_items_);
+    Update::append(page, page.menu_items_);
+    SoundCard::append(page, page.menu_items_);
+}
+
+} // namespace setting
