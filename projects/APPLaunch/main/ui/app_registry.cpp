@@ -32,6 +32,11 @@ void config_set_int(const char *key, int val)
     cp0_signal_config_api({"SetInt", key ? std::string(key) : std::string(), std::to_string(val)}, nullptr);
 }
 
+void config_save()
+{
+    cp0_signal_config_api({"Save"}, nullptr);
+}
+
 } // namespace
 
 bool launcher_app_registry_is_enabled(const AppDescriptor &desc)
@@ -46,6 +51,7 @@ void launcher_app_registry_set_enabled(const AppDescriptor &desc, bool enabled)
     if (desc.always_on || !desc.configurable)
         enabled = true;
     config_set_int(desc.config_key, enabled ? 1 : 0);
+    config_save();
 }
 
 void launcher_app_registry_set_changed_callback(LauncherAppRegistryChangedCallback callback,

@@ -4,6 +4,7 @@
 #include "../cp0_config_json.h"
 
 #include <cstdlib>
+#include <cerrno>
 #include <cstdio>
 #include <cstring>
 #include <functional>
@@ -13,6 +14,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -76,11 +78,11 @@ public:
         copy_cstr(entries_[idx].val, val ? val : "", VAL_MAX);
     }
 
-    void save()
+    int save()
     {
         std::lock_guard<std::mutex> lock(mutex_);
         ensure_loaded_locked();
-        save_locked();
+        return save_locked();
     }
 
     void api_call(arg_t arg, callback_t callback)
@@ -114,8 +116,8 @@ public:
             set_str(key.c_str(), val.c_str());
             report(callback, 0, "ok");
         } else if (cmd == "Save") {
-            save();
-            report(callback, 0, "ok");
+            int ret = save();
+            report(callback, ret, ret == 0 ? "ok" : "save failed");
         } else {
             report(callback, -1, "unknown config api\n");
         }
@@ -172,7 +174,7 @@ private:
             add_entry_locked(e.first, e.second);
     }
 
-    void save_locked()
+    int save_locked()
     {
         std::vector<std::pair<std::string, std::string>> kv;
         kv.reserve(count_);
@@ -183,14 +185,34 @@ private:
         const std::string dir = config_dir();
         const char *home = std::getenv("HOME");
         std::string base = (home && home[0]) ? std::string(home) : std::string("/root");
-        mkdir((base + "/.config").c_str(), 0755);
-        mkdir(dir.c_str(), 0755);
+        if (!ensure_dir((base + "/.config").c_str()))
+            return -1;
+        if (!ensure_dir(dir.c_str()))
+            return -1;
 
-        FILE *fp = std::fopen(config_file().c_str(), "w");
-        if (!fp) return;
-        std::fwrite(json.data(), 1, json.size(), fp);
+        const std::string path = config_file();
+        const std::string tmp_path = path + ".tmp";
+        FILE *fp = std::fopen(tmp_path.c_str(), "w");
+        if (!fp) return -1;
+        size_t written = std::fwrite(json.data(), 1, json.size(), fp);
+        if (written != json.size()) {
+            std::fclose(fp);
+            std::remove(tmp_path.c_str());
+            return -1;
+        }
+        if (std::fflush(fp) != 0 || fsync(fileno(fp)) != 0) {
+            std::fclose(fp);
+            std::remove(tmp_path.c_str());
+            return -1;
+        }
         std::fclose(fp);
+        if (std::rename(tmp_path.c_str(), path.c_str()) != 0) {
+            std::remove(tmp_path.c_str());
+            return -1;
+        }
+        fsync_dir(dir.c_str());
         sync();
+        return 0;
     }
 
     static bool read_file(const char *path, std::string &out)
@@ -203,6 +225,26 @@ private:
             out.append(buf, n);
         std::fclose(fp);
         return true;
+    }
+
+    static bool ensure_dir(const char *path)
+    {
+        if (!path || !path[0]) return false;
+        if (mkdir(path, 0755) == 0) return true;
+        return errno == EEXIST;
+    }
+
+    static void fsync_dir(const char *path)
+    {
+#ifdef O_DIRECTORY
+        int fd = open(path, O_RDONLY | O_DIRECTORY);
+#else
+        int fd = open(path, O_RDONLY);
+#endif
+        if (fd >= 0) {
+            fsync(fd);
+            close(fd);
+        }
     }
 
     int find_entry_locked(const char *key) const

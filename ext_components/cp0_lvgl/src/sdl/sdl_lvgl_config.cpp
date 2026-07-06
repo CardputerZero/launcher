@@ -13,6 +13,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <utility>
@@ -131,11 +132,28 @@ public:
         for (int i = 0; i < count_; ++i)
             kv.emplace_back(entries_[i].key, entries_[i].val);
         const std::string json = cp0cfg::to_json(kv);
-        FILE *fp = std::fopen(join_path(dir, "config.json").c_str(), "w");
+        const std::string path = join_path(dir, "config.json");
+        const std::string tmp_path = path + ".tmp";
+        FILE *fp = std::fopen(tmp_path.c_str(), "w");
         if (!fp)
             return -1;
-        std::fwrite(json.data(), 1, json.size(), fp);
+        size_t written = std::fwrite(json.data(), 1, json.size(), fp);
+        if (written != json.size()) {
+            std::fclose(fp);
+            std::remove(tmp_path.c_str());
+            return -1;
+        }
+        if (std::fflush(fp) != 0 || fsync(fileno(fp)) != 0) {
+            std::fclose(fp);
+            std::remove(tmp_path.c_str());
+            return -1;
+        }
         std::fclose(fp);
+        if (std::rename(tmp_path.c_str(), path.c_str()) != 0) {
+            std::remove(tmp_path.c_str());
+            return -1;
+        }
+        fsync_dir(dir.c_str());
         return 0;
     }
 
@@ -251,6 +269,19 @@ private:
     {
         if (callback)
             callback(code, data);
+    }
+
+    static void fsync_dir(const char *path)
+    {
+#ifdef O_DIRECTORY
+        int fd = open(path, O_RDONLY | O_DIRECTORY);
+#else
+        int fd = open(path, O_RDONLY);
+#endif
+        if (fd >= 0) {
+            fsync(fd);
+            close(fd);
+        }
     }
 };
 
