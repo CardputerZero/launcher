@@ -37,7 +37,9 @@ typedef struct {
 
 typedef struct {
     int  powered;
+    int  discoverable;
     char address[24];
+    char alias[64];
 } hal_bt_status_t;
 
 hal_battery_info_t hal_battery_read(void);

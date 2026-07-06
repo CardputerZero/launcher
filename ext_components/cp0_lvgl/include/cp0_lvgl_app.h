@@ -41,7 +41,9 @@ typedef struct {
 
 typedef struct {
     int powered;
+    int discoverable;
     char address[24];
+    char alias[CP0_BT_NAME_MAX];
 } cp0_bt_status_t;
 
 typedef struct {
