@@ -53,6 +53,8 @@ void init_freambuffer_disp()
         device = fbdev;
     }
 
+    setenv("APPLAUNCH_LINUX_FBDEV_DEVICE", device, 1);
+    setenv("LV_LINUX_FBDEV_DEVICE", device, 1);
     printf("Using framebuffer device: %s\n", device);
     lv_linux_fbdev_set_file(disp, device);
     lv_linux_fbdev_set_force_refresh(disp, true);

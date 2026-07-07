@@ -21,6 +21,7 @@
 #else
 #include "compat/input_keys.h"
 #endif
+#include "cp0_lvgl_app.h"
 #include "keyboard_input.h"
 #include "lvgl/lvgl.h"
 #include "../../../../SDK/components/utilities/include/sample_log.h"
@@ -715,7 +716,8 @@ static void kbd_wake_up(struct kbd_ctx *kc) {
 void *keyboard_read_thread(void *argv) {
     STAILQ_INIT(&keyboard_queue);
 
-    const char *device_path = argv ? (const char *)argv
+    char *device_path_arg = argv ? (char *)argv : NULL;
+    const char *device_path = device_path_arg ? device_path_arg
         : "/dev/input/by-path/platform-3f804000.i2c-event";
 
     struct kbd_ctx kc = {0};
@@ -800,6 +802,7 @@ out:
     if (kc.repeat_fd >= 0) close(kc.repeat_fd);
     free_xkb(&kc);
     if (kc.li) libinput_unref(kc.li);
+    free(device_path_arg);
     return NULL;
 }
 
@@ -812,10 +815,23 @@ void init_input(void)
     if (LV_EVENT_KEYBOARD == 0)
         LV_EVENT_KEYBOARD = lv_event_register_id();
 
+    const char *default_keyboard_device = cp0_file_path("keyboard_device");
+    const char *keyboard_device = getenv_default("LV_LINUX_KEYBOARD_DEVICE", default_keyboard_device);
+    if (keyboard_device == NULL || keyboard_device[0] == '\0')
+        keyboard_device = "/dev/input/by-path/platform-3f804000.i2c-event";
+    setenv("APPLAUNCH_LINUX_KEYBOARD_DEVICE", keyboard_device, 1);
+    setenv("LV_LINUX_KEYBOARD_DEVICE", keyboard_device, 1);
+
+    char *keyboard_device_arg = strdup(keyboard_device);
+    if (keyboard_device_arg == NULL) {
+        perror("strdup keyboard_device");
+        return;
+    }
+
     pthread_t keyboard_read_thread_id;
-    const char *keyboard_device = getenv("APPLAUNCH_LINUX_KEYBOARD_DEVICE");
-    if (pthread_create(&keyboard_read_thread_id, NULL, keyboard_read_thread, (void *)keyboard_device) != 0) {
+    if (pthread_create(&keyboard_read_thread_id, NULL, keyboard_read_thread, keyboard_device_arg) != 0) {
         perror("pthread_create keyboard_read_thread");
+        free(keyboard_device_arg);
         return;
     }
 
