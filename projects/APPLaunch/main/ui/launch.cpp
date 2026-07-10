@@ -9,6 +9,7 @@
 #include "app_registry.h"
 #include "ui.h"
 #include "ui_launch_page.h"
+#include "ui_screensaver.h"
 #include "ui_loading.h"
 #include "generated/page_app.h"
 #include "cp0_lvgl_app.h"
@@ -207,6 +208,7 @@ void Launch::launch_Exec(const std::string &exec, bool keep_root)
         ui_loading::show("Loading...");
         lv_disp_t *disp = lv_disp_get_default();
         lv_indev_t *indev = lv_indev_get_next(NULL);
+        ui_screensaver_set_foreground(0);
         LVGL_RUN_FLAGE = 0;
         if (indev)
             lv_indev_set_group(indev, NULL);
@@ -225,6 +227,7 @@ void Launch::launch_Exec(const std::string &exec, bool keep_root)
         lv_obj_invalidate(lv_screen_active());
         lv_refr_now(disp);
         LVGL_RUN_FLAGE = 1;
+        ui_screensaver_set_foreground(1);
     }
 
 void Launch::select_next_app()

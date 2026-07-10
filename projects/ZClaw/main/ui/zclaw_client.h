@@ -45,8 +45,9 @@ public:
     static std::string zeroclaw_bin_path();
     static bool first_run_needed(const UiConfig &config);
     static void ensure_storage_dir();
+    static bool has_internet_connection(std::string *error = nullptr);
 
-    ZClawClientResult run_setup(UiConfig config, const std::vector<ProviderConfig> &providers);
+    ZClawClientResult run_setup(UiConfig config, const ProviderConfig &provider);
     ZClawClientResult pair_with_code(UiConfig config, const std::string &code);
     ZClawClientResult send_chat(const UiConfig &config, const std::string &message,
                                 const ApprovalHandler &approval_handler);

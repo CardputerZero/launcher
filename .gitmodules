@@ -12,3 +12,6 @@
 	path = projects/AppStore
 	url = https://github.com/CardputerZero/AppStore.git
 	branch = main
+[submodule "projects/CameraApp/main_CameraApp"]
+	path = projects/CameraApp/main_CameraApp
+	url = https://github.com/CardputerZero/CameraApp.git
