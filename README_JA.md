@@ -4,9 +4,10 @@
 
 [M5Stack_Linux_Libs](https://github.com/m5stack/M5Stack_Linux_Libs) SDK を使用して開発された M5CardputerZero アプリケーション集です。このプロジェクトは、M5CardputerZero（AArch64 Linux）デバイス上で **LVGL 9.5** を使ったグラフィカル UI アプリケーションを構築する方法を示します。
 
-このリポジトリには、2 つの主要プロジェクトと、いくつかのサンプル／補助プロジェクトが含まれています。
+このリポジトリには、3 つの主要プロジェクトと、いくつかのサンプル／補助プロジェクトが含まれています。
 - **HelloWorld** - ステータスバーとシンプルな UI を表示する基本的なユーザーデモ
 - **APPLaunch** - 複数アプリのナビゲーション、LoRa 通信、オーディオ再生などの豊富な機能を備えたアプリケーションランチャー
+- **ZClaw** - ガイド付きプロバイダー設定とツール承認に対応する、キーボード中心の ZeroClaw Webhook 用 LVGL チャットクライアント
 
 UI は **SquareLine Studio 1.5.0** によって生成され、ローカルデバッグ用の SDL2 シミュレーションモードと、デバイス上で実行する Linux Framebuffer モードの 2 つの表示バックエンドをサポートします。
 
@@ -41,6 +42,10 @@ launcher/
 │   │           ├── launcher_ui_runtime.*  # LVGL runtime/home bootstrap
 │   │           ├── animation/             # Animation effects
 │   │           └── page_app/              # Built-in app pages
+│   ├── ZClaw/                  # ZeroClaw webhook chat client
+│   │   ├── SConstruct          # Project build script
+│   │   ├── *_config_defaults.mk # Device, SDL2, and cross-build configs
+│   │   └── main/ui/            # Chat UI, client, setup, and runtime fonts
 │   ├── Calculator/             # Calculator
 │   ├── AppStore/               # App store
 │   └── HelloWorld/             # Hello World example
@@ -76,6 +81,15 @@ launcher/
 - アプリケーションプロセスのロック管理（Home 長押しでアプリを強制終了）
 - マルチスレッドタスクプール（C-Thread-Pool）
 - macOS クロスコンパイル対応
+
+### ZClaw の機能
+
+- 320×170 ディスプレイ向けのキーボード中心チャット UI
+- OpenAI、OpenRouter、Anthropic、Ollama、DeepSeek、カスタムプロバイダーの初回セットアップ
+- ZeroClaw Webhook のペアリング、Bearer/Secret 認証、ローカル設定の永続化
+- エージェントから返されるツール要求の対話的な承認
+- FreeType ランタイムフォントと `ZCLAW_FONT`、`ZCLAW_FALLBACK_FONT` による上書き
+- デバイス、Linux SDL2、Linux クロスコンパイル、macOS クロスコンパイル用設定
 
 ### UserDemo の機能
 

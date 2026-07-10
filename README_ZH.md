@@ -4,9 +4,10 @@
 
 基于 [M5Stack_Linux_Libs](https://github.com/m5stack/M5Stack_Linux_Libs) SDK 开发的 M5CardputerZero 应用集合。该项目展示了如何在 M5CardputerZero（AArch64 Linux）设备上使用 **LVGL 9.5** 构建图形界面应用。
 
-仓库包含两个主要项目，并提供若干示例/辅助项目：
+仓库包含三个主要项目，并提供若干示例/辅助项目：
 - **HelloWorld** — 基础用户演示程序，展示状态栏和简单 UI
 - **APPLaunch** — 应用启动器，提供多应用导航、LoRa 通信、音频播放等丰富功能
+- **ZClaw** — 面向键盘操作的 LVGL ZeroClaw Webhook 聊天客户端，支持引导式模型服务配置与工具审批
 
 UI 界面由 **SquareLine Studio 1.5.0** 生成，支持 SDL2 仿真模式（本机调试）和 Linux Framebuffer 模式（设备运行）两种显示后端。
 
@@ -41,6 +42,10 @@ launcher/
 │   │           ├── launcher_ui_runtime.*  # LVGL 运行时/首页引导
 │   │           ├── animation/             # 动画效果
 │   │           └── page_app/              # 内置应用页面
+│   ├── ZClaw/                  # ZeroClaw Webhook 聊天客户端
+│   │   ├── SConstruct          # 项目编译脚本
+│   │   ├── *_config_defaults.mk # 设备、SDL2 与交叉编译配置
+│   │   └── main/ui/            # 聊天 UI、客户端、初始化与运行时字体
 │   ├── Calculator/             # 计算器
 │   ├── AppStore/               # 应用商店
 │   └── HelloWorld/             # Hello World 示例
@@ -76,6 +81,15 @@ launcher/
 - 应用进程锁定管理（长按 Home 键强制关闭应用）
 - 多线程任务池（C-Thread-Pool）
 - 支持 macOS 交叉编译
+
+### ZClaw 特性
+
+- 针对 320×170 屏幕设计的键盘优先聊天界面
+- 首次启动引导配置 OpenAI、OpenRouter、Anthropic、Ollama、DeepSeek 与自定义服务
+- 支持 ZeroClaw Webhook 配对、Bearer/Secret 认证及本地持久化配置
+- 支持 Agent 返回工具请求时的交互式审批
+- 支持 FreeType 运行时字体及 `ZCLAW_FONT`、`ZCLAW_FALLBACK_FONT` 环境变量覆盖
+- 提供设备端、Linux SDL2 仿真、Linux 交叉编译和 macOS 交叉编译配置
 
 ### UserDemo 特性
 
