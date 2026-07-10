@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <ctype.h>
 #include <fcntl.h>
 #include <unistd.h>
 #ifdef __linux__
@@ -238,68 +239,152 @@ static const struct libinput_interface interface = {
 };
 
 /* ============================================================
- *  TCA8418 custom keycode mapping table (same as the original one)
+ *  TCA8418 custom keycode mapping table
  * ============================================================ */
+#define TCA8418_KEYMAP_PATH "/usr/share/keymaps/tca8418_keypad_m5stack_keymap.map"
+#define TCA8418_KEYMAP_MAX_ENTRIES 64
+
 struct tca8418_keymap_entry {
     uint32_t    keycode;
     const char *sym_name;
     const char *utf8;
 };
-static const struct tca8418_keymap_entry tca8418_keymap[] = {
-    { 183, "exclam",       "!"  },
 
-    { 184, "at",           "@"  },
-    { 185, "numbersign",   "#"  },
-    { 186, "dollar",       "$"  },
-    { 187, "percent",      "%"  },
-    { 188, "asciicircum",  "^"  },
-    { 189, "ampersand",    "&"  },
-    { 190, "asterisk",     "*"  },
-    { 191, "parenleft",    "("  },
-    { 192, "parenright",   ")"  },
+static const struct tca8418_keymap_entry tca8418_default_keymap[] = {
+    { 26, "exclam",        "!"  },
 
-    { 193, "asciitilde",   "~"  },
-    { 194, "grave",        "`"  },
-    { 195, "plus",         "+"  },
-    { 196, "minus",        "-"  },
-    { 197, "slash",        "/"  },
-    { 198, "backslash",    "\\" },
-    { 199, "braceleft",    "{"  },
-    { 200, "braceright",   "}"  },
-    { 201, "bracketleft",  "["  },
-    { 202, "bracketright", "]"  },
+    { 27, "at",            "@"  },
+    { 39, "numbersign",    "#"  },
+    { 40, "dollar",        "$"  },
+    { 41, "percent",       "%"  },
+    { 43, "asciicircum",   "^"  },
+    { 51, "ampersand",     "&"  },
+    { 52, "asterisk",      "*"  },
+    { 53, "parenleft",     "("  },
+    { 54, "parenright",    ")"  },
 
-    { 231, "comma",        ","  },
-    { 232, "period",       "."  },
-    { 233, "bar",          "|"  },
-    { 209, "equal",        "="  },
-    { 210, "colon",        ":"  },
-    { 211, "semicolon",    ";"  },
-    { 212, "underscore",   "_"  },
-    { 213, "question",     "?"  },
+    { 55, "asciitilde",    "~"  },
+    { 69, "grave",         "`"  },
+    { 70, "underscore",    "_"  },
+    { 71, "minus",         "-"  },
+    { 72, "plus",          "+"  },
+    { 73, "equal",         "="  },
+    { 74, "bracketleft",   "["  },
+    { 75, "bracketright",  "]"  },
+    { 76, "braceleft",     "{"  },
+    { 77, "braceright",    "}"  },
 
-    { 214, "less",         "<"  },
-    { 215, "greater",      ">"  },
-    { 216, "apostrophe",   "'"  },
-    { 217, "quotedbl",     "\"" },
+    { 79, "semicolon",     ";"  },
+    { 80, "colon",         ":"  },
+    { 81, "apostrophe",    "'"  },
+    { 82, "quotedbl",      "\"" },
+    { 83, "less",          "<"  },
+    { 85, "greater",       ">"  },
+    { 86, "backslash",     "\\" },
+    { 89, "bar",           "|"  },
+
+    { 90, "comma",         ","  },
+    { 91, "period",        "."  },
+    { 92, "slash",         "/"  },
+    { 93, "question",      "?"  },
 };
 
+struct tca8418_runtime_keymap_entry {
+    uint32_t keycode;
+    char     sym_name[64];
+    char     utf8[16];
+};
 
-
-
-
-
-
-
-
-#define TCA8418_KEYMAP_SIZE (sizeof(tca8418_keymap)/sizeof(tca8418_keymap[0]))
+static struct tca8418_runtime_keymap_entry tca8418_runtime_keymap[TCA8418_KEYMAP_MAX_ENTRIES];
+static size_t tca8418_runtime_keymap_size = 0;
+static int tca8418_runtime_keymap_loaded = 0;
 
 static const struct tca8418_keymap_entry *
 tca8418_keymap_lookup(uint32_t keycode) {
-    for (size_t i = 0; i < TCA8418_KEYMAP_SIZE; i++)
-        if (tca8418_keymap[i].keycode == keycode)
-            return &tca8418_keymap[i];
+    static struct tca8418_keymap_entry mapped;
+
+    if (tca8418_runtime_keymap_loaded) {
+        for (size_t i = 0; i < tca8418_runtime_keymap_size; i++) {
+            if (tca8418_runtime_keymap[i].keycode == keycode) {
+                mapped.keycode = tca8418_runtime_keymap[i].keycode;
+                mapped.sym_name = tca8418_runtime_keymap[i].sym_name;
+                mapped.utf8 = tca8418_runtime_keymap[i].utf8;
+                return &mapped;
+            }
+        }
+        return NULL;
+    }
+
+    for (size_t i = 0; i < sizeof(tca8418_default_keymap) / sizeof(tca8418_default_keymap[0]); i++)
+        if (tca8418_default_keymap[i].keycode == keycode)
+            return &tca8418_default_keymap[i];
     return NULL;
+}
+
+static char *trim_ascii(char *s)
+{
+    while (isspace((unsigned char)*s))
+        s++;
+
+    char *end = s + strlen(s);
+    while (end > s && isspace((unsigned char)end[-1]))
+        *--end = '\0';
+    return s;
+}
+
+static int tca8418_parse_keymap_line(char *line,
+                                     struct tca8418_runtime_keymap_entry *out)
+{
+    char *comment = strchr(line, '#');
+    if (comment)
+        *comment = '\0';
+
+    char *body = trim_ascii(line);
+    if (body[0] == '\0')
+        return 0;
+
+    uint32_t evdev_keycode = 0;
+    char sym_name[sizeof(out->sym_name)] = {0};
+    if (sscanf(body, "keycode %u = %63s", &evdev_keycode, sym_name) != 2)
+        return 0;
+
+    out->keycode = evdev_keycode;
+    snprintf(out->sym_name, sizeof(out->sym_name), "%s", sym_name);
+
+    xkb_keysym_t sym = xkb_keysym_from_name(out->sym_name, XKB_KEYSYM_NO_FLAGS);
+    if (sym == XKB_KEY_NoSymbol ||
+        xkb_keysym_to_utf8(sym, out->utf8, sizeof(out->utf8)) <= 0) {
+        out->utf8[0] = '\0';
+    }
+    return 1;
+}
+
+static void tca8418_load_runtime_keymap(void)
+{
+    if (access(TCA8418_KEYMAP_PATH, F_OK) != 0)
+        return;
+
+    FILE *fp = fopen(TCA8418_KEYMAP_PATH, "r");
+    if (!fp) {
+        SLOGW("[KBD] failed to open %s: %s; using built-in keymap",
+              TCA8418_KEYMAP_PATH, strerror(errno));
+        return;
+    }
+
+    char line[256];
+    size_t count = 0;
+    while (count < TCA8418_KEYMAP_MAX_ENTRIES && fgets(line, sizeof(line), fp)) {
+        struct tca8418_runtime_keymap_entry entry = {0};
+        if (!tca8418_parse_keymap_line(line, &entry))
+            continue;
+        tca8418_runtime_keymap[count++] = entry;
+    }
+    fclose(fp);
+
+    tca8418_runtime_keymap_size = count;
+    tca8418_runtime_keymap_loaded = 1;
+    SLOGI("[KBD] loaded %zu TCA8418 keymap entries from %s",
+          tca8418_runtime_keymap_size, TCA8418_KEYMAP_PATH);
 }
 
 
@@ -821,6 +906,8 @@ void init_input(void)
         keyboard_device = "/dev/input/by-path/platform-3f804000.i2c-event";
     setenv("APPLAUNCH_LINUX_KEYBOARD_DEVICE", keyboard_device, 1);
     setenv("LV_LINUX_KEYBOARD_DEVICE", keyboard_device, 1);
+
+    tca8418_load_runtime_keymap();
 
     char *keyboard_device_arg = strdup(keyboard_device);
     if (keyboard_device_arg == NULL) {
