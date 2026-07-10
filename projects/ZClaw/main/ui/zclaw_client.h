@@ -33,9 +33,18 @@ struct ZClawClientResult {
     UiConfig config;
 };
 
+struct ZClawSetupProgress {
+    std::string status;
+    int percent = 0;
+    size_t downloaded_bytes = 0;
+    size_t total_bytes = 0;
+    double bytes_per_second = 0.0;
+};
+
 class ZClawClient {
 public:
     using ApprovalHandler = std::function<std::string(const ZClawApprovalRequest &)>;
+    using SetupProgressHandler = std::function<void(const ZClawSetupProgress &)>;
 
     static std::string home_dir();
     static std::string zeroclaw_dir();
@@ -47,7 +56,8 @@ public:
     static void ensure_storage_dir();
     static bool has_internet_connection(std::string *error = nullptr);
 
-    ZClawClientResult run_setup(UiConfig config, const ProviderConfig &provider);
+    ZClawClientResult run_setup(UiConfig config, const ProviderConfig &provider,
+                                const SetupProgressHandler &progress_handler = nullptr);
     ZClawClientResult pair_with_code(UiConfig config, const std::string &code);
     ZClawClientResult send_chat(const UiConfig &config, const std::string &message,
                                 const ApprovalHandler &approval_handler);

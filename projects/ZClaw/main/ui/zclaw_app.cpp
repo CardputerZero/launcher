@@ -119,6 +119,11 @@ class ZClawApp
         std::string error;
     };
 
+    struct SetupProgressData {
+        ZClawApp *self = nullptr;
+        ZClawSetupProgress progress;
+    };
+
     lv_obj_t *screen_ = nullptr;
     lv_obj_t *startup_overlay_ = nullptr;
     lv_obj_t *startup_title_ = nullptr;
@@ -144,6 +149,12 @@ class ZClawApp
     lv_obj_t *settings_panel_ = nullptr;
     lv_obj_t *settings_header_label_ = nullptr;
     lv_obj_t *settings_hint_label_ = nullptr;
+    lv_obj_t *setup_spinner_ = nullptr;
+    lv_obj_t *setup_status_label_ = nullptr;
+    lv_obj_t *setup_detail_label_ = nullptr;
+    lv_obj_t *setup_progress_bar_ = nullptr;
+    lv_obj_t *setup_percent_label_ = nullptr;
+    lv_obj_t *setup_speed_label_ = nullptr;
     lv_obj_t *settings_rows_[SETTINGS_ROW_MAX] = {};
     lv_obj_t *settings_values_[SETTINGS_ROW_MAX] = {};
     lv_style_t textarea_cursor_style_;
@@ -704,13 +715,36 @@ private:
     {
         settings_view_ = SettingsView::Setup;
         clear_settings_rows();
+        clear_setup_progress_objects();
         if (setup_in_flight_) {
             set_settings_header("Quickstart", "Please wait");
-            add_settings_row("Status", "Working");
-            add_settings_row("Provider", provider_display_name(setup_provider_.family));
-            add_settings_row("Agent", ui_config_.agent_alias.c_str());
+            setup_spinner_ = lv_spinner_create(settings_panel_);
+            lv_obj_set_size(setup_spinner_, 26, 26);
+            lv_obj_set_pos(setup_spinner_, 18, 40);
+            lv_spinner_set_anim_params(setup_spinner_, 900, 70);
+            lv_obj_set_style_arc_width(setup_spinner_, 3, LV_PART_MAIN);
+            lv_obj_set_style_arc_width(setup_spinner_, 3, LV_PART_INDICATOR);
+            lv_obj_set_style_arc_color(setup_spinner_, lv_color_hex(COLOR_PANEL_LINE), LV_PART_MAIN);
+            lv_obj_set_style_arc_color(setup_spinner_, lv_color_hex(COLOR_PURPLE), LV_PART_INDICATOR);
+
+            setup_status_label_ = make_label(settings_panel_, "Preparing Quickstart", 54, 39, 248, 16,
+                                             fonts_.font_12(), COLOR_TEXT);
+            setup_detail_label_ = make_label(settings_panel_, "Starting...", 54, 58, 248, 14,
+                                             fonts_.font_10(), COLOR_MUTED);
+            setup_progress_bar_ = lv_bar_create(settings_panel_);
+            lv_obj_set_pos(setup_progress_bar_, 18, 88);
+            lv_obj_set_size(setup_progress_bar_, 284, 10);
+            lv_bar_set_range(setup_progress_bar_, 0, 100);
+            lv_bar_set_value(setup_progress_bar_, 0, LV_ANIM_OFF);
+            lv_obj_set_style_radius(setup_progress_bar_, 3, LV_PART_MAIN);
+            lv_obj_set_style_radius(setup_progress_bar_, 3, LV_PART_INDICATOR);
+            lv_obj_set_style_bg_color(setup_progress_bar_, lv_color_hex(COLOR_PANEL), LV_PART_MAIN);
+            lv_obj_set_style_bg_color(setup_progress_bar_, lv_color_hex(COLOR_PURPLE), LV_PART_INDICATOR);
+            setup_percent_label_ = make_label(settings_panel_, "0%", 18, 105, 70, 14,
+                                              fonts_.font_10(), COLOR_TEXT);
+            setup_speed_label_ = make_label(settings_panel_, "", 92, 105, 210, 14,
+                                            fonts_.font_10(), COLOR_MUTED, LV_TEXT_ALIGN_RIGHT);
             settings_selected_ = 0;
-            update_settings_selection();
             return;
         }
         set_settings_header("Model Settings", "Enter / Esc");
@@ -727,6 +761,56 @@ private:
         if (settings_selected_ < 0)
             settings_selected_ = 0;
         update_settings_selection();
+    }
+
+    void clear_setup_progress_objects()
+    {
+        lv_obj_t **objects[] = {&setup_spinner_, &setup_status_label_, &setup_detail_label_,
+                                &setup_progress_bar_, &setup_percent_label_, &setup_speed_label_};
+        for (lv_obj_t **object : objects) {
+            if (*object)
+                lv_obj_del(*object);
+            *object = nullptr;
+        }
+    }
+
+    static std::string format_transfer_detail(const ZClawSetupProgress &progress)
+    {
+        if (progress.total_bytes == 0)
+            return progress.status;
+        char buffer[96];
+        const double downloaded_mb = (double)progress.downloaded_bytes / (1024.0 * 1024.0);
+        const double total_mb = (double)progress.total_bytes / (1024.0 * 1024.0);
+        std::snprintf(buffer, sizeof(buffer), "%.1f / %.1f MB", downloaded_mb, total_mb);
+        return buffer;
+    }
+
+    static std::string format_transfer_speed(double bytes_per_second)
+    {
+        if (bytes_per_second <= 0.0)
+            return "Waiting for data";
+        char buffer[64];
+        if (bytes_per_second >= 1024.0 * 1024.0)
+            std::snprintf(buffer, sizeof(buffer), "%.1f MB/s", bytes_per_second / (1024.0 * 1024.0));
+        else
+            std::snprintf(buffer, sizeof(buffer), "%.0f KB/s", bytes_per_second / 1024.0);
+        return buffer;
+    }
+
+    void update_setup_progress(const ZClawSetupProgress &progress)
+    {
+        if (!setup_in_flight_ || !setup_progress_bar_)
+            return;
+        const int percent = progress.percent < 0 ? 0 : (progress.percent > 100 ? 100 : progress.percent);
+        lv_label_set_text(setup_status_label_, progress.status.c_str());
+        const std::string detail = format_transfer_detail(progress);
+        lv_label_set_text(setup_detail_label_, detail.c_str());
+        lv_bar_set_value(setup_progress_bar_, percent, LV_ANIM_ON);
+        const std::string percent_text = std::to_string(percent) + "%";
+        lv_label_set_text(setup_percent_label_, percent_text.c_str());
+        const std::string speed = progress.total_bytes > 0 ?
+                                  format_transfer_speed(progress.bytes_per_second) : "";
+        lv_label_set_text(setup_speed_label_, speed.c_str());
     }
 
     void render_setup_providers()
@@ -931,6 +1015,12 @@ private:
                 settings_panel_ = nullptr;
                 settings_header_label_ = nullptr;
                 settings_hint_label_ = nullptr;
+                setup_spinner_ = nullptr;
+                setup_status_label_ = nullptr;
+                setup_detail_label_ = nullptr;
+                setup_progress_bar_ = nullptr;
+                setup_percent_label_ = nullptr;
+                setup_speed_label_ = nullptr;
                 for (auto *&row : settings_rows_)
                     row = nullptr;
                 for (auto *&value : settings_values_)
@@ -1615,13 +1705,34 @@ private:
         delete result;
     }
 
+    static void setup_progress_async(void *data)
+    {
+        SetupProgressData *update = static_cast<SetupProgressData *>(data);
+        if (!update)
+            return;
+        if (update->self)
+            update->self->update_setup_progress(update->progress);
+        delete update;
+    }
+
+    void post_setup_progress(const ZClawSetupProgress &progress)
+    {
+        SetupProgressData *update = new SetupProgressData();
+        update->self = this;
+        update->progress = progress;
+        lv_async_call(setup_progress_async, update);
+    }
+
     static void *setup_thread_main(void *data)
     {
         AsyncResult *result = static_cast<AsyncResult *>(data);
         if (!result || !result->self)
             return nullptr;
         ZClawClientResult client_result = result->self->client_.run_setup(
-            result->self->ui_config_, result->self->setup_provider_);
+            result->self->ui_config_, result->self->setup_provider_,
+            [self = result->self](const ZClawSetupProgress &progress) {
+                self->post_setup_progress(progress);
+            });
         result->text = client_result.text;
         result->ok = client_result.ok;
         result->config = client_result.config;

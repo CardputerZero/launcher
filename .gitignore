@@ -23,3 +23,5 @@ projects/APPLaunch/APPLaunch/bin/LaunchWizard
 bluez*
 projects/lcd_test
 .sconsign.dblite
+zeromp3
+*.pyc
