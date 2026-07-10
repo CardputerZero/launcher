@@ -57,7 +57,8 @@ void init_freambuffer_disp()
     setenv("LV_LINUX_FBDEV_DEVICE", device, 1);
     printf("Using framebuffer device: %s\n", device);
     lv_linux_fbdev_set_file(disp, device);
-    lv_linux_fbdev_set_force_refresh(disp, true);
+    if(0)
+        lv_linux_fbdev_set_force_refresh(disp, true);
 
     lv_coord_t w = lv_display_get_horizontal_resolution(disp);
     lv_coord_t h = lv_display_get_vertical_resolution(disp);
