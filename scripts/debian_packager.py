@@ -37,6 +37,7 @@ OPTIONAL_BINARIES = (
     "M5CardputerZero-AppStore",
     "appstore.py",
     "M5CardputerZero-Calculator",
+    "ZClaw",
 )
 APPSTORE_IMAGE_PATTERNS = ("store_wordmark.png", "store_arrow_*.png")
 
