@@ -81,9 +81,44 @@
 #define HINT_HEIGHT         22
 #define HINT_Y_OFFSET       4    /* px below top of screen */
 
+#define MEDIA_OSD_SHOW_MS   1000
+#define MEDIA_OSD_STEP      5
+#define MEDIA_OSD_WIDTH     190
+#define MEDIA_OSD_HEIGHT    82
+#define MEDIA_OSD_BG_COLOR  0x20242C
+#define MEDIA_OSD_BAR_BG    0x555C66
+#define MEDIA_OSD_BAR_FG    0xF2C94C
+#define MEDIA_OSD_TEXT      0xFFFFFF
+
+#ifndef KEY_MUTE
+#define KEY_MUTE            113
+#endif
+#ifndef KEY_VOLUMEDOWN
+#define KEY_VOLUMEDOWN      114
+#endif
+#ifndef KEY_VOLUMEUP
+#define KEY_VOLUMEUP        115
+#endif
+#ifndef KEY_BRIGHTNESSDOWN
+#define KEY_BRIGHTNESSDOWN  224
+#endif
+#ifndef KEY_BRIGHTNESSUP
+#define KEY_BRIGHTNESSUP    225
+#endif
+
 static lv_obj_t  *s_hint_obj   = NULL;
 static lv_obj_t  *s_hint_label = NULL;
 static lv_timer_t *s_hint_timer = NULL;
+
+static lv_obj_t   *s_media_obj     = NULL;
+static lv_obj_t   *s_media_icon    = NULL;
+static lv_obj_t   *s_media_title   = NULL;
+static lv_obj_t   *s_media_value   = NULL;
+static lv_obj_t   *s_media_bar     = NULL;
+static lv_timer_t *s_media_timer   = NULL;
+static int         s_brightness_pct = -1;
+static int         s_volume_pct     = -1;
+static bool        s_muted          = false;
 
 /* ESC-hold tracking. We do NOT fire the ESC hint on key-down anymore;
  * instead we record the down-tick and let a poll timer decide. */
@@ -105,6 +140,113 @@ static void hint_timer_cb(lv_timer_t *t)
         lv_obj_add_flag(s_hint_obj, LV_OBJ_FLAG_HIDDEN);
     }
     s_esc_hint_shown = false;
+    if (t) lv_timer_pause(t);
+}
+
+static int clamp_percent(int value)
+{
+    if (value < 0) return 0;
+    if (value > 100) return 100;
+    return value;
+}
+
+static int read_config_int(const char *key, int default_val)
+{
+    int val = default_val;
+    cp0_signal_config_api({"GetInt", key ? std::string(key) : std::string(), std::to_string(default_val)},
+                          [&](int code, std::string data) {
+                              if (code == 0) val = std::atoi(data.c_str());
+                          });
+    return val;
+}
+
+static void write_config_int(const char *key, int val)
+{
+    cp0_signal_config_api({"SetInt", key ? std::string(key) : std::string(), std::to_string(val)}, nullptr);
+    cp0_signal_config_api({"Save"}, nullptr);
+}
+
+static int read_volume_percent(void)
+{
+    int volume = -1;
+    cp0_signal_audio_api({"VolumeRead"}, [&](int code, std::string data) {
+        if (code == 0) volume = std::atoi(data.c_str());
+    });
+    if (volume < 0) volume = read_config_int("volume", s_volume_pct >= 0 ? s_volume_pct : 50);
+    return clamp_percent(volume);
+}
+
+static int write_volume_percent(int pct)
+{
+    pct = clamp_percent(pct);
+    int written = pct;
+    cp0_signal_audio_api({"VolumeWrite", std::to_string(pct)}, [&](int code, std::string data) {
+        if (code == 0) written = clamp_percent(std::atoi(data.c_str()));
+    });
+    s_volume_pct = written;
+    write_config_int("volume", written);
+    return written;
+}
+
+static int read_brightness_percent(void)
+{
+    int raw = cp0_backlight_read();
+    int mx = cp0_backlight_max();
+    if (mx <= 0) mx = 100;
+    if (raw < 0) raw = read_config_int("brightness", s_brightness_pct >= 0 ? mx * s_brightness_pct / 100 : mx);
+    return clamp_percent(raw * 100 / mx);
+}
+
+static int write_brightness_percent(int pct)
+{
+    pct = clamp_percent(pct);
+    int mx = cp0_backlight_max();
+    if (mx <= 0) mx = 100;
+    int raw = mx * pct / 100;
+    if (pct > 0 && raw < 1) raw = 1;
+    int written = cp0_backlight_write(raw);
+    if (written < 0) written = raw;
+    s_brightness_pct = clamp_percent(written * 100 / mx);
+    write_config_int("brightness", written);
+    return s_brightness_pct;
+}
+
+static bool read_system_mute(bool fallback)
+{
+    FILE *p = popen("pactl get-sink-mute @DEFAULT_SINK@ 2>/dev/null", "r");
+    if (!p) return fallback;
+
+    char buf[128];
+    bool muted = fallback;
+    while (fgets(buf, sizeof(buf), p)) {
+        if (strstr(buf, "yes")) {
+            muted = true;
+            break;
+        }
+        if (strstr(buf, "no")) {
+            muted = false;
+            break;
+        }
+    }
+    pclose(p);
+    return muted;
+}
+
+static bool toggle_system_mute(void)
+{
+    bool fallback = !s_muted;
+    int ret = system("pactl set-sink-mute @DEFAULT_SINK@ toggle >/dev/null 2>&1");
+    if (ret != 0) {
+        s_muted = fallback;
+        return s_muted;
+    }
+    s_muted = read_system_mute(fallback);
+    return s_muted;
+}
+
+static void media_timer_cb(lv_timer_t *t)
+{
+    if (s_media_obj) lv_obj_add_flag(s_media_obj, LV_OBJ_FLAG_HIDDEN);
     if (t) lv_timer_pause(t);
 }
 
@@ -169,6 +311,127 @@ static void ensure_hint_created(void)
     lv_obj_center(s_hint_label);
 
     lv_obj_add_flag(s_hint_obj, LV_OBJ_FLAG_HIDDEN);
+}
+
+static void ensure_media_created(void)
+{
+    if (s_media_obj != NULL) return;
+
+    lv_obj_t *parent = lv_layer_top();
+    if (parent == NULL) return;
+
+    s_media_obj = lv_obj_create(parent);
+    lv_obj_remove_style_all(s_media_obj);
+    lv_obj_set_size(s_media_obj, MEDIA_OSD_WIDTH, MEDIA_OSD_HEIGHT);
+    lv_obj_center(s_media_obj);
+    lv_obj_set_style_bg_color(s_media_obj, lv_color_hex(MEDIA_OSD_BG_COLOR), 0);
+    lv_obj_set_style_bg_opa(s_media_obj, LV_OPA_90, 0);
+    lv_obj_set_style_radius(s_media_obj, 8, 0);
+    lv_obj_set_style_border_width(s_media_obj, 1, 0);
+    lv_obj_set_style_border_color(s_media_obj, lv_color_hex(0x3A404A), 0);
+    lv_obj_set_style_pad_all(s_media_obj, 0, 0);
+    lv_obj_set_style_shadow_width(s_media_obj, 0, 0);
+    lv_obj_clear_flag(s_media_obj, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_clear_flag(s_media_obj, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(s_media_obj, LV_OBJ_FLAG_IGNORE_LAYOUT);
+
+    s_media_icon = lv_label_create(s_media_obj);
+    lv_obj_set_size(s_media_icon, 30, 24);
+    lv_obj_set_pos(s_media_icon, 14, 10);
+    lv_obj_set_style_text_color(s_media_icon, lv_color_hex(MEDIA_OSD_BAR_FG), 0);
+    lv_obj_set_style_text_font(s_media_icon, LV_FONT_DEFAULT, 0);
+    lv_obj_set_style_text_align(s_media_icon, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_text(s_media_icon, LV_SYMBOL_VOLUME_MAX);
+
+    lv_font_t *font = launcher_fonts().get("AlibabaPuHuiTi-3-55-Regular.ttf", 12, LV_FREETYPE_FONT_STYLE_BOLD);
+
+    s_media_title = lv_label_create(s_media_obj);
+    lv_obj_set_size(s_media_title, 76, 18);
+    lv_obj_set_pos(s_media_title, 48, 12);
+    lv_obj_set_style_text_color(s_media_title, lv_color_hex(MEDIA_OSD_TEXT), 0);
+    lv_obj_set_style_text_font(s_media_title, font, 0);
+    lv_label_set_long_mode(s_media_title, LV_LABEL_LONG_CLIP);
+    lv_label_set_text(s_media_title, "");
+
+    s_media_value = lv_label_create(s_media_obj);
+    lv_obj_set_size(s_media_value, 48, 18);
+    lv_obj_set_pos(s_media_value, 124, 12);
+    lv_obj_set_style_text_color(s_media_value, lv_color_hex(MEDIA_OSD_TEXT), 0);
+    lv_obj_set_style_text_font(s_media_value, font, 0);
+    lv_obj_set_style_text_align(s_media_value, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_label_set_text(s_media_value, "");
+
+    s_media_bar = lv_bar_create(s_media_obj);
+    lv_obj_set_size(s_media_bar, 154, 10);
+    lv_obj_set_pos(s_media_bar, 18, 50);
+    lv_bar_set_range(s_media_bar, 0, 100);
+    lv_obj_set_style_radius(s_media_bar, 5, LV_PART_MAIN);
+    lv_obj_set_style_radius(s_media_bar, 5, LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(s_media_bar, lv_color_hex(MEDIA_OSD_BAR_BG), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(s_media_bar, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(s_media_bar, lv_color_hex(MEDIA_OSD_BAR_FG), LV_PART_INDICATOR);
+    lv_obj_set_style_bg_opa(s_media_bar, LV_OPA_COVER, LV_PART_INDICATOR);
+
+    lv_obj_add_flag(s_media_obj, LV_OBJ_FLAG_HIDDEN);
+}
+
+static void show_media_bar(const char *title, const char *icon, int pct)
+{
+    ensure_media_created();
+    if (!s_media_obj || !s_media_icon || !s_media_title || !s_media_value || !s_media_bar) return;
+
+    pct = clamp_percent(pct);
+    lv_label_set_text(s_media_icon, icon);
+    lv_label_set_text(s_media_title, title);
+    lv_label_set_text_fmt(s_media_value, "%d%%", pct);
+    lv_bar_set_value(s_media_bar, pct, LV_ANIM_OFF);
+
+    lv_obj_set_size(s_media_icon, 30, 24);
+    lv_obj_set_pos(s_media_icon, 14, 10);
+    lv_obj_set_pos(s_media_title, 48, 12);
+    lv_obj_set_pos(s_media_value, 124, 12);
+    lv_obj_clear_flag(s_media_value, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(s_media_bar, LV_OBJ_FLAG_HIDDEN);
+
+    lv_obj_center(s_media_obj);
+    lv_obj_move_foreground(s_media_obj);
+    lv_obj_clear_flag(s_media_obj, LV_OBJ_FLAG_HIDDEN);
+
+    if (s_media_timer == NULL) {
+        s_media_timer = lv_timer_create(media_timer_cb, MEDIA_OSD_SHOW_MS, NULL);
+    }
+    if (s_media_timer) {
+        lv_timer_set_period(s_media_timer, MEDIA_OSD_SHOW_MS);
+        lv_timer_reset(s_media_timer);
+        lv_timer_resume(s_media_timer);
+    }
+}
+
+static void show_mute_osd(bool muted)
+{
+    ensure_media_created();
+    if (!s_media_obj || !s_media_icon || !s_media_title || !s_media_value || !s_media_bar) return;
+
+    lv_label_set_text(s_media_icon, muted ? LV_SYMBOL_MUTE : LV_SYMBOL_VOLUME_MAX);
+    lv_label_set_text(s_media_title, muted ? "Muted" : "Sound On");
+    lv_obj_set_size(s_media_icon, 60, 32);
+    lv_obj_set_pos(s_media_icon, 65, 12);
+    lv_obj_set_pos(s_media_title, 55, 50);
+    lv_obj_add_flag(s_media_value, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(s_media_bar, LV_OBJ_FLAG_HIDDEN);
+
+    lv_obj_center(s_media_obj);
+    lv_obj_move_foreground(s_media_obj);
+    lv_obj_clear_flag(s_media_obj, LV_OBJ_FLAG_HIDDEN);
+
+    if (s_media_timer == NULL) {
+        s_media_timer = lv_timer_create(media_timer_cb, MEDIA_OSD_SHOW_MS, NULL);
+    }
+    if (s_media_timer) {
+        lv_timer_set_period(s_media_timer, MEDIA_OSD_SHOW_MS);
+        lv_timer_reset(s_media_timer);
+        lv_timer_resume(s_media_timer);
+    }
 }
 
 static void show_hint(const char *text)
@@ -267,7 +530,38 @@ void on_key(const struct key_item *elm)
         return;
     }
 
-    /* All other keys: only fire on the initial key-down edge. */
+    if (elm->key_state == KBD_KEY_PRESSED || elm->key_state == KBD_KEY_REPEATED) {
+        switch (code) {
+            case KEY_BRIGHTNESSUP:
+            case KEY_BRIGHTNESSDOWN: {
+                int pct = s_brightness_pct >= 0 ? s_brightness_pct : read_brightness_percent();
+                pct += (code == KEY_BRIGHTNESSUP) ? MEDIA_OSD_STEP : -MEDIA_OSD_STEP;
+                pct = write_brightness_percent(pct);
+                show_media_bar("Brightness", LV_SYMBOL_TINT, pct);
+                return;
+            }
+
+            case KEY_VOLUMEUP:
+            case KEY_VOLUMEDOWN: {
+                int pct = s_volume_pct >= 0 ? s_volume_pct : read_volume_percent();
+                pct += (code == KEY_VOLUMEUP) ? MEDIA_OSD_STEP : -MEDIA_OSD_STEP;
+                pct = write_volume_percent(pct);
+                show_media_bar("Volume", pct == 0 ? LV_SYMBOL_MUTE : LV_SYMBOL_VOLUME_MAX, pct);
+                return;
+            }
+
+            case KEY_MUTE:
+                if (elm->key_state == KBD_KEY_PRESSED) {
+                    show_mute_osd(toggle_system_mute());
+                }
+                return;
+
+            default:
+                break;
+        }
+    }
+
+    /* All non-media keys: only fire on the initial key-down edge. */
     if (elm->key_state != KBD_KEY_PRESSED) return;
 
     /* Ctrl+Alt+S: global screenshot → ~/Screenshots */

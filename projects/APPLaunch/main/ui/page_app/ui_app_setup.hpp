@@ -74,6 +74,7 @@ class Screen {
 public:
     static void append(UISetupPage &p, std::vector<MenuItem> &menu);
     void enter_brightness_adjust(UISetupPage &page);
+    void enter_darktime_adjust(UISetupPage &page);
     void apply_value(UISetupPage &page);
     static int backlight_read();
     static int backlight_max();
@@ -537,6 +538,8 @@ private:
     void apply_value_selection()
     {
         if (val_title_ == "Brightness") {
+            screen_.apply_value(*this);
+        } else if (val_title_ == "DarkTime") {
             screen_.apply_value(*this);
         } else if (val_title_ == "Volume") {
             speaker_.apply_value(*this);
@@ -1554,7 +1557,10 @@ void Screen::append(UISetupPage &p, std::vector<MenuItem> &menu)
     UISetupPage *page = &p;
     MenuItem m;
     m.label = "Screen";
-    m.sub_items = {{"Brightness", false, false, [page]() { page->screen_.enter_brightness_adjust(*page); }}};
+    m.sub_items = {
+        {"Brightness", false, false, [page]() { page->screen_.enter_brightness_adjust(*page); }},
+        {"DarkTime", false, false, [page]() { page->screen_.enter_darktime_adjust(*page); }},
+    };
     menu.push_back(m);
 }
 
@@ -1593,6 +1599,13 @@ void Screen::enter_brightness_adjust(UISetupPage &page)
 
 void Screen::apply_value(UISetupPage &page)
 {
+    if (page.val_title_ == "DarkTime") {
+        static const int times[] = {0, 10, 30, 60, 300};
+        UISetupPage::config_set_int("dark_time", times[page.val_sel_idx_]);
+        UISetupPage::config_save();
+        return;
+    }
+
     int mx = backlight_max();
     int pcts[] = {100, 75, 50, 25};
     int new_val = mx * pcts[page.val_sel_idx_] / 100;
@@ -1600,6 +1613,23 @@ void Screen::apply_value(UISetupPage &page)
     cp0_backlight_write(new_val);
     UISetupPage::config_set_int("brightness", new_val);
     UISetupPage::config_save();
+}
+
+void Screen::enter_darktime_adjust(UISetupPage &page)
+{
+    static const int times[] = {0, 10, 30, 60, 300};
+    page.val_title_ = "DarkTime";
+    page.val_options_ = {"Never", "10S", "30S", "60S", "300S"};
+    const int saved = UISetupPage::config_get_int("dark_time", 30);
+    page.val_sel_idx_ = 2;
+    for (size_t i = 0; i < sizeof(times) / sizeof(times[0]); ++i) {
+        if (times[i] == saved) {
+            page.val_sel_idx_ = static_cast<int>(i);
+            break;
+        }
+    }
+    page.view_state_ = UISetupPage::ViewState::VALUE_SELECT;
+    page.transition_enter_level();
 }
 
 void Speaker::append(UISetupPage &p, std::vector<MenuItem> &menu)

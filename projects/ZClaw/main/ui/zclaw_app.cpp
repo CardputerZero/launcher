@@ -15,6 +15,7 @@
 #include <linux/input.h>
 
 #include <chrono>
+#include <csignal>
 #include <cstdio>
 #include <cstdlib>
 #include <condition_variable>
@@ -26,6 +27,8 @@
 #include <vector>
 
 namespace {
+
+volatile sig_atomic_t g_quit_requested = 0;
 
 inline const struct key_item *keyboard_item(lv_event_t *event)
 {
@@ -62,6 +65,7 @@ class ZClawApp
 
     enum class SettingsView {
         Setup,
+        SetupProviders,
         Authorization,
         Main,
         Providers,
@@ -79,8 +83,22 @@ class ZClawApp
 
     enum class InputMode {
         Chat,
+        SetupEdit,
         ProviderEdit,
         PairingCode
+    };
+
+    enum class SetupEditField {
+        None,
+        Uri,
+        ApiKey,
+        Model
+    };
+
+    enum class StartupState {
+        CheckingNetwork,
+        Offline,
+        Ready
     };
 
     struct AsyncResult {
@@ -95,7 +113,16 @@ class ZClawApp
         ZClawApprovalRequest request;
     };
 
+    struct NetworkResult {
+        ZClawApp *self = nullptr;
+        bool online = false;
+        std::string error;
+    };
+
     lv_obj_t *screen_ = nullptr;
+    lv_obj_t *startup_overlay_ = nullptr;
+    lv_obj_t *startup_title_ = nullptr;
+    lv_obj_t *startup_detail_ = nullptr;
     lv_obj_t *chat_container_ = nullptr;
     lv_obj_t *scroll_track_ = nullptr;
     lv_obj_t *scroll_thumb_ = nullptr;
@@ -130,9 +157,14 @@ class ZClawApp
     int provider_scroll_ = 0;
     int provider_detail_index_ = -1;
     ProviderEditField provider_edit_field_ = ProviderEditField::None;
+    SetupEditField setup_edit_field_ = SetupEditField::None;
     InputMode input_mode_ = InputMode::Chat;
+    StartupState startup_state_ = StartupState::CheckingNetwork;
     UiConfig ui_config_;
     std::vector<ProviderConfig> providers_;
+    ProviderConfig setup_provider_;
+    int setup_provider_selected_ = 0;
+    int setup_provider_scroll_ = 0;
     std::string avatar_path_;
     std::string sparkles_path_;
     std::string send_button_path_;
@@ -159,10 +191,11 @@ public:
         send_button_path_ = cp0_file_path("zclaw_send_button_18.png");
         load_providers();
         load_ui_config();
+        setup_provider_ = providers_.empty() ? provider_preset(0) : providers_[0];
         create_ui();
         event_handler_init();
-        if (first_run_needed())
-            open_setup_panel();
+        show_network_check();
+        start_network_check();
     }
 
 private:
@@ -211,6 +244,34 @@ private:
     static lv_coord_t centered_y(lv_coord_t container_h, lv_coord_t item_h)
     {
         return (container_h - item_h) / 2;
+    }
+
+    static ProviderConfig provider_preset(int index)
+    {
+        switch (index) {
+        case 0:
+            return {"zclaw", "openai", "gpt-4.1-mini", "https://api.openai.com/v1", ""};
+        case 1:
+            return {"zclaw", "openrouter", "openrouter/auto", "https://openrouter.ai/api/v1", ""};
+        case 2:
+            return {"zclaw", "anthropic", "claude-sonnet-4", "https://api.anthropic.com", ""};
+        case 3:
+            return {"zclaw", "ollama", "llama3.1", "http://127.0.0.1:11434", ""};
+        case 4:
+            return {"zclaw", "deepseek", "deepseek-chat", "https://api.deepseek.com", ""};
+        default:
+            return {"zclaw", "custom", "", "https://api.example.com/v1", ""};
+        }
+    }
+
+    static const char *provider_display_name(const std::string &family)
+    {
+        if (family == "openai") return "OpenAI";
+        if (family == "openrouter") return "OpenRouter";
+        if (family == "anthropic") return "Anthropic";
+        if (family == "ollama") return "Ollama";
+        if (family == "deepseek") return "DeepSeek";
+        return "Custom";
     }
 
     static std::string encode_field(const std::string &value)
@@ -295,8 +356,8 @@ private:
         }
 
         if (providers_.empty()) {
-            providers_.push_back({"openai", "openai", "gpt-4.1-mini", "https://api.openai.com/v1", ""});
-            providers_.push_back({"anthropic", "anthropic", "claude-sonnet-4", "https://api.anthropic.com", ""});
+            for (int i = 0; i < 6; ++i)
+                providers_.push_back(provider_preset(i));
         }
     }
 
@@ -398,6 +459,77 @@ private:
         }
         lv_obj_clear_flag(avatar, (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
         return avatar;
+    }
+
+    void show_network_check()
+    {
+        startup_state_ = StartupState::CheckingNetwork;
+        startup_overlay_ = make_box(screen_, 0, 0, SCREEN_W, SCREEN_H, COLOR_BG);
+        lv_obj_move_foreground(startup_overlay_);
+        make_label(startup_overlay_, "ZCLAW", 16, 24, 288, 20, fonts_.font_12(), COLOR_PURPLE,
+                   LV_TEXT_ALIGN_CENTER);
+        startup_title_ = make_label(startup_overlay_, "Checking network...", 16, 68, 288, 20,
+                                    fonts_.font_12(), COLOR_TEXT, LV_TEXT_ALIGN_CENTER);
+        startup_detail_ = make_label(startup_overlay_, "Please wait", 16, 96, 288, 16,
+                                     fonts_.font_10(), COLOR_MUTED, LV_TEXT_ALIGN_CENTER);
+    }
+
+    void show_offline(const std::string &error)
+    {
+        startup_state_ = StartupState::Offline;
+        lv_label_set_text(startup_title_, "No internet connection");
+        const std::string detail = error.empty() ? "Check Wi-Fi and try again." :
+                                   "Check Wi-Fi and try again.\n" + error;
+        lv_label_set_text(startup_detail_, detail.c_str());
+        lv_obj_set_height(startup_detail_, 34);
+        make_label(startup_overlay_, "OK  EXIT", 16, 142, 288, 14, fonts_.font_10(),
+                   COLOR_PURPLE, LV_TEXT_ALIGN_CENTER);
+    }
+
+    static void network_async_done(void *data)
+    {
+        NetworkResult *result = static_cast<NetworkResult *>(data);
+        if (!result)
+            return;
+        if (result->self) {
+            if (!result->online) {
+                result->self->show_offline(result->error);
+            } else {
+                result->self->startup_state_ = StartupState::Ready;
+                if (result->self->startup_overlay_) {
+                    lv_obj_del(result->self->startup_overlay_);
+                    result->self->startup_overlay_ = nullptr;
+                    result->self->startup_title_ = nullptr;
+                    result->self->startup_detail_ = nullptr;
+                }
+                if (result->self->first_run_needed())
+                    result->self->open_setup_panel();
+            }
+        }
+        delete result;
+    }
+
+    static void *network_thread_main(void *data)
+    {
+        NetworkResult *result = static_cast<NetworkResult *>(data);
+        if (!result)
+            return nullptr;
+        result->online = ZClawClient::has_internet_connection(&result->error);
+        lv_async_call(network_async_done, result);
+        return nullptr;
+    }
+
+    void start_network_check()
+    {
+        NetworkResult *result = new NetworkResult();
+        result->self = this;
+        pthread_t thread_id{};
+        if (pthread_create(&thread_id, nullptr, network_thread_main, result) != 0) {
+            result->error = "Could not start network check.";
+            network_async_done(result);
+            return;
+        }
+        pthread_detach(thread_id);
     }
 
     void create_ui()
@@ -572,14 +704,123 @@ private:
     {
         settings_view_ = SettingsView::Setup;
         clear_settings_rows();
-        set_settings_header("Quickstart", "Enter / Esc");
-        add_settings_row("Run Quickstart", setup_in_flight_ ? "Working" : "Start");
-        add_settings_row("ZeroClaw Bin", "Managed");
-        add_settings_row("Provider", providers_.empty() ? "None" : providers_[0].alias.c_str());
-        add_settings_row("Agent", ui_config_.agent_alias.c_str());
-        add_settings_row("Token", ui_config_.bearer_token.empty() ? "Pair" : "Saved");
-        settings_selected_ = 0;
+        if (setup_in_flight_) {
+            set_settings_header("Quickstart", "Please wait");
+            add_settings_row("Status", "Working");
+            add_settings_row("Provider", provider_display_name(setup_provider_.family));
+            add_settings_row("Agent", ui_config_.agent_alias.c_str());
+            settings_selected_ = 0;
+            update_settings_selection();
+            return;
+        }
+        set_settings_header("Model Settings", "Enter / Esc");
+        add_settings_row("Provider", provider_display_name(setup_provider_.family));
+        if (setup_provider_.family == "custom")
+            add_settings_row("API URL", setup_provider_.uri.empty() ? "Required" : "Set");
+        if (setup_provider_.family != "ollama")
+            add_settings_row("API Key", setup_provider_.api_key.empty() ? "Required" : "Set");
+        if (setup_provider_.family == "custom")
+            add_settings_row("API Model", setup_provider_.model.empty() ? "Required" : "Set");
+        add_settings_row("Confirm", "Quickstart");
+        if (settings_selected_ >= settings_row_count_)
+            settings_selected_ = settings_row_count_ - 1;
+        if (settings_selected_ < 0)
+            settings_selected_ = 0;
         update_settings_selection();
+    }
+
+    void render_setup_providers()
+    {
+        settings_view_ = SettingsView::SetupProviders;
+        clear_settings_rows();
+        set_settings_header("Model Provider", "Enter / Esc");
+        if (setup_provider_selected_ < setup_provider_scroll_)
+            setup_provider_scroll_ = setup_provider_selected_;
+        if (setup_provider_selected_ >= setup_provider_scroll_ + SETTINGS_ROW_MAX)
+            setup_provider_scroll_ = setup_provider_selected_ - SETTINGS_ROW_MAX + 1;
+        for (int i = 0; i < SETTINGS_ROW_MAX && setup_provider_scroll_ + i < 6; ++i) {
+            const int item = setup_provider_scroll_ + i;
+            const ProviderConfig preset = provider_preset(item);
+            add_settings_row(provider_display_name(preset.family),
+                             item == setup_provider_selected_ ? "Selected" : "");
+        }
+        settings_selected_ = setup_provider_selected_ - setup_provider_scroll_;
+        update_settings_selection();
+    }
+
+    int setup_initialize_row() const
+    {
+        return settings_row_count_ - 1;
+    }
+
+    SetupEditField selected_setup_field() const
+    {
+        if (settings_selected_ == 0)
+            return SetupEditField::None;
+        int row = 1;
+        if (setup_provider_.family == "custom") {
+            if (settings_selected_ == row++) return SetupEditField::Uri;
+        }
+        if (setup_provider_.family != "ollama") {
+            if (settings_selected_ == row++) return SetupEditField::ApiKey;
+        }
+        if (setup_provider_.family == "custom" && settings_selected_ == row)
+            return SetupEditField::Model;
+        return SetupEditField::None;
+    }
+
+    void edit_selected_setup_field()
+    {
+        setup_edit_field_ = selected_setup_field();
+        const char *title = "";
+        const std::string *value = nullptr;
+        if (setup_edit_field_ == SetupEditField::Uri) {
+            title = "API URL";
+            value = &setup_provider_.uri;
+        } else if (setup_edit_field_ == SetupEditField::ApiKey) {
+            title = "API Key";
+            value = &setup_provider_.api_key;
+        } else if (setup_edit_field_ == SetupEditField::Model) {
+            title = "API Model Name";
+            value = &setup_provider_.model;
+        }
+        if (!value)
+            return;
+        open_text_dialog(title, value->c_str(), InputMode::SetupEdit);
+    }
+
+    void apply_setup_edit(const std::string &value)
+    {
+        if (setup_edit_field_ == SetupEditField::Uri)
+            setup_provider_.uri = value;
+        else if (setup_edit_field_ == SetupEditField::ApiKey)
+            setup_provider_.api_key = value;
+        else if (setup_edit_field_ == SetupEditField::Model)
+            setup_provider_.model = value;
+        setup_edit_field_ = SetupEditField::None;
+        render_setup();
+    }
+
+    bool validate_setup(std::string *error)
+    {
+        if (setup_provider_.family != "ollama" && setup_provider_.api_key.empty()) {
+            settings_selected_ = setup_provider_.family == "custom" ? 2 : 1;
+            *error = "API Key is required.";
+            return false;
+        }
+        if (setup_provider_.family == "custom") {
+            if (setup_provider_.uri.rfind("http://", 0) != 0 && setup_provider_.uri.rfind("https://", 0) != 0) {
+                settings_selected_ = 1;
+                *error = "API URL must start with http:// or https://.";
+                return false;
+            }
+            if (setup_provider_.model.empty()) {
+                settings_selected_ = 3;
+                *error = "API Model Name is required.";
+                return false;
+            }
+        }
+        return true;
     }
 
     void render_settings_providers()
@@ -659,8 +900,18 @@ private:
         if (settings_panel_open() || settings_animating_)
             return;
         close_input_dialog();
+        if (setup_provider_.family == "openrouter") setup_provider_selected_ = 1;
+        else if (setup_provider_.family == "anthropic") setup_provider_selected_ = 2;
+        else if (setup_provider_.family == "ollama") setup_provider_selected_ = 3;
+        else if (setup_provider_.family == "deepseek") setup_provider_selected_ = 4;
+        else if (setup_provider_.family == "custom") setup_provider_selected_ = 5;
+        else setup_provider_selected_ = 0;
+        setup_provider_scroll_ = 0;
         create_settings_panel();
-        render_setup();
+        if (first_run_needed())
+            render_setup_providers();
+        else
+            render_setup();
         animate_settings_panel(SCREEN_W, 0, false);
     }
 
@@ -735,6 +986,15 @@ private:
     {
         if (!settings_panel_open())
             return;
+        if (settings_view_ == SettingsView::SetupProviders) {
+            setup_provider_selected_ += delta;
+            if (setup_provider_selected_ < 0)
+                setup_provider_selected_ = 0;
+            if (setup_provider_selected_ >= 6)
+                setup_provider_selected_ = 5;
+            render_setup_providers();
+            return;
+        }
         settings_selected_ += delta;
         if (settings_selected_ < 0)
             settings_selected_ = 0;
@@ -1361,7 +1621,7 @@ private:
         if (!result || !result->self)
             return nullptr;
         ZClawClientResult client_result = result->self->client_.run_setup(
-            result->self->ui_config_, result->self->providers_);
+            result->self->ui_config_, result->self->setup_provider_);
         result->text = client_result.text;
         result->ok = client_result.ok;
         result->config = client_result.config;
@@ -1373,6 +1633,12 @@ private:
     {
         if (setup_in_flight_)
             return;
+        std::string validation_error;
+        if (!validate_setup(&validation_error)) {
+            append_ai_message(validation_error.c_str());
+            render_setup();
+            return;
+        }
         setup_in_flight_ = true;
         append_ai_message("Configuring ZeroClaw service...");
         render_setup();
@@ -1394,6 +1660,10 @@ private:
         setup_in_flight_ = false;
         if (ok) {
             ui_config_ = config;
+            if (providers_.empty())
+                providers_.push_back(setup_provider_);
+            else
+                providers_[0] = setup_provider_;
             save_providers();
             save_ui_config();
         }
@@ -1410,8 +1680,22 @@ private:
             return;
 
         if (settings_view_ == SettingsView::Setup) {
-            if (settings_selected_ == 0)
+            if (setup_in_flight_)
+                return;
+            if (settings_selected_ == 0) {
+                render_setup_providers();
+            } else if (settings_selected_ == setup_initialize_row()) {
                 start_setup();
+            } else {
+                edit_selected_setup_field();
+            }
+            return;
+        }
+
+        if (settings_view_ == SettingsView::SetupProviders) {
+            setup_provider_ = provider_preset(setup_provider_selected_);
+            settings_selected_ = 0;
+            render_setup();
             return;
         }
 
@@ -1458,7 +1742,22 @@ private:
 
     void settings_back()
     {
-        if (settings_view_ == SettingsView::Setup || settings_view_ == SettingsView::Authorization) {
+        if (setup_in_flight_ && settings_view_ == SettingsView::Setup)
+            return;
+        if (settings_view_ == SettingsView::SetupProviders) {
+            if (first_run_needed())
+                g_quit_requested = 1;
+            else {
+                settings_selected_ = 0;
+                render_setup();
+            }
+        } else if (settings_view_ == SettingsView::Setup) {
+            if (first_run_needed()) {
+                render_setup_providers();
+            } else {
+                close_settings_panel();
+            }
+        } else if (settings_view_ == SettingsView::Authorization) {
             close_settings_panel();
         } else if (settings_view_ == SettingsView::ProviderDetail) {
             provider_detail_index_ = -1;
@@ -1477,6 +1776,13 @@ private:
             return;
 
         const char *text = lv_textarea_get_text(input_textarea_);
+        if (input_mode_ == InputMode::SetupEdit) {
+            const std::string value = text ? text : "";
+            close_input_dialog();
+            apply_setup_edit(value);
+            input_mode_ = InputMode::Chat;
+            return;
+        }
         if (input_mode_ == InputMode::ProviderEdit) {
             const std::string value = text ? text : "";
             close_input_dialog();
@@ -1534,7 +1840,13 @@ private:
         if (!item)
             return;
 
-        const uint32_t key = keyboard_key(e);
+        uint32_t key = keyboard_key(e);
+        if (startup_state_ != StartupState::Ready) {
+            if (startup_state_ == StartupState::Offline &&
+                item->key_state == KBD_KEY_RELEASED && key == KEY_ENTER)
+                g_quit_requested = 1;
+            return;
+        }
         const bool shift_down = (item->mods & KBD_MOD_SHIFT) != 0;
         if (item->key_state == KBD_KEY_PRESSED || item->key_state == KBD_KEY_REPEATED) {
             if (!input_dialog_open())
@@ -1590,6 +1902,15 @@ private:
             }
             return;
         }
+
+        if (key == KEY_Z)
+            key = KEY_LEFT;
+        else if (key == KEY_X)
+            key = KEY_DOWN;
+        else if (key == KEY_C)
+            key = KEY_RIGHT;
+        else if (key == KEY_F)
+            key = KEY_UP;
 
         {
             std::lock_guard<std::mutex> lock(approval_mutex_);
@@ -1671,4 +1992,14 @@ void ui_init()
 {
     static ZClawApp app;
     g_app = &app;
+}
+
+bool ui_should_quit()
+{
+    return g_quit_requested != 0;
+}
+
+void ui_request_quit()
+{
+    g_quit_requested = 1;
 }
