@@ -50,8 +50,9 @@ int lvgl_main(int argc, char **argv)
     ui_init();
     lv_obj_invalidate(lv_screen_active());
 
-    while (1) {
+    while (!ui_should_quit()) {
         lv_timer_handler();
         usleep(10000);
     }
+    return 0;
 }

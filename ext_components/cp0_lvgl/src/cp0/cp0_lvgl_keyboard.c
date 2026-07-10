@@ -112,6 +112,12 @@ __attribute__((weak)) void ui_global_hint_on_key(const struct key_item *elm)
     (void)elm;
 }
 
+__attribute__((weak)) int ui_screensaver_filter_key(const struct key_item *elm)
+{
+    (void)elm;
+    return 0;
+}
+
 static const char *getenv_default(const char *name, const char *dflt)
 {
     const char *value = getenv(name);
@@ -178,15 +184,19 @@ static void cp0_keypad_read_cb(lv_indev_t *indev, lv_indev_data_t *data)
               elm->key_code, kbd_state_name(elm->key_state), elm->sym_name,
               utf8_dbg, elm->codepoint, (void *)lv_screen_active());
 
-        lv_obj_t *root = lv_screen_active();
-        if (root)
-            lv_obj_send_event(root, (lv_event_code_t)LV_EVENT_KEYBOARD, elm);
+        int swallowed = ui_screensaver_filter_key(elm);
+        if (!swallowed) {
+            lv_obj_t *root = lv_screen_active();
+            if (root)
+                lv_obj_send_event(root, (lv_event_code_t)LV_EVENT_KEYBOARD, elm);
 
-        ui_global_hint_on_key(elm);
+            ui_global_hint_on_key(elm);
 
-        data->key = cp0_evdev_process_key(elm->key_code);
-        if (data->key) {
-            data->state = (lv_indev_state_t)elm->key_state;
+            data->key = cp0_evdev_process_key(elm->key_code);
+            if (data->key)
+                data->state = (lv_indev_state_t)elm->key_state;
+        }
+        if (data->key || swallowed) {
             data->continue_reading = !STAILQ_EMPTY(&keyboard_queue);
         }
         free(elm);

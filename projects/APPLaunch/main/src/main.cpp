@@ -12,6 +12,7 @@
 #include <string>
 #include <semaphore.h>
 #include "ui/ui.h"
+#include "ui/ui_screensaver.h"
 #include "keyboard_input.h"
 #include "cp0_lvgl_app.h"
 #include "cp0_lvgl_file.hpp"
@@ -85,6 +86,7 @@ int main(void)
         LV_EVENT_KEYBOARD = lv_event_register_id();
 
     launcher_ui::init();
+    ui_screensaver_init();
 
     // Force full-screen refresh immediately after init
     SLOGI("[BOOT] ui_init done, forcing full refresh...");

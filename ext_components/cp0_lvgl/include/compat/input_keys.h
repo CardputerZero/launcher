@@ -76,6 +76,11 @@
 #define KEY_PAGEDOWN        109
 #define KEY_INSERT          110
 #define KEY_DELETE          111
+#define KEY_MUTE            113
+#define KEY_VOLUMEDOWN      114
+#define KEY_VOLUMEUP        115
+#define KEY_BRIGHTNESSDOWN  224
+#define KEY_BRIGHTNESSUP    225
 #define KEY_NEXT            407
 #define KEY_PREVIOUS        412
 #endif

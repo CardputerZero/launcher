@@ -361,20 +361,34 @@ bool config_set(const std::string &path, const std::string &value, std::string *
     return true;
 }
 
-bool apply_quickstart_config(UiConfig *config, const std::vector<ProviderConfig> &providers, std::string *error)
+bool ensure_agent(const std::string &alias, std::string *error)
 {
-    ProviderConfig provider;
-    if (providers.empty()) {
-        provider.alias = "local";
-        provider.family = "ollama";
-        provider.model = "llama3.1";
-        provider.uri = "http://127.0.0.1:11434";
-    } else {
-        provider = providers[0];
+    int rc = 0;
+    std::string out = run_command_capture(zeroclaw_cli() + " agents list", &rc);
+    if (rc != 0) {
+        if (error)
+            *error = "agents list failed\n" + out;
+        return false;
     }
+    std::istringstream lines(out);
+    std::string line;
+    while (std::getline(lines, line)) {
+        if (trim(line) == alias)
+            return true;
+    }
+    out = run_command_capture(zeroclaw_cli() + " agents create " + shell_quote(alias), &rc);
+    if (rc != 0) {
+        if (error)
+            *error = "agent creation failed\n" + out;
+        return false;
+    }
+    return true;
+}
 
+bool apply_quickstart_config(UiConfig *config, ProviderConfig provider, std::string *error)
+{
     if (provider.alias.empty())
-        provider.alias = "default";
+        provider.alias = "zclaw";
     if (provider.family.empty())
         provider.family = "openai";
     if (provider.model.empty())
@@ -398,13 +412,10 @@ bool apply_quickstart_config(UiConfig *config, const std::vector<ProviderConfig>
     if (!provider.api_key.empty() && !config_set(provider_prefix + ".api_key", provider.api_key, error))
         return false;
 
-    if (!config_set("risk_profiles.zclaw_supervised.level", "supervised", error) ||
-        !config_set("risk_profiles.zclaw_supervised.workspace_only", "true", error) ||
-        !config_set("risk_profiles.zclaw_supervised.require_approval_for_medium_risk", "true", error) ||
-        !config_set("risk_profiles.zclaw_supervised.block_high_risk_commands", "true", error) ||
+    if (!ensure_agent(agent, error) ||
         !config_set("agents." + agent + ".enabled", "true", error) ||
         !config_set("agents." + agent + ".model_provider", provider_ref, error) ||
-        !config_set("agents." + agent + ".risk_profile", "zclaw_supervised", error))
+        !config_set("onboard_state.quickstart_completed", "true", error))
         return false;
 
     config->agent_alias = agent;
@@ -505,6 +516,34 @@ bool ZClawClient::first_run_needed(const UiConfig &config)
 void ZClawClient::ensure_storage_dir()
 {
     ensure_zeroclaw_dir();
+}
+
+bool ZClawClient::has_internet_connection(std::string *error)
+{
+    static constexpr const char *PROBES[] = {
+        "https://www.cloudflare.com/cdn-cgi/trace",
+        "https://www.msftconnecttest.com/connecttest.txt",
+        "https://github.com/",
+    };
+
+    std::string last_error;
+    for (const char *probe : PROBES) {
+        HttpUrl url;
+        if (!split_http_url(probe, &url))
+            continue;
+        httplib::Client client(url.base);
+        client.set_connection_timeout(2);
+        client.set_read_timeout(2);
+        client.set_write_timeout(2);
+        client.set_follow_location(true);
+        auto res = client.Get(url.path);
+        if (res)
+            return true;
+        last_error = httplib::to_string(res.error());
+    }
+    if (error)
+        *error = last_error.empty() ? "No public endpoint responded." : last_error;
+    return false;
 }
 
 ZClawClientResult ZClawClient::pair_with_code(UiConfig config, const std::string &code)
@@ -642,12 +681,12 @@ ZClawClientResult ZClawClient::send_chat(const UiConfig &config, const std::stri
     return result;
 }
 
-ZClawClientResult ZClawClient::run_setup(UiConfig config, const std::vector<ProviderConfig> &providers)
+ZClawClientResult ZClawClient::run_setup(UiConfig config, const ProviderConfig &provider)
 {
     ZClawClientResult result;
     result.config = config;
     std::string error;
-    if (!ensure_zeroclaw_binary(&error) || !apply_quickstart_config(&result.config, providers, &error) ||
+    if (!ensure_zeroclaw_binary(&error) || !apply_quickstart_config(&result.config, provider, &error) ||
         !start_zeroclaw_service(&error)) {
         result.text = error;
         return result;
@@ -655,18 +694,18 @@ ZClawClientResult ZClawClient::run_setup(UiConfig config, const std::vector<Prov
 
     const std::string code = generate_pairing_code();
     if (code.empty()) {
-        result.config.setup_complete = true;
-        result.text = "ZeroClaw is running.\nOpen Authorization and pair manually.";
-        result.ok = true;
+        result.text = "ZeroClaw started, but pairing code generation failed.";
         return result;
     }
 
     ZClawClientResult pair_result = pair_with_code(result.config, code);
     result.config = pair_result.config;
+    if (result.config.bearer_token.empty()) {
+        result.text = "Automatic pairing failed.\n" + pair_result.text;
+        return result;
+    }
     result.config.setup_complete = true;
     result.ok = true;
-    result.text = result.config.bearer_token.empty()
-                      ? "ZeroClaw is running.\nAuto pairing failed:\n" + pair_result.text
-                      : "Quickstart complete.\nChat and approvals use WS.";
+    result.text = "Quickstart complete.\nChat and approvals use WS.";
     return result;
 }
