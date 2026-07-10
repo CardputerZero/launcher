@@ -10,7 +10,9 @@ on:
       - 'projects/Calculator'
       - 'projects/Calculator/**'
       - 'projects/LaunchWizard/**'
+      - 'projects/ZClaw/**'
       - 'SDK/**'
+      - 'ext_components/**'
       - '.gitmodules'
       - '.github/workflows/launcher-build.yml'
       - 'scripts/debian_packager.py'
@@ -97,12 +99,21 @@ jobs:
         export CONFIG_REPO_AUTOMATION=y
         scons -j$(nproc)
 
+    - name: Build ZClaw (cross-compile aarch64)
+      run: |
+        cd projects/ZClaw
+        rm -rf build dist
+        export CardputerZero=y
+        export CONFIG_REPO_AUTOMATION=y
+        scons -j$(nproc)
+
     - name: Copy bundled apps into APPLaunch dist
       run: |
         mkdir -p projects/APPLaunch/dist/bin
         cp projects/AppStore/dist/M5CardputerZero-AppStore projects/APPLaunch/dist/bin/
         cp projects/AppStore/dist/APPLaunch/bin/appstore.py projects/APPLaunch/dist/bin/
         cp projects/Calculator/dist/M5CardputerZero-Calculator projects/APPLaunch/dist/bin/
+        cp projects/ZClaw/dist/ZClaw projects/APPLaunch/dist/bin/
         mkdir -p projects/APPLaunch/dist/APPLaunch/share/images
         cp projects/AppStore/dist/APPLaunch/share/images/store_wordmark.png projects/APPLaunch/dist/APPLaunch/share/images/ 2>/dev/null || true
         cp projects/AppStore/dist/APPLaunch/share/images/store_arrow_*.png projects/APPLaunch/dist/APPLaunch/share/images/ 2>/dev/null || true
