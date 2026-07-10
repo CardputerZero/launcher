@@ -4,6 +4,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <chrono>
 #include <ctime>
 #include <fstream>
 #include <sstream>
@@ -271,7 +272,22 @@ std::string zeroclaw_cli()
     return shell_quote(ZClawClient::zeroclaw_bin_path());
 }
 
-bool download_file(const std::string &url_text, const std::string &output_path, std::string *error)
+void report_setup_progress(const ZClawClient::SetupProgressHandler &handler, const char *status,
+                           int percent, size_t downloaded = 0, size_t total = 0, double speed = 0.0)
+{
+    if (!handler)
+        return;
+    ZClawSetupProgress progress;
+    progress.status = status ? status : "";
+    progress.percent = percent;
+    progress.downloaded_bytes = downloaded;
+    progress.total_bytes = total;
+    progress.bytes_per_second = speed;
+    handler(progress);
+}
+
+bool download_file(const std::string &url_text, const std::string &output_path, std::string *error,
+                   const ZClawClient::SetupProgressHandler &progress_handler)
 {
     HttpUrl url;
     if (!split_http_url(url_text, &url)) {
@@ -289,9 +305,23 @@ bool download_file(const std::string &url_text, const std::string &output_path, 
 
     httplib::Client client(url.base);
     configure_http_client(client, 300);
+    auto last_time = std::chrono::steady_clock::now();
+    size_t last_bytes = 0;
     auto res = client.Get(url.path, [&](const char *data, size_t len) {
         out.write(data, (std::streamsize)len);
         return (bool)out;
+    }, [&](size_t current, size_t total) {
+        const auto now = std::chrono::steady_clock::now();
+        const double seconds = std::chrono::duration<double>(now - last_time).count();
+        if (seconds >= 0.2 || current == total) {
+            const double speed = seconds > 0.0 ? (double)(current - last_bytes) / seconds : 0.0;
+            const int download_percent = total > 0 ? (int)((current * 60) / total) : 0;
+            report_setup_progress(progress_handler, "Downloading ZeroClaw", 5 + download_percent,
+                                  current, total, speed);
+            last_time = now;
+            last_bytes = current;
+        }
+        return true;
     });
     out.close();
     if (!res) {
@@ -307,12 +337,16 @@ bool download_file(const std::string &url_text, const std::string &output_path, 
     return true;
 }
 
-bool ensure_zeroclaw_binary(std::string *error)
+bool ensure_zeroclaw_binary(std::string *error,
+                            const ZClawClient::SetupProgressHandler &progress_handler)
 {
+    report_setup_progress(progress_handler, "Checking ZeroClaw", 3);
     ensure_zeroclaw_bin_dir();
     if (file_exists(ZClawClient::zeroclaw_bin_path()) &&
-        ::access(ZClawClient::zeroclaw_bin_path().c_str(), X_OK) == 0)
+        ::access(ZClawClient::zeroclaw_bin_path().c_str(), X_OK) == 0) {
+        report_setup_progress(progress_handler, "ZeroClaw is ready", 65);
         return true;
+    }
 
     const std::string tmp_prefix = ZClawClient::zeroclaw_dir() + "/zeroclaw-install.XXXXXX";
     int rc = 0;
@@ -324,11 +358,12 @@ bool ensure_zeroclaw_binary(std::string *error)
     }
 
     const std::string archive_path = tmp_dir + "/zeroclaw.tar.gz";
-    if (!download_file(ZEROCLAW_RELEASE_URL, archive_path, error)) {
+    if (!download_file(ZEROCLAW_RELEASE_URL, archive_path, error, progress_handler)) {
         run_command_capture("rm -rf " + shell_quote(tmp_dir));
         return false;
     }
 
+    report_setup_progress(progress_handler, "Installing ZeroClaw", 67);
     const std::string cmd =
         "tar -xzf " + shell_quote(archive_path) + " -C " + shell_quote(tmp_dir) + " && "
         "found=$(find " + shell_quote(tmp_dir) + " -type f -name zeroclaw | head -n 1) && "
@@ -681,17 +716,28 @@ ZClawClientResult ZClawClient::send_chat(const UiConfig &config, const std::stri
     return result;
 }
 
-ZClawClientResult ZClawClient::run_setup(UiConfig config, const ProviderConfig &provider)
+ZClawClientResult ZClawClient::run_setup(UiConfig config, const ProviderConfig &provider,
+                                         const SetupProgressHandler &progress_handler)
 {
     ZClawClientResult result;
     result.config = config;
     std::string error;
-    if (!ensure_zeroclaw_binary(&error) || !apply_quickstart_config(&result.config, provider, &error) ||
-        !start_zeroclaw_service(&error)) {
+    if (!ensure_zeroclaw_binary(&error, progress_handler)) {
+        result.text = error;
+        return result;
+    }
+    report_setup_progress(progress_handler, "Configuring provider", 72);
+    if (!apply_quickstart_config(&result.config, provider, &error)) {
+        result.text = error;
+        return result;
+    }
+    report_setup_progress(progress_handler, "Starting ZeroClaw service", 86);
+    if (!start_zeroclaw_service(&error)) {
         result.text = error;
         return result;
     }
 
+    report_setup_progress(progress_handler, "Pairing local client", 94);
     const std::string code = generate_pairing_code();
     if (code.empty()) {
         result.text = "ZeroClaw started, but pairing code generation failed.";
@@ -706,6 +752,7 @@ ZClawClientResult ZClawClient::run_setup(UiConfig config, const ProviderConfig &
     }
     result.config.setup_complete = true;
     result.ok = true;
+    report_setup_progress(progress_handler, "Quickstart complete", 100);
     result.text = "Quickstart complete.\nChat and approvals use WS.";
     return result;
 }

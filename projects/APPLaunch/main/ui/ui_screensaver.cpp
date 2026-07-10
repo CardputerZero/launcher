@@ -19,9 +19,9 @@ namespace {
 
 constexpr int kBlockSize = 20;
 constexpr uint32_t kIdleCheckMs = 500;
-constexpr uint32_t kAnimationFrameMs = 33;
-constexpr int kVelocityX = 90;
-constexpr int kVelocityY = 70;
+constexpr uint32_t kAnimationFrameMs = 40;
+constexpr int kVelocityX = 45;
+constexpr int kVelocityY = 35;
 
 constexpr uint32_t kColors[] = {
     0x00E5FF, 0xFFEA00, 0xFF3D71, 0x69F0AE,
