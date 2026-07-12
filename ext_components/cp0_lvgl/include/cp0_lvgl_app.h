@@ -118,6 +118,22 @@ typedef void *cp0_watcher_t;
 typedef int cp0_pid_t;
 typedef void (*cp0_compass_read_cb_t)(int code, const cp0_compass_info_t *info, void *user);
 
+typedef enum {
+    CP0_SUDO_RESULT_SUCCESS = 0,
+    CP0_SUDO_RESULT_AUTH_FAILED,
+    CP0_SUDO_RESULT_EXEC_FAILED,
+    CP0_SUDO_RESULT_CANCELLED,
+    CP0_SUDO_RESULT_TIMED_OUT,
+} cp0_sudo_result_t;
+
+typedef enum {
+    CP0_SUDO_CALLBACK_LVGL = 0,
+    CP0_SUDO_CALLBACK_WORKER,
+} cp0_sudo_callback_thread_t;
+
+typedef void (*cp0_sudo_output_cb_t)(const char *data, size_t size, void *user);
+typedef void (*cp0_sudo_complete_cb_t)(cp0_sudo_result_t result, int exit_code, void *user);
+
 const char *cp0_file_path_c(const char *file);
 
 int cp0_dir_list(const char *path, cp0_dirent_t *entries, int max_entries, int *out_count);
@@ -137,7 +153,29 @@ void cp0_system_reboot(void);
 
 int cp0_process_run_argv(const char *const *argv, int background);
 int cp0_process_capture_argv(const char *const *argv, char *out, int out_size);
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((deprecated("use cp0_sudo_run_argv_async or cp0_sudo_run_shell_async")))
+#endif
 int cp0_process_run_sudo(const char *password, const char *const *argv);
+int cp0_sudo_run_argv_async(const char *const *argv,
+                            cp0_sudo_callback_thread_t callback_thread,
+                            cp0_sudo_output_cb_t output_cb,
+                            cp0_sudo_complete_cb_t complete_cb,
+                            void *user);
+int cp0_sudo_run_shell_async(const char *command,
+                             cp0_sudo_callback_thread_t callback_thread,
+                             cp0_sudo_output_cb_t output_cb,
+                             cp0_sudo_complete_cb_t complete_cb,
+                             void *user);
+int cp0_sudo_run_argv_async_ex(const char *const *argv,
+                               cp0_sudo_callback_thread_t callback_thread,
+                               cp0_sudo_output_cb_t output_cb,
+                               cp0_sudo_complete_cb_t complete_cb,
+                               void *user,
+                               int auth_timeout_ms,
+                               int exec_timeout_ms,
+                               uint64_t *request_id);
+int cp0_sudo_cancel(uint64_t request_id);
 int cp0_file_read_first_line(const char *path, char *out, int out_size);
 int cp0_desktop_exec_is_safe(const char *exec, char *reason, int reason_size);
 int cp0_network_default_info_read(cp0_eth_info_t *info);
