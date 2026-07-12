@@ -4,13 +4,50 @@
 #include "hal/hal_paths.h"
 #include "hal/hal_process.h"
 #include "hal/hal_settings.h"
+#include "cp0_lvgl_app.h"
 
+#include <errno.h>
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
 
 int cp0_process_run_sudo(const char *password, const char *const *argv)
 { (void)password; (void)argv; return -1; }
+
+int cp0_sudo_run_argv_async(const char *const *argv,
+                            cp0_sudo_callback_thread_t callback_thread,
+                            cp0_sudo_output_cb_t output_cb,
+                            cp0_sudo_complete_cb_t complete_cb,
+                            void *user)
+{
+    (void)argv; (void)callback_thread; (void)output_cb; (void)complete_cb; (void)user;
+    return -ENOTSUP;
+}
+
+int cp0_sudo_run_shell_async(const char *command,
+                             cp0_sudo_callback_thread_t callback_thread,
+                             cp0_sudo_output_cb_t output_cb,
+                             cp0_sudo_complete_cb_t complete_cb,
+                             void *user)
+{
+    (void)command; (void)callback_thread; (void)output_cb; (void)complete_cb; (void)user;
+    return -ENOTSUP;
+}
+
+int cp0_sudo_run_argv_async_ex(const char *const *argv,
+                               cp0_sudo_callback_thread_t callback_thread,
+                               cp0_sudo_output_cb_t output_cb,
+                               cp0_sudo_complete_cb_t complete_cb, void *user,
+                               int auth_timeout_ms, int exec_timeout_ms,
+                               uint64_t *request_id)
+{
+    (void)auth_timeout_ms; (void)exec_timeout_ms;
+    if (request_id) *request_id = 0;
+    return cp0_sudo_run_argv_async(argv, callback_thread, output_cb, complete_cb, user);
+}
+
+int cp0_sudo_cancel(uint64_t request_id)
+{ (void)request_id; return -ENOTSUP; }
 
 void hal_audio_init(void) {}
 void hal_audio_play(const char *path) { (void)path; }

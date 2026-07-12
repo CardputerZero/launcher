@@ -33,6 +33,7 @@
 #include <sstream>
 #include <thread>
 #include <list>
+#include <memory>
 #include <utility>
 #include "cp0_lvgl_app.h"
 #include "hal_lvgl_bsp.h"
@@ -2275,23 +2276,58 @@ void RTC::apply_value(UISetupPage &page)
     char timestamp[32];
     snprintf(timestamp, sizeof(timestamp), "%04d-%02d-%02d %02d:%02d:%02d",
              values_[0], values_[1], values_[2], values_[3], values_[4], values_[5]);
-    char shell_cmd[96];
-    snprintf(shell_cmd, sizeof(shell_cmd), "date -s '%s'", timestamp);
-
-    SudoPrompt::show({"sh", "-c", shell_cmd}, [this, &page](int code) {
-        if (code == 0)
-            page.update_datetime_status();
-        else
-            refresh_values(page);
-    });
+    struct Context {
+        RTC *rtc;
+        UISetupPage *page;
+    };
+    auto *context = new (std::nothrow) Context{this, &page};
+    if (!context) {
+        refresh_values(page);
+        return;
+    }
+    const char *argv[] = {"date", "-s", timestamp, nullptr};
+    int rc = cp0_sudo_run_argv_async(
+        argv, CP0_SUDO_CALLBACK_LVGL, nullptr,
+        [](cp0_sudo_result_t result, int, void *user) {
+            std::unique_ptr<Context> context(static_cast<Context *>(user));
+            if (result == CP0_SUDO_RESULT_SUCCESS) {
+                context->rtc->dirty_ = true;
+                context->page->update_datetime_status();
+            } else {
+                context->rtc->refresh_values(*context->page);
+            }
+        }, context);
+    if (rc != 0) {
+        delete context;
+        refresh_values(page);
+    }
 }
 
 void RTC::commit_to_hardware(UISetupPage &page)
 {
-    SudoPrompt::show({"hwclock", "-w"}, [this, &page](int code) {
-        refresh_values(page);
-        page.update_datetime_status();
-    });
+    struct Context {
+        RTC *rtc;
+        UISetupPage *page;
+    };
+    auto *context = new (std::nothrow) Context{this, &page};
+    if (!context)
+        return;
+    const char *argv[] = {"hwclock", "-w", nullptr};
+    int rc = cp0_sudo_run_argv_async(
+        argv, CP0_SUDO_CALLBACK_LVGL, nullptr,
+        [](cp0_sudo_result_t result, int, void *user) {
+            std::unique_ptr<Context> context(static_cast<Context *>(user));
+            if (result == CP0_SUDO_RESULT_SUCCESS) {
+                context->rtc->refresh_values(*context->page);
+                context->page->update_datetime_status();
+            } else {
+                context->rtc->dirty_ = true;
+            }
+        }, context);
+    if (rc != 0) {
+        delete context;
+        dirty_ = true;
+    }
 }
 
 void RTC::show_write_confirm(UISetupPage &page)
