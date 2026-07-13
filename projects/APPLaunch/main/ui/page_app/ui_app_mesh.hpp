@@ -51,7 +51,6 @@ public:
     UIMeshPage() : AppPage()
     {
         set_page_title("MESH");
-        srand((unsigned)time(nullptr));
         generate_node_id();
         creat_UI();
         event_handler_init();
@@ -127,16 +126,24 @@ private:
     // ==================== generate random node ID ====================
     void generate_node_id()
     {
-        uint32_t r = (uint32_t)rand();
+        uint32_t r = 0;
+        cp0_signal_osinfo_api({"RandomU32"}, [&](int code, std::string data) {
+            if (code == 0) r = static_cast<uint32_t>(std::strtoul(data.c_str(), nullptr, 10));
+        });
         snprintf(node_id_, sizeof(node_id_), "0x%04X", r & 0xFFFF);
     }
 
     // ==================== get current time string ====================
     static void get_time_str(char *buf, int sz)
     {
-        time_t now = time(nullptr);
-        struct tm *t = localtime(&now);
-        snprintf(buf, sz, "%02d:%02d:%02d", t->tm_hour, t->tm_min, t->tm_sec);
+        int values[6] = {};
+        bool valid = false;
+        cp0_signal_osinfo_api({"LocalTime"}, [&](int code, std::string data) {
+            valid = code == 0 && std::sscanf(data.c_str(), "%d,%d,%d,%d,%d,%d", &values[0], &values[1],
+                                             &values[2], &values[3], &values[4], &values[5]) == 6;
+        });
+        if (valid) snprintf(buf, sz, "%02d:%02d:%02d", values[3], values[4], values[5]);
+        else snprintf(buf, sz, "--:--:--");
     }
 
     // ==================== UI build ====================

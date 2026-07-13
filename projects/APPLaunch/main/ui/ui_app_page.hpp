@@ -8,8 +8,6 @@
 #include "ui.h"
 #include <stdio.h>
 #include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
 #include <unordered_map>
 #include <list>
 #include <memory>
@@ -25,6 +23,7 @@
 #include <functional>
 #include "cp0_lvgl_app.h"
 #include "hal_lvgl_bsp.h"
+#include "launcher_platform.hpp"
 #include "cp0_lvgl_file.hpp"
 #define APP_CONSOLE_EXIT_EVENT (lv_event_code_t)(LV_EVENT_LAST + 1)
 
@@ -240,9 +239,11 @@ public:
     {
         if (!time_label_)
             return;
-        char time_buf[16];
-        cp0_time_str(time_buf, sizeof(time_buf));
-        lv_label_set_text(time_label_, time_buf);
+        std::string time_text = "--:--";
+        cp0_signal_settings_api({"TimeStr"}, [&](int code, std::string data) {
+            if (code == 0) time_text = std::move(data);
+        });
+        lv_label_set_text(time_label_, time_text.c_str());
     }
 
     void update_wifi()
@@ -347,7 +348,7 @@ private:
     void create_ethernet(lv_obj_t *parent)
     {
         eth_icon_ = lv_img_create(parent);
-        lv_img_set_src(eth_icon_, cp0_file_path_c("status_ethernet.png"));
+        lv_img_set_src(eth_icon_, launcher_platform::path_c("status_ethernet.png"));
         lv_obj_clear_flag(eth_icon_, (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
         lv_obj_add_flag(eth_icon_, LV_OBJ_FLAG_HIDDEN);
     }
@@ -381,7 +382,7 @@ private:
         time_panel_ = lv_obj_create(parent);
         lv_obj_set_size(time_panel_, 40, 16);
         clear_status_panel_style(time_panel_);
-        lv_obj_set_style_bg_img_src(time_panel_, cp0_file_path_c("status_time_background.png"), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_img_src(time_panel_, launcher_platform::path_c("status_time_background.png"), LV_PART_MAIN | LV_STATE_DEFAULT);
 
         time_label_ = lv_label_create(time_panel_);
         lv_obj_set_align(time_label_, LV_ALIGN_CENTER);
@@ -395,7 +396,7 @@ private:
         battery_panel_ = lv_obj_create(parent);
         lv_obj_set_size(battery_panel_, 36, 16);
         clear_status_panel_style(battery_panel_);
-        lv_obj_set_style_bg_img_src(battery_panel_, cp0_file_path_c("status_battery_background.png"), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_img_src(battery_panel_, launcher_platform::path_c("status_battery_background.png"), LV_PART_MAIN | LV_STATE_DEFAULT);
 
         battery_bar_ = lv_bar_create(battery_panel_);
         lv_bar_set_value(battery_bar_, 96, LV_ANIM_OFF);
@@ -579,7 +580,13 @@ public:
         UI_bind_event();
         update_datetime_status();
         update_status_bar();
-        update_battery_status(cp0_battery_read());
+        cp0_signal_bq27220_api({"Read"}, [&](int code, std::string data) {
+            cp0_battery_info_t bat{};
+            if (code == 0 && std::sscanf(data.c_str(), "%d,%d,%d,%d,%d,%d,%d,%d,%d",
+                    &bat.voltage_mv, &bat.current_ma, &bat.temperature_c10, &bat.soc,
+                    &bat.remain_mah, &bat.full_mah, &bat.flags, &bat.avg_current_ma, &bat.valid) == 9)
+                update_battery_status(bat);
+        });
         time_timer_ = lv_timer_create(app_time_timer_cb, 1000, this);
         status_timer_ = lv_timer_create(app_status_timer_cb, 5000, this);
     }
@@ -857,7 +864,7 @@ private:
 
 #ifdef APPLAUNCH_LOGO_USE_PNG
         ui_TOP_logo = lv_img_create(ui_TOP_Container);
-        lv_img_set_src(ui_TOP_logo, cp0_file_path_c("launcher_brand_logo.png"));
+        lv_img_set_src(ui_TOP_logo, launcher_platform::path_c("launcher_brand_logo.png"));
         lv_obj_set_size(ui_TOP_logo, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
         lv_obj_add_flag(ui_TOP_logo, LV_OBJ_FLAG_ADV_HITTEST);
         lv_obj_clear_flag(ui_TOP_logo, LV_OBJ_FLAG_SCROLLABLE);
@@ -876,7 +883,7 @@ private:
         lv_obj_clear_flag(spacer, (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
 
         ui_TOP_eth = lv_img_create(ui_TOP_Container);
-        lv_img_set_src(ui_TOP_eth, cp0_file_path_c("status_ethernet.png"));
+        lv_img_set_src(ui_TOP_eth, launcher_platform::path_c("status_ethernet.png"));
         lv_obj_clear_flag(ui_TOP_eth, (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
         lv_obj_add_flag(ui_TOP_eth, LV_OBJ_FLAG_HIDDEN);
 
@@ -889,7 +896,7 @@ private:
         lv_obj_set_style_radius(ui_TOP_time, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_color(ui_TOP_time, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_opa(ui_TOP_time, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_img_src(ui_TOP_time, cp0_file_path_c("status_time_background.png"), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_img_src(ui_TOP_time, launcher_platform::path_c("status_time_background.png"), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_border_width(ui_TOP_time, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
         ui_TOP_time_Label = lv_label_create(ui_TOP_time);
         lv_obj_set_width(ui_TOP_time_Label, LV_SIZE_CONTENT);
@@ -906,7 +913,7 @@ private:
         lv_obj_set_style_radius(ui_TOP_battery_panel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_color(ui_TOP_battery_panel, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_opa(ui_TOP_battery_panel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_img_src(ui_TOP_battery_panel, cp0_file_path_c("status_battery_background.png"), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_img_src(ui_TOP_battery_panel, launcher_platform::path_c("status_battery_background.png"), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_border_width(ui_TOP_battery_panel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_pad_all(ui_TOP_battery_panel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
 
@@ -1023,9 +1030,11 @@ private:
         if (!ui_TOP_time_Label)
             return;
 
-        char time_buf[16];
-        cp0_time_str(time_buf, sizeof(time_buf));
-        lv_label_set_text(ui_TOP_time_Label, time_buf);
+        std::string time_text = "--:--";
+        cp0_signal_settings_api({"TimeStr"}, [&](int code, std::string data) {
+            if (code == 0) time_text = std::move(data);
+        });
+        lv_label_set_text(ui_TOP_time_Label, time_text.c_str());
     }
 
     void update_wifi_status()

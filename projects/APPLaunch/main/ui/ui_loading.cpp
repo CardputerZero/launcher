@@ -23,7 +23,7 @@
  *     the slow work begins. Otherwise LVGL would only render on the
  *     next frame, which is after the freeze.
  *   - For external (forked) apps, lv_refr_now() is already performed
- *     by launch_Exec() before cp0_process_exec_blocking() — the
+ *     by launch_Exec() before the cp0 process callback - the
  *     overlay stays on-screen while the child owns the framebuffer,
  *     which is exactly the desired "something is happening" feedback.
  */

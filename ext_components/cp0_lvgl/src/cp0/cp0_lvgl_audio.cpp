@@ -748,6 +748,20 @@ public:
         report(callback, ret >= 0 ? 0 : -1, std::to_string(ret));
     }
 
+    void MuteRead(arg_t arg, callback_t callback)
+    {
+        (void)arg;
+        int val = read_system_mute();
+        report(callback, val >= 0 ? 0 : -1, std::to_string(val));
+    }
+
+    void MuteToggle(arg_t arg, callback_t callback)
+    {
+        (void)arg;
+        int val = toggle_system_mute();
+        report(callback, val >= 0 ? 0 : -1, std::to_string(val));
+    }
+
     void api_call(arg_t arg, callback_t callback)
     {
         if(arg.empty())
@@ -771,6 +785,8 @@ public:
             map_fun(SetCallback),
             map_fun(VolumeRead),
             map_fun(VolumeWrite),
+            map_fun(MuteRead),
+            map_fun(MuteToggle),
             map_fun(SetSystemSoundNames),
             map_fun(SystemSoundPlay),
             map_fun(SystemSoundEnable)
@@ -817,6 +833,27 @@ public:
         char cmd[128];
         snprintf(cmd, sizeof(cmd), "pactl set-sink-volume @DEFAULT_SINK@ %d%%", val);
         return system(cmd) == 0 ? val : -1;
+    }
+
+    static int read_system_mute()
+    {
+        FILE *p = popen("pactl get-sink-mute @DEFAULT_SINK@ 2>/dev/null", "r");
+        if (!p) return -1;
+        char buf[128] = {};
+        int muted = -1;
+        while (fgets(buf, sizeof(buf), p)) {
+            if (strstr(buf, "yes")) { muted = 1; break; }
+            if (strstr(buf, "no")) { muted = 0; break; }
+        }
+        pclose(p);
+        return muted;
+    }
+
+    static int toggle_system_mute()
+    {
+        if (system("pactl set-sink-mute @DEFAULT_SINK@ toggle >/dev/null 2>&1") != 0)
+            return -1;
+        return read_system_mute();
     }
 
     static int parse_volume_arg(const arg_t& arg)

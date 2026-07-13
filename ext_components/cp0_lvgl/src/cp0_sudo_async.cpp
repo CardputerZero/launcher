@@ -40,6 +40,16 @@ constexpr size_t kMaxCapturedOutputBytes = 64 * 1024;
 cp0_sudo::Coordinator g_coordinator;
 std::atomic<uint64_t> g_next_request_id{1};
 
+struct SignalRequestContext {
+    std::function<void(int, int)> complete;
+};
+
+void signal_request_complete(cp0_sudo_result_t result, int exit_code, void *user)
+{
+    std::unique_ptr<SignalRequestContext> context(static_cast<SignalRequestContext *>(user));
+    if (context->complete) context->complete(static_cast<int>(result), exit_code);
+}
+
 lv_obj_t *g_overlay = nullptr;
 lv_obj_t *g_box = nullptr;
 lv_obj_t *g_password_label = nullptr;
@@ -499,4 +509,73 @@ extern "C" int cp0_sudo_cancel(uint64_t request_id)
     if (rc != 0) return rc;
     if (!post_actions(actions)) g_coordinator.requeue_actions(std::move(actions));
     return 0;
+}
+
+extern "C" void init_sudo_signals(void)
+{
+    cp0_signal_sudo_argv_async.append([](std::list<std::string> args, int auth_timeout_ms,
+        int exec_timeout_ms, std::function<void(int, int)> complete,
+        std::function<void(int, uint64_t)> started) {
+        std::vector<std::string> storage(args.begin(), args.end());
+        std::vector<const char *> argv;
+        argv.reserve(storage.size() + 1);
+        for (const std::string &arg : storage) argv.push_back(arg.c_str());
+        argv.push_back(nullptr);
+        auto *context = new (std::nothrow) SignalRequestContext{std::move(complete)};
+        if (!context) {
+            if (started) started(-ENOMEM, 0);
+            return;
+        }
+        uint64_t request_id = 0;
+        int ret = cp0_sudo_run_argv_async_ex(argv.data(), CP0_SUDO_CALLBACK_LVGL, nullptr,
+            signal_request_complete, context, auth_timeout_ms, exec_timeout_ms, &request_id);
+        if (ret != 0) delete context;
+        if (started) started(ret, request_id);
+    });
+    cp0_signal_sudo_cancel.append([](uint64_t request_id, std::function<void(int)> done) {
+        int ret = cp0_sudo_cancel(request_id);
+        if (done) done(ret);
+    });
+    cp0_signal_system_admin_async.append([](std::list<std::string> args, int auth_timeout_ms,
+        int exec_timeout_ms, std::function<void(int, int)> complete,
+        std::function<void(int, uint64_t)> started) {
+        if (args.empty()) {
+            if (started) started(-EINVAL, 0);
+            return;
+        }
+        const std::string command = args.front();
+        const std::string value = args.size() > 1 ? *std::next(args.begin()) : std::string();
+        std::list<std::string> argv;
+        if (command == "AdbSet") {
+            argv = {cp0_file_path("adb_helper"), value == "1" ? "enable" : "disable"};
+        } else if (command == "NtpSet") {
+            argv = {"timedatectl", "set-ntp", value == "1" ? "true" : "false"};
+        } else if (command == "TimeSet") {
+            const bool valid_shape = value.size() == 19 && value[4] == '-' && value[7] == '-' &&
+                value[10] == ' ' && value[13] == ':' && value[16] == ':';
+            bool digits_valid = valid_shape;
+            for (size_t i = 0; digits_valid && i < value.size(); ++i) {
+                if (i == 4 || i == 7 || i == 10 || i == 13 || i == 16) continue;
+                digits_valid = std::isdigit(static_cast<unsigned char>(value[i])) != 0;
+            }
+            int year = 0, month = 0, day = 0, hour = 0, minute = 0, second = 0;
+            const bool parsed = digits_valid && std::sscanf(value.c_str(), "%d-%d-%d %d:%d:%d",
+                &year, &month, &day, &hour, &minute, &second) == 6;
+            const bool leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+            static constexpr int days_per_month[] = {0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+            const int max_day = month == 2 ? days_per_month[month] + (leap ? 1 : 0)
+                                           : (month >= 1 && month <= 12 ? days_per_month[month] : 0);
+            if (!parsed || year < 1970 || month < 1 || month > 12 || day < 1 || day > max_day ||
+                hour < 0 || hour > 23 || minute < 0 || minute > 59 || second < 0 || second > 59) {
+                if (started) started(-EINVAL, 0);
+                return;
+            }
+            argv = {"/bin/sh", "-c", "date -s '" + value + "' && hwclock -w"};
+        } else {
+            if (started) started(-EINVAL, 0);
+            return;
+        }
+        cp0_signal_sudo_argv_async(std::move(argv), auth_timeout_ms, exec_timeout_ms,
+                                   std::move(complete), std::move(started));
+    });
 }

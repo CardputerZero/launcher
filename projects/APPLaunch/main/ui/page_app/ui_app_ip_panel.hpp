@@ -62,18 +62,23 @@ private:
     {
         iface_list_.clear();
 
-        cp0_netif_info_t entries[16];
-        int count = 0;
-        if (cp0_network_list(entries, 16, &count) != 0)
+        int code = -1;
+        std::string data;
+        cp0_signal_osinfo_api({"NetworkList"}, [&](int c, std::string value) {
+            code = c;
+            data = std::move(value);
+        });
+        if (code != 0)
             return;
-
-        for (int i = 0; i < count; i++)
-        {
+        std::istringstream lines(data);
+        std::string line;
+        while (std::getline(lines, line)) {
+            std::istringstream fields(line);
             NetIfInfo info;
-            info.iface = entries[i].iface;
-            info.ip    = entries[i].ipv4;
-            info.mask  = entries[i].netmask;
-            info.up    = entries[i].is_up != 0;
+            std::string up;
+            if (!std::getline(fields, info.iface, '\t') || !std::getline(fields, info.ip, '\t') ||
+                !std::getline(fields, info.mask, '\t') || !std::getline(fields, up)) continue;
+            info.up = std::atoi(up.c_str()) != 0;
             iface_list_.push_back(info);
         }
 

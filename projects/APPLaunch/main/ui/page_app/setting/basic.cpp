@@ -50,8 +50,8 @@ void Launcher::save_app_toggle(UISetupPage &page, const std::string &config_key)
 
 void Boot::factory_reset()
 {
-    remove("/var/lib/applaunch/settings");
-    cp0_system_reboot();
+    cp0_signal_filesystem_api({"Remove", launcher_platform::path("launcher_settings")}, nullptr);
+    cp0_signal_process_api({"Reboot"}, nullptr);
 }
 
 void Boot::append(UISetupPage &p, std::vector<MenuItem> &menu)
@@ -61,10 +61,10 @@ void Boot::append(UISetupPage &p, std::vector<MenuItem> &menu)
     m.label = "Boot";
     m.sub_items = {
         {"Reboot", false, false, [page]() {
-            page->enter_confirm_action("Reboot?", [page](){ cp0_system_reboot(); });
+            page->enter_confirm_action("Reboot?", [page](){ cp0_signal_process_api({"Reboot"}, nullptr); });
         }},
         {"Shutdown", false, false, [page]() {
-            page->enter_confirm_action("Shutdown?", [page](){ cp0_system_shutdown(); });
+            page->enter_confirm_action("Shutdown?", [page](){ cp0_signal_process_api({"Shutdown"}, nullptr); });
         }},
     };
     menu.push_back(m);
@@ -72,12 +72,8 @@ void Boot::append(UISetupPage &p, std::vector<MenuItem> &menu)
 
 void Boot::rearm_oobe_and_reboot()
 {
-#ifndef _WIN32
-    mkdir("/var/lib/applaunch", 0755);
-#endif
-    FILE *f = fopen("/var/lib/applaunch/run-oobe", "w");
-    if (f) fclose(f);
-    cp0_system_reboot();
+    cp0_signal_filesystem_api({"Touch", launcher_platform::path("oobe_marker")}, nullptr);
+    cp0_signal_process_api({"Reboot"}, nullptr);
 }
 
 void Screen::append(UISetupPage &p, std::vector<MenuItem> &menu)
@@ -138,7 +134,7 @@ void Screen::apply_value(UISetupPage &page)
     int pcts[] = {100, 75, 50, 25};
     int new_val = mx * pcts[page.val_sel_idx_] / 100;
     if (new_val < 1) new_val = 1;
-    cp0_backlight_write(new_val);
+    cp0_signal_settings_api({"BacklightWrite", std::to_string(new_val)}, nullptr);
     UISetupPage::config_set_int("brightness", new_val);
     UISetupPage::config_save();
 }
@@ -206,7 +202,9 @@ void Camera::enter_resolution(UISetupPage &page)
 {
     page.val_title_ = "Resolution";
     page.val_options_ = {"1280x720", "640x480"};
-    page.val_sel_idx_ = (UISetupPage::config_get_int("camera.resolution.width", 1280) == 640) ? 1 : 0;
+    const int width = UISetupPage::config_get_int("camera.resolution.width", 1280);
+    const int height = UISetupPage::config_get_int("camera.resolution.height", 720);
+    page.val_sel_idx_ = (width == 640 && height == 480) ? 1 : 0;
     page.view_state_ = UISetupPage::ViewState::VALUE_SELECT;
     page.transition_enter_level();
 }

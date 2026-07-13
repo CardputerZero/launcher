@@ -433,7 +433,7 @@ void Bluetooth::remove_selected(UISetupPage &page)
     int ret = device_command("BtRemove", devices_[dev_index].address);
     if (ret != 0) {
         show_action(page, "Remove failed", 0xFF4444);
-        usleep(1200000);
+        cp0_signal_process_api({"DelayMs", "1200"}, nullptr);
     }
     refresh_devices();
     build_list(page);
