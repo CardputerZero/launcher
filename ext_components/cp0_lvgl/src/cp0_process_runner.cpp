@@ -128,7 +128,8 @@ Result run(std::vector<std::string> argv, const std::string *input, Output outpu
     fcntl(out[0], F_SETFL, fcntl(out[0], F_GETFL, 0) | O_NONBLOCK);
     auto deadline = std::chrono::steady_clock::now() +
         std::chrono::milliseconds(timeout_ms > 0 ? timeout_ms : INT_MAX);
-    bool terminated = false, reaped = false, output_eof = false;
+    bool terminated = false, forced = false, reaped = false, output_eof = false;
+    auto force_deadline = std::chrono::steady_clock::time_point::max();
     int output_error = 0;
     size_t input_offset = 0;
     char buffer[4096];
@@ -136,17 +137,31 @@ Result run(std::vector<std::string> argv, const std::string *input, Output outpu
         const bool reaped_before_drain = reaped;
         bool cancelled = cancel && cancel->load();
         bool timed_out = timeout_ms > 0 && std::chrono::steady_clock::now() >= deadline;
-        if ((cancelled || timed_out) && !terminated) {
-            kill(-pid, SIGKILL);
+        if ((cancelled || timed_out) && !terminated && !reaped) {
+            kill(-pid, SIGTERM);
             result.exit_code = cancelled ? -ECANCELED : -ETIMEDOUT;
             terminated = true;
+            force_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(6);
+            if (input && in[1] >= 0) { close(in[1]); in[1] = -1; }
+        }
+        if (terminated && !forced) {
+            siginfo_t info{};
+            bool leader_exited = waitid(P_PID, pid, &info, WEXITED | WNOHANG | WNOWAIT) == 0 &&
+                                 info.si_pid == pid;
+            if (leader_exited || std::chrono::steady_clock::now() >= force_deadline) {
+                kill(-pid, SIGKILL);
+                forced = true;
+            }
         }
         bool output_drained = false;
+        size_t drained_bytes = 0;
         for (;;) {
             ssize_t count = read(out[0], buffer, sizeof(buffer));
             if (count > 0) {
                 cp0_testable::append_tail(result.output, buffer, count, capacity);
                 if (output) output(buffer, count);
+                drained_bytes += static_cast<size_t>(count);
+                if (drained_bytes >= 64 * 1024) break;
                 continue;
             }
             if (count == 0) output_eof = true;
@@ -168,7 +183,9 @@ Result run(std::vector<std::string> argv, const std::string *input, Output outpu
             }
         }
         if (input && in[1] >= 0 && input_offset == input->size()) { close(in[1]); in[1] = -1; }
-        if (!reaped) {
+        // Keep the leader unreaped during the grace period. Its PID then cannot
+        // be reused as another process group's ID before the forced group kill.
+        if (!reaped && (!terminated || forced)) {
             int status = 0; pid_t waited = waitpid(pid, &status, WNOHANG);
             if (waited == pid) {
                 reaped = true;
