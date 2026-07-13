@@ -2,90 +2,44 @@
 #include "compat/input_keys.h"
 #include "hal_lvgl_bsp.h"
 #include "keyboard_input.h"
+#include "cp0_process_runner.hpp"
+#include "cp0_sudo_coordinator.hpp"
+#include "cp0_dispatch_testable.hpp"
 
 #include "lvgl/lvgl.h"
 
 #include <algorithm>
 #include <atomic>
-#include <chrono>
-#include <climits>
 #include <cerrno>
+#include <chrono>
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <deque>
-#include <functional>
+#include <iterator>
 #include <memory>
-#include <mutex>
+#include <new>
 #include <string>
 #include <thread>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
 #if !defined(_WIN32)
-#include <fcntl.h>
-#include <grp.h>
-#include <poll.h>
-#include <pthread.h>
 #include <pwd.h>
-#include <signal.h>
-#include <sys/types.h>
-#include <sys/wait.h>
 #include <unistd.h>
 #endif
 
 namespace {
 
-constexpr int kMaxAuthAttempts = 3;
+using cp0_sudo::Action;
+using cp0_sudo::ActionType;
+using cp0_sudo::Request;
+
 constexpr size_t kMaxPasswordBytes = 128;
+constexpr size_t kMaxCapturedOutputBytes = 64 * 1024;
+cp0_sudo::Coordinator g_coordinator;
+std::atomic<uint64_t> g_next_request_id{1};
 
-struct SudoRequest {
-    std::vector<std::string> argv;
-    bool use_login_shell = false;
-    cp0_sudo_callback_thread_t callback_thread = CP0_SUDO_CALLBACK_LVGL;
-    cp0_sudo_output_cb_t output_cb = nullptr;
-    cp0_sudo_complete_cb_t complete_cb = nullptr;
-    void *user = nullptr;
-    int auth_attempts = 0;
-    uint64_t id = 0;
-    int auth_timeout_ms = 0;
-    int exec_timeout_ms = 0;
-    std::atomic<bool> cancel_requested{false};
-};
-
-struct UserIdentity {
-    std::string name;
-    std::string home;
-    std::string shell;
-#if !defined(_WIN32)
-    uid_t uid = static_cast<uid_t>(-1);
-    gid_t gid = static_cast<gid_t>(-1);
-#endif
-};
-
-struct ProcessResult {
-    int exit_code = -1;
-    std::string output;
-};
-
-struct CompletionEvent {
-    std::shared_ptr<SudoRequest> request;
-    cp0_sudo_result_t result = CP0_SUDO_RESULT_EXEC_FAILED;
-    int exit_code = -1;
-};
-
-struct OutputEvent {
-    std::shared_ptr<SudoRequest> request;
-    std::string data;
-};
-
-std::mutex g_mutex;
-std::deque<std::shared_ptr<SudoRequest>> g_queue;
-std::unordered_map<uint64_t, std::shared_ptr<SudoRequest>> g_requests;
-std::deque<std::unique_ptr<CompletionEvent>> g_completions;
-std::shared_ptr<SudoRequest> g_current;
 lv_obj_t *g_overlay = nullptr;
 lv_obj_t *g_box = nullptr;
 lv_obj_t *g_password_label = nullptr;
@@ -93,278 +47,91 @@ lv_obj_t *g_hint_label = nullptr;
 lv_obj_t *g_key_hook = nullptr;
 lv_group_t *g_saved_group = nullptr;
 lv_group_t *g_prompt_group = nullptr;
-lv_timer_t *g_completion_timer = nullptr;
+lv_timer_t *g_timer = nullptr;
+std::shared_ptr<Request> g_prompt_request;
 std::string g_password;
-bool g_running = false;
-std::atomic<uint64_t> g_next_request_id{1};
 
-void start_next_request();
-void key_event_cb(lv_event_t *event);
+int64_t now_ms()
+{
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+
+void secure_clear(std::string &value)
+{
+    volatile char *data = value.empty() ? nullptr : &value[0];
+    for (size_t i = 0; data && i < value.size(); ++i) data[i] = 0;
+    value.clear();
+}
+
+#if !defined(_WIN32)
+struct UserIdentity {
+    std::string name, home, shell;
+    uint32_t uid = UINT32_MAX, gid = UINT32_MAX;
+};
 
 std::string config_get_string(const char *key)
 {
     std::string value;
     cp0_signal_config_api({"GetStr", key ? std::string(key) : std::string(), value},
-                          [&](int code, std::string data) {
-                              if (code == 0)
-                                  value = std::move(data);
-                          });
+        [&](int code, std::string data) { if (code == 0) value = std::move(data); });
     return value;
 }
 
-#if !defined(_WIN32)
 bool is_nologin_shell(const char *shell)
 {
-    return !shell || !shell[0] || std::strstr(shell, "nologin") || std::strstr(shell, "/bin/false");
+    return !shell || !shell[0] || std::strstr(shell, "nologin") ||
+           std::strstr(shell, "/bin/false");
 }
 
 bool resolve_run_user(UserIdentity &identity)
 {
     std::string configured;
-    if (geteuid() == 0)
-        configured = config_get_string("run_as_user");
+    if (geteuid() == 0) configured = config_get_string("run_as_user");
     else {
-        struct passwd *current = getpwuid(geteuid());
-        if (current && current->pw_name)
-            configured = current->pw_name;
+        passwd *current = getpwuid(geteuid());
+        if (current && current->pw_name) configured = current->pw_name;
     }
-    struct passwd *pwd = nullptr;
-
-    if (!configured.empty()) {
-        pwd = getpwnam(configured.c_str());
-    } else {
-        std::string fallback_name;
+    passwd *pwd = nullptr;
+    if (!configured.empty()) pwd = getpwnam(configured.c_str());
+    else {
+        std::string fallback;
         setpwent();
         while ((pwd = getpwent()) != nullptr) {
-            if (pwd->pw_uid >= 1000 && pwd->pw_uid < 65534 && !is_nologin_shell(pwd->pw_shell)) {
-                fallback_name = pwd->pw_name ? pwd->pw_name : "";
+            if (pwd->pw_uid >= 1000 && pwd->pw_uid < 65534 &&
+                !is_nologin_shell(pwd->pw_shell)) {
+                fallback = pwd->pw_name ? pwd->pw_name : "";
                 break;
             }
         }
         endpwent();
-        pwd = getpwnam(fallback_name.empty() ? "pi" : fallback_name.c_str());
+        pwd = getpwnam(fallback.empty() ? "pi" : fallback.c_str());
     }
-
-    if (!pwd || pwd->pw_uid == 0 || is_nologin_shell(pwd->pw_shell))
-        return false;
-
+    if (!pwd || pwd->pw_uid == 0 || is_nologin_shell(pwd->pw_shell)) return false;
     identity.name = pwd->pw_name ? pwd->pw_name : "";
     identity.home = pwd->pw_dir && pwd->pw_dir[0] ? pwd->pw_dir : "/";
     identity.shell = pwd->pw_shell && pwd->pw_shell[0] ? pwd->pw_shell : "/bin/sh";
-    identity.uid = pwd->pw_uid;
-    identity.gid = pwd->pw_gid;
+    identity.uid = static_cast<uint32_t>(pwd->pw_uid);
+    identity.gid = static_cast<uint32_t>(pwd->pw_gid);
     return !identity.name.empty();
-}
-
-bool drop_to_user(const UserIdentity &identity)
-{
-    if (geteuid() != 0)
-        return true;
-    if (identity.name.empty())
-        return true;
-    if (initgroups(identity.name.c_str(), identity.gid) != 0)
-        return false;
-    if (setgid(identity.gid) != 0)
-        return false;
-    if (setuid(identity.uid) != 0)
-        return false;
-    setenv("HOME", identity.home.c_str(), 1);
-    setenv("USER", identity.name.c_str(), 1);
-    setenv("LOGNAME", identity.name.c_str(), 1);
-    setenv("SHELL", identity.shell.c_str(), 1);
-    setenv("LC_ALL", "C", 1);
-    return true;
-}
-
-std::vector<char *> raw_argv(std::vector<std::string> &argv)
-{
-    std::vector<char *> raw;
-    raw.reserve(argv.size() + 1);
-    for (std::string &arg : argv)
-        raw.push_back(arg.data());
-    raw.push_back(nullptr);
-    return raw;
-}
-
-ProcessResult run_process(const UserIdentity &identity,
-                          std::vector<std::string> argv,
-                          const std::string *stdin_text,
-                          const std::function<void(const char *, size_t)> &output_callback = {},
-                          const std::shared_ptr<SudoRequest> &request = {},
-                          int timeout_ms = 0)
-{
-    ProcessResult result;
-    int stdin_pipe[2] = {-1, -1};
-    int output_pipe[2] = {-1, -1};
-    if (pipe(output_pipe) != 0) {
-        result.exit_code = -errno;
-        return result;
-    }
-    if (stdin_text && pipe(stdin_pipe) != 0) {
-        result.exit_code = -errno;
-        close(output_pipe[0]);
-        close(output_pipe[1]);
-        return result;
-    }
-
-    pid_t pid = fork();
-    if (pid < 0) {
-        result.exit_code = -errno;
-        close(output_pipe[0]);
-        close(output_pipe[1]);
-        if (stdin_text) {
-            close(stdin_pipe[0]);
-            close(stdin_pipe[1]);
-        }
-        return result;
-    }
-
-    if (pid == 0) {
-        setpgid(0, 0);
-        if (stdin_text) {
-            close(stdin_pipe[1]);
-            dup2(stdin_pipe[0], STDIN_FILENO);
-        } else {
-            int devnull = open("/dev/null", O_RDONLY);
-            if (devnull >= 0) {
-                dup2(devnull, STDIN_FILENO);
-                if (devnull > STDIN_FILENO)
-                    close(devnull);
-            }
-        }
-        close(output_pipe[0]);
-        dup2(output_pipe[1], STDOUT_FILENO);
-        dup2(output_pipe[1], STDERR_FILENO);
-        if (output_pipe[1] > STDERR_FILENO)
-            close(output_pipe[1]);
-        if (stdin_text && stdin_pipe[0] > STDIN_FILENO)
-            close(stdin_pipe[0]);
-        setenv("LC_ALL", "C", 1);
-        if (!drop_to_user(identity))
-            _exit(126);
-        auto raw = raw_argv(argv);
-        execvp(raw[0], raw.data());
-        _exit(127);
-    }
-
-    close(output_pipe[1]);
-    if (stdin_text) {
-        close(stdin_pipe[0]);
-        sigset_t blocked_set, old_set, pending_set;
-        sigemptyset(&blocked_set);
-        sigaddset(&blocked_set, SIGPIPE);
-        pthread_sigmask(SIG_BLOCK, &blocked_set, &old_set);
-        sigpending(&pending_set);
-        const bool sigpipe_was_pending = sigismember(&pending_set, SIGPIPE);
-        const char *data = stdin_text->data();
-        size_t remaining = stdin_text->size();
-        while (remaining > 0) {
-            ssize_t written = write(stdin_pipe[1], data, remaining);
-            if (written < 0) {
-                if (errno == EINTR)
-                    continue;
-                break;
-            }
-            data += written;
-            remaining -= static_cast<size_t>(written);
-        }
-        close(stdin_pipe[1]);
-        sigpending(&pending_set);
-        if (!sigpipe_was_pending && sigismember(&pending_set, SIGPIPE)) {
-            struct timespec no_wait {0, 0};
-            sigtimedwait(&blocked_set, nullptr, &no_wait);
-        }
-        pthread_sigmask(SIG_SETMASK, &old_set, nullptr);
-    }
-
-    setpgid(pid, pid);
-    int flags = fcntl(output_pipe[0], F_GETFL, 0);
-    if (flags >= 0) fcntl(output_pipe[0], F_SETFL, flags | O_NONBLOCK);
-    const auto deadline = std::chrono::steady_clock::now() +
-        std::chrono::milliseconds(timeout_ms > 0 ? timeout_ms : INT_MAX);
-    bool terminated = false;
-    char buffer[1024];
-    for (;;) {
-        ssize_t count = read(output_pipe[0], buffer, sizeof(buffer));
-        if (count > 0) {
-            result.output.append(buffer, static_cast<size_t>(count));
-            if (output_callback)
-                output_callback(buffer, static_cast<size_t>(count));
-            continue;
-        }
-        if (count < 0 && errno == EINTR)
-            continue;
-        int status = 0;
-        pid_t waited = waitpid(pid, &status, WNOHANG);
-        if (waited == pid) {
-            if (!terminated) {
-                if (WIFEXITED(status)) result.exit_code = WEXITSTATUS(status);
-                else if (WIFSIGNALED(status)) result.exit_code = 128 + WTERMSIG(status);
-            }
-            break;
-        }
-        const bool cancelled = request && request->cancel_requested.load();
-        const bool timed_out = timeout_ms > 0 && std::chrono::steady_clock::now() >= deadline;
-        if ((cancelled || timed_out) && !terminated) {
-            kill(-pid, SIGTERM);
-            std::this_thread::sleep_for(std::chrono::milliseconds(250));
-            kill(-pid, SIGKILL);
-            result.exit_code = cancelled ? -ECANCELED : -ETIMEDOUT;
-            terminated = true;
-        }
-        struct pollfd pfd { output_pipe[0], POLLIN, 0 };
-        poll(&pfd, 1, 50);
-    }
-    close(output_pipe[0]);
-    return result;
 }
 
 bool authentication_error(const std::string &output)
 {
-    static const char *markers[] = {
-        "incorrect password", "incorrect password attempt", "authentication failure", "sorry, try again",
-        "a password is required", "no password was provided", "3 incorrect password attempts"
-    };
+    static const char *markers[] = {"incorrect password", "incorrect password attempt",
+        "authentication failure", "sorry, try again", "a password is required",
+        "no password was provided", "3 incorrect password attempts"};
     std::string lowered = output;
     std::transform(lowered.begin(), lowered.end(), lowered.begin(),
-                   [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
-    for (const char *marker : markers) {
-        if (lowered.find(marker) != std::string::npos)
-            return true;
-    }
+        [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+    for (const char *marker : markers)
+        if (lowered.find(marker) != std::string::npos) return true;
     return false;
 }
 #endif
 
-void secure_clear(std::string &value)
-{
-    volatile char *data = value.empty() ? nullptr : &value[0];
-    for (size_t i = 0; data && i < value.size(); ++i)
-        data[i] = 0;
-    value.clear();
-}
-
-void output_event_cb(void *user_data)
-{
-    std::unique_ptr<OutputEvent> event(static_cast<OutputEvent *>(user_data));
-    if (event->request->output_cb && !event->data.empty())
-        event->request->output_cb(event->data.data(), event->data.size(), event->request->user);
-}
-
-void dispatch_output(const std::shared_ptr<SudoRequest> &request, std::string data)
-{
-    if (!request->output_cb || data.empty())
-        return;
-    if (request->callback_thread == CP0_SUDO_CALLBACK_WORKER) {
-        request->output_cb(data.data(), data.size(), request->user);
-        return;
-    }
-    auto *event = new (std::nothrow) OutputEvent{request, std::move(data)};
-    if (!event)
-        return;
-    if (lv_async_call(output_event_cb, event) != LV_RESULT_OK)
-        delete event;
-}
+void key_event_cb(lv_event_t *event);
+void execute_actions(std::vector<Action> actions);
 
 void destroy_prompt()
 {
@@ -373,261 +140,35 @@ void destroy_prompt()
         g_key_hook = nullptr;
     }
     lv_group_set_default(g_saved_group);
-    lv_indev_t *indev = lv_indev_get_next(nullptr);
-    if (indev)
-        lv_indev_set_group(indev, g_saved_group);
-    if (g_prompt_group) {
-        lv_group_delete(g_prompt_group);
-        g_prompt_group = nullptr;
-    }
-    if (g_box) {
-        lv_obj_del(g_box);
-        g_box = nullptr;
-    }
-    if (g_overlay) {
-        lv_obj_del(g_overlay);
-        g_overlay = nullptr;
-    }
+    if (lv_indev_t *indev = lv_indev_get_next(nullptr)) lv_indev_set_group(indev, g_saved_group);
+    if (g_prompt_group) { lv_group_delete(g_prompt_group); g_prompt_group = nullptr; }
+    if (g_box) { lv_obj_del(g_box); g_box = nullptr; }
+    if (g_overlay) { lv_obj_del(g_overlay); g_overlay = nullptr; }
     g_password_label = nullptr;
     g_hint_label = nullptr;
+    g_prompt_request.reset();
     secure_clear(g_password);
-}
-
-void finish_request(const std::shared_ptr<SudoRequest> &request,
-                    cp0_sudo_result_t result,
-                    int exit_code)
-{
-    destroy_prompt();
-    {
-        std::lock_guard<std::mutex> lock(g_mutex);
-        if (g_current == request)
-            g_current.reset();
-        g_requests.erase(request->id);
-        g_running = false;
-    }
-
-    auto complete_cb = request->complete_cb;
-    request->complete_cb = nullptr;
-    if (complete_cb) {
-        if (request->callback_thread == CP0_SUDO_CALLBACK_WORKER) {
-            std::thread([request, complete_cb, result, exit_code]() {
-                complete_cb(result, exit_code, request->user);
-            }).detach();
-        } else {
-            complete_cb(result, exit_code, request->user);
-        }
-    }
-    start_next_request();
 }
 
 void update_password_label()
 {
-    if (!g_password_label)
-        return;
+    if (!g_password_label) return;
     std::string masked(g_password.size(), '*');
     masked.push_back('_');
     lv_label_set_text(g_password_label, masked.c_str());
 }
 
-void show_auth_error()
+void create_prompt(const std::shared_ptr<Request> &request)
 {
-    if (g_hint_label) {
-        char text[64];
-        std::snprintf(text, sizeof(text), "Wrong password (%d/%d). Try again.",
-                      g_current ? g_current->auth_attempts : 0, kMaxAuthAttempts);
-        lv_label_set_text(g_hint_label, text);
-        lv_obj_set_style_text_color(g_hint_label, lv_color_hex(0xFF5555), 0);
-    }
-    secure_clear(g_password);
-    update_password_label();
-}
-
-void worker_done_cb(void *user_data)
-{
-    std::unique_ptr<CompletionEvent> event(static_cast<CompletionEvent *>(user_data));
-    auto request = event->request;
-    if (request->cancel_requested.load()) {
-        finish_request(request, CP0_SUDO_RESULT_CANCELLED, -ECANCELED);
-        return;
-    }
-    if (event->result == CP0_SUDO_RESULT_AUTH_FAILED && request->auth_attempts < kMaxAuthAttempts) {
-        g_running = false;
-        show_auth_error();
-        return;
-    }
-    finish_request(request, event->result, event->exit_code);
-}
-
-void run_request_worker(std::shared_ptr<SudoRequest> request, std::string password)
-{
-    cp0_sudo_result_t result = CP0_SUDO_RESULT_EXEC_FAILED;
-    int exit_code = -ENOTSUP;
-
-#if defined(_WIN32)
-    (void)request;
-#elif defined(HAL_PLATFORM_SDL)
-    UserIdentity identity;
-    std::vector<std::string> command = request->argv;
-    if (request->use_login_shell) {
-        std::string shell = std::getenv("SHELL") ? std::getenv("SHELL") : "/bin/sh";
-        command = {shell, "-c", request->argv.front()};
-    }
-    ProcessResult execution = run_process(
-        identity, std::move(command), nullptr,
-        [request](const char *data, size_t size) {
-            dispatch_output(request, std::string(data, size));
-        }, request, request->exec_timeout_ms);
-    exit_code = execution.exit_code;
-    if (exit_code == -ECANCELED) result = CP0_SUDO_RESULT_CANCELLED;
-    else if (exit_code == -ETIMEDOUT) result = CP0_SUDO_RESULT_TIMED_OUT;
-    else result = exit_code == 0 ? CP0_SUDO_RESULT_SUCCESS : CP0_SUDO_RESULT_EXEC_FAILED;
-#else
-    UserIdentity identity;
-    if (resolve_run_user(identity)) {
-        std::string password_line = password + "\n";
-        ProcessResult auth = run_process(identity,
-                                         {"sudo", "-k", "-S", "-p", "", "-v"},
-                                         &password_line, {}, request, request->auth_timeout_ms);
-        secure_clear(password_line);
-        if (auth.exit_code == -ECANCELED) {
-            result = CP0_SUDO_RESULT_CANCELLED;
-            exit_code = auth.exit_code;
-        } else if (auth.exit_code == -ETIMEDOUT) {
-            result = CP0_SUDO_RESULT_TIMED_OUT;
-            exit_code = auth.exit_code;
-        } else if (auth.exit_code != 0) {
-            exit_code = auth.exit_code;
-            result = authentication_error(auth.output)
-                         ? CP0_SUDO_RESULT_AUTH_FAILED
-                         : CP0_SUDO_RESULT_EXEC_FAILED;
-        } else {
-            std::vector<std::string> command;
-            if (request->use_login_shell)
-                command = {"sudo", "-n", "--", identity.shell, "-c", request->argv.front()};
-            else {
-                command = {"sudo", "-n", "--"};
-                command.insert(command.end(), request->argv.begin(), request->argv.end());
-            }
-            ProcessResult execution = run_process(
-                identity, std::move(command), nullptr,
-                [request](const char *data, size_t size) {
-                    dispatch_output(request, std::string(data, size));
-                }, request, request->exec_timeout_ms);
-            exit_code = execution.exit_code;
-            if (exit_code == -ECANCELED) result = CP0_SUDO_RESULT_CANCELLED;
-            else if (exit_code == -ETIMEDOUT) result = CP0_SUDO_RESULT_TIMED_OUT;
-            else result = exit_code == 0 ? CP0_SUDO_RESULT_SUCCESS : CP0_SUDO_RESULT_EXEC_FAILED;
-        }
-    } else {
-        exit_code = -EPERM;
-    }
-#endif
-
-    secure_clear(password);
-    auto event = std::make_unique<CompletionEvent>();
-    event->request = request;
-    event->result = result;
-    event->exit_code = exit_code;
-    {
-        std::lock_guard<std::mutex> lock(g_mutex);
-        g_completions.push_back(std::move(event));
-    }
-}
-
-void completion_timer_cb(lv_timer_t *)
-{
-    for (;;) {
-        std::unique_ptr<CompletionEvent> event;
-        {
-            std::lock_guard<std::mutex> lock(g_mutex);
-            if (g_completions.empty()) break;
-            event = std::move(g_completions.front());
-            g_completions.pop_front();
-        }
-        worker_done_cb(event.release());
-    }
-}
-
-void complete_queued_request(const std::shared_ptr<SudoRequest> &request,
-                             cp0_sudo_result_t result = CP0_SUDO_RESULT_CANCELLED,
-                             int exit_code = -ECANCELED)
-{
-    cp0_sudo_complete_cb_t callback = nullptr;
-    {
-        std::lock_guard<std::mutex> lock(g_mutex);
-        g_requests.erase(request->id);
-        callback = request->complete_cb;
-        request->complete_cb = nullptr;
-    }
-    if (!callback) return;
-    if (request->callback_thread == CP0_SUDO_CALLBACK_WORKER) {
-        std::thread([request, callback, result, exit_code]() {
-            callback(result, exit_code, request->user);
-        }).detach();
-    } else {
-        callback(result, exit_code, request->user);
-    }
-}
-
-void submit_password()
-{
-    if (!g_current || g_running)
-        return;
-    g_running = true;
-    ++g_current->auth_attempts;
-    if (g_hint_label) {
-        lv_label_set_text(g_hint_label, "Authenticating...");
-        lv_obj_set_style_text_color(g_hint_label, lv_color_hex(0xA0A0A0), 0);
-    }
-    std::string password = g_password;
-    secure_clear(g_password);
-    update_password_label();
-    std::thread(run_request_worker, g_current, std::move(password)).detach();
-}
-
-void key_event_cb(lv_event_t *event)
-{
-    auto *key = static_cast<struct key_item *>(lv_event_get_param(event));
-    if (!key || key->key_state != KBD_KEY_RELEASED)
-        return;
-    lv_event_stop_processing(event);
-    if (g_running)
-        {
-            if (key->key_code == KEY_ESC && g_current)
-                g_current->cancel_requested.store(true);
-            return;
-        }
-    if (key->key_code == KEY_ESC) {
-        finish_request(g_current, CP0_SUDO_RESULT_CANCELLED, -ECANCELED);
-        return;
-    }
-    if (key->key_code == KEY_ENTER) {
-        submit_password();
-        return;
-    }
-    if (key->key_code == KEY_BACKSPACE) {
-        if (!g_password.empty())
-            g_password.pop_back();
-        update_password_label();
-        return;
-    }
-    if (key->utf8[0] && static_cast<unsigned char>(key->utf8[0]) >= 0x20 &&
-        g_password.size() + std::strlen(key->utf8) <= kMaxPasswordBytes) {
-        g_password += key->utf8;
-        update_password_label();
-    }
-}
-
-void create_prompt()
-{
+    if (g_overlay) return;
+    g_prompt_request = request;
     lv_obj_t *layer = lv_layer_top();
     g_overlay = lv_obj_create(layer);
     lv_obj_remove_style_all(g_overlay);
     lv_obj_set_size(g_overlay, LV_PCT(100), LV_PCT(100));
-    lv_obj_set_style_bg_color(g_overlay, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_color(g_overlay, lv_color_hex(0), 0);
     lv_obj_set_style_bg_opa(g_overlay, LV_OPA_70, 0);
     lv_obj_clear_flag(g_overlay, LV_OBJ_FLAG_SCROLLABLE);
-
     g_box = lv_obj_create(layer);
     lv_obj_set_size(g_box, 240, 116);
     lv_obj_align(g_box, LV_ALIGN_CENTER, 0, 0);
@@ -636,212 +177,326 @@ void create_prompt()
     lv_obj_set_style_border_width(g_box, 1, 0);
     lv_obj_set_style_radius(g_box, 6, 0);
     lv_obj_clear_flag(g_box, LV_OBJ_FLAG_SCROLLABLE);
-
     lv_obj_t *title = lv_label_create(g_box);
     lv_label_set_text(title, "Sudo Password");
     lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 6);
     lv_obj_set_style_text_color(title, lv_color_hex(0x4A9EFF), 0);
     lv_obj_set_style_text_font(title, &lv_font_montserrat_14, 0);
-
     g_password_label = lv_label_create(g_box);
     lv_obj_set_width(g_password_label, 200);
     lv_obj_set_style_text_align(g_password_label, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_style_text_color(g_password_label, lv_color_hex(0xFFFFFF), 0);
     lv_obj_align(g_password_label, LV_ALIGN_TOP_MID, 0, 38);
     update_password_label();
-
     g_hint_label = lv_label_create(g_box);
     lv_label_set_text(g_hint_label, "Enter:OK  ESC:Cancel");
     lv_obj_set_width(g_hint_label, 220);
     lv_obj_set_style_text_align(g_hint_label, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_style_text_color(g_hint_label, lv_color_hex(0x808090), 0);
     lv_obj_align(g_hint_label, LV_ALIGN_BOTTOM_MID, 0, -8);
-
     g_key_hook = lv_screen_active();
-    if (g_key_hook)
-        lv_obj_add_event_cb(g_key_hook, key_event_cb,
-                            static_cast<lv_event_code_t>(LV_EVENT_KEYBOARD), nullptr);
+    if (g_key_hook) lv_obj_add_event_cb(g_key_hook, key_event_cb,
+        static_cast<lv_event_code_t>(LV_EVENT_KEYBOARD), nullptr);
     g_saved_group = lv_group_get_default();
     g_prompt_group = lv_group_create();
     lv_group_add_obj(g_prompt_group, g_overlay);
     lv_group_set_default(g_prompt_group);
-    lv_indev_t *indev = lv_indev_get_next(nullptr);
-    if (indev)
-        lv_indev_set_group(indev, g_prompt_group);
+    if (lv_indev_t *indev = lv_indev_get_next(nullptr)) lv_indev_set_group(indev, g_prompt_group);
 }
 
-void start_next_request()
+void show_auth_error(const std::shared_ptr<Request> &request)
 {
-    for (;;) {
-        std::shared_ptr<SudoRequest> cancelled;
-        {
-            std::lock_guard<std::mutex> lock(g_mutex);
-            if (g_current || g_queue.empty()) return;
-            auto next = g_queue.front();
-            g_queue.pop_front();
-            if (next->cancel_requested.load()) cancelled = next;
-            else g_current = next;
+    g_prompt_request = request;
+    if (g_hint_label) {
+        char text[64];
+        std::snprintf(text, sizeof(text), "Wrong password (%d/3). Try again.", request->auth_attempts);
+        lv_label_set_text(g_hint_label, text);
+        lv_obj_set_style_text_color(g_hint_label, lv_color_hex(0xFF5555), 0);
+    }
+    secure_clear(g_password);
+    update_password_label();
+}
+
+struct ActionHolder { std::vector<Action> actions; };
+void action_cb(void *user)
+{
+    std::unique_ptr<ActionHolder> holder(static_cast<ActionHolder *>(user));
+    execute_actions(std::move(holder->actions));
+}
+
+bool post_actions(std::vector<Action> actions)
+{
+    if (actions.empty()) return true;
+    auto *holder = new (std::nothrow) ActionHolder{std::move(actions)};
+    if (!holder) return false;
+    bool scheduled = cp0_testable::dispatch_task(
+        [holder](auto callback) { return lv_async_call(callback, holder) == LV_RESULT_OK; },
+        action_cb);
+    if (!scheduled) { delete holder; return false; }
+    return true;
+}
+
+void stream_output(const std::shared_ptr<Request> &request, const char *data, size_t size)
+{
+    if (!request->output_cb || !size) return;
+    if (request->callback_thread == CP0_SUDO_CALLBACK_WORKER) {
+        if (request->cancel_requested.load()) return;
+        request->output_cb(data, size, request->user);
+        return;
+    }
+    size_t offset = 0;
+    while (offset < size) {
+        size_t chunk_size = std::min(size - offset, g_coordinator.max_output_chunk());
+        for (;;) {
+            std::string chunk(data + offset, chunk_size);
+            auto outcome = g_coordinator.worker_output(request->id, chunk);
+            if (outcome == cp0_sudo::OutputResult::ACCEPTED) { offset += chunk_size; break; }
+            if (outcome == cp0_sudo::OutputResult::TERMINAL) return;
+            if (outcome == cp0_sudo::OutputResult::TOO_LARGE) {
+                if (chunk_size > 1) chunk_size /= 2;
+                else std::this_thread::sleep_for(std::chrono::milliseconds(2));
+                continue;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
         }
-        if (!cancelled) break;
-        complete_queued_request(cancelled);
     }
-    create_prompt();
 }
 
-void enqueue_cb(void *user_data)
+void run_worker(std::shared_ptr<Request> request, std::string password)
 {
-    std::unique_ptr<std::shared_ptr<SudoRequest>> holder(
-        static_cast<std::shared_ptr<SudoRequest> *>(user_data));
-    if (!g_completion_timer)
-        g_completion_timer = lv_timer_create(completion_timer_cb, 20, nullptr);
-    if (!g_completion_timer) {
-        complete_queued_request(*holder, CP0_SUDO_RESULT_EXEC_FAILED, -ENOMEM);
-        return;
+    cp0_sudo_result_t result = CP0_SUDO_RESULT_EXEC_FAILED;
+    int exit_code = -ENOTSUP;
+#if defined(_WIN32)
+    (void)request;
+#elif defined(HAL_PLATFORM_SDL)
+    std::vector<std::string> command = request->argv;
+    if (request->use_login_shell) {
+        const char *shell = std::getenv("SHELL");
+        command = {shell ? shell : "/bin/sh", "-c", request->argv.front()};
     }
-    bool cancelled = false;
-    {
-        std::lock_guard<std::mutex> lock(g_mutex);
-        cancelled = (*holder)->cancel_requested.load();
-        if (!cancelled) g_queue.push_back(*holder);
+    auto execution = cp0_runner::run(std::move(command), nullptr,
+        [request](const char *data, size_t size) { stream_output(request, data, size); },
+        &request->cancel_requested, request->exec_timeout_ms);
+    exit_code = execution.exit_code;
+    result = exit_code == -ECANCELED ? CP0_SUDO_RESULT_CANCELLED :
+             exit_code == -ETIMEDOUT ? CP0_SUDO_RESULT_TIMED_OUT :
+             exit_code == 0 ? CP0_SUDO_RESULT_SUCCESS : CP0_SUDO_RESULT_EXEC_FAILED;
+#else
+    UserIdentity identity;
+    if (!resolve_run_user(identity)) exit_code = -EPERM;
+    else {
+        std::string password_line = password + "\n";
+        int auth_timeout = request->auth_timeout_ms;
+        if (auth_timeout > 0)
+            auth_timeout = static_cast<int>(std::max<int64_t>(1, request->deadline_ms - now_ms()));
+        auto auth = cp0_runner::run({"sudo", "-k", "-S", "-p", "", "-v"},
+            &password_line, {}, &request->cancel_requested, auth_timeout,
+            kMaxCapturedOutputBytes, identity.uid, identity.gid, identity.name,
+            identity.home, identity.shell);
+        secure_clear(password_line);
+        if (auth.exit_code != 0) {
+            exit_code = auth.exit_code;
+            result = auth.exit_code == -ECANCELED ? CP0_SUDO_RESULT_CANCELLED :
+                     auth.exit_code == -ETIMEDOUT ? CP0_SUDO_RESULT_TIMED_OUT :
+                     authentication_error(auth.output) ? CP0_SUDO_RESULT_AUTH_FAILED :
+                     CP0_SUDO_RESULT_EXEC_FAILED;
+            auto actions = g_coordinator.worker_auth_result(request->id, result, exit_code, now_ms());
+            secure_clear(password);
+            if (!actions.empty() && !post_actions(actions))
+                g_coordinator.requeue_actions(std::move(actions));
+            return;
+        }
+        std::vector<std::string> command;
+        if (request->use_login_shell)
+            command = {"sudo", "-n", "--", identity.shell, "-c", request->argv.front()};
+        else {
+            command = {"sudo", "-n", "--"};
+            command.insert(command.end(), request->argv.begin(), request->argv.end());
+        }
+        auto execution = cp0_runner::run(std::move(command), nullptr,
+            [request](const char *data, size_t size) { stream_output(request, data, size); },
+            &request->cancel_requested, request->exec_timeout_ms, kMaxCapturedOutputBytes,
+            identity.uid, identity.gid, identity.name, identity.home, identity.shell);
+        exit_code = execution.exit_code;
+        result = exit_code == -ECANCELED ? CP0_SUDO_RESULT_CANCELLED :
+                 exit_code == -ETIMEDOUT ? CP0_SUDO_RESULT_TIMED_OUT :
+                 exit_code == 0 ? CP0_SUDO_RESULT_SUCCESS : CP0_SUDO_RESULT_EXEC_FAILED;
     }
-    if (cancelled) {
-        complete_queued_request(*holder);
-        return;
-    }
-    start_next_request();
+#endif
+    secure_clear(password);
+    g_coordinator.worker_complete(request->id, result, exit_code);
 }
 
-void cancel_request_cb(void *user_data)
+void execute_actions(std::vector<Action> actions)
 {
-    std::unique_ptr<uint64_t> id(static_cast<uint64_t *>(user_data));
-    std::shared_ptr<SudoRequest> cancelled;
-    std::shared_ptr<SudoRequest> current;
-    {
-        std::lock_guard<std::mutex> lock(g_mutex);
-        if (g_current && g_current->id == *id && !g_running)
-            current = g_current;
-        for (auto it = g_queue.begin(); it != g_queue.end(); ++it) {
-            if ((*it)->id == *id) {
-                cancelled = *it;
-                g_queue.erase(it);
-                break;
+    if (!g_timer) {
+        g_timer = lv_timer_create([](lv_timer_t *) {
+            execute_actions(g_coordinator.tick(now_ms(), {}));
+        }, 20, nullptr);
+        if (!g_timer) {
+            actions = g_coordinator.fail_all(-ENOMEM, now_ms());
+            for (;;) {
+                auto drained = g_coordinator.tick(now_ms(), {SIZE_MAX, SIZE_MAX});
+                if (drained.empty()) break;
+                actions.insert(actions.end(), std::make_move_iterator(drained.begin()),
+                               std::make_move_iterator(drained.end()));
             }
         }
     }
-    if (current) {
-        finish_request(current, CP0_SUDO_RESULT_CANCELLED, -ECANCELED);
+    for (auto &action : actions) {
+        switch (action.type) {
+        case ActionType::SHOW_PROMPT: create_prompt(action.request); break;
+        case ActionType::SHOW_AUTH_ERROR: show_auth_error(action.request); break;
+        case ActionType::DESTROY_PROMPT: destroy_prompt(); break;
+        case ActionType::START_WORKER: {
+            std::string password = g_password;
+            secure_clear(g_password);
+            update_password_label();
+            if (g_hint_label) lv_label_set_text(g_hint_label, "Authenticating...");
+            std::thread(run_worker, action.request, std::move(password)).detach();
+            break;
+        }
+        case ActionType::CALL_OUTPUT:
+            if (action.request->output_cb && !action.data.empty())
+                action.request->output_cb(action.data.data(), action.data.size(), action.request->user);
+            g_coordinator.output_delivered(action.request->id, action.data.size());
+            break;
+        case ActionType::CALL_COMPLETE: {
+            auto callback = action.request->complete_cb;
+            action.request->complete_cb = nullptr;
+            if (!callback) break;
+            if (action.request->callback_thread == CP0_SUDO_CALLBACK_WORKER)
+                std::thread([request = action.request, callback, result = action.result,
+                             exit_code = action.exit_code]() {
+                    callback(result, exit_code, request->user);
+                }).detach();
+            else callback(action.result, action.exit_code, action.request->user);
+            break;
+        }
+        }
+    }
+}
+
+void submit_password()
+{
+    if (!g_prompt_request) return;
+    execute_actions(g_coordinator.submit_password(g_prompt_request->id));
+}
+
+void key_event_cb(lv_event_t *event)
+{
+    auto *key = static_cast<key_item *>(lv_event_get_param(event));
+    if (!key || key->key_state != KBD_KEY_RELEASED) return;
+    lv_event_stop_processing(event);
+    if (!g_prompt_request) return;
+    if (g_coordinator.state(g_prompt_request->id) == cp0_sudo::State::RUNNING) {
+        if (key->key_code == KEY_ESC) {
+            std::vector<Action> actions;
+            g_coordinator.cancel(g_prompt_request->id, actions, now_ms());
+            execute_actions(std::move(actions));
+        }
         return;
     }
-    if (cancelled) complete_queued_request(cancelled);
+    if (key->key_code == KEY_ESC) {
+        std::vector<Action> actions;
+        g_coordinator.cancel(g_prompt_request->id, actions, now_ms());
+        execute_actions(std::move(actions));
+    } else if (key->key_code == KEY_ENTER) submit_password();
+    else if (key->key_code == KEY_BACKSPACE) {
+        if (!g_password.empty()) g_password.pop_back();
+        update_password_label();
+    } else if (key->utf8[0] && static_cast<unsigned char>(key->utf8[0]) >= 0x20 &&
+               g_password.size() + std::strlen(key->utf8) <= kMaxPasswordBytes) {
+        g_password += key->utf8;
+        update_password_label();
+    }
 }
 
-int enqueue_request(std::shared_ptr<SudoRequest> request)
+bool valid_thread(cp0_sudo_callback_thread_t thread)
 {
-    auto *holder = new (std::nothrow) std::shared_ptr<SudoRequest>(std::move(request));
-    if (!holder)
+    return thread == CP0_SUDO_CALLBACK_LVGL || thread == CP0_SUDO_CALLBACK_WORKER;
+}
+
+void enqueue_cb(void *user)
+{
+    std::unique_ptr<std::shared_ptr<Request>> holder(
+        static_cast<std::shared_ptr<Request> *>(user));
+    execute_actions(g_coordinator.commit_reserved((*holder)->id, now_ms()));
+}
+
+int enqueue(std::shared_ptr<Request> request, uint64_t *request_id)
+{
+    if (!g_coordinator.reserve(request)) return -EEXIST;
+    auto *holder = new (std::nothrow) std::shared_ptr<Request>(request);
+    if (!holder) {
+        auto actions = g_coordinator.release_reserved(request->id, now_ms());
+        if (!actions.empty() && !post_actions(actions))
+            g_coordinator.requeue_actions(std::move(actions));
         return -ENOMEM;
-    if (lv_async_call(enqueue_cb, holder) != LV_RESULT_OK) {
+    }
+    bool scheduled = cp0_testable::dispatch_task(
+        [holder](auto callback) { return lv_async_call(callback, holder) == LV_RESULT_OK; },
+        enqueue_cb);
+    if (!scheduled) {
         delete holder;
+        auto actions = g_coordinator.release_reserved(request->id, now_ms());
+        if (!actions.empty() && !post_actions(actions))
+            g_coordinator.requeue_actions(std::move(actions));
         return -EIO;
-    }
-    return 0;
-}
-
-bool valid_callback_thread(cp0_sudo_callback_thread_t callback_thread)
-{
-    return callback_thread == CP0_SUDO_CALLBACK_LVGL ||
-           callback_thread == CP0_SUDO_CALLBACK_WORKER;
-}
-
-} // namespace
-
-extern "C" int cp0_sudo_run_argv_async(const char *const *argv,
-                                         cp0_sudo_callback_thread_t callback_thread,
-                                         cp0_sudo_output_cb_t output_cb,
-                                         cp0_sudo_complete_cb_t complete_cb,
-                                         void *user)
-{
-    return cp0_sudo_run_argv_async_ex(argv, callback_thread, output_cb, complete_cb,
-                                     user, 0, 0, nullptr);
-}
-
-extern "C" int cp0_sudo_run_argv_async_ex(const char *const *argv,
-                                            cp0_sudo_callback_thread_t callback_thread,
-                                            cp0_sudo_output_cb_t output_cb,
-                                            cp0_sudo_complete_cb_t complete_cb,
-                                            void *user, int auth_timeout_ms,
-                                            int exec_timeout_ms, uint64_t *request_id)
-{
-    if (!argv || !argv[0] || !argv[0][0] || !valid_callback_thread(callback_thread))
-        return -EINVAL;
-    auto request = std::make_shared<SudoRequest>();
-    request->callback_thread = callback_thread;
-    request->output_cb = output_cb;
-    request->complete_cb = complete_cb;
-    request->user = user;
-    request->id = g_next_request_id.fetch_add(1);
-    request->auth_timeout_ms = auth_timeout_ms;
-    request->exec_timeout_ms = exec_timeout_ms;
-    for (size_t i = 0; argv[i]; ++i)
-        request->argv.emplace_back(argv[i]);
-    {
-        std::lock_guard<std::mutex> lock(g_mutex);
-        g_requests[request->id] = request;
-    }
-    int rc = enqueue_request(request);
-    if (rc != 0) {
-        std::lock_guard<std::mutex> lock(g_mutex);
-        g_requests.erase(request->id);
-        return rc;
     }
     if (request_id) *request_id = request->id;
     return 0;
 }
 
-extern "C" int cp0_sudo_cancel(uint64_t request_id)
+} // namespace
+
+extern "C" int cp0_sudo_run_argv_async_ex(const char *const *argv,
+    cp0_sudo_callback_thread_t callback_thread, cp0_sudo_output_cb_t output_cb,
+    cp0_sudo_complete_cb_t complete_cb, void *user, int auth_timeout_ms,
+    int exec_timeout_ms, uint64_t *request_id)
 {
-    auto *id = new (std::nothrow) uint64_t(request_id);
-    if (!id) return -ENOMEM;
-    {
-        std::lock_guard<std::mutex> lock(g_mutex);
-        auto found = g_requests.find(request_id);
-        if (found == g_requests.end()) {
-            delete id;
-            return -ENOENT;
-        }
-        found->second->cancel_requested.store(true);
-    }
-    if (lv_async_call(cancel_request_cb, id) != LV_RESULT_OK) {
-        delete id;
-        return -EIO;
-    }
-    return 0;
+    if (!argv || !argv[0] || !argv[0][0] || !valid_thread(callback_thread)) return -EINVAL;
+    auto request = std::make_shared<Request>();
+    request->id = g_next_request_id.fetch_add(1);
+    request->callback_thread = callback_thread;
+    request->output_cb = output_cb;
+    request->complete_cb = complete_cb;
+    request->user = user;
+    request->auth_timeout_ms = auth_timeout_ms;
+    request->exec_timeout_ms = exec_timeout_ms;
+    for (size_t i = 0; argv[i]; ++i) request->argv.emplace_back(argv[i]);
+    return enqueue(std::move(request), request_id);
+}
+
+extern "C" int cp0_sudo_run_argv_async(const char *const *argv,
+    cp0_sudo_callback_thread_t callback_thread, cp0_sudo_output_cb_t output_cb,
+    cp0_sudo_complete_cb_t complete_cb, void *user)
+{
+    return cp0_sudo_run_argv_async_ex(argv, callback_thread, output_cb, complete_cb,
+                                     user, 0, 0, nullptr);
 }
 
 extern "C" int cp0_sudo_run_shell_async(const char *command,
-                                          cp0_sudo_callback_thread_t callback_thread,
-                                          cp0_sudo_output_cb_t output_cb,
-                                          cp0_sudo_complete_cb_t complete_cb,
-                                          void *user)
+    cp0_sudo_callback_thread_t callback_thread, cp0_sudo_output_cb_t output_cb,
+    cp0_sudo_complete_cb_t complete_cb, void *user)
 {
-    if (!command || !command[0] || !valid_callback_thread(callback_thread))
-        return -EINVAL;
-    auto request = std::make_shared<SudoRequest>();
+    if (!command || !command[0] || !valid_thread(callback_thread)) return -EINVAL;
+    auto request = std::make_shared<Request>();
+    request->id = g_next_request_id.fetch_add(1);
     request->argv.emplace_back(command);
     request->use_login_shell = true;
     request->callback_thread = callback_thread;
     request->output_cb = output_cb;
     request->complete_cb = complete_cb;
     request->user = user;
-    request->id = g_next_request_id.fetch_add(1);
-    {
-        std::lock_guard<std::mutex> lock(g_mutex);
-        g_requests[request->id] = request;
-    }
-    int rc = enqueue_request(request);
-    if (rc != 0) {
-        std::lock_guard<std::mutex> lock(g_mutex);
-        g_requests.erase(request->id);
-    }
-    return rc;
+    return enqueue(std::move(request), nullptr);
+}
+
+extern "C" int cp0_sudo_cancel(uint64_t request_id)
+{
+    std::vector<Action> actions;
+    int rc = g_coordinator.cancel(request_id, actions, now_ms());
+    if (rc != 0) return rc;
+    if (!post_actions(actions)) g_coordinator.requeue_actions(std::move(actions));
+    return 0;
 }

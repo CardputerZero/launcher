@@ -5,6 +5,7 @@
  */
 
 #pragma once
+#include "setting/rtc_ntp_state.hpp"
 // Keep this page platform-neutral: system and hardware operations go through
 // cp0_lvgl's cp0_* service interfaces so the SDL build can compile the page.
 #define _STRINGIFY(x) #x
@@ -36,6 +37,7 @@
 #include <memory>
 #include <utility>
 #include "cp0_lvgl_app.h"
+#include "cp0_async_testable_utils.hpp"
 #include "hal_lvgl_bsp.h"
 #include "../app_registry.h"
 
@@ -165,6 +167,8 @@ private:
 
 class RTC {
 public:
+    RTC();
+    ~RTC();
     static void append(UISetupPage &p, std::vector<MenuItem> &menu);
     void refresh_values(UISetupPage &page);
     void toggle_ntp(UISetupPage &page);
@@ -176,15 +180,29 @@ public:
     void handle_write_confirm_key(UISetupPage &page, uint32_t key);
     bool is_dirty() const { return dirty_; }
     bool ntp_on() const { return ntp_on_; }
+    bool ntp_available() const { return ntp_available_; }
     bool write_confirm_active() const { return confirm_overlay_ != nullptr; }
     void clear_dirty() { dirty_ = false; }
 private:
+    struct AsyncState {
+        bool alive = true;
+        uint64_t request_id = 0;
+    };
+    enum class Modal { NONE, CONFIRM, BUSY, ERROR };
+    static int days_in_month(int year, int month);
+    void show_status(const char *title, const char *detail, Modal modal);
+    void finish_request();
+    void show_result_error(cp0_sudo_result_t result, int exit_code, const char *operation);
     void update_labels(UISetupPage &page);
     void update_write_confirm_buttons();
     int values_[6] = {2026, 1, 1, 0, 0, 0};
     int field_ = 0;
     bool ntp_on_ = true;
     bool dirty_ = false;
+    bool ntp_available_ = true;
+    bool ntp_previous_ = true;
+    Modal modal_ = Modal::NONE;
+    std::shared_ptr<AsyncState> async_state_;
     int confirm_sel_ = 1;
     lv_obj_t *confirm_overlay_ = nullptr;
     lv_obj_t *confirm_yes_lbl_ = nullptr;
@@ -1051,7 +1069,9 @@ private:
         SubItem &cur_sub = item.sub_items[sub_selected_idx_];
         lv_obj_t *hint = lv_label_create(cont);
         if (cur_sub.is_toggle && item.label == "RTC" && cur_sub.label == "NTP")
-            lv_label_set_text(hint, cur_sub.toggle_state ? "ok:disable" : "ok:enable");
+            lv_label_set_text(hint, rtc_.ntp_available()
+                                      ? (cur_sub.toggle_state ? "ok:disable" : "ok:enable")
+                                      : "unavailable");
         else if (cur_sub.is_toggle && item.label == "WiFi" && cur_sub.label == "Power")
             lv_label_set_text(hint, cur_sub.toggle_state ? "ok:disable" : "ok:enable");
         else if (cur_sub.is_toggle && item.label == "Bluetooth" && cur_sub.label == "Named Only")
@@ -2201,6 +2221,20 @@ void RTC::append(UISetupPage &p, std::vector<MenuItem> &menu)
     menu.push_back(m);
 }
 
+RTC::RTC() : async_state_(std::make_shared<AsyncState>()) {}
+
+RTC::~RTC()
+{
+    async_state_->alive = false;
+    if (async_state_->request_id)
+        cp0_sudo_cancel(async_state_->request_id);
+}
+
+int RTC::days_in_month(int year, int month)
+{
+    return cp0_testable::days_in_month(year, month);
+}
+
 void RTC::update_labels(UISetupPage &page)
 {
     for (auto &m : page.menu_items_) {
@@ -2218,7 +2252,10 @@ void RTC::update_labels(UISetupPage &page)
 
 void RTC::refresh_values(UISetupPage &page)
 {
-    ntp_on_ = cp0_time_ntp_get() == 1;
+    int ntp = cp0_time_ntp_get();
+    ntp_available_ = ntp >= 0;
+    if (ntp_available_)
+        ntp_on_ = ntp == 1;
     time_t now = time(NULL);
     struct tm *t = localtime(&now);
     if (t) {
@@ -2235,13 +2272,71 @@ void RTC::refresh_values(UISetupPage &page)
 
 void RTC::toggle_ntp(UISetupPage &page)
 {
-    for (auto &m : page.menu_items_) {
-        if (m.label != "RTC") continue;
-        bool on = m.sub_items[0].toggle_state;
-        cp0_time_ntp_set(on ? 1 : 0);
-        break;
+    NtpToggleEligibility eligibility = ntp_toggle_eligibility(
+        async_state_->request_id != 0, dirty_, ntp_available_);
+    if (eligibility == NtpToggleEligibility::IN_FLIGHT)
+        return;
+    if (eligibility == NtpToggleEligibility::DIRTY) {
+        update_labels(page);
+        show_status("NTP unchanged", "Save or discard time edits first", Modal::ERROR);
+        return;
     }
-    refresh_values(page);
+    if (eligibility == NtpToggleEligibility::UNAVAILABLE) {
+        update_labels(page);
+        show_status("NTP unavailable", "Unable to read NTP status", Modal::ERROR);
+        return;
+    }
+    bool desired = ntp_on_;
+    for (auto &m : page.menu_items_)
+        if (m.label == "RTC") { desired = m.sub_items[0].toggle_state; break; }
+    ntp_previous_ = ntp_on_;
+    show_status("Updating NTP", "Please wait...", Modal::BUSY);
+    struct Context { RTC *rtc; UISetupPage *page; std::weak_ptr<AsyncState> state; };
+    auto *ctx = new (std::nothrow) Context{this, &page, async_state_};
+    if (!ctx) {
+        ntp_on_ = ntp_rollback_value(ntp_previous_);
+        update_labels(page);
+        show_status("NTP failed", "Out of memory", Modal::ERROR);
+        return;
+    }
+    const char *argv[] = {"timedatectl", "set-ntp", desired ? "true" : "false", nullptr};
+    uint64_t request_id = 0;
+    int rc = cp0_sudo_run_argv_async_ex(argv, CP0_SUDO_CALLBACK_LVGL, nullptr,
+        [](cp0_sudo_result_t result, int exit_code, void *user) {
+            std::unique_ptr<Context> ctx(static_cast<Context *>(user));
+            auto state = ctx->state.lock();
+            if (!state || !state->alive) return;
+            ctx->rtc->finish_request();
+            if (result != CP0_SUDO_RESULT_SUCCESS) {
+                ctx->rtc->ntp_on_ = ntp_rollback_value(ctx->rtc->ntp_previous_);
+                ctx->rtc->update_labels(*ctx->page);
+                if (result == CP0_SUDO_RESULT_CANCELLED) {
+                    ctx->rtc->close_write_confirm();
+                    ctx->page->build_sub_view();
+                    return;
+                }
+                ctx->rtc->show_result_error(result, exit_code, "NTP update");
+                return;
+            }
+            int actual = cp0_time_ntp_get();
+            if (actual < 0) {
+                ctx->rtc->ntp_available_ = false;
+                ctx->rtc->show_status("NTP unavailable", "Unable to read NTP status", Modal::ERROR);
+            } else {
+                ctx->rtc->ntp_available_ = true;
+                ctx->rtc->ntp_on_ = actual == 1;
+                ctx->rtc->close_write_confirm();
+            }
+            ctx->rtc->update_labels(*ctx->page);
+            ctx->page->build_sub_view();
+        }, ctx, 60000, 30000, &request_id);
+    if (rc != 0) {
+        delete ctx;
+        ntp_on_ = ntp_rollback_value(ntp_previous_);
+        update_labels(page);
+        show_status("NTP failed", "Unable to start request", Modal::ERROR);
+    }
+    else async_state_->request_id = request_id;
 }
 
 void RTC::enter_adjust(UISetupPage &page, int field)
@@ -2253,7 +2348,7 @@ void RTC::enter_adjust(UISetupPage &page, int field)
     page.val_title_ = names[field];
     int cur = values_[field];
     int mins[] = {2000, 1, 1, 0, 0, 0};
-    int maxs[] = {2099, 12, 31, 23, 59, 59};
+    int maxs[] = {2099, 12, days_in_month(values_[0], values_[1]), 23, 59, 59};
 
     page.val_options_.clear();
     for (int v = mins[field]; v <= maxs[field]; ++v) {
@@ -2270,64 +2365,112 @@ void RTC::apply_value(UISetupPage &page)
 {
     int new_val = atoi(page.val_options_[page.val_sel_idx_].c_str());
     values_[field_] = new_val;
+    if ((field_ == 0 || field_ == 1) && values_[2] > days_in_month(values_[0], values_[1]))
+        values_[2] = days_in_month(values_[0], values_[1]);
     dirty_ = true;
     update_labels(page);
-
-    char timestamp[32];
-    snprintf(timestamp, sizeof(timestamp), "%04d-%02d-%02d %02d:%02d:%02d",
-             values_[0], values_[1], values_[2], values_[3], values_[4], values_[5]);
-    struct Context {
-        RTC *rtc;
-        UISetupPage *page;
-    };
-    auto *context = new (std::nothrow) Context{this, &page};
-    if (!context) {
-        refresh_values(page);
-        return;
-    }
-    const char *argv[] = {"date", "-s", timestamp, nullptr};
-    int rc = cp0_sudo_run_argv_async(
-        argv, CP0_SUDO_CALLBACK_LVGL, nullptr,
-        [](cp0_sudo_result_t result, int, void *user) {
-            std::unique_ptr<Context> context(static_cast<Context *>(user));
-            if (result == CP0_SUDO_RESULT_SUCCESS) {
-                context->rtc->dirty_ = true;
-                context->page->update_datetime_status();
-            } else {
-                context->rtc->refresh_values(*context->page);
-            }
-        }, context);
-    if (rc != 0) {
-        delete context;
-        refresh_values(page);
-    }
 }
 
 void RTC::commit_to_hardware(UISetupPage &page)
 {
-    struct Context {
-        RTC *rtc;
-        UISetupPage *page;
-    };
-    auto *context = new (std::nothrow) Context{this, &page};
-    if (!context)
-        return;
-    const char *argv[] = {"hwclock", "-w", nullptr};
-    int rc = cp0_sudo_run_argv_async(
-        argv, CP0_SUDO_CALLBACK_LVGL, nullptr,
-        [](cp0_sudo_result_t result, int, void *user) {
-            std::unique_ptr<Context> context(static_cast<Context *>(user));
+    char command[96];
+    snprintf(command, sizeof(command), "date -s '%04d-%02d-%02d %02d:%02d:%02d' && hwclock -w",
+             values_[0], values_[1], values_[2], values_[3], values_[4], values_[5]);
+    show_status("Saving date & time", "Please wait...", Modal::BUSY);
+    struct Context { RTC *rtc; UISetupPage *page; std::weak_ptr<AsyncState> state; };
+    auto *ctx = new (std::nothrow) Context{this, &page, async_state_};
+    if (!ctx) { show_status("Save failed", "Out of memory", Modal::ERROR); return; }
+    uint64_t request_id = 0;
+    const char *argv[] = {"/bin/sh", "-c", command, nullptr};
+    int rc = cp0_sudo_run_argv_async_ex(argv, CP0_SUDO_CALLBACK_LVGL, nullptr,
+        [](cp0_sudo_result_t result, int exit_code, void *user) {
+            std::unique_ptr<Context> ctx(static_cast<Context *>(user));
+            auto state = ctx->state.lock();
+            if (!state || !state->alive) return;
+            ctx->rtc->finish_request();
             if (result == CP0_SUDO_RESULT_SUCCESS) {
-                context->rtc->refresh_values(*context->page);
-                context->page->update_datetime_status();
+                ctx->rtc->dirty_ = false;
+                ctx->rtc->close_write_confirm();
+                ctx->page->update_datetime_status();
+                ctx->page->view_state_ = UISetupPage::ViewState::MAIN;
+                ctx->page->build_main_view();
             } else {
-                context->rtc->dirty_ = true;
+                ctx->rtc->dirty_ = true;
+                if (result == CP0_SUDO_RESULT_CANCELLED)
+                    ctx->rtc->close_write_confirm();
+                else
+                    ctx->rtc->show_result_error(result, exit_code, "Date/time save");
             }
-        }, context);
-    if (rc != 0) {
-        delete context;
-        dirty_ = true;
+        }, ctx, 60000, 30000, &request_id);
+    if (rc != 0) { delete ctx; show_status("Save failed", "Unable to start request", Modal::ERROR); }
+    else async_state_->request_id = request_id;
+}
+
+void RTC::finish_request()
+{
+    async_state_->request_id = 0;
+}
+
+void RTC::show_result_error(cp0_sudo_result_t result, int exit_code, const char *operation)
+{
+    const char *reason = "Command failed";
+    switch (classify_privileged_result(static_cast<int>(result))) {
+    case PrivilegedResultKind::AUTH_FAILED: reason = "Authentication failed"; break;
+    case PrivilegedResultKind::CANCELLED: reason = "Request cancelled"; break;
+    case PrivilegedResultKind::TIMED_OUT: reason = "Request timed out"; break;
+    case PrivilegedResultKind::EXEC_FAILED: reason = exit_code ? "Command returned an error" : "Unable to start command"; break;
+    default: break;
     }
+    char title[64];
+    snprintf(title, sizeof(title), "%s failed", operation);
+    show_status(title, reason, Modal::ERROR);
+}
+
+void RTC::show_status(const char *title_text, const char *detail_text, Modal modal)
+{
+    close_write_confirm();
+    modal_ = modal;
+    confirm_overlay_ = lv_obj_create(lv_layer_top());
+    lv_obj_remove_style_all(confirm_overlay_);
+    lv_obj_set_size(confirm_overlay_, UISetupPage::SCREEN_W, UISetupPage::SCREEN_H + 20);
+    lv_obj_set_pos(confirm_overlay_, 0, 0);
+    lv_obj_set_style_bg_color(confirm_overlay_, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_opa(confirm_overlay_, LV_OPA_60, 0);
+    lv_obj_clear_flag(confirm_overlay_, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t *box = lv_obj_create(confirm_overlay_);
+    lv_obj_remove_style_all(box);
+    lv_obj_set_size(box, 250, 82);
+    lv_obj_align(box, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_set_style_bg_color(box, lv_color_hex(0x1A1A2E), 0);
+    lv_obj_set_style_bg_opa(box, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(box, 6, 0);
+    lv_obj_set_style_border_color(box, lv_color_hex(modal == Modal::ERROR ? 0xCC5555 : 0x3A5A8A), 0);
+    lv_obj_set_style_border_width(box, 1, 0);
+
+    lv_obj_t *title = lv_label_create(box);
+    lv_label_set_text(title, title_text);
+    lv_obj_set_width(title, 230);
+    lv_obj_set_style_text_align(title, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_color(title, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_set_style_text_font(title, launcher_fonts().get("Montserrat-Bold.ttf", 14, LV_FREETYPE_FONT_STYLE_BOLD), 0);
+    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 10);
+
+    lv_obj_t *detail = lv_label_create(box);
+    lv_label_set_text(detail, detail_text);
+    lv_obj_set_width(detail, 230);
+    lv_obj_set_style_text_align(detail, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_color(detail, lv_color_hex(0xAAAAAA), 0);
+    lv_obj_set_style_text_font(detail, &lv_font_montserrat_10, 0);
+    lv_obj_align(detail, LV_ALIGN_CENTER, 0, 7);
+    if (modal == Modal::ERROR) {
+        lv_obj_t *hint = lv_label_create(box);
+        lv_label_set_text(hint, "OK / ESC: close");
+        lv_obj_set_style_text_color(hint, lv_color_hex(0x777777), 0);
+        lv_obj_set_style_text_font(hint, &lv_font_montserrat_10, 0);
+        lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, -5);
+    }
+    lv_obj_move_foreground(confirm_overlay_);
 }
 
 void RTC::show_write_confirm(UISetupPage &page)
@@ -2335,6 +2478,7 @@ void RTC::show_write_confirm(UISetupPage &page)
     if (confirm_overlay_)
         return;
 
+    modal_ = Modal::CONFIRM;
     confirm_sel_ = 1;
     lv_obj_t *layer = lv_layer_top();
 
@@ -2395,6 +2539,7 @@ void RTC::close_write_confirm()
     }
     confirm_yes_lbl_ = nullptr;
     confirm_no_lbl_ = nullptr;
+    modal_ = Modal::NONE;
 }
 
 void RTC::update_write_confirm_buttons()
@@ -2409,6 +2554,17 @@ void RTC::update_write_confirm_buttons()
 
 void RTC::handle_write_confirm_key(UISetupPage &page, uint32_t key)
 {
+    if (modal_ == Modal::BUSY)
+        return;
+    if (modal_ == Modal::ERROR) {
+        if (key == KEY_ENTER || key == KEY_ESC) {
+            page.play_back();
+            close_write_confirm();
+            if (page.view_state_ == UISetupPage::ViewState::SUB)
+                page.build_sub_view();
+        }
+        return;
+    }
     switch (key) {
     case KEY_LEFT:
     case KEY_UP:
@@ -2427,10 +2583,9 @@ void RTC::handle_write_confirm_key(UISetupPage &page, uint32_t key)
             commit_to_hardware(page);
         } else {
             refresh_values(page);
+            page.view_state_ = UISetupPage::ViewState::MAIN;
+            page.build_main_view();
         }
-        dirty_ = false;
-        page.view_state_ = UISetupPage::ViewState::MAIN;
-        page.build_main_view();
         break;
     case KEY_ESC:
         page.play_back();
