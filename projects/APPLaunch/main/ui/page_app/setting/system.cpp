@@ -56,16 +56,17 @@ void Developer::toggle_adb(UISetupPage &page)
             auto state = ctx->state.lock();
             if (!state || !state->alive) return;
             state->request_id = 0;
-            if (adb_toggle_succeeded(static_cast<int>(result), exit_code)) {
+            if (adb_toggle_succeeded(result, exit_code)) {
                 ctx->developer->update_toggle(*ctx->page, ctx->desired, true);
                 ctx->developer->close_status();
-                if (adb_reboot_required(static_cast<int>(result), exit_code))
+                if (adb_reboot_required(result, exit_code))
                     ctx->developer->enter_usb_guide(*ctx->page, ctx->desired);
                 else
                     ctx->page->build_sub_view();
                 return;
             }
-            ctx->developer->update_toggle(*ctx->page, ctx->previous, false);
+            if (!ctx->developer->refresh_adb_status(*ctx->page))
+                ctx->developer->update_toggle(*ctx->page, ctx->previous, false);
             if (result == CP0_SUDO_RESULT_CANCELLED) {
                 ctx->developer->close_status();
                 ctx->page->build_sub_view();
@@ -82,17 +83,19 @@ void Developer::toggle_adb(UISetupPage &page)
     async_state_->request_id = request_id;
 }
 
-void Developer::refresh_adb_status(UISetupPage &page)
+bool Developer::refresh_adb_status(UISetupPage &page)
 {
     int idx = page.find_menu("Developer");
-    if (idx < 0) return;
+    if (idx < 0) return false;
     int rc = -1;
     std::string out;
     cp0_signal_process_api({"CaptureArgv", kAdbHelper, "status"},
                            [&](int code, std::string data) { rc = code; out = std::move(data); });
-    if (rc != 0) return;
+    if (rc != 0) return false;
     AdbStatus status = parse_adb_status(out.c_str());
-    if (status.valid) update_toggle(page, status.active || status.enabled, true);
+    if (!status.valid) return false;
+    update_toggle(page, adb_state_after_failure(status, false), true);
+    return true;
 }
 
 void Developer::update_toggle(UISetupPage &page, bool enabled, bool save)
@@ -114,7 +117,7 @@ void Developer::show_result_error(cp0_sudo_result_t result, int exit_code)
     case PrivilegedResultKind::CANCELLED: reason = "Request cancelled"; break;
     case PrivilegedResultKind::TIMED_OUT: reason = "Request timed out"; break;
     case PrivilegedResultKind::EXEC_FAILED:
-        reason = exit_code ? "Command returned an error" : "Unable to start command";
+        reason = exit_code < 0 ? "Unable to start command" : "Command returned an error";
         break;
     default: break;
     }
