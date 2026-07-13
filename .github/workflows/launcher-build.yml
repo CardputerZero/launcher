@@ -114,6 +114,8 @@ jobs:
         cp projects/AppStore/dist/APPLaunch/bin/appstore.py projects/APPLaunch/dist/bin/
         cp projects/Calculator/dist/M5CardputerZero-Calculator projects/APPLaunch/dist/bin/
         cp projects/ZClaw/dist/ZClaw projects/APPLaunch/dist/bin/
+        mkdir -p projects/APPLaunch/dist/APPLaunch/applications
+        cp projects/ZClaw/dist/APPLaunch/applications/zclaw.desktop projects/APPLaunch/dist/APPLaunch/applications/
         mkdir -p projects/APPLaunch/dist/APPLaunch/share/images
         cp projects/AppStore/dist/APPLaunch/share/images/store_wordmark.png projects/APPLaunch/dist/APPLaunch/share/images/ 2>/dev/null || true
         cp projects/AppStore/dist/APPLaunch/share/images/store_arrow_*.png projects/APPLaunch/dist/APPLaunch/share/images/ 2>/dev/null || true

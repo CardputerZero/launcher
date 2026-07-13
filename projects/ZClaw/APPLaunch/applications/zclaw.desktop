@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=ZClaw
+Exec=/usr/share/APPLaunch/bin/ZClaw
+Terminal=false
+Icon=share/images/claw_100.png
+Type=Application
