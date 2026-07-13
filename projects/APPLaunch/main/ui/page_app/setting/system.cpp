@@ -3,6 +3,15 @@
 
 namespace setting {
 
+Developer::Developer() : async_state_(std::make_shared<AsyncState>()) {}
+
+Developer::~Developer()
+{
+    async_state_->alive = false;
+    if (async_state_->request_id) cp0_sudo_cancel(async_state_->request_id);
+    close_status();
+}
+
 void Developer::append(UISetupPage &p, std::vector<MenuItem> &menu)
 {
     UISetupPage *page = &p;
@@ -18,44 +27,153 @@ void Developer::toggle_adb(UISetupPage &page)
 {
     int idx = page.find_menu("Developer");
     if (idx < 0) return;
+    if (async_state_->request_id) {
+        page.menu_items_[idx].sub_items[0].toggle_state =
+            !page.menu_items_[idx].sub_items[0].toggle_state;
+        return;
+    }
     bool want_on = page.menu_items_[idx].sub_items[0].toggle_state;
-    const char *argv[] = {"sudo", kAdbHelper, want_on ? "enable" : "disable", nullptr};
-    int rc = cp0_process_run_argv(argv, 0);
-    if (rc == 10) {
-        UISetupPage::config_set_int("adb_debug", want_on ? 1 : 0);
-        UISetupPage::config_save();
-        enter_usb_guide(page, want_on);
+    const bool previous = !want_on;
+    show_status(want_on ? "Enabling ADB" : "Disabling ADB", "Please wait...", Modal::BUSY);
+    struct Context {
+        Developer *developer;
+        UISetupPage *page;
+        std::weak_ptr<AsyncState> state;
+        bool desired;
+        bool previous;
+    };
+    auto *ctx = new (std::nothrow) Context{this, &page, async_state_, want_on, previous};
+    if (!ctx) {
+        update_toggle(page, previous, false);
+        show_status("ADB update failed", "Out of memory", Modal::ERROR);
         return;
     }
+    const char *argv[] = {kAdbHelper, want_on ? "enable" : "disable", nullptr};
+    uint64_t request_id = 0;
+    int rc = cp0_sudo_run_argv_async_ex(argv, CP0_SUDO_CALLBACK_LVGL, nullptr,
+        [](cp0_sudo_result_t result, int exit_code, void *user) {
+            std::unique_ptr<Context> ctx(static_cast<Context *>(user));
+            auto state = ctx->state.lock();
+            if (!state || !state->alive) return;
+            state->request_id = 0;
+            if (adb_toggle_succeeded(result, exit_code)) {
+                ctx->developer->update_toggle(*ctx->page, ctx->desired, true);
+                ctx->developer->close_status();
+                if (adb_reboot_required(result, exit_code))
+                    ctx->developer->enter_usb_guide(*ctx->page, ctx->desired);
+                else
+                    ctx->page->build_sub_view();
+                return;
+            }
+            if (!ctx->developer->refresh_adb_status(*ctx->page))
+                ctx->developer->update_toggle(*ctx->page, ctx->previous, false);
+            if (result == CP0_SUDO_RESULT_CANCELLED) {
+                ctx->developer->close_status();
+                ctx->page->build_sub_view();
+            } else {
+                ctx->developer->show_result_error(result, exit_code);
+            }
+        }, ctx, 60000, 300000, &request_id);
     if (rc != 0) {
-        page.menu_items_[idx].sub_items[0].toggle_state = !want_on;
+        delete ctx;
+        update_toggle(page, previous, false);
+        show_status("ADB update failed", "Unable to start request", Modal::ERROR);
         return;
     }
-    UISetupPage::config_set_int("adb_debug", want_on ? 1 : 0);
-    UISetupPage::config_save();
+    async_state_->request_id = request_id;
 }
 
-void Developer::refresh_adb_status(UISetupPage &page)
+bool Developer::refresh_adb_status(UISetupPage &page)
+{
+    int idx = page.find_menu("Developer");
+    if (idx < 0) return false;
+    int rc = -1;
+    std::string out;
+    cp0_signal_process_api({"CaptureArgv", kAdbHelper, "status"},
+                           [&](int code, std::string data) { rc = code; out = std::move(data); });
+    if (rc != 0) return false;
+    AdbStatus status = parse_adb_status(out.c_str());
+    if (!status.valid) return false;
+    update_toggle(page, adb_state_after_failure(status, false), true);
+    return true;
+}
+
+void Developer::update_toggle(UISetupPage &page, bool enabled, bool save)
 {
     int idx = page.find_menu("Developer");
     if (idx < 0) return;
-    char out[64] = {0};
-    const char *argv[] = {"systemctl", "is-active", "adbd.service", nullptr};
-    cp0_process_capture_argv(argv, out, sizeof(out));
-    bool active = (std::strncmp(out, "active", 6) == 0);
-    page.menu_items_[idx].sub_items[0].toggle_state = active;
-    UISetupPage::config_set_int("adb_debug", active ? 1 : 0);
+    page.menu_items_[idx].sub_items[0].toggle_state = enabled;
+    if (save) {
+        UISetupPage::config_set_int("adb_debug", enabled ? 1 : 0);
+        UISetupPage::config_save();
+    }
+}
+
+void Developer::show_result_error(cp0_sudo_result_t result, int exit_code)
+{
+    const char *reason = "Command failed";
+    switch (classify_privileged_result(static_cast<int>(result))) {
+    case PrivilegedResultKind::AUTH_FAILED: reason = "Authentication failed"; break;
+    case PrivilegedResultKind::CANCELLED: reason = "Request cancelled"; break;
+    case PrivilegedResultKind::TIMED_OUT: reason = "Request timed out"; break;
+    case PrivilegedResultKind::EXEC_FAILED:
+        reason = exit_code < 0 ? "Unable to start command" : "Command returned an error";
+        break;
+    default: break;
+    }
+    show_status("ADB update failed", reason, Modal::ERROR);
+}
+
+void Developer::show_status(const char *title_text, const char *detail_text, Modal modal)
+{
+    close_status();
+    modal_ = modal;
+    status_overlay_ = lv_obj_create(lv_layer_top());
+    lv_obj_remove_style_all(status_overlay_);
+    lv_obj_set_size(status_overlay_, UISetupPage::SCREEN_W, UISetupPage::SCREEN_H + 20);
+    lv_obj_set_style_bg_color(status_overlay_, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_opa(status_overlay_, LV_OPA_60, 0);
+    lv_obj_clear_flag(status_overlay_, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_t *box = guide_chip(status_overlay_, 35, 69, 250, 82, 0x1A1A2E,
+                               modal == Modal::ERROR ? 0xCC5555 : 0x3A5A8A, 6, 1);
+    lv_obj_t *title = guide_label(box, 10, 10, title_text, 0xFFFFFF,
+        launcher_fonts().get("Montserrat-Bold.ttf", 14, LV_FREETYPE_FONT_STYLE_BOLD));
+    lv_obj_set_width(title, 230);
+    lv_obj_set_style_text_align(title, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_t *detail = guide_label(box, 10, 39, detail_text, 0xAAAAAA, &lv_font_montserrat_10);
+    lv_obj_set_width(detail, 230);
+    lv_obj_set_style_text_align(detail, LV_TEXT_ALIGN_CENTER, 0);
+    if (modal == Modal::ERROR) {
+        lv_obj_t *hint = guide_label(box, 10, 64, "OK / ESC: close", 0x777777,
+                                     &lv_font_montserrat_10);
+        lv_obj_set_width(hint, 230);
+        lv_obj_set_style_text_align(hint, LV_TEXT_ALIGN_CENTER, 0);
+    }
+    lv_obj_move_foreground(status_overlay_);
+}
+
+void Developer::close_status()
+{
+    if (status_overlay_) {
+        lv_obj_del(status_overlay_);
+        status_overlay_ = nullptr;
+    }
+    modal_ = Modal::NONE;
+}
+
+void Developer::handle_status_key(UISetupPage &page, uint32_t key)
+{
+    if (modal_ == Modal::BUSY) return;
+    if (key == KEY_ENTER || key == KEY_ESC || key == KEY_LEFT) {
+        close_status();
+        page.build_sub_view();
+    }
 }
 
 void Developer::enter_usb_guide(UISetupPage &page, bool enabling)
 {
     usb_guide_enabling_ = enabling;
-    lv_timer_t *t = lv_timer_create([](lv_timer_t *timer) {
-        UISetupPage *self = (UISetupPage *)lv_timer_get_user_data(timer);
-        lv_timer_delete(timer);
-        self->developer_.build_usb_guide_view(*self);
-    }, 60, &page);
-    lv_timer_set_repeat_count(t, 1);
+    build_usb_guide_view(page);
 }
 
 lv_obj_t *Developer::guide_chip(lv_obj_t *parent, int x, int y, int w, int h,
