@@ -15,3 +15,6 @@
 [submodule "projects/CameraApp/main_CameraApp"]
 	path = projects/CameraApp/main_CameraApp
 	url = https://github.com/CardputerZero/CameraApp.git
+[submodule "projects/FactoryTest/main_FactoryTest"]
+	path = projects/FactoryTest/main_FactoryTest
+	url = https://github.com/CardputerZero/FactoryTest.git
