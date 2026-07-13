@@ -6,6 +6,7 @@
 
 #pragma once
 #include "setting/rtc_ntp_state.hpp"
+#include "setting/adb_state.hpp"
 // Keep this page platform-neutral: system and hardware operations go through
 // cp0_lvgl's cp0_* service interfaces so the SDL build can compile the page.
 #define _STRINGIFY(x) #x
@@ -148,6 +149,8 @@ private:
 
 class Developer {
 public:
+    Developer();
+    ~Developer();
     static void append(UISetupPage &p, std::vector<MenuItem> &menu);
     void toggle_adb(UISetupPage &page);
     void refresh_adb_status(UISetupPage &page);
@@ -155,12 +158,23 @@ public:
     void build_usb_guide_view(UISetupPage &page);
     void stop_usb_guide_anims();
     void handle_usb_guide_key(UISetupPage &page, uint32_t key);
+    void handle_status_key(UISetupPage &page, uint32_t key);
+    bool status_active() const { return status_overlay_ != nullptr; }
 private:
+    struct AsyncState { bool alive = true; uint64_t request_id = 0; };
+    enum class Modal { NONE, BUSY, ERROR };
     static constexpr const char *kAdbHelper = "/usr/share/APPLaunch/adb/cardputer-adb";
     static lv_obj_t *guide_chip(lv_obj_t *parent, int x, int y, int w, int h,
                                 uint32_t bg, uint32_t border, int radius, int border_w);
     static lv_obj_t *guide_label(lv_obj_t *parent, int x, int y, const char *txt,
                                  uint32_t color, const lv_font_t *font);
+    void show_status(const char *title, const char *detail, Modal modal);
+    void close_status();
+    void update_toggle(UISetupPage &page, bool enabled, bool save);
+    void show_result_error(cp0_sudo_result_t result, int exit_code);
+    std::shared_ptr<AsyncState> async_state_;
+    Modal modal_ = Modal::NONE;
+    lv_obj_t *status_overlay_ = nullptr;
     bool usb_guide_enabling_ = true;
     lv_obj_t *usb_guide_knob_ = nullptr;
 };
@@ -1298,6 +1312,11 @@ private:
         cur_elm_ = elm;
         uint32_t key = elm->key_code;
         key = remap_fzxc(key);
+
+        if (developer_.status_active()) {
+            if (released) developer_.handle_status_key(*this, key);
+            return;
+        }
 
         if (rtc_.write_confirm_active()) {
             if (released)
