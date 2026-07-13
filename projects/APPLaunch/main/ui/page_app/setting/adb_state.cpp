@@ -28,13 +28,19 @@ AdbStatus parse_adb_status(const char *output)
     return status;
 }
 
-bool adb_toggle_succeeded(int result, int exit_code)
+bool adb_toggle_succeeded(cp0_sudo_result_t result, int exit_code)
 {
-    return result == 0 || (result == 2 && exit_code == 10);
+    return result == CP0_SUDO_RESULT_SUCCESS ||
+           (result == CP0_SUDO_RESULT_EXEC_FAILED && exit_code == 10);
 }
 
-bool adb_reboot_required(int result, int exit_code)
+bool adb_reboot_required(cp0_sudo_result_t result, int exit_code)
 {
-    return result == 2 && exit_code == 10;
+    return result == CP0_SUDO_RESULT_EXEC_FAILED && exit_code == 10;
+}
+
+bool adb_state_after_failure(const AdbStatus &status, bool previous)
+{
+    return status.valid ? status.active || status.enabled : previous;
 }
 } // namespace setting

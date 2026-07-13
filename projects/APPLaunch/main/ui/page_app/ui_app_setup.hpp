@@ -153,7 +153,7 @@ public:
     ~Developer();
     static void append(UISetupPage &p, std::vector<MenuItem> &menu);
     void toggle_adb(UISetupPage &page);
-    void refresh_adb_status(UISetupPage &page);
+    bool refresh_adb_status(UISetupPage &page);
     void enter_usb_guide(UISetupPage &page, bool enabling);
     void build_usb_guide_view(UISetupPage &page);
     void stop_usb_guide_anims();
