@@ -14,9 +14,9 @@
 #include "generated/page_app.h"
 #include "cp0_lvgl_app.h"
 #include "cp0_lvgl_file.hpp"
+#include "launcher_platform.hpp"
 #include "sample_log.h"
 
-#include <dirent.h>
 #include <fstream>
 #include <functional>
 #include <memory>
@@ -45,7 +45,7 @@ struct BuiltinAppRegistration {
 template <class PageT>
 void append_page_app(std::list<app> &apps, const AppDescriptor &desc)
 {
-    apps.emplace_back(desc.label, cp0_file_path(desc.icon), page_v<PageT>);
+    apps.emplace_back(desc.label, launcher_platform::path(desc.icon), page_v<PageT>);
 }
 
 void append_builtin_app(std::list<app> &apps, const BuiltinAppRegistration &registration)
@@ -56,9 +56,11 @@ void append_builtin_app(std::list<app> &apps, const BuiltinAppRegistration &regi
         return;
     }
 
+    std::string exec = registration.exec ? registration.exec : "";
+    if (!exec.empty() && exec.front() == '@') exec = launcher_platform::path(exec.substr(1));
     apps.emplace_back(desc.label,
-                      cp0_file_path(desc.icon),
-                      registration.exec ? registration.exec : "",
+                      launcher_platform::path(desc.icon),
+                      exec,
                       registration.terminal,
                       registration.sysplause,
                       registration.run_as_root);
@@ -67,12 +69,12 @@ void append_builtin_app(std::list<app> &apps, const BuiltinAppRegistration &regi
 constexpr BuiltinAppRegistration kBuiltinApps[] = {
     {{"Python", "python_100.png", "app_Python", false, true}, "python3", true, false, false, nullptr},
     {{"STORE", "store_100.png", "app_Store", false, true},
-     "/usr/share/APPLaunch/bin/M5CardputerZero-AppStore", false, true, false, nullptr},
+     "@appstore_exec", false, true, false, nullptr},
     {{"CLI", "cli_100.png", "app_CLI", false, true}, nullptr, false, true, false, append_page_app<UISTPage>},
     {{"GAME", "game_100.png", "app_Game", false, true}, nullptr, false, true, false, append_page_app<UIGamePage>},
     {{"SETTING", "setting_100.png", "app_Setting", false, true}, nullptr, false, true, false, append_page_app<UISetupPage>},
     {{"MATH", "math_100.png", "app_Math", true, false},
-     "/usr/share/APPLaunch/bin/M5CardputerZero-Calculator", false, true, false, nullptr},
+     "@calculator_exec", false, true, false, nullptr},
 #if defined(__linux__) && !defined(HAL_PLATFORM_SDL)
     {{"IP_PANEL", "ip_panel_100.png", "app_IP_Panel", true, false},
      nullptr, false, true, false, append_page_app<UIIpPanelPage>},
@@ -104,19 +106,6 @@ const AppDescriptor *launcher_app_registry_entries(std::size_t *count)
         *count = sizeof(kBuiltinApps) / sizeof(kBuiltinApps[0]);
     return descriptors;
 }
-
-// ============================================================
-// Launch shortcut examples
-// ============================================================
-/*
-root@pi:/home/pi# cat /usr/share/APPLaunch/applications/vim.desktop
-[Desktop Entry]
-Name=Vim
-TryExec=vim
-Exec=vim
-Terminal=true
-Icon=share/images/e-Mail_80.png
-*/
 
 // ============================================================
 // Launch
@@ -204,7 +193,7 @@ void Launch::launch_Exec(const std::string &exec, bool keep_root)
         /* Show overlay BEFORE we tear down LVGL input/timers so the user
          * gets immediate feedback when ENTER was pressed. The overlay
          * stays drawn on the framebuffer right up until the child takes
-         * it over via cp0_process_exec_blocking(). */
+         * it over via the cp0 process callback. */
         ui_loading::show("Loading...");
         lv_disp_t *disp = lv_disp_get_default();
         lv_indev_t *indev = lv_indev_get_next(NULL);
@@ -215,7 +204,11 @@ void Launch::launch_Exec(const std::string &exec, bool keep_root)
         lv_timer_enable(false);
         lv_refr_now(disp);
 
-        int ret = cp0_process_exec_blocking(exec.c_str(), &LVGL_HOME_KEY_FLAG, keep_root ? 1 : 0);
+        int ret = -1;
+        cp0_signal_process_api({"ExecBlocking", exec,
+                                std::to_string(reinterpret_cast<uintptr_t>(&LVGL_HOME_KEY_FLAG)),
+                                keep_root ? "1" : "0"},
+                               [&](int code, std::string) { ret = code; });
         SLOGI("App %s exited with code %d", exec.c_str(), ret);
 
         lv_timer_enable(true);
@@ -253,31 +246,39 @@ const app *Launch::carousel_slot_app(size_t slot) const
 
 void Launch::applications_load()
     {
-        const std::string app_dir_path = cp0_file_path("applications");
-        const char *app_dir = app_dir_path.c_str();
-        DIR *dir = opendir(app_dir);
-        if (!dir)
-        {
-            perror("applications_load: opendir failed");
-            return;
-        }
-
-        struct dirent *entry;
-        while ((entry = readdir(dir)) != NULL)
+        const std::string app_dir_path = launcher_platform::path("applications");
+        int list_code = -1;
+        std::string listing;
+        cp0_signal_filesystem_api({"DirList", app_dir_path}, [&](int code, std::string data) {
+            list_code = code;
+            listing = std::move(data);
+        });
+        if (list_code != 0) return;
+        std::istringstream list_stream(listing);
+        std::string list_line;
+        while (std::getline(list_stream, list_line))
         {
             // Process only *.desktop files
-            const char *name = entry->d_name;
-            size_t len = strlen(name);
-            if (len <= 8 || strcmp(name + len - 8, ".desktop") != 0)
+            if (list_line.size() < 3 || list_line[0] != 'F' || list_line[1] != '\t') continue;
+            std::string name;
+            if (!launcher_platform::decode_field(list_line.substr(2), name)) continue;
+            size_t len = name.size();
+            if (len <= 8 || name.compare(len - 8, 8, ".desktop") != 0)
                 continue;
 
-            std::string filepath = std::string(app_dir) + "/" + name;
-            std::ifstream ifs(filepath);
-            if (!ifs.is_open())
+            std::string filepath = app_dir_path + "/" + name;
+            int read_code = -1;
+            std::string desktop_data;
+            cp0_signal_filesystem_api({"ReadFile", filepath, "65536"}, [&](int code, std::string data) {
+                read_code = code;
+                desktop_data = std::move(data);
+            });
+            if (read_code != 0)
             {
                 fprintf(stderr, "applications_load: cannot open %s\n", filepath.c_str());
                 continue;
             }
+            std::istringstream ifs(desktop_data);
 
             // Parse the INI file
             std::string page_title, app_icon, app_exec;
@@ -350,11 +351,16 @@ void Launch::applications_load()
                 fprintf(stderr, "applications_load: skip %s (missing Name or Exec)\n", filepath.c_str());
                 continue;
             }
-            char unsafe_reason[128] = {};
-            if (!cp0_desktop_exec_is_safe(app_exec.c_str(), unsafe_reason, sizeof(unsafe_reason)))
+            int safe_code = -1;
+            std::string unsafe_reason;
+            cp0_signal_process_api({"DesktopExecIsSafe", app_exec}, [&](int code, std::string data) {
+                safe_code = code;
+                unsafe_reason = std::move(data);
+            });
+            if (safe_code != 0)
             {
                 fprintf(stderr, "applications_load: skip %s (unsafe Exec: %s)\n",
-                        filepath.c_str(), unsafe_reason);
+                        filepath.c_str(), unsafe_reason.c_str());
                 continue;
             }
             bool in_list = false;
@@ -379,7 +385,10 @@ void Launch::applications_load()
             bool shadows_builtin = false;
             for (const auto &registration : kBuiltinApps)
             {
-                if (registration.exec && app_exec == registration.exec)
+                std::string builtin_exec = registration.exec ? registration.exec : "";
+                if (!builtin_exec.empty() && builtin_exec.front() == '@')
+                    builtin_exec = launcher_platform::path(builtin_exec.substr(1));
+                if (!builtin_exec.empty() && app_exec == builtin_exec)
                 {
                     shadows_builtin = true;
                     break;
@@ -391,10 +400,8 @@ void Launch::applications_load()
                 continue;
             }
 
-            app_list.emplace_back(page_title, cp0_file_path(app_icon), app_exec, app_terminal, app_sysplause);
+            app_list.emplace_back(page_title, launcher_platform::path(app_icon), app_exec, app_terminal, app_sysplause);
         }
-
-        closedir(dir);
     }
 
     // ============================================================
@@ -402,15 +409,19 @@ void Launch::applications_load()
     // ============================================================
 void Launch::inotify_init_watch()
     {
-        const std::string app_dir_path = cp0_file_path("applications");
+        const std::string app_dir_path = launcher_platform::path("applications");
         release_dir_watcher();
-        dir_watcher_ = cp0_dir_watch_start(app_dir_path.c_str());
+        cp0_signal_filesystem_api({"WatchStart", app_dir_path}, [&](int code, std::string data) {
+            dir_watcher_ = code == 0
+                ? reinterpret_cast<cp0_watcher_t>(static_cast<uintptr_t>(std::strtoull(data.c_str(), nullptr, 0)))
+                : nullptr;
+        });
     }
 
 void Launch::release_dir_watcher()
     {
         if (dir_watcher_) {
-            cp0_dir_watch_stop(dir_watcher_);
+            cp0_signal_filesystem_api({"WatchStop", std::to_string(reinterpret_cast<uintptr_t>(dir_watcher_))}, nullptr);
             dir_watcher_ = NULL;
         }
     }
@@ -485,7 +496,12 @@ void Launch::app_dir_watch_cb(lv_timer_t *timer)
         if (!self || !self->dir_watcher_)
             return;
 
-        if (cp0_dir_watch_poll(self->dir_watcher_) > 0)
+        int changed = 0;
+        cp0_signal_filesystem_api({"WatchPoll", std::to_string(reinterpret_cast<uintptr_t>(self->dir_watcher_))},
+                                  [&](int code, std::string data) {
+                                      if (code == 0) changed = std::atoi(data.c_str());
+                                  });
+        if (changed > 0)
         {
             SLOGI("app_dir_watch_cb: applications dir changed, reloading...");
             self->applications_reload();

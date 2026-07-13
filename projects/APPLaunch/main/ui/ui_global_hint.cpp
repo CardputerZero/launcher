@@ -33,6 +33,7 @@
 #include "lvgl/lvgl.h"
 #include "hal_lvgl_bsp.h"
 #include "cp0_lvgl_app.h"
+#include "launcher_platform.hpp"
 
 #include "compat/input_keys.h"
 
@@ -40,12 +41,6 @@
 #include <cstdio>
 #include <cstdlib>
 #include <string>
-#include <sys/stat.h>
-#ifdef _WIN32
-#include <direct.h>
-#else
-#include <unistd.h>
-#endif
 
 /* KEY_RIGHTSHIFT / KEY_COMPOSE exist in <linux/input.h> but the
  * project's non-Linux compat/input_keys.h does not define them.
@@ -190,8 +185,14 @@ static int write_volume_percent(int pct)
 
 static int read_brightness_percent(void)
 {
-    int raw = cp0_backlight_read();
-    int mx = cp0_backlight_max();
+    int raw = -1;
+    int mx = 100;
+    cp0_signal_settings_api({"BacklightRead"}, [&](int code, std::string data) {
+        if (code == 0) raw = std::atoi(data.c_str());
+    });
+    cp0_signal_settings_api({"BacklightMax"}, [&](int code, std::string data) {
+        if (code == 0) mx = std::atoi(data.c_str());
+    });
     if (mx <= 0) mx = 100;
     if (raw < 0) raw = read_config_int("brightness", s_brightness_pct >= 0 ? mx * s_brightness_pct / 100 : mx);
     return clamp_percent(raw * 100 / mx);
@@ -200,11 +201,17 @@ static int read_brightness_percent(void)
 static int write_brightness_percent(int pct)
 {
     pct = clamp_percent(pct);
-    int mx = cp0_backlight_max();
+    int mx = 100;
+    cp0_signal_settings_api({"BacklightMax"}, [&](int code, std::string data) {
+        if (code == 0) mx = std::atoi(data.c_str());
+    });
     if (mx <= 0) mx = 100;
     int raw = mx * pct / 100;
     if (pct > 0 && raw < 1) raw = 1;
-    int written = cp0_backlight_write(raw);
+    int written = -1;
+    cp0_signal_settings_api({"BacklightWrite", std::to_string(raw)}, [&](int code, std::string data) {
+        if (code == 0) written = std::atoi(data.c_str());
+    });
     if (written < 0) written = raw;
     s_brightness_pct = clamp_percent(written * 100 / mx);
     write_config_int("brightness", written);
@@ -213,34 +220,20 @@ static int write_brightness_percent(int pct)
 
 static bool read_system_mute(bool fallback)
 {
-    FILE *p = popen("pactl get-sink-mute @DEFAULT_SINK@ 2>/dev/null", "r");
-    if (!p) return fallback;
-
-    char buf[128];
     bool muted = fallback;
-    while (fgets(buf, sizeof(buf), p)) {
-        if (strstr(buf, "yes")) {
-            muted = true;
-            break;
-        }
-        if (strstr(buf, "no")) {
-            muted = false;
-            break;
-        }
-    }
-    pclose(p);
+    cp0_signal_audio_api({"MuteRead"}, [&](int code, std::string data) {
+        if (code == 0) muted = std::atoi(data.c_str()) != 0;
+    });
     return muted;
 }
 
 static bool toggle_system_mute(void)
 {
     bool fallback = !s_muted;
-    int ret = system("pactl set-sink-mute @DEFAULT_SINK@ toggle >/dev/null 2>&1");
-    if (ret != 0) {
-        s_muted = fallback;
-        return s_muted;
-    }
-    s_muted = read_system_mute(fallback);
+    s_muted = fallback;
+    cp0_signal_audio_api({"MuteToggle"}, [&](int code, std::string data) {
+        if (code == 0) s_muted = std::atoi(data.c_str()) != 0;
+    });
     return s_muted;
 }
 
@@ -465,22 +458,7 @@ static void show_hint(const char *text)
 
 static void ensure_screenshot_dir(const char *scr_dir)
 {
-#ifdef _WIN32
-    _mkdir(scr_dir);
-#else
-    /* Ensure dir exists with correct ownership (real uid/gid, not root). */
-    mkdir(scr_dir, 0755);
-    if (getuid() == 0) {
-        /* Running as root via systemd — chown to the login user. */
-        uid_t uid = 1000;
-        gid_t gid = 1000;
-        const char *sudo_uid = getenv("SUDO_UID");
-        const char *sudo_gid = getenv("SUDO_GID");
-        if (sudo_uid) uid = (uid_t)atoi(sudo_uid);
-        if (sudo_gid) gid = (gid_t)atoi(sudo_gid);
-        chown(scr_dir, uid, gid);
-    }
-#endif
+    cp0_signal_filesystem_api({"EnsureDirForUser", scr_dir ? scr_dir : ""}, nullptr);
 }
 
 namespace ui_global_hint {
@@ -566,10 +544,8 @@ void on_key(const struct key_item *elm)
 
     /* Ctrl+Alt+S: global screenshot → ~/Screenshots */
     if (code == KEY_S && (elm->mods & KBD_MOD_CTRL) && (elm->mods & KBD_MOD_ALT)) {
-        const char *home = getenv("HOME");
-        char scr_dir[256];
-        snprintf(scr_dir, sizeof(scr_dir), "%s/Screenshots", home ? home : "/tmp");
-        ensure_screenshot_dir(scr_dir);
+        std::string scr_dir = launcher_platform::path("home_dir") + "/Screenshots";
+        ensure_screenshot_dir(scr_dir.c_str());
         int ret = -1;
         cp0_signal_screenshot_api({"Save", scr_dir}, [&](int code, std::string) {
             ret = code;

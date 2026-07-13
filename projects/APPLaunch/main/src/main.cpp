@@ -6,7 +6,6 @@
 
 #include "lvgl/lvgl.h"
 #include "lvgl/demos/lv_demos.h"
-#include <unistd.h>
 #include <stdio.h>
 #include <chrono>
 #include <string>
@@ -25,55 +24,15 @@
 #include "backward.h"
 #endif
 
-static const char* lock_file = NULL;
 static sem_t lvgl_sem;
 
 static void lvgl_resume_cb(void *data) {
     sem_post(&lvgl_sem);
 }
 
-/*
-void APPLaunch_lock()
-{
-    static int home_back_status = 0;
-    static std::chrono::time_point<std::chrono::steady_clock> start_time;
-
-    int holder_pid = 0;
-    cp0_process_check_lock(lock_file, &holder_pid);
-
-    static int lvgl_lock = 0;
-    if (holder_pid == 0) {
-        if (lvgl_lock == 1) {
-            LVGL_RUN_FLAGE = 1;
-            lvgl_lock = 0;
-            lv_obj_invalidate(lv_scr_act());
-        }
-    } else {
-        if (LVGL_HOME_KEY_FLAG) {
-            if (home_back_status == 0) {
-                home_back_status = 1;
-                start_time = std::chrono::steady_clock::now();
-            }
-            auto elapsed = std::chrono::steady_clock::now() - start_time;
-            auto secs = std::chrono::duration_cast<std::chrono::seconds>(elapsed).count();
-            if (secs >= 5) {
-                cp0_process_kill(holder_pid, 3000);
-                home_back_status = 0;
-            }
-        } else {
-            home_back_status = 0;
-        }
-        lvgl_lock = 1;
-        LVGL_RUN_FLAGE = 0;
-    }
-}
-*/
-
 int main(void)
 {
     sem_init(&lvgl_sem, 0, 0);
-    static const std::string default_lock_file = cp0_file_path("lock_file");
-    lock_file = default_lock_file.c_str();
     lv_init();
     SLOGI("[BOOT] lv_init() done");
     lv_timer_handler_set_resume_cb(lvgl_resume_cb, NULL);

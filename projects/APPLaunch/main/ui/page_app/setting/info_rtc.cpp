@@ -23,7 +23,15 @@ void Info::refresh_values(UISetupPage &page)
 {
     for (auto &m : page.menu_items_) {
         if (m.label != "Info") continue;
-        cp0_battery_info_t bat = cp0_battery_read();
+        cp0_battery_info_t bat{};
+        cp0_signal_bq27220_api({"Read"}, [&](int code, std::string data) {
+            cp0_battery_info_t parsed{};
+            if (code == 0 && std::sscanf(data.c_str(), "%d,%d,%d,%d,%d,%d,%d,%d,%d",
+                    &parsed.voltage_mv, &parsed.current_ma, &parsed.temperature_c10, &parsed.soc,
+                    &parsed.remain_mah, &parsed.full_mah, &parsed.flags, &parsed.avg_current_ma,
+                    &parsed.valid) == 9)
+                bat = parsed;
+        });
         char buf[64];
         snprintf(buf, sizeof(buf), "Battery: %d%%", bat.valid ? bat.soc : 0);
         m.sub_items[0].label = buf;
@@ -112,7 +120,7 @@ void Info::enter_bq_calibrate(UISetupPage &page)
 
 void Info::apply_bq_calibrate(UISetupPage &page)
 {
-    cp0_bq27220_calibrate(page.val_sel_idx_);
+    cp0_signal_bq27220_api({"Calibrate", std::to_string(page.val_sel_idx_)}, nullptr);
 }
 
 void RTC::append(UISetupPage &p, std::vector<MenuItem> &menu)
@@ -139,7 +147,7 @@ RTC::~RTC()
 {
     async_state_->alive = false;
     if (async_state_->request_id)
-        cp0_sudo_cancel(async_state_->request_id);
+        cp0_signal_sudo_cancel(async_state_->request_id, nullptr);
 }
 
 int RTC::days_in_month(int year, int month)
@@ -164,20 +172,17 @@ void RTC::update_labels(UISetupPage &page)
 
 void RTC::refresh_values(UISetupPage &page)
 {
-    int ntp = cp0_time_ntp_get();
+    int ntp = -1;
+    cp0_signal_osinfo_api({"NtpGet"}, [&](int code, std::string) { ntp = code; });
     ntp_available_ = ntp >= 0;
     if (ntp_available_)
         ntp_on_ = ntp == 1;
-    time_t now = time(NULL);
-    struct tm *t = localtime(&now);
-    if (t) {
-        values_[0] = t->tm_year + 1900;
-        values_[1] = t->tm_mon + 1;
-        values_[2] = t->tm_mday;
-        values_[3] = t->tm_hour;
-        values_[4] = t->tm_min;
-        values_[5] = t->tm_sec;
-    }
+    cp0_signal_osinfo_api({"LocalTime"}, [&](int code, std::string data) {
+        int parsed[6]{};
+        if (code == 0 && std::sscanf(data.c_str(), "%d,%d,%d,%d,%d,%d", &parsed[0], &parsed[1],
+                &parsed[2], &parsed[3], &parsed[4], &parsed[5]) == 6)
+            std::copy(std::begin(parsed), std::end(parsed), std::begin(values_));
+    });
     dirty_ = false;
     update_labels(page);
 }
@@ -211,11 +216,12 @@ void RTC::toggle_ntp(UISetupPage &page)
         show_status("NTP failed", "Out of memory", Modal::ERROR);
         return;
     }
-    const char *argv[] = {"timedatectl", "set-ntp", desired ? "true" : "false", nullptr};
     uint64_t request_id = 0;
-    int rc = cp0_sudo_run_argv_async_ex(argv, CP0_SUDO_CALLBACK_LVGL, nullptr,
-        [](cp0_sudo_result_t result, int exit_code, void *user) {
-            std::unique_ptr<Context> ctx(static_cast<Context *>(user));
+    int rc = -1;
+    cp0_signal_system_admin_async({"NtpSet", desired ? "1" : "0"}, 60000, 30000,
+        [ctx](int result_code, int exit_code) {
+            std::unique_ptr<Context> owned(ctx);
+            cp0_sudo_result_t result = static_cast<cp0_sudo_result_t>(result_code);
             auto state = ctx->state.lock();
             if (!state || !state->alive) return;
             ctx->rtc->finish_request();
@@ -230,7 +236,8 @@ void RTC::toggle_ntp(UISetupPage &page)
                 ctx->rtc->show_result_error(result, exit_code, "NTP update");
                 return;
             }
-            int actual = cp0_time_ntp_get();
+            int actual = -1;
+            cp0_signal_osinfo_api({"NtpGet"}, [&](int code, std::string) { actual = code; });
             if (actual < 0) {
                 ctx->rtc->ntp_available_ = false;
                 ctx->rtc->show_status("NTP unavailable", "Unable to read NTP status", Modal::ERROR);
@@ -241,7 +248,7 @@ void RTC::toggle_ntp(UISetupPage &page)
             }
             ctx->rtc->update_labels(*ctx->page);
             ctx->page->build_sub_view();
-        }, ctx, 60000, 30000, &request_id);
+        }, [&](int code, uint64_t id) { rc = code; request_id = id; });
     if (rc != 0) {
         delete ctx;
         ntp_on_ = ntp_rollback_value(ntp_previous_);
@@ -285,18 +292,19 @@ void RTC::apply_value(UISetupPage &page)
 
 void RTC::commit_to_hardware(UISetupPage &page)
 {
-    char command[96];
-    snprintf(command, sizeof(command), "date -s '%04d-%02d-%02d %02d:%02d:%02d' && hwclock -w",
+    char timestamp[32];
+    snprintf(timestamp, sizeof(timestamp), "%04d-%02d-%02d %02d:%02d:%02d",
              values_[0], values_[1], values_[2], values_[3], values_[4], values_[5]);
     show_status("Saving date & time", "Please wait...", Modal::BUSY);
     struct Context { RTC *rtc; UISetupPage *page; std::weak_ptr<AsyncState> state; };
     auto *ctx = new (std::nothrow) Context{this, &page, async_state_};
     if (!ctx) { show_status("Save failed", "Out of memory", Modal::ERROR); return; }
     uint64_t request_id = 0;
-    const char *argv[] = {"/bin/sh", "-c", command, nullptr};
-    int rc = cp0_sudo_run_argv_async_ex(argv, CP0_SUDO_CALLBACK_LVGL, nullptr,
-        [](cp0_sudo_result_t result, int exit_code, void *user) {
-            std::unique_ptr<Context> ctx(static_cast<Context *>(user));
+    int rc = -1;
+    cp0_signal_system_admin_async({"TimeSet", timestamp}, 60000, 30000,
+        [ctx](int result_code, int exit_code) {
+            std::unique_ptr<Context> owned(ctx);
+            cp0_sudo_result_t result = static_cast<cp0_sudo_result_t>(result_code);
             auto state = ctx->state.lock();
             if (!state || !state->alive) return;
             ctx->rtc->finish_request();
@@ -313,7 +321,7 @@ void RTC::commit_to_hardware(UISetupPage &page)
                 else
                     ctx->rtc->show_result_error(result, exit_code, "Date/time save");
             }
-        }, ctx, 60000, 30000, &request_id);
+        }, [&](int code, uint64_t id) { rc = code; request_id = id; });
     if (rc != 0) { delete ctx; show_status("Save failed", "Unable to start request", Modal::ERROR); }
     else async_state_->request_id = request_id;
 }

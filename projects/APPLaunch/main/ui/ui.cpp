@@ -12,7 +12,6 @@
 #include "ui.h"
 #include "ui_app_page.hpp"
 #include <stdio.h>
-#include <sys/stat.h>
 #include <cstdlib>
 #include "lvgl/src/widgets/gif/lv_gif.h"
 #include "cp0_lvgl_app.h"

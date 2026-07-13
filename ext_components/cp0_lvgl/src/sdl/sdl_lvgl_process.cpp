@@ -83,11 +83,21 @@ public:
             std::string output;
             int ret = capture_argv(argv, output);
             report(callback, ret, output);
+        } else if (cmd == "AdbStatus") {
+            std::string output;
+            report(callback, capture_argv({cp0_file_path("adb_helper"), "status"}, output), output);
+        } else if (cmd == "DesktopExecIsSafe") {
+            char reason[128] = {};
+            int safe = cp0_desktop_exec_is_safe(nth_arg(arg, 1).c_str(), reason, sizeof(reason));
+            report(callback, safe ? 0 : -1, reason);
         } else if (cmd == "Shutdown") {
             system_shutdown();
             report(callback, 0, "");
         } else if (cmd == "Reboot") {
             system_reboot();
+            report(callback, 0, "");
+        } else if (cmd == "DelayMs") {
+            std::this_thread::sleep_for(std::chrono::milliseconds(std::max(0, std::atoi(nth_arg(arg, 1).c_str()))));
             report(callback, 0, "");
         } else {
             report(callback, -1, "unknown process api command");

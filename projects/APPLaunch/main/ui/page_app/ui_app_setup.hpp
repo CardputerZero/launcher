@@ -26,12 +26,6 @@
 #include <cstdlib>
 #include <cctype>
 #include <ctime>
-#include <fcntl.h>
-#ifndef _WIN32
-#include <unistd.h>
-#include <sys/stat.h>
-#endif
-#include <dirent.h>
 #include <sstream>
 #include <thread>
 #include <list>
@@ -40,6 +34,7 @@
 #include "cp0_lvgl_app.h"
 #include "cp0_async_testable_utils.hpp"
 #include "hal_lvgl_bsp.h"
+#include "launcher_platform.hpp"
 #include "../app_registry.h"
 
 
@@ -163,7 +158,6 @@ public:
 private:
     struct AsyncState { bool alive = true; uint64_t request_id = 0; };
     enum class Modal { NONE, BUSY, ERROR };
-    static constexpr const char *kAdbHelper = "/usr/share/APPLaunch/adb/cardputer-adb";
     static lv_obj_t *guide_chip(lv_obj_t *parent, int x, int y, int w, int h,
                                 uint32_t bg, uint32_t border, int radius, int border_w);
     static lv_obj_t *guide_label(lv_obj_t *parent, int x, int y, const char *txt,
@@ -533,13 +527,13 @@ private:
 
     void cache_image_paths()
     {
-        img_arrow_up_    = cp0_file_path("setting_red_up.png");
-        img_arrow_down_  = cp0_file_path("setting_red_down.png");
-        img_right_arrow_ = cp0_file_path("setting_right_arrow.png");
-        img_ok_          = cp0_file_path("setting_ok.png");
-        img_cross_       = cp0_file_path("setting_cross.png");
-        snd_enter_       = cp0_file_path("key_enter.wav");
-        snd_back_        = cp0_file_path("key_back.wav");
+        img_arrow_up_    = launcher_platform::path("setting_red_up.png");
+        img_arrow_down_  = launcher_platform::path("setting_red_down.png");
+        img_right_arrow_ = launcher_platform::path("setting_right_arrow.png");
+        img_ok_          = launcher_platform::path("setting_ok.png");
+        img_cross_       = launcher_platform::path("setting_cross.png");
+        snd_enter_       = launcher_platform::path("key_enter.wav");
+        snd_back_        = launcher_platform::path("key_back.wav");
     }
 
     // ==================== Menu init ====================
