@@ -154,13 +154,16 @@ public:
         if (!ssid || !ssid[0])
             return -1;
 
+        constexpr const char *kActivationTimeoutSeconds = "20";
         const bool with_password = password && password[0];
         char output[4096] = {};
         if (with_password) {
-            const char *argv[] = {"nmcli", "dev", "wifi", "connect", ssid, "password", password, nullptr};
+            const char *argv[] = {"nmcli", "--wait", kActivationTimeoutSeconds, "dev", "wifi", "connect",
+                                  ssid, "password", password, nullptr};
             cp0_process_capture_argv(argv, output, sizeof(output));
         } else {
-            const char *argv[] = {"nmcli", "con", "up", "id", ssid, nullptr};
+            const char *argv[] = {"nmcli", "--wait", kActivationTimeoutSeconds, "con", "up", "id", ssid,
+                                  nullptr};
             cp0_process_capture_argv(argv, output, sizeof(output));
         }
 

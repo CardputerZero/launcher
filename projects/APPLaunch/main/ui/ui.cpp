@@ -45,5 +45,3 @@ LauncherFonts &launcher_fonts()
     }
     return *home->fonts_;
 }
-
-SudoPrompt *SudoPrompt::s_instance_ = nullptr;
