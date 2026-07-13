@@ -1,5 +1,6 @@
 #include "cp0_lvgl_app.h"
 #include "hal_lvgl_bsp.h"
+#include "../cp0_battery_testable.hpp"
 
 #include <cerrno>
 #include <climits>
@@ -85,7 +86,7 @@ public:
             std::snprintf(path, sizeof(path), "%s/temp", bq_path);
             ok = ok && read_long(path, &temp_raw);
             std::snprintf(path, sizeof(path), "%s/status", bq_path);
-            read_string(path, status, sizeof(status));
+            ok = ok && read_string(path, status, sizeof(status));
 
             if (ok) {
                 const bool is_charging = is_charging_status(status);
@@ -96,37 +97,22 @@ public:
                     temp_c = temp_raw / 100.0;
                 }
 
-                info.soc = static_cast<int>(capacity);
-                info.voltage_mv = static_cast<int>(voltage_uv / 1000);
                 const int rounded_current_ma = sanitize_battery_current_ma(round_to_int(current_ma), is_charging);
-                info.current_ma = rounded_current_ma;
-                info.avg_current_ma = rounded_current_ma;
-                info.temperature_c10 = round_to_int(temp_c * 10.0);
-                info.flags = is_charging ? 1 : 0;
-                info.valid = 1;
-                return info;
+                if (cp0_battery_testable::measurement_is_valid(
+                        static_cast<int>(capacity), rounded_current_ma) &&
+                    cp0_battery_testable::power_supply_status_is_known(status)) {
+                    info.soc = static_cast<int>(capacity);
+                    info.voltage_mv = static_cast<int>(voltage_uv / 1000);
+                    info.current_ma = rounded_current_ma;
+                    info.avg_current_ma = rounded_current_ma;
+                    info.temperature_c10 = round_to_int(temp_c * 10.0);
+                    info.flags = is_charging ? 1 : 0;
+                    info.valid = 1;
+                    return info;
+                }
             }
         }
 
-#if CP0_HAS_LINUX_I2C_RDWR
-        int fd = open(kI2cDev, O_RDWR);
-        if (fd < 0) {
-            return info;
-        }
-
-        int v;
-        v = read_word(fd, 0x08); if (v >= 0) info.voltage_mv = v;
-        v = read_word(fd, 0x0C); if (v >= 0) info.current_ma = sanitize_battery_current_ma((v > 32767) ? v - 65536 : v, false);
-        v = read_word(fd, 0x06); if (v >= 0) info.temperature_c10 = v - 2731;
-        v = read_word(fd, 0x2C); if (v >= 0) info.soc = v;
-        v = read_word(fd, 0x10); if (v >= 0) info.remain_mah = v;
-        v = read_word(fd, 0x12); if (v >= 0) info.full_mah = v;
-        v = read_word(fd, 0x0E); if (v >= 0) info.flags = v;
-        v = read_word(fd, 0x14); if (v >= 0) info.avg_current_ma = sanitize_battery_current_ma((v > 32767) ? v - 65536 : v, false);
-
-        info.valid = 1;
-        close(fd);
-#endif
         return info;
     }
 
@@ -311,29 +297,6 @@ private:
         }
         return 0;
     }
-
-#if CP0_HAS_LINUX_I2C_RDWR
-    static int read_word(int fd, unsigned char reg)
-    {
-        unsigned char buf[2] = {0};
-        struct i2c_msg msgs[2];
-        struct i2c_rdwr_ioctl_data data;
-
-        msgs[0].addr = kI2cAddr;
-        msgs[0].flags = 0;
-        msgs[0].len = 1;
-        msgs[0].buf = &reg;
-        msgs[1].addr = kI2cAddr;
-        msgs[1].flags = I2C_M_RD;
-        msgs[1].len = 2;
-        msgs[1].buf = buf;
-        data.msgs = msgs;
-        data.nmsgs = 2;
-
-        if (ioctl(fd, I2C_RDWR, &data) < 0) return -1;
-        return buf[0] | (buf[1] << 8);
-    }
-#endif
 
 public:
     static bool decode_info(const std::string &data, cp0_battery_info_t *info)
