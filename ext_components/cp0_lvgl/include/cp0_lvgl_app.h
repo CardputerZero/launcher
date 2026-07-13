@@ -131,6 +131,8 @@ typedef enum {
     CP0_SUDO_CALLBACK_WORKER,
 } cp0_sudo_callback_thread_t;
 
+/* Output is delivered in order before completion. LVGL delivery uses bounded
+ * backpressure, so callbacks should return promptly to avoid stalling the command. */
 typedef void (*cp0_sudo_output_cb_t)(const char *data, size_t size, void *user);
 typedef void (*cp0_sudo_complete_cb_t)(cp0_sudo_result_t result, int exit_code, void *user);
 
@@ -172,9 +174,13 @@ int cp0_sudo_run_argv_async_ex(const char *const *argv,
                                cp0_sudo_output_cb_t output_cb,
                                cp0_sudo_complete_cb_t complete_cb,
                                void *user,
+                               /* Includes time spent waiting at the password prompt. */
                                int auth_timeout_ms,
+                               /* Starts when the privileged command is launched. */
                                int exec_timeout_ms,
                                uint64_t *request_id);
+/* Cancellation is idempotent while a request ID remains in the bounded recent
+ * completion history. Returns -ENOENT only for an unknown or expired ID. */
 int cp0_sudo_cancel(uint64_t request_id);
 int cp0_file_read_first_line(const char *path, char *out, int out_size);
 int cp0_desktop_exec_is_safe(const char *exec, char *reason, int reason_size);
