@@ -104,9 +104,11 @@ private:
 };
 
 LauncherFonts &launcher_fonts();
+#ifndef APP_PAGE_IMPLEMENTATION_UNIT
 #include "launch.h"
 #include "ui_launch_page.h"
 #include "launcher_ui_runtime.h"
+#endif
 #endif
 
 #endif

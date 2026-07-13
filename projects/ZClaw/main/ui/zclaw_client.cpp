@@ -396,6 +396,57 @@ bool config_set(const std::string &path, const std::string &value, std::string *
     return true;
 }
 
+bool ensure_default_risk_profile(std::string *error)
+{
+    const std::string path = ZClawClient::zeroclaw_config_path();
+    std::ifstream input(path, std::ios::binary);
+    if (!input) {
+        if (error)
+            *error = "Cannot read ZeroClaw config.";
+        return false;
+    }
+
+    std::ostringstream buffer;
+    buffer << input.rdbuf();
+    const std::string config = buffer.str();
+    std::istringstream lines(config);
+    std::string line;
+    while (std::getline(lines, line)) {
+        if (trim(line) == "[risk_profiles.default]")
+            return true;
+    }
+
+    const std::string tmp_path = path + ".zclaw.tmp";
+    std::ofstream output(tmp_path, std::ios::binary | std::ios::trunc);
+    if (!output) {
+        if (error)
+            *error = "Cannot update ZeroClaw risk profile.";
+        return false;
+    }
+    output << config;
+    if (!config.empty() && config.back() != '\n')
+        output << '\n';
+    output << "\n[risk_profiles.default]\n";
+    output.close();
+    if (!output) {
+        ::unlink(tmp_path.c_str());
+        if (error)
+            *error = "Cannot write ZeroClaw risk profile.";
+        return false;
+    }
+
+    struct stat st {};
+    const mode_t mode = ::stat(path.c_str(), &st) == 0 ? st.st_mode & 0777 : 0600;
+    ::chmod(tmp_path.c_str(), mode);
+    if (::rename(tmp_path.c_str(), path.c_str()) != 0) {
+        ::unlink(tmp_path.c_str());
+        if (error)
+            *error = "Cannot install ZeroClaw risk profile.";
+        return false;
+    }
+    return true;
+}
+
 bool ensure_agent(const std::string &alias, std::string *error)
 {
     int rc = 0;
@@ -448,8 +499,10 @@ bool apply_quickstart_config(UiConfig *config, ProviderConfig provider, std::str
         return false;
 
     if (!ensure_agent(agent, error) ||
+        !ensure_default_risk_profile(error) ||
         !config_set("agents." + agent + ".enabled", "true", error) ||
         !config_set("agents." + agent + ".model_provider", provider_ref, error) ||
+        !config_set("agents." + agent + ".risk_profile", "default", error) ||
         !config_set("onboard_state.quickstart_completed", "true", error))
         return false;
 

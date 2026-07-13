@@ -1163,7 +1163,7 @@ private:
                               lv_coord_t w, lv_coord_t h, uint32_t color,
                               lv_text_align_t align = LV_TEXT_ALIGN_LEFT)
     {
-        lv_obj_t *label = make_label(parent, text, x, y, w, h, fonts_.font_10(), color, align);
+        lv_obj_t *label = make_label(parent, text, x, y, w, h, fonts_.font_12(), color, align);
         lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
         return label;
     }
@@ -1212,7 +1212,7 @@ private:
         static constexpr lv_coord_t pad_x = 10;
         static constexpr lv_coord_t pad_y = 6;
         const std::string display_text = display_text_compat(text ? text : "");
-        const lv_point_t text_size = measure_text_box(display_text.c_str(), fonts_.font_10(), text_w);
+        const lv_point_t text_size = measure_text_box(display_text.c_str(), fonts_.font_12(), text_w);
         lv_coord_t bubble_h = text_size.y + pad_y * 2;
         if (bubble_h < 41)
             bubble_h = 41;
@@ -1229,7 +1229,7 @@ private:
     {
         const std::string display_text = display_text_compat(text);
         const lv_coord_t text_max_w = USER_BUBBLE_MAX_W - USER_BUBBLE_PAD_X * 2;
-        const lv_point_t text_size = measure_text_box(display_text.c_str(), fonts_.font_10(), text_max_w);
+        const lv_point_t text_size = measure_text_box(display_text.c_str(), fonts_.font_12(), text_max_w);
         lv_coord_t bubble_w = text_size.x + USER_BUBBLE_PAD_X * 2;
         lv_coord_t bubble_h = text_size.y + USER_BUBBLE_PAD_Y * 2;
         if (bubble_w < USER_BUBBLE_MIN_W)
@@ -1289,7 +1289,8 @@ private:
             lv_style_set_border_color(&textarea_cursor_style_, lv_color_hex(COLOR_PURPLE));
             lv_style_set_border_side(&textarea_cursor_style_, LV_BORDER_SIDE_LEFT);
             lv_style_set_border_width(&textarea_cursor_style_, 2);
-            lv_style_set_pad_hor(&textarea_cursor_style_, 1);
+            lv_style_set_pad_left(&textarea_cursor_style_, -2);
+            lv_style_set_pad_right(&textarea_cursor_style_, 0);
             textarea_cursor_style_inited_ = true;
         }
         lv_obj_add_style(input_textarea_, &textarea_cursor_style_, LV_PART_CURSOR | LV_STATE_FOCUSED);
