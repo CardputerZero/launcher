@@ -34,6 +34,15 @@ static bool process_stopped(pid_t pid)
     return parsed && state == 'Z';
 }
 
+static bool wait_process_stopped(pid_t pid)
+{
+    for (int i = 0; i < 100; ++i) {
+        if (process_stopped(pid)) return true;
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    return process_stopped(pid);
+}
+
 int main()
 {
     std::atomic<bool> cancel{false};
@@ -148,7 +157,7 @@ int main()
         {"/bin/sh", "-c", stubborn_script}, nullptr, {}, nullptr, 50);
     assert(stubborn.exit_code == -ETIMEDOUT);
     assert(std::chrono::steady_clock::now() - stubborn_start < std::chrono::seconds(2));
-    assert(process_stopped(read_pid(stubborn_pid_file)));
+    assert(wait_process_stopped(read_pid(stubborn_pid_file)));
     assert(unlink(stubborn_pid_file) == 0);
 
     char noisy_stubborn_pid_file[] = "/tmp/cp0-runner-noisy-stubborn-XXXXXX";
@@ -164,7 +173,7 @@ int main()
         {"/bin/sh", "-c", noisy_stubborn_script}, nullptr, {}, nullptr, 50);
     assert(noisy_stubborn.exit_code == -ETIMEDOUT);
     assert(std::chrono::steady_clock::now() - noisy_stubborn_start < std::chrono::seconds(2));
-    assert(process_stopped(read_pid(noisy_stubborn_pid_file)));
+    assert(wait_process_stopped(read_pid(noisy_stubborn_pid_file)));
     assert(unlink(noisy_stubborn_pid_file) == 0);
 
     auto term_ignoring_start = std::chrono::steady_clock::now();

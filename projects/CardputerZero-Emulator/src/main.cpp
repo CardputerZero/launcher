@@ -259,6 +259,7 @@ void init_audio(void);
 void init_config(void);
 void init_pty(void);
 void init_process(void);
+void init_sudo_signals(void);
 void init_screenshot(void);
 void init_lora(void);
 void init_wifi(void);
@@ -285,6 +286,7 @@ static void emu_init_cp0_runtime()
     init_pty();
     init_audio();
     init_process();
+    init_sudo_signals();
     init_osinfo();
     init_screenshot();
     init_lora();
