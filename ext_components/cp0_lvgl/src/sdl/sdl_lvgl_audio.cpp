@@ -83,6 +83,8 @@ public:
             map_fun(SetCallback),
             map_fun(VolumeRead),
             map_fun(VolumeWrite),
+            map_fun(MuteRead),
+            map_fun(MuteToggle),
             map_fun(SetSystemSoundNames),
             map_fun(SystemSoundPlay),
             map_fun(SystemSoundEnable),
@@ -110,6 +112,7 @@ private:
     bool cap_paused_ = false;
     bool waveform_enabled_ = false;
     int volume_ = kDefaultVolume;
+    bool muted_ = false;
     std::array<std::string, 3> system_sound_names_ = {"Ding2.wav", "switch.wav", "enter.wav"};
     bool system_sound_enabled_ = true;
 
@@ -316,6 +319,19 @@ private:
     {
         volume_ = std::max(0, std::min(kMaxVolume, parse_volume_arg(arg)));
         report(callback, 0, std::to_string(volume_));
+    }
+
+    void MuteRead(arg_t arg, callback_t callback)
+    {
+        (void)arg;
+        report(callback, 0, muted_ ? "1" : "0");
+    }
+
+    void MuteToggle(arg_t arg, callback_t callback)
+    {
+        (void)arg;
+        muted_ = !muted_;
+        report(callback, 0, muted_ ? "1" : "0");
     }
 
     void SetSystemSoundNames(arg_t arg, callback_t callback)

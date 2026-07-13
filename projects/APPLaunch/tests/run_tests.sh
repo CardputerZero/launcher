@@ -13,3 +13,10 @@ ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     "$(dirname "$0")/../main/ui/page_app/setting/adb_state.cpp" \
     -o "$build_dir/test_adb_state"
 "$build_dir/test_adb_state"
+${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
+    -I"$(dirname "$0")/../main/include" \
+    -I"$(dirname "$0")/../../../ext_components/cp0_lvgl/include" \
+    -I"$(dirname "$0")/../../../SDK/github_source/eventpp/include" \
+    "$(dirname "$0")/test_launcher_platform.cpp" \
+    -o "$build_dir/test_launcher_platform"
+"$build_dir/test_launcher_platform"

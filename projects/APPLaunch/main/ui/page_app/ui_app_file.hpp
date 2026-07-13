@@ -12,9 +12,8 @@
 #include <string>
 #include <vector>
 #include <algorithm>
-#include <dirent.h>
-#include <sys/stat.h>
 #include <libgen.h>
+#include <sstream>
 
 // ============================================================
 //  File Browser  UIFilePage
@@ -89,38 +88,61 @@ private:
             snprintf(buf, buflen, "%.1fMB", size / (1024.0 * 1024.0));
     }
 
+    static bool decode_list_field(const std::string &encoded, std::string &decoded)
+    {
+        auto hex_value = [](char c) -> int {
+            if (c >= '0' && c <= '9') return c - '0';
+            if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+            if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+            return -1;
+        };
+        decoded.clear();
+        for (size_t i = 0; i < encoded.size(); ++i) {
+            if (encoded[i] != '%') {
+                decoded.push_back(encoded[i]);
+                continue;
+            }
+            if (i + 2 >= encoded.size()) return false;
+            const int high = hex_value(encoded[i + 1]);
+            const int low = hex_value(encoded[i + 2]);
+            if (high < 0 || low < 0) return false;
+            decoded.push_back(static_cast<char>((high << 4) | low));
+            i += 2;
+        }
+        return true;
+    }
+
     // ==================== read directory ====================
     void read_directory()
     {
         entries_.clear();
 
-        DIR *dp = opendir(current_path_.c_str());
-        if (!dp)
-        {
-            SLOGI("[File] opendir failed: %s", current_path_.c_str());
+        int code = -1;
+        std::string data;
+        cp0_signal_filesystem_api({"DirListDetail", current_path_}, [&](int c, std::string d) {
+            code = c;
+            data = std::move(d);
+        });
+        if (code != 0) {
+            SLOGI("[File] directory list failed: %s", current_path_.c_str());
             return;
         }
-
-        struct dirent *ent;
-        while ((ent = readdir(dp)) != nullptr)
-        {
-            // skip "." and ".."
-            if (ent->d_name[0] == '.' && (ent->d_name[1] == '\0' ||
-                (ent->d_name[1] == '.' && ent->d_name[2] == '\0')))
-                continue;
-
-            std::string full = path_join(current_path_, ent->d_name);
-            struct stat st;
-            if (stat(full.c_str(), &st) != 0)
-                continue;
-
+        std::istringstream stream(data);
+        std::string line;
+        while (std::getline(stream, line)) {
+            const size_t first = line.find('\t');
+            const size_t second = first == std::string::npos ? first : line.find('\t', first + 1);
+            if (first == std::string::npos || second == std::string::npos) continue;
             FileEntry fe;
-            fe.name   = ent->d_name;
-            fe.is_dir = S_ISDIR(st.st_mode);
-            fe.size   = fe.is_dir ? 0 : st.st_size;
-            entries_.push_back(fe);
+            if (line[0] != 'D' && line[0] != 'F') continue;
+            char *size_end = nullptr;
+            const long long parsed_size = std::strtoll(line.c_str() + first + 1, &size_end, 10);
+            if (size_end != line.c_str() + second || parsed_size < 0) continue;
+            fe.is_dir = line[0] == 'D';
+            fe.size = fe.is_dir ? 0 : static_cast<off_t>(parsed_size);
+            if (!decode_list_field(line.substr(second + 1), fe.name)) continue;
+            entries_.push_back(std::move(fe));
         }
-        closedir(dp);
 
         // sort: directories first (alphabetically), then files (alphabetically)
         std::sort(entries_.begin(), entries_.end(),

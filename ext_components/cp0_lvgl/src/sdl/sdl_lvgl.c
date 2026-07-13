@@ -21,6 +21,7 @@ void cp0_lvgl_init(void)
     init_input();
     init_audio();
     init_process();
+    init_sudo_signals();
     init_osinfo();
     init_screenshot();
     init_lora();

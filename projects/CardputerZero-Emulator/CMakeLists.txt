@@ -161,6 +161,9 @@ file(GLOB APPLAUNCH_HAL_SDL_CPP ${APPLAUNCH}/hal/sdl/*.cpp)
 file(GLOB CP0_LVGL_SDL_SRCS CONFIGURE_DEPENDS
     ${CP0_LVGL}/src/commount.c
     ${CP0_LVGL}/src/commount.cpp
+    ${CP0_LVGL}/src/cp0_process_runner.cpp
+    ${CP0_LVGL}/src/cp0_sudo_async.cpp
+    ${CP0_LVGL}/src/cp0_sudo_coordinator.cpp
     ${CP0_LVGL}/src/sdl/*.c
     ${CP0_LVGL}/src/sdl/*.cpp
 )

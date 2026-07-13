@@ -3,6 +3,8 @@
 #include "../cp0_app_internal_utils.h"
 
 #include <arpa/inet.h>
+#include <cerrno>
+#include <chrono>
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
@@ -12,6 +14,7 @@
 #include <iterator>
 #include <list>
 #include <memory>
+#include <random>
 #include <net/if.h>
 #include <pwd.h>
 #include <sstream>
@@ -68,12 +71,41 @@ public:
             cp0_eth_info_t info{};
             int ret = network_default_info_read(&info);
             report(callback, ret, encode_eth_info(info));
+        } else if (cmd == "NetworkList") {
+            cp0_netif_info_t entries[64]{};
+            int count = 0;
+            int ret = cp0_network_list(entries, 64, &count);
+            std::ostringstream out;
+            for (int i = 0; ret == 0 && i < count; ++i)
+                out << entries[i].iface << '\t' << entries[i].ipv4 << '\t'
+                    << entries[i].netmask << '\t' << entries[i].is_up << '\n';
+            report(callback, ret, out.str());
         } else if (cmd == "AccountInfoRead") {
             cp0_account_info_t info{};
             int ret = account_info_read(&info);
             report(callback, ret, encode_account_info(info));
         } else if (cmd == "TimeSet") {
             report(callback, time_set(nth_arg(arg, 1).c_str()), "");
+        } else if (cmd == "LocalTime") {
+            std::time_t now = std::time(nullptr);
+            struct tm value{};
+#ifdef _WIN32
+            if (localtime_s(&value, &now) != 0) {
+                report(callback, -1, "");
+                return;
+            }
+#else
+            if (!localtime_r(&now, &value)) {
+                report(callback, errno ? -errno : -1, "");
+                return;
+            }
+#endif
+            std::ostringstream out;
+            out << value.tm_year + 1900 << ',' << value.tm_mon + 1 << ',' << value.tm_mday << ','
+                << value.tm_hour << ',' << value.tm_min << ',' << value.tm_sec;
+            report(callback, 0, out.str());
+        } else if (cmd == "RandomU32") {
+            report(callback, 0, std::to_string(random_u32()));
         } else if (cmd == "NtpGet") {
             report(callback, 0, ""); // emulator: NTP considered off so manual set is allowed
         } else if (cmd == "NtpSet") {
@@ -99,6 +131,18 @@ public:
     }
 
 private:
+    static uint32_t random_u32() noexcept
+    {
+        try {
+            std::random_device source;
+            return static_cast<uint32_t>(source());
+        } catch (...) {
+            const auto seed = static_cast<uint32_t>(std::chrono::steady_clock::now().time_since_epoch().count());
+            static thread_local std::mt19937 fallback(seed);
+            return fallback();
+        }
+    }
+
     static void report(callback_t callback, int code, const std::string &data)
     {
         if (callback)

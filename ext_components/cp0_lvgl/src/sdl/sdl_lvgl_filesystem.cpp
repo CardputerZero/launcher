@@ -11,8 +11,11 @@
 #include <cstring>
 #include <dirent.h>
 #include <functional>
+#include <fstream>
 #include <iterator>
 #include <list>
+#include <limits>
+#include <new>
 #include <sstream>
 #include <string>
 #include <sys/stat.h>
@@ -179,6 +182,37 @@ public:
         } else if (cmd == "DirList") {
             std::string data;
             report(encode_dir_entries(value.c_str(), data), data);
+        } else if (cmd == "DirListDetail") {
+            std::string data;
+            report(encode_dir_entries_detail(value.c_str(), data), data);
+        } else if (cmd == "Exists") {
+            report(0, access(value.c_str(), R_OK) == 0 ? "1" : "0");
+        } else if (cmd == "ReadFile") {
+            const auto max_it = arg.size() >= 3 ? std::next(arg.begin(), 2) : arg.end();
+            const size_t max_bytes = max_it == arg.end() ? std::numeric_limits<size_t>::max()
+                : static_cast<size_t>(std::strtoull(max_it->c_str(), nullptr, 10));
+            std::string data;
+            report(read_file_limited(value, max_bytes, data), data);
+        } else if (cmd == "EnsureDirForUser") {
+            int ret = mkdir(value.c_str(), 0755);
+            struct stat st{};
+            report((ret == 0 || errno == EEXIST) && stat(value.c_str(), &st) == 0 && S_ISDIR(st.st_mode) ? 0 : -1, "");
+        } else if (cmd == "Touch") {
+            const auto slash = value.find_last_of('/');
+            if (slash != std::string::npos && slash > 0) {
+                const std::string parent = value.substr(0, slash);
+                struct stat st{};
+                if ((mkdir(parent.c_str(), 0755) != 0 && errno != EEXIST) ||
+                    stat(parent.c_str(), &st) != 0 || !S_ISDIR(st.st_mode)) {
+                    report(-1, "");
+                    return;
+                }
+            }
+            FILE *file = fopen(value.c_str(), "a");
+            if (file) fclose(file);
+            report(file ? 0 : -1, "");
+        } else if (cmd == "Remove") {
+            report(std::remove(value.c_str()) == 0 ? 0 : -1, "");
         } else if (cmd == "WatchStart") {
             cp0_watcher_t watcher = watch_start(value.c_str());
             report(watcher ? 0 : -1, std::to_string(reinterpret_cast<uintptr_t>(watcher)));
@@ -215,6 +249,20 @@ private:
             return "";
         if (file == "applications")
             return hal_path_applications_dir();
+        if (file == "appstore_exec")
+            return join_path(hal_path_data_dir(), "bin/M5CardputerZero-AppStore");
+        if (file == "calculator_exec")
+            return join_path(hal_path_data_dir(), "bin/M5CardputerZero-Calculator");
+        if (file == "adb_helper")
+            return join_path(hal_path_data_dir(), "adb/cardputer-adb");
+        if (file == "launcher_settings")
+            return join_path(hal_path_data_dir(), "settings");
+        if (file == "oobe_marker")
+            return join_path(hal_path_data_dir(), "run-oobe");
+        if (file == "home_dir") {
+            const char *home = std::getenv("HOME");
+            return home && home[0] ? home : ".";
+        }
         if (file == "lock_file")
             return hal_path_lock_file();
         if (file == "keyboard_device")
@@ -255,7 +303,7 @@ private:
 
         struct dirent *ent = nullptr;
         while ((ent = readdir(dir)) != nullptr) {
-            if (ent->d_name[0] == '.')
+            if (is_dot_entry(ent->d_name))
                 continue;
             if (*out_count >= max_entries)
                 break;
@@ -275,16 +323,93 @@ private:
 
     static int encode_dir_entries(const char *path, std::string &data)
     {
-        cp0_dirent_t entries[512];
-        int count = 0;
-        int ret = list_dir(path, entries, 512, &count);
-        if (ret != 0)
-            return ret;
-        std::ostringstream out;
-        for (int i = 0; i < count; ++i)
-            out << (entries[i].is_dir ? 'D' : 'F') << '\t' << entries[i].name << '\n';
-        data = out.str();
+        DIR *dir = opendir(path);
+        if (!dir) return -errno;
+        try {
+            std::ostringstream out;
+            struct dirent *ent = nullptr;
+            while ((ent = readdir(dir)) != nullptr) {
+                if (is_dot_entry(ent->d_name)) continue;
+                bool is_dir = ent->d_type == DT_DIR;
+                if (ent->d_type == DT_UNKNOWN) {
+                    struct stat st{};
+                    is_dir = stat(join_path(path, ent->d_name).c_str(), &st) == 0 && S_ISDIR(st.st_mode);
+                }
+                out << (is_dir ? 'D' : 'F') << '\t' << encode_field(ent->d_name) << '\n';
+            }
+            data = out.str();
+        } catch (const std::bad_alloc &) {
+            closedir(dir);
+            return -ENOMEM;
+        }
+        closedir(dir);
         return 0;
+    }
+
+    static int read_file_limited(const std::string &path, size_t max_bytes, std::string &data)
+    {
+        std::ifstream file(path, std::ios::binary | std::ios::ate);
+        if (!file) return errno ? -errno : -EIO;
+        const std::streamoff length = file.tellg();
+        if (length < 0) return -EIO;
+        if (static_cast<uintmax_t>(length) > max_bytes) return -EFBIG;
+        try {
+            data.resize(static_cast<size_t>(length));
+        } catch (const std::bad_alloc &) {
+            return -ENOMEM;
+        }
+        file.seekg(0);
+        if (length > 0 && !file.read(&data[0], length)) {
+            data.clear();
+            return -EIO;
+        }
+        return 0;
+    }
+
+    static int encode_dir_entries_detail(const char *path, std::string &data)
+    {
+        DIR *dir = opendir(path);
+        if (!dir) return -errno;
+        try {
+            std::ostringstream out;
+            struct dirent *ent = nullptr;
+            while ((ent = readdir(dir)) != nullptr) {
+                if (is_dot_entry(ent->d_name)) continue;
+                const std::string full = join_path(path, ent->d_name);
+                struct stat st;
+                if (stat(full.c_str(), &st) != 0) continue;
+                out << (S_ISDIR(st.st_mode) ? 'D' : 'F') << '\t' << static_cast<long long>(st.st_size)
+                    << '\t' << encode_field(ent->d_name) << '\n';
+            }
+            data = out.str();
+        } catch (const std::bad_alloc &) {
+            closedir(dir);
+            return -ENOMEM;
+        }
+        closedir(dir);
+        return 0;
+    }
+
+    static bool is_dot_entry(const char *name)
+    {
+        return name && name[0] == '.' &&
+               (name[1] == '\0' || (name[1] == '.' && name[2] == '\0'));
+    }
+
+    static std::string encode_field(const char *value)
+    {
+        static constexpr char hex[] = "0123456789ABCDEF";
+        std::string encoded;
+        for (const unsigned char c : std::string(value ? value : "")) {
+            if (c == '%' || c == '\t' || c == '\n' || c == '\r') {
+                encoded.push_back('%');
+                encoded.push_back(hex[c >> 4]);
+                encoded.push_back(hex[c & 0x0f]);
+            } else {
+                encoded.push_back(static_cast<char>(c));
+            }
+        }
+        return encoded;
     }
 
     static void snapshot(SdlWatcher *watcher)

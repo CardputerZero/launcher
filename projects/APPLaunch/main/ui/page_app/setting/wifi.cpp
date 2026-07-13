@@ -245,7 +245,7 @@ void WiFi::show_error(UISetupPage &page, const char *msg)
     lv_obj_set_style_text_color(lbl, lv_color_hex(0xFF4444), LV_PART_MAIN);
     lv_obj_set_style_text_font(lbl, &lv_font_montserrat_14, LV_PART_MAIN);
     lv_refr_now(NULL);
-    usleep(2000000);
+    cp0_signal_process_api({"DelayMs", "2000"}, nullptr);
 }
 
 void WiFi::forget_selected(UISetupPage &page)
@@ -290,7 +290,7 @@ void WiFi::forget_selected(UISetupPage &page)
     lv_obj_set_style_text_color(lbl, lv_color_hex(0x33CC33), LV_PART_MAIN);
     lv_obj_set_style_text_font(lbl, &lv_font_montserrat_14, LV_PART_MAIN);
     lv_refr_now(NULL);
-    usleep(1500000);
+    cp0_signal_process_api({"DelayMs", "1500"}, nullptr);
 
     page.view_state_ = UISetupPage::ViewState::WIFI_LIST;
     do_scan();

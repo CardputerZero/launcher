@@ -10,6 +10,7 @@
 #include "hal_lvgl_bsp.h"
 #include "lvgl/src/widgets/gif/lv_gif.h"
 #include "sample_log.h"
+#include "launcher_platform.hpp"
 #include "compat/input_keys.h"
 
 #undef SLOGI
@@ -22,7 +23,6 @@
 #include "animation/ui_launcher_animation.h"
 
 #include <algorithm>
-#include <unistd.h>
 
 void UILaunchPage::rotate_carousel_left(size_t start, size_t end)
 {
@@ -95,10 +95,16 @@ void UILaunchPage::set_panel_icon(lv_obj_t *panel, const char *src)
     const char *icon_src = src ? src : "";
     if (icon_src[0] == '\0') {
         SLOGW("[LAUNCHER] set panel icon with empty path");
-    } else if (access(icon_src, R_OK) == 0) {
-        SLOGI("[LAUNCHER] set panel icon: %s", icon_src);
     } else {
-        SLOGW("[LAUNCHER] set panel icon missing/unreadable: %s", icon_src);
+        bool exists = false;
+        cp0_signal_filesystem_api({"Exists", icon_src}, [&](int code, std::string data) {
+            exists = code == 0 && data == "1";
+        });
+        if (exists) {
+            SLOGI("[LAUNCHER] set panel icon: %s", icon_src);
+        } else {
+            SLOGW("[LAUNCHER] set panel icon missing/unreadable: %s", icon_src);
+        }
     }
 
     lv_obj_set_style_pad_all(panel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -262,7 +268,8 @@ lv_font_t *LauncherFonts::get(const char *ttf_name, uint16_t size, lv_freetype_f
         return it->second ? it->second : fallback(size);
     }
 
-    lv_font_t *font = lv_freetype_font_create(cp0_file_path_c(ttf_name), render_mode, size, style);
+    const std::string font_path = launcher_platform::path(ttf_name);
+    lv_font_t *font = lv_freetype_font_create(font_path.c_str(), render_mode, size, style);
     fonts_[font_key] = font;
     return font ? font : fallback(size);
 }
@@ -340,7 +347,7 @@ void UILaunchPage::load_home_screen()
     play_startup_sound_with_retry();
 
     // Show logo_lcd.png as background during the 1-second sound delay
-    snprintf(startup_logo_path_.data(), startup_logo_path_.size(), "%s", cp0_file_path("logo_lcd.png").c_str());
+    snprintf(startup_logo_path_.data(), startup_logo_path_.size(), "%s", launcher_platform::path("logo_lcd.png").c_str());
     startup_logo_scr_ = lv_obj_create(nullptr);
     lv_obj_set_style_bg_color(startup_logo_scr_, lv_color_hex(0x000000), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(startup_logo_scr_, LV_OPA_COVER, LV_PART_MAIN);
@@ -385,7 +392,7 @@ void UILaunchPage::stop_startup_sound_timer()
 
 void UILaunchPage::start_startup_gif()
 {
-    snprintf(startup_gif_path_.data(), startup_gif_path_.size(), "%s", cp0_file_path("logo_output.gif").c_str());
+    snprintf(startup_gif_path_.data(), startup_gif_path_.size(), "%s", launcher_platform::path("logo_output.gif").c_str());
     startup_gif_done_ = false;
     startup_gif_ = lv_gif_create(nullptr);
     lv_gif_set_src(startup_gif_, startup_gif_path_.data());
@@ -902,7 +909,7 @@ void UILaunchPage::create_app_container(lv_obj_t *parent)
     lv_obj_set_style_radius(left_arrow_button_, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_color(left_arrow_button_, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_opa(left_arrow_button_, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_img_src(left_arrow_button_, cp0_file_path_c("carousel_left_arrow.png"), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_img_src(left_arrow_button_, launcher_platform::path_c("carousel_left_arrow.png"), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_shadow_color(left_arrow_button_, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_shadow_opa(left_arrow_button_, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
 
@@ -917,7 +924,7 @@ void UILaunchPage::create_app_container(lv_obj_t *parent)
     lv_obj_set_style_radius(right_arrow_button_, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_color(right_arrow_button_, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_opa(right_arrow_button_, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_img_src(right_arrow_button_, cp0_file_path_c("carousel_right_arrow.png"), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_img_src(right_arrow_button_, launcher_platform::path_c("carousel_right_arrow.png"), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_shadow_color(right_arrow_button_, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_shadow_opa(right_arrow_button_, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
 

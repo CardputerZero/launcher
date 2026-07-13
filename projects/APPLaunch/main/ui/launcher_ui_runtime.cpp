@@ -9,7 +9,8 @@
 #include "launch.h"
 #include "ui_launch_page.h"
 
-#include <cstdio>
+#include "hal_lvgl_bsp.h"
+#include "launcher_platform.hpp"
 
 void LauncherUiRuntime::create_display()
 {
@@ -36,10 +37,11 @@ void LauncherUiRuntime::show_initial_screen()
 #ifdef HAL_PLATFORM_SDL
     launch_page_->load_home_screen();
 #else
-    const char *gif_path = cp0_file_path_c("logo_output.gif");
-    FILE *gif_file = fopen(gif_path, "r");
-    if (gif_file) {
-        fclose(gif_file);
+    bool gif_exists = false;
+    cp0_signal_filesystem_api({"Exists", launcher_platform::path("logo_output.gif")}, [&](int code, std::string data) {
+        gif_exists = code == 0 && data == "1";
+    });
+    if (gif_exists) {
         launch_page_->start_startup_gif();
     } else {
         launch_page_->load_home_screen();

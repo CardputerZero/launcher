@@ -8,7 +8,7 @@ Developer::Developer() : async_state_(std::make_shared<AsyncState>()) {}
 Developer::~Developer()
 {
     async_state_->alive = false;
-    if (async_state_->request_id) cp0_sudo_cancel(async_state_->request_id);
+    if (async_state_->request_id) cp0_signal_sudo_cancel(async_state_->request_id, nullptr);
     close_status();
 }
 
@@ -48,11 +48,12 @@ void Developer::toggle_adb(UISetupPage &page)
         show_status("ADB update failed", "Out of memory", Modal::ERROR);
         return;
     }
-    const char *argv[] = {kAdbHelper, want_on ? "enable" : "disable", nullptr};
     uint64_t request_id = 0;
-    int rc = cp0_sudo_run_argv_async_ex(argv, CP0_SUDO_CALLBACK_LVGL, nullptr,
-        [](cp0_sudo_result_t result, int exit_code, void *user) {
-            std::unique_ptr<Context> ctx(static_cast<Context *>(user));
+    int rc = -1;
+    cp0_signal_system_admin_async({"AdbSet", want_on ? "1" : "0"}, 60000, 300000,
+        [ctx](int result_code, int exit_code) {
+            std::unique_ptr<Context> owned(ctx);
+            cp0_sudo_result_t result = static_cast<cp0_sudo_result_t>(result_code);
             auto state = ctx->state.lock();
             if (!state || !state->alive) return;
             state->request_id = 0;
@@ -73,7 +74,7 @@ void Developer::toggle_adb(UISetupPage &page)
             } else {
                 ctx->developer->show_result_error(result, exit_code);
             }
-        }, ctx, 60000, 300000, &request_id);
+        }, [&](int code, uint64_t id) { rc = code; request_id = id; });
     if (rc != 0) {
         delete ctx;
         update_toggle(page, previous, false);
@@ -89,7 +90,7 @@ bool Developer::refresh_adb_status(UISetupPage &page)
     if (idx < 0) return false;
     int rc = -1;
     std::string out;
-    cp0_signal_process_api({"CaptureArgv", kAdbHelper, "status"},
+    cp0_signal_process_api({"AdbStatus"},
                            [&](int code, std::string data) { rc = code; out = std::move(data); });
     if (rc != 0) return false;
     AdbStatus status = parse_adb_status(out.c_str());
@@ -271,7 +272,7 @@ void Developer::handle_usb_guide_key(UISetupPage &page, uint32_t key)
         lv_obj_t *lbl = lv_label_create(cont);
         lv_label_set_text(lbl, "Rebooting...");
         lv_obj_center(lbl);
-        cp0_system_reboot();
+        cp0_signal_process_api({"Reboot"}, nullptr);
         break;
     }
     case KEY_ESC:
@@ -399,11 +400,15 @@ void Ethernet::refresh_info(UISetupPage &page)
 {
     for (auto &m : page.menu_items_) {
         if (m.label != "Ethernet") continue;
-        cp0_eth_info_t info;
-        cp0_network_default_info_read(&info);
-        m.sub_items[0].label = std::string("IP: ") + info.ipv4;
-        m.sub_items[1].label = std::string("GW: ") + info.gateway;
-        m.sub_items[2].label = std::string("MAC: ") + info.mac;
+        std::string data;
+        cp0_signal_osinfo_api({"NetworkDefaultInfoRead"},
+                              [&](int code, std::string value) { if (code == 0) data = std::move(value); });
+        std::istringstream lines(data);
+        std::string ip, gateway, mac;
+        std::getline(lines, ip); std::getline(lines, gateway); std::getline(lines, mac);
+        m.sub_items[0].label = "IP: " + ip;
+        m.sub_items[1].label = "GW: " + gateway;
+        m.sub_items[2].label = "MAC: " + mac;
         break;
     }
 }
@@ -426,11 +431,15 @@ void Account::refresh_info(UISetupPage &page)
 {
     for (auto &m : page.menu_items_) {
         if (m.label != "Account") continue;
-        cp0_account_info_t info;
-        cp0_account_info_read(&info);
-        m.sub_items[0].label = std::string("User: ") + info.user;
+        std::string data;
+        cp0_signal_osinfo_api({"AccountInfoRead"},
+                              [&](int code, std::string value) { if (code == 0) data = std::move(value); });
+        std::istringstream lines(data);
+        std::string user, hostname;
+        std::getline(lines, user); std::getline(lines, hostname);
+        m.sub_items[0].label = "User: " + user;
         m.sub_items[1].label = "Password: ****";
-        m.sub_items[2].label = std::string("Host: ") + info.hostname;
+        m.sub_items[2].label = "Host: " + hostname;
         break;
     }
 }
@@ -460,12 +469,12 @@ void Update::refresh_version_info(UISetupPage &page)
 
 void Update::check_system_update()
 {
-    cp0_system_apt_update_background();
+    cp0_signal_osinfo_api({"AptUpdateBackground"}, nullptr);
 }
 
 void Update::update_launcher()
 {
-    cp0_system_update_launcher_background();
+    cp0_signal_osinfo_api({"UpdateLauncherBackground"}, nullptr);
 }
 
 } // namespace setting
