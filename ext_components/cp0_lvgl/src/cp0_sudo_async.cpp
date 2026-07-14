@@ -575,7 +575,7 @@ extern "C" void init_sudo_signals(void)
                 if (started) started(-EINVAL, 0);
                 return;
             }
-            argv = {"/bin/sh", "-c", "date -s '" + value + "' && hwclock -w"};
+            argv = {"/bin/sh", "-c", "date -s '" + value + "'; hwclock -w"};
         } else {
             if (started) started(-EINVAL, 0);
             return;
