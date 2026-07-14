@@ -19,12 +19,71 @@ on:
   pull_request:
     branches: [master]
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (for example 0.7.0 or v0.7.0); leave empty to increment the latest release patch"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: launcher-release
+  cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Resolve release version
+      id: version
+      shell: bash
+      env:
+        REQUESTED_VERSION: ${{ github.event.inputs.version || '' }}
+      run: |
+        set -euo pipefail
+
+        version="${REQUESTED_VERSION#v}"
+        if [[ -z "${version}" ]]; then
+          latest="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" --jq \
+            '.[].tag_name | select(test("^(launcher-)?v[0-9]+\\.[0-9]+\\.[0-9]+$"))' 2>/dev/null \
+            | sed -E 's/^(launcher-)?v//' \
+            | sort -V \
+            | tail -n1)"
+          if [[ -z "${latest}" ]]; then
+            latest="$(sed -nE 's/^DEFAULT_VERSION = "([0-9]+\.[0-9]+\.[0-9]+)"$/\1/p' scripts/debian_packager.py | head -n1)"
+          fi
+          if [[ ! "${latest}" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            echo "Unable to determine a semantic version from releases or packager default: ${latest:-<none>}" >&2
+            exit 1
+          fi
+          version="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.$((BASH_REMATCH[3] + 1))"
+        fi
+
+        if [[ ! "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "Version must use MAJOR.MINOR.PATCH format, got: ${version}" >&2
+          exit 1
+        fi
+
+        tag="launcher-v${version}"
+        if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${tag}" >/dev/null 2>&1; then
+          echo "Tag ${tag} already exists; choose a different manual version." >&2
+          exit 1
+        fi
+
+        echo "version=${version}" >> "${GITHUB_OUTPUT}"
+        echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+        echo "Building APPLauncher ${version}"
 
     - name: Initialize submodules (SDK + AppStore + Calculator)
       run: |
@@ -128,7 +187,7 @@ jobs:
 
     - name: Build .deb package
       run: |
-        python3 scripts/debian_packager.py
+        python3 scripts/debian_packager.py --version "${{ steps.version.outputs.version }}"
 
     - name: Collect artifacts
       run: |
@@ -153,15 +212,11 @@ jobs:
         name: applaunch-arm64
         path: artifacts/
 
-    - name: Generate release tag
-      id: tag
-      run: echo "tag=launcher-$(date +'%Y%m%d-%H%M%S')" >> "$GITHUB_OUTPUT"
-
     - name: Create prerelease
       uses: softprops/action-gh-release@v2
       with:
-        tag_name: ${{ steps.tag.outputs.tag }}
-        name: "APPLauncher Prerelease ${{ steps.tag.outputs.tag }}"
+        tag_name: ${{ needs.build.outputs.tag }}
+        name: "APPLauncher Prerelease v${{ needs.build.outputs.version }}"
         prerelease: true
         generate_release_notes: true
         files: |
