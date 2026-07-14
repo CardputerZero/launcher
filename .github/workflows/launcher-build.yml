@@ -55,14 +55,13 @@ jobs:
 
         version="${REQUESTED_VERSION#v}"
         if [[ -z "${version}" ]]; then
-          latest="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" --jq \
-            '.[].tag_name | select(test("^(launcher-)?v[0-9]+\\.[0-9]+\\.[0-9]+$"))' 2>/dev/null \
-            | sed -E 's/^(launcher-)?v//' \
-            | sort -V \
-            | tail -n1)"
-          if [[ -z "${latest}" ]]; then
-            latest="$(sed -nE 's/^DEFAULT_VERSION = "([0-9]+\.[0-9]+\.[0-9]+)"$/\1/p' scripts/debian_packager.py | head -n1)"
-          fi
+          baseline="$(sed -nE 's/^DEFAULT_VERSION = "([0-9]+\.[0-9]+\.[0-9]+)"$/\1/p' scripts/debian_packager.py | head -n1)"
+          latest="$({
+            printf '%s\n' "${baseline}"
+            gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" --jq \
+              '.[].tag_name | select(test("^launcher-v[0-9]+\\.[0-9]+\\.[0-9]+$"))' 2>/dev/null \
+              | sed -E 's/^launcher-v//'
+          } | sed '/^$/d' | sort -V | tail -n1)"
           if [[ ! "${latest}" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
             echo "Unable to determine a semantic version from releases or packager default: ${latest:-<none>}" >&2
             exit 1
