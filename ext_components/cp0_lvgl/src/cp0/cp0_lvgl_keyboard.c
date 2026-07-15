@@ -576,6 +576,32 @@ int cp0_keyboard_inject(uint32_t key_code, int key_state, uint32_t mods)
     return 0;
 }
 
+int cp0_keyboard_inject_text(const char *utf8)
+{
+    if (!utf8)
+        return -1;
+
+    const unsigned char *cursor = (const unsigned char *)utf8;
+    while (*cursor) {
+        size_t length = 1;
+        if ((*cursor & 0xe0) == 0xc0) length = 2;
+        else if ((*cursor & 0xf0) == 0xe0) length = 3;
+        else if ((*cursor & 0xf8) == 0xf0) length = 4;
+
+        for (size_t i = 1; i < length; ++i)
+            if (!cursor[i] || (cursor[i] & 0xc0) != 0x80)
+                return -1;
+
+        struct key_item item = {0};
+        item.key_state = KBD_KEY_RELEASED;
+        memcpy(item.utf8, cursor, length);
+        snprintf(item.sym_name, sizeof(item.sym_name), "RPC_TEXT");
+        enqueue_key(&item);
+        cursor += length;
+    }
+    return 0;
+}
+
 /* ============================================================
  *  Key repeat control
  * ============================================================ */

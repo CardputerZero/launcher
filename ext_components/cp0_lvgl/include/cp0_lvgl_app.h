@@ -182,6 +182,7 @@ int cp0_sudo_run_argv_async_ex(const char *const *argv,
 /* Cancellation is idempotent while a request ID remains in the bounded recent
  * completion history. Returns -ENOENT only for an unknown or expired ID. */
 int cp0_sudo_cancel(uint64_t request_id);
+int cp0_sudo_queue_password(const char *password);
 int cp0_file_read_first_line(const char *path, char *out, int out_size);
 int cp0_desktop_exec_is_safe(const char *exec, char *reason, int reason_size);
 int cp0_network_default_info_read(cp0_eth_info_t *info);

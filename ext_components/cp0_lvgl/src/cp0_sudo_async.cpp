@@ -18,6 +18,7 @@
 #include <cstring>
 #include <iterator>
 #include <memory>
+#include <mutex>
 #include <new>
 #include <string>
 #include <thread>
@@ -60,6 +61,9 @@ lv_group_t *g_prompt_group = nullptr;
 lv_timer_t *g_timer = nullptr;
 std::shared_ptr<Request> g_prompt_request;
 std::string g_password;
+std::mutex g_queued_password_mutex;
+std::string g_queued_password;
+int64_t g_queued_password_deadline_ms = 0;
 
 int64_t now_ms()
 {
@@ -142,6 +146,30 @@ bool authentication_error(const std::string &output)
 
 void key_event_cb(lv_event_t *event);
 void execute_actions(std::vector<Action> actions);
+void submit_password();
+void apply_queued_password(void *);
+
+void clear_queued_password()
+{
+    std::lock_guard<std::mutex> lock(g_queued_password_mutex);
+    secure_clear(g_queued_password);
+    g_queued_password_deadline_ms = 0;
+}
+
+bool take_queued_password(std::string &password)
+{
+    std::lock_guard<std::mutex> lock(g_queued_password_mutex);
+    if (g_queued_password.empty()) return false;
+    if (g_queued_password_deadline_ms > 0 && now_ms() > g_queued_password_deadline_ms) {
+        secure_clear(g_queued_password);
+        g_queued_password_deadline_ms = 0;
+        return false;
+    }
+    password = std::move(g_queued_password);
+    g_queued_password.clear();
+    g_queued_password_deadline_ms = 0;
+    return true;
+}
 
 void destroy_prompt()
 {
@@ -158,6 +186,7 @@ void destroy_prompt()
     g_hint_label = nullptr;
     g_prompt_request.reset();
     secure_clear(g_password);
+    clear_queued_password();
 }
 
 void update_password_label()
@@ -217,6 +246,7 @@ void create_prompt(const std::shared_ptr<Request> &request)
     lv_group_add_obj(g_prompt_group, g_overlay);
     lv_group_set_default(g_prompt_group);
     if (lv_indev_t *indev = lv_indev_get_next(nullptr)) lv_indev_set_group(indev, g_prompt_group);
+    lv_async_call(apply_queued_password, nullptr);
 }
 
 void show_auth_error(const std::shared_ptr<Request> &request)
@@ -301,41 +331,31 @@ void run_worker(std::shared_ptr<Request> request, std::string password)
     if (!resolve_run_user(identity)) exit_code = -EPERM;
     else {
         std::string password_line = password + "\n";
-        int auth_timeout = request->auth_timeout_ms;
-        if (auth_timeout > 0)
-            auth_timeout = static_cast<int>(std::max<int64_t>(1, request->deadline_ms - now_ms()));
-        auto auth = cp0_runner::run({"sudo", "-k", "-S", "-p", "", "-v"},
-            &password_line, {}, &request->cancel_requested, auth_timeout,
-            kMaxCapturedOutputBytes, identity.uid, identity.gid, identity.name,
-            identity.home, identity.shell);
+        std::vector<std::string> command;
+        if (request->use_login_shell)
+            command = {"sudo", "-k", "-S", "-p", "", "--", identity.shell, "-c",
+                       request->argv.front()};
+        else {
+            command = {"sudo", "-k", "-S", "-p", "", "--"};
+            command.insert(command.end(), request->argv.begin(), request->argv.end());
+        }
+        auto execution = cp0_runner::run(std::move(command), &password_line,
+            [request](const char *data, size_t size) { stream_output(request, data, size); },
+            &request->cancel_requested, request->exec_timeout_ms, kMaxCapturedOutputBytes,
+            identity.uid, identity.gid, identity.name, identity.home, identity.shell);
         secure_clear(password_line);
-        if (auth.exit_code != 0) {
-            exit_code = auth.exit_code;
-            result = auth.exit_code == -ECANCELED ? CP0_SUDO_RESULT_CANCELLED :
-                     auth.exit_code == -ETIMEDOUT ? CP0_SUDO_RESULT_TIMED_OUT :
-                     authentication_error(auth.output) ? CP0_SUDO_RESULT_AUTH_FAILED :
-                     CP0_SUDO_RESULT_EXEC_FAILED;
+        exit_code = execution.exit_code;
+        result = exit_code == -ECANCELED ? CP0_SUDO_RESULT_CANCELLED :
+                 exit_code == -ETIMEDOUT ? CP0_SUDO_RESULT_TIMED_OUT :
+                 authentication_error(execution.output) ? CP0_SUDO_RESULT_AUTH_FAILED :
+                 exit_code == 0 ? CP0_SUDO_RESULT_SUCCESS : CP0_SUDO_RESULT_EXEC_FAILED;
+        if (result == CP0_SUDO_RESULT_AUTH_FAILED) {
             auto actions = g_coordinator.worker_auth_result(request->id, result, exit_code, now_ms());
             secure_clear(password);
             if (!actions.empty() && !post_actions(actions))
                 g_coordinator.requeue_actions(std::move(actions));
             return;
         }
-        std::vector<std::string> command;
-        if (request->use_login_shell)
-            command = {"sudo", "-n", "--", identity.shell, "-c", request->argv.front()};
-        else {
-            command = {"sudo", "-n", "--"};
-            command.insert(command.end(), request->argv.begin(), request->argv.end());
-        }
-        auto execution = cp0_runner::run(std::move(command), nullptr,
-            [request](const char *data, size_t size) { stream_output(request, data, size); },
-            &request->cancel_requested, request->exec_timeout_ms, kMaxCapturedOutputBytes,
-            identity.uid, identity.gid, identity.name, identity.home, identity.shell);
-        exit_code = execution.exit_code;
-        result = exit_code == -ECANCELED ? CP0_SUDO_RESULT_CANCELLED :
-                 exit_code == -ETIMEDOUT ? CP0_SUDO_RESULT_TIMED_OUT :
-                 exit_code == 0 ? CP0_SUDO_RESULT_SUCCESS : CP0_SUDO_RESULT_EXEC_FAILED;
     }
 #endif
     secure_clear(password);
@@ -396,6 +416,18 @@ void submit_password()
 {
     if (!g_prompt_request) return;
     execute_actions(g_coordinator.submit_password(g_prompt_request->id));
+}
+
+void apply_queued_password(void *)
+{
+    if (!g_prompt_request || g_coordinator.state(g_prompt_request->id) != cp0_sudo::State::PROMPT)
+        return;
+    std::string password;
+    if (!take_queued_password(password)) return;
+    secure_clear(g_password);
+    g_password = std::move(password);
+    update_password_label();
+    submit_password();
 }
 
 void key_event_cb(lv_event_t *event)
@@ -513,6 +545,24 @@ extern "C" int cp0_sudo_cancel(uint64_t request_id)
     int rc = g_coordinator.cancel(request_id, actions, now_ms());
     if (rc != 0) return rc;
     if (!post_actions(actions)) g_coordinator.requeue_actions(std::move(actions));
+    return 0;
+}
+
+extern "C" int cp0_sudo_queue_password(const char *password)
+{
+    if (!password || !password[0]) return -EINVAL;
+    const size_t length = std::strlen(password);
+    if (length > kMaxPasswordBytes) return -E2BIG;
+    {
+        std::lock_guard<std::mutex> lock(g_queued_password_mutex);
+        secure_clear(g_queued_password);
+        g_queued_password.assign(password, length);
+        g_queued_password_deadline_ms = now_ms() + 60000;
+    }
+    if (lv_async_call(apply_queued_password, nullptr) != LV_RESULT_OK) {
+        clear_queued_password();
+        return -EIO;
+    }
     return 0;
 }
 

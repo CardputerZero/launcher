@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import getpass
 import pathlib
 import sys
 import time
@@ -52,6 +53,10 @@ def main() -> int:
     tap = sub.add_parser("tap")
     tap.add_argument("key", type=key_code)
     tap.add_argument("--duration", type=float, default=0.08)
+    text = sub.add_parser("text")
+    text.add_argument("value")
+    password = sub.add_parser("password")
+    password.add_argument("value", nargs="?")
     hold = sub.add_parser("hold")
     hold.add_argument("key", type=key_code)
     hold.add_argument("seconds", type=float)
@@ -80,6 +85,11 @@ def main() -> int:
             send_key(socket, args.key, 1)
             time.sleep(max(0.0, args.duration))
             send_key(socket, args.key, 0)
+        elif args.command == "text":
+            request(socket, f"text {args.value}")
+        elif args.command == "password":
+            value = args.value if args.value is not None else getpass.getpass("Password: ")
+            request(socket, f"password {value}")
         elif args.command == "hold":
             send_key(socket, args.key, 1)
             try:
