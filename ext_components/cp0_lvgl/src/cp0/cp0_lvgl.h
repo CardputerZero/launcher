@@ -12,6 +12,7 @@ void init_pty(void);
 void init_config(void);
 void init_process(void);
 void init_screenshot(void);
+void init_rpc(void);
 void init_lora(void);
 void init_wifi();
 void init_bluetooth(void);
