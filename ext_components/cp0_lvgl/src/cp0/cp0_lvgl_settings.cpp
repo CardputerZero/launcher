@@ -34,6 +34,12 @@ struct ExtPortGpioMap {
 static constexpr const char *kHwIdPath = "/proc/cardputerzero_hw_id";
 static constexpr ExtPortGpioMap kCardputerZeroGpioMap = {"/dev/gpiochip1", 3, 12, false, false};
 static constexpr ExtPortGpioMap kFallbackGpioMap = {"/dev/gpiochip0", 17, 5, false, true};
+static constexpr const char *kGrove5vLedPaths[] = {
+    "/sys/class/leds/grove_5v_out/brightness",
+};
+static constexpr const char *kExt5vLedPaths[] = {
+    "/sys/class/leds/ext_5v_out/brightness",
+};
 
 static int gpio_v2_get_value(int line_fd);
 
@@ -217,22 +223,40 @@ private:
     int set_named_gpio(const char *name, int val)
     {
         std::lock_guard<std::mutex> lock(gpio_mutex_);
-        const ExtPortGpioMap &map = active_gpio_map_locked();
-        if (is_grove5v_name(name))
+        if (is_grove5v_name(name)) {
+            int ret = write_led_value(kGrove5vLedPaths, val);
+            if (ret != -ENOENT)
+                return ret;
+            const ExtPortGpioMap &map = active_gpio_map_locked();
             return set_gpio_value(map.chip_path, map.grove5v_line, map.grove5v_active_low, "GROVE5V", val);
-        if (is_ext5v_name(name))
+        }
+        if (is_ext5v_name(name)) {
+            int ret = write_led_value(kExt5vLedPaths, val);
+            if (ret != -ENOENT)
+                return ret;
+            const ExtPortGpioMap &map = active_gpio_map_locked();
             return set_gpio_value(map.chip_path, map.ext5v_line, map.ext5v_active_low, "EXT5V", val);
+        }
         return -EINVAL;
     }
 
     int get_named_gpio(const char *name)
     {
         std::lock_guard<std::mutex> lock(gpio_mutex_);
-        const ExtPortGpioMap &map = active_gpio_map_locked();
-        if (is_grove5v_name(name))
+        if (is_grove5v_name(name)) {
+            int value = read_led_value(kGrove5vLedPaths);
+            if (value != -ENOENT)
+                return value;
+            const ExtPortGpioMap &map = active_gpio_map_locked();
             return get_gpio_value(map.chip_path, map.grove5v_line, map.grove5v_active_low, "GROVE5V");
-        if (is_ext5v_name(name))
+        }
+        if (is_ext5v_name(name)) {
+            int value = read_led_value(kExt5vLedPaths);
+            if (value != -ENOENT)
+                return value;
+            const ExtPortGpioMap &map = active_gpio_map_locked();
             return get_gpio_value(map.chip_path, map.ext5v_line, map.ext5v_active_low, "EXT5V");
+        }
         return -EINVAL;
     }
 
@@ -258,6 +282,48 @@ private:
     {
         int value = gpio_v2_read_input(chip_path, line, consumer);
         return value < 0 ? value : (value ^ (active_low ? 1 : 0));
+    }
+
+    template <size_t N>
+    static int write_led_value(const char *const (&paths)[N], int val)
+    {
+        const char value = val ? '1' : '0';
+        for (const char *path : paths) {
+            int fd = open(path, O_WRONLY | O_CLOEXEC);
+            if (fd < 0) {
+                if (errno == ENOENT)
+                    continue;
+                return -errno;
+            }
+            ssize_t written = write(fd, &value, 1);
+            int err = written == 1 ? 0 : (written < 0 ? errno : EIO);
+            close(fd);
+            return -err;
+        }
+        return -ENOENT;
+    }
+
+    template <size_t N>
+    static int read_led_value(const char *const (&paths)[N])
+    {
+        for (const char *path : paths) {
+            int fd = open(path, O_RDONLY | O_CLOEXEC);
+            if (fd < 0) {
+                if (errno == ENOENT)
+                    continue;
+                return -errno;
+            }
+            char buf[16] = {};
+            ssize_t size = read(fd, buf, sizeof(buf) - 1);
+            int err = size >= 0 ? 0 : errno;
+            close(fd);
+            if (err != 0)
+                return -err;
+            if (size == 0)
+                return -EIO;
+            return std::strtol(buf, nullptr, 10) != 0 ? 1 : 0;
+        }
+        return -ENOENT;
     }
 
     static int config_get_int(const char *key, int default_val)
