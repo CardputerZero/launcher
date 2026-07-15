@@ -2,6 +2,7 @@
 #include "hal/hal_process.h"
 #include "hal_lvgl_bsp.h"
 #include "../cp0_app_internal_utils.h"
+#include "../cp0_external_process_group.hpp"
 
 #include <algorithm>
 #include <cerrno>
@@ -438,24 +439,27 @@ private:
         return -1;
 #else
         (void)keep_root;
+        const bool subreaper = cp0_process_group::enable_subreaper();
         pid_t pid = fork();
         if (pid < 0)
             return -1;
         if (pid == 0) {
+            setpgid(0, 0);
             execlp("/bin/sh", "sh", "-c", exec_path, static_cast<char *>(nullptr));
             _exit(127);
         }
+        setpgid(pid, pid);
+        std::fprintf(stderr, "[process] external app leader=%d pgid=%d subreaper=%d\n",
+                     static_cast<int>(pid), static_cast<int>(pid), subreaper ? 1 : 0);
         int status = 0;
+        bool leader_reaped = false;
         int home_status = 0;
         std::chrono::steady_clock::time_point home_start;
+        std::chrono::steady_clock::time_point term_start;
         while (true) {
-            int r = waitpid(pid, &status, WNOHANG);
-            if (r > 0)
+            cp0_process_group::reap_available(pid, pid, status, leader_reaped);
+            if (!cp0_process_group::exists(pid))
                 break;
-            if (r < 0) {
-                status = 0;
-                break;
-            }
 
             if (home_key_flag) {
                 if (home_status == 0 && *home_key_flag) {
@@ -466,22 +470,29 @@ private:
                         auto elapsed = std::chrono::steady_clock::now() - home_start;
                         if (std::chrono::duration_cast<std::chrono::seconds>(elapsed).count() >= 3) {
                             home_status = 2;
-                            kill(pid, SIGTERM);
+                            term_start = std::chrono::steady_clock::now();
+                            std::fprintf(stderr, "[process] ESC timeout: SIGTERM pgid=%d\n",
+                                         static_cast<int>(pid));
+                            killpg(pid, SIGTERM);
                         }
                     } else {
                         home_status = 0;
                     }
                 } else if (home_status == 2) {
-                    auto elapsed = std::chrono::steady_clock::now() - home_start;
-                    if (std::chrono::duration_cast<std::chrono::seconds>(elapsed).count() >= 5) {
-                        kill(pid, SIGKILL);
-                        waitpid(pid, &status, 0);
-                        break;
+                    auto elapsed = std::chrono::steady_clock::now() - term_start;
+                    if (std::chrono::duration_cast<std::chrono::seconds>(elapsed).count() >= 2) {
+                        home_status = 3;
+                        std::fprintf(stderr, "[process] grace timeout: SIGKILL pgid=%d\n",
+                                     static_cast<int>(pid));
+                        killpg(pid, SIGKILL);
                     }
                 }
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
         }
+        cp0_process_group::reap_available(pid, pid, status, leader_reaped);
+        std::fprintf(stderr, "[process] external app group drained pgid=%d leader_reaped=%d\n",
+                     static_cast<int>(pid), leader_reaped ? 1 : 0);
         if (home_key_flag)
             *home_key_flag = 0;
         if (WIFEXITED(status))
@@ -495,8 +506,8 @@ private:
 #if defined(_WIN32) || defined(HAL_PLATFORM_SDL)
         return exec_blocking_sdl(exec_path, home_key_flag, keep_root);
 #else
-        (void)home_key_flag;
         keyboard_pause();
+        const bool subreaper = cp0_process_group::enable_subreaper();
 
         int evfd = open(get_kbd_device(), O_RDONLY | O_NONBLOCK);
         if (evfd < 0) {
@@ -523,52 +534,66 @@ private:
             _exit(127);
         }
         setpgid(pid, pid);
+        std::fprintf(stderr, "[process] external app leader=%d pgid=%d subreaper=%d\n",
+                     static_cast<int>(pid), static_cast<int>(pid), subreaper ? 1 : 0);
 
         auto esc_down_since = std::chrono::steady_clock::time_point{};
+        auto term_start = std::chrono::steady_clock::time_point{};
         bool esc_down = false;
+        bool raw_esc_down = false;
+        bool term_sent = false;
+        bool kill_sent = false;
+        bool leader_reaped = false;
         int status = 0;
 
         while (true) {
-            int r = waitpid(pid, &status, WNOHANG);
-            if (r > 0)
+            cp0_process_group::reap_available(pid, pid, status, leader_reaped);
+            if (!cp0_process_group::exists(pid))
                 break;
-            if (r < 0) {
-                status = -1;
-                break;
-            }
 
             struct input_event ev;
             while (read(evfd, &ev, sizeof(ev)) == static_cast<ssize_t>(sizeof(ev))) {
                 if (ev.type == EV_KEY && ev.code == KEY_ESC) {
                     if (ev.value == 1) {
-                        esc_down = true;
-                        esc_down_since = std::chrono::steady_clock::now();
+                        raw_esc_down = true;
                     } else if (ev.value == 0) {
-                        esc_down = false;
+                        raw_esc_down = false;
                     }
                 }
             }
 
-            if (esc_down) {
+            const bool esc_now = raw_esc_down || (home_key_flag && *home_key_flag);
+            if (esc_now && !esc_down) {
+                esc_down = true;
+                esc_down_since = std::chrono::steady_clock::now();
+            } else if (!esc_now) {
+                esc_down = false;
+            }
+
+            if (esc_down && !term_sent) {
                 auto held_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                     std::chrono::steady_clock::now() - esc_down_since).count();
                 if (held_ms >= 3000) {
+                    term_sent = true;
+                    term_start = std::chrono::steady_clock::now();
+                    std::fprintf(stderr, "[process] ESC timeout: SIGTERM pgid=%d\n",
+                                 static_cast<int>(pid));
                     killpg(pid, SIGTERM);
-                    auto t0 = std::chrono::steady_clock::now();
-                    while (waitpid(pid, &status, WNOHANG) == 0) {
-                        if (std::chrono::duration_cast<std::chrono::seconds>(
-                                std::chrono::steady_clock::now() - t0).count() >= 2) {
-                            killpg(pid, SIGKILL);
-                            waitpid(pid, &status, 0);
-                            break;
-                        }
-                        std::this_thread::sleep_for(std::chrono::milliseconds(50));
-                    }
-                    break;
                 }
+            }
+            if (term_sent && !kill_sent &&
+                std::chrono::duration_cast<std::chrono::seconds>(
+                    std::chrono::steady_clock::now() - term_start).count() >= 2) {
+                kill_sent = true;
+                std::fprintf(stderr, "[process] grace timeout: SIGKILL pgid=%d\n",
+                             static_cast<int>(pid));
+                killpg(pid, SIGKILL);
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
+        cp0_process_group::reap_available(pid, pid, status, leader_reaped);
+        std::fprintf(stderr, "[process] external app group drained pgid=%d leader_reaped=%d\n",
+                     static_cast<int>(pid), leader_reaped ? 1 : 0);
 
         close(evfd);
         keyboard_resume();
