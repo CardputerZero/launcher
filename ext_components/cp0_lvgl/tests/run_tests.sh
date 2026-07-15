@@ -9,6 +9,10 @@ trap 'rm -f "$binary"' EXIT HUP INT TERM
     -I"$root/include" "$root/tests/test_async_testable_utils.cpp" -o "$binary"
 "$binary"
 
+"${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -pthread \
+    -I"$root/src" "$root/tests/test_external_process_group.cpp" -o "$binary"
+"$binary"
+
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror \
     -I"$root/include" "$root/tests/test_dispatch_testable.cpp" -o "$binary"
 "$binary"

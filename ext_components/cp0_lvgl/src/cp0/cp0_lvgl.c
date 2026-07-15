@@ -11,6 +11,7 @@ void cp0_lvgl_init(void)
     init_pty();
     init_freambuffer_disp();
     init_input();
+    init_rpc();
     init_audio();
     init_process();
     init_sudo_signals();

@@ -14,9 +14,6 @@ public:
             return;
 
         cp0_battery_info_t info = cp0_battery_read();
-        if (!info.valid)
-            return;
-
         lv_obj_t *root = lv_display_get_screen_active(NULL);
         if (root != NULL)
             lv_obj_send_event(root, (lv_event_code_t)lv_c_event[CP0_C_EVENT_BATTERY], (void *)&info);

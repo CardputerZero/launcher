@@ -9,4 +9,8 @@ config CP0_LVGL_USE_ZMQ_LOG
     bool "Enable cp0 lvgl zmq log publisher"
     default n
 
+config CP0_LVGL_USE_ZMQ_RPC
+    bool "Enable cp0 lvgl local ZMQ automation RPC"
+    default n
+
 endif
