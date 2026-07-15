@@ -38,6 +38,10 @@ if "CONFIG_CP0_LVGL_COMPONENT_ENABLED" in os.environ or "CONFIG_SIGSLOT_COMPONEN
         if 'CONFIG_CP0_LVGL_USE_ZMQ_LOG' in os.environ:
             DEFINITIONS += ['-DCP0_LVGL_USE_ZMQ_LOG=1']
             REQUIREMENTS += ['zmq']
+        if 'CONFIG_CP0_LVGL_USE_ZMQ_RPC' in os.environ:
+            DEFINITIONS += ['-DCP0_LVGL_USE_ZMQ_RPC=1']
+            if 'zmq' not in REQUIREMENTS:
+                REQUIREMENTS += ['zmq']
 
     env["COMPONENTS"].append(
         {

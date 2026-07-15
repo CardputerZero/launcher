@@ -559,6 +559,23 @@ static void enqueue_key(const struct key_item *src) {
 
 }
 
+int cp0_keyboard_inject(uint32_t key_code, int key_state, uint32_t mods)
+{
+    if (key_state != KBD_KEY_RELEASED && key_state != KBD_KEY_PRESSED &&
+        key_state != KBD_KEY_REPEATED)
+        return -1;
+
+    struct key_item item = {0};
+    item.key_code = key_code;
+    item.key_state = key_state;
+    item.mods = mods;
+    const char *ctrl = ctrl_key_utf8_lookup(key_code);
+    if (ctrl) snprintf(item.utf8, sizeof(item.utf8), "%s", ctrl);
+    snprintf(item.sym_name, sizeof(item.sym_name), "RPC_%u", key_code);
+    enqueue_key(&item);
+    return 0;
+}
+
 /* ============================================================
  *  Key repeat control
  * ============================================================ */
