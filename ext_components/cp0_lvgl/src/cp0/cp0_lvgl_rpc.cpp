@@ -1,4 +1,5 @@
 #include "cp0_lvgl.h"
+#include "cp0_lvgl_app.h"
 
 #ifndef CP0_LVGL_USE_ZMQ_RPC
 #define CP0_LVGL_USE_ZMQ_RPC 0
@@ -45,6 +46,13 @@ const char *env_or_default(const char *name, const char *fallback)
 {
     const char *value = std::getenv(name);
     return value && value[0] ? value : fallback;
+}
+
+void secure_clear(std::string &value)
+{
+    volatile char *data = value.empty() ? nullptr : &value[0];
+    for (size_t i = 0; data && i < value.size(); ++i) data[i] = 0;
+    value.clear();
 }
 
 bool capture_ppm(std::vector<uint8_t> &out, std::string &error)
@@ -184,6 +192,38 @@ void rpc_broker(std::shared_ptr<zmq::context_t> context)
                 cp0_keyboard_inject(code, static_cast<int>(state), mods);
                 pub.send(zmq::buffer(&event, sizeof(event)), zmq::send_flags::none);
                 send_text(rep, "OK key");
+                continue;
+            }
+            if (command == "text") {
+                std::string value;
+                std::getline(input, value);
+                if (!value.empty() && value.front() == ' ') value.erase(0, 1);
+                if (value.empty()) {
+                    send_text(rep, "ERR usage: text <utf8>");
+                    continue;
+                }
+                if (cp0_keyboard_inject_text(value.c_str()) != 0) {
+                    send_text(rep, "ERR invalid utf8 text");
+                    continue;
+                }
+                send_text(rep, "OK text");
+                continue;
+            }
+            if (command == "password") {
+                std::string value;
+                std::getline(input, value);
+                if (!value.empty() && value.front() == ' ') value.erase(0, 1);
+                if (value.empty()) {
+                    send_text(rep, "ERR usage: password <value>");
+                    continue;
+                }
+                const int result = cp0_sudo_queue_password(value.c_str());
+                secure_clear(value);
+                if (result != 0) {
+                    send_text(rep, "ERR unable to queue password " + std::to_string(result));
+                    continue;
+                }
+                send_text(rep, "OK password");
                 continue;
             }
             if (command == "screenshot") {

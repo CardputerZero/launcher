@@ -41,6 +41,7 @@ extern volatile uint32_t LV_EVENT_KEYBOARD;
 
 void *keyboard_read_thread(void *argv);
 int cp0_keyboard_inject(uint32_t key_code, int key_state, uint32_t mods);
+int cp0_keyboard_inject_text(const char *utf8);
 const char *kbd_state_name(int state);
 void kbd_dump_keymap_table(void);
 #ifdef __cplusplus

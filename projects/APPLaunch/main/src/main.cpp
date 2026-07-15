@@ -1,3 +1,7 @@
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+
 /*
  * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
  *
@@ -7,6 +11,7 @@
 #include "lvgl/lvgl.h"
 #include "lvgl/demos/lv_demos.h"
 #include <stdio.h>
+#include <errno.h>
 #include <chrono>
 #include <string>
 #include <semaphore.h>
@@ -25,6 +30,28 @@
 #endif
 
 static sem_t lvgl_sem;
+
+static void lvgl_wait(uint32_t milliseconds)
+{
+    struct timespec deadline;
+#if defined(__linux__)
+    clock_gettime(CLOCK_MONOTONIC, &deadline);
+#else
+    clock_gettime(CLOCK_REALTIME, &deadline);
+#endif
+    deadline.tv_nsec += (milliseconds % 1000) * 1000000;
+    deadline.tv_sec += milliseconds / 1000 + deadline.tv_nsec / 1000000000;
+    deadline.tv_nsec %= 1000000000;
+
+    int result;
+    do {
+#if defined(__linux__)
+        result = sem_clockwait(&lvgl_sem, CLOCK_MONOTONIC, &deadline);
+#else
+        result = sem_timedwait(&lvgl_sem, &deadline);
+#endif
+    } while (result != 0 && errno == EINTR);
+}
 
 static void lvgl_resume_cb(void *data) {
     sem_post(&lvgl_sem);
@@ -60,12 +87,7 @@ int main(void)
         if (ms == LV_NO_TIMER_READY) {
             sem_wait(&lvgl_sem);      // 无定时器，阻塞等事件
         } else {
-            struct timespec ts;
-            clock_gettime(CLOCK_REALTIME, &ts);
-            ts.tv_nsec += (ms % 1000) * 1000000;
-            ts.tv_sec += ms / 1000 + ts.tv_nsec / 1000000000;
-            ts.tv_nsec %= 1000000000;
-            sem_timedwait(&lvgl_sem, &ts);  // 定时唤醒 或 被事件提前唤醒
+            lvgl_wait(ms);  // 定时唤醒或被事件提前唤醒，不受系统时间调整影响
         }
     }
 
