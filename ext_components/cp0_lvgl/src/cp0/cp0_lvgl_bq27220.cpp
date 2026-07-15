@@ -73,13 +73,15 @@ public:
         cp0_battery_info_t info{};
 
         char bq_path[256] = {0};
-        long capacity = 0, voltage_uv = 0, current_raw = 0, temp_raw = 0;
+        long present = 0, capacity = 0, voltage_uv = 0, current_raw = 0, temp_raw = 0;
         char status[64] = "Unknown";
 
         if (find_power_supply(bq_path, sizeof(bq_path))) {
             char path[320];
+            std::snprintf(path, sizeof(path), "%s/present", bq_path);
+            int ok = read_long(path, &present);
             std::snprintf(path, sizeof(path), "%s/capacity", bq_path);
-            int ok = read_long(path, &capacity);
+            ok = ok && read_long(path, &capacity);
             std::snprintf(path, sizeof(path), "%s/voltage_now", bq_path);
             ok = ok && read_long(path, &voltage_uv);
             ok = ok && read_current_raw(bq_path, &current_raw);
@@ -92,20 +94,16 @@ public:
                 const bool is_charging = is_charging_status(status);
                 // power_supply convention: negative = discharging, positive = charging
                 const double current_ma = current_raw / 1000.0;
-                double temp_c = temp_raw / 10.0;
-                if (temp_c > 100.0 || temp_c < -40.0) {
-                    temp_c = temp_raw / 100.0;
-                }
-
                 const int rounded_current_ma = sanitize_battery_current_ma(round_to_int(current_ma), is_charging);
                 if (cp0_battery_testable::measurement_is_valid(
-                        static_cast<int>(capacity), rounded_current_ma) &&
+                        static_cast<int>(present), static_cast<int>(capacity),
+                        rounded_current_ma, static_cast<int>(temp_raw)) &&
                     cp0_battery_testable::power_supply_status_is_known(status)) {
                     info.soc = static_cast<int>(capacity);
                     info.voltage_mv = static_cast<int>(voltage_uv / 1000);
                     info.current_ma = rounded_current_ma;
                     info.avg_current_ma = rounded_current_ma;
-                    info.temperature_c10 = round_to_int(temp_c * 10.0);
+                    info.temperature_c10 = static_cast<int>(temp_raw);
                     info.flags = is_charging ? 1 : 0;
                     info.valid = 1;
                     return info;
@@ -272,7 +270,13 @@ private:
 
             char dir[320];
             std::snprintf(dir, sizeof(dir), "%s/%s", base, ent->d_name);
-            if (!has_file(dir, "capacity") ||
+            char type[64] = {0};
+            char type_path[384];
+            std::snprintf(type_path, sizeof(type_path), "%s/type", dir);
+            if (!read_string(type_path, type, sizeof(type)) ||
+                !cp0_battery_testable::power_supply_type_is_battery(type) ||
+                !has_file(dir, "present") ||
+                !has_file(dir, "capacity") ||
                 !has_file(dir, "voltage_now") ||
                 (!has_file(dir, "current_instant") && !has_file(dir, "current_now")) ||
                 !has_file(dir, "temp") ||
