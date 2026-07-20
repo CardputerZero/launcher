@@ -40,6 +40,41 @@ static int find_st7789v_fbdev(char *dev_path, size_t buf_size)
 
 void init_freambuffer_disp()
 {
+#if LV_USE_LINUX_DRM
+    const char *device = getenv("LV_LINUX_DRM_DEVICE");
+    char *detected_device = NULL;
+    if (device == NULL || device[0] == '\0') {
+        detected_device = lv_linux_drm_find_device_path();
+        device = detected_device;
+    }
+
+    if (device == NULL || device[0] == '\0') {
+        fprintf(stderr, "Failed to find a connected DRM device\n");
+        lv_free(detected_device);
+        return;
+    }
+
+    printf("Using DRM device: %s\n", device);
+    lv_display_t *disp = lv_linux_drm_create();
+    if (disp == NULL) {
+        fprintf(stderr, "Failed to create DRM display\n");
+        lv_free(detected_device);
+        return;
+    }
+
+    if (lv_linux_drm_set_file(disp, device, -1) != LV_RESULT_OK) {
+        fprintf(stderr, "Failed to initialize DRM device: %s\n", device);
+        lv_display_delete(disp);
+        lv_free(detected_device);
+        return;
+    }
+
+    lv_free(detected_device);
+
+    printf("DRM resolution: %dx%d\n",
+           (int)lv_display_get_horizontal_resolution(disp),
+           (int)lv_display_get_vertical_resolution(disp));
+#else
     lv_display_t *disp = lv_linux_fbdev_create();
     if (disp == NULL) {
         printf("Failed to create fbdev display!\n");
@@ -63,4 +98,5 @@ void init_freambuffer_disp()
     lv_coord_t w = lv_display_get_horizontal_resolution(disp);
     lv_coord_t h = lv_display_get_vertical_resolution(disp);
     printf("Framebuffer resolution: %dx%d\n", w, h);
+#endif
 }
