@@ -10,6 +10,8 @@ void cp0_lvgl_init(void)
     init_config();
     init_pty();
     init_freambuffer_disp();
+    if (lv_display_get_default() == NULL)
+        return;
     init_input();
     init_rpc();
     init_audio();

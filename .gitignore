@@ -25,3 +25,4 @@ projects/lcd_test
 .sconsign.dblite
 zeromp3
 *.pyc
+docs/rtc/applaunch_rtc_flow.html

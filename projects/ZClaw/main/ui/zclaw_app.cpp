@@ -11,6 +11,7 @@
 #include "keyboard_input.h"
 #include "zclaw_client.h"
 #include "zclaw_fonts.hpp"
+#include "zclaw_provider_store.h"
 
 #include <linux/input.h>
 
@@ -285,57 +286,6 @@ private:
         return "Custom";
     }
 
-    static std::string encode_field(const std::string &value)
-    {
-        std::string out;
-        for (char ch : value) {
-            if (ch == '\\')
-                out += "\\\\";
-            else if (ch == '\t')
-                out += "\\t";
-            else if (ch == '\n')
-                out += "\\n";
-            else
-                out += ch;
-        }
-        return out;
-    }
-
-    static std::string decode_field(const std::string &value)
-    {
-        std::string out;
-        for (size_t i = 0; i < value.size(); ++i) {
-            if (value[i] == '\\' && i + 1 < value.size()) {
-                const char next = value[++i];
-                if (next == 't')
-                    out += '\t';
-                else if (next == 'n')
-                    out += '\n';
-                else
-                    out += next;
-            } else {
-                out += value[i];
-            }
-        }
-        return out;
-    }
-
-    static std::vector<std::string> split_tab_line(const std::string &line)
-    {
-        std::vector<std::string> fields;
-        std::string current;
-        for (char ch : line) {
-            if (ch == '\t') {
-                fields.push_back(current);
-                current.clear();
-            } else {
-                current += ch;
-            }
-        }
-        fields.push_back(current);
-        return fields;
-    }
-
     static std::string display_text_compat(const std::string &text)
     {
         return text;
@@ -348,23 +298,7 @@ private:
 
     void load_providers()
     {
-        providers_.clear();
-        std::ifstream file(ZClawClient::providers_config_path());
-        std::string line;
-        while (std::getline(file, line)) {
-            if (line.empty())
-                continue;
-            std::vector<std::string> fields = split_tab_line(line);
-            if (fields.size() < 5)
-                continue;
-            ProviderConfig provider;
-            provider.alias = decode_field(fields[0]);
-            provider.family = decode_field(fields[1]);
-            provider.model = decode_field(fields[2]);
-            provider.uri = decode_field(fields[3]);
-            provider.api_key = decode_field(fields[4]);
-            providers_.push_back(provider);
-        }
+        zclaw::load_provider_configs(ZClawClient::providers_config_path(), &providers_);
 
         if (providers_.empty()) {
             for (int i = 0; i < 6; ++i)
@@ -372,19 +306,23 @@ private:
         }
     }
 
-    void save_providers()
+    bool save_providers(std::string *error = nullptr)
     {
         ZClawClient::ensure_storage_dir();
-        std::ofstream file(ZClawClient::providers_config_path(), std::ios::trunc);
-        if (!file)
-            return;
-        for (const ProviderConfig &provider : providers_) {
-            file << encode_field(provider.alias) << '\t'
-                 << encode_field(provider.family) << '\t'
-                 << encode_field(provider.model) << '\t'
-                 << encode_field(provider.uri) << '\t'
-                 << encode_field(provider.api_key) << '\n';
-        }
+        return zclaw::save_provider_configs(ZClawClient::providers_config_path(), providers_, error);
+    }
+
+    bool save_setup_provider()
+    {
+        if (providers_.empty())
+            providers_.push_back(setup_provider_);
+        else
+            providers_[0] = setup_provider_;
+        std::string error;
+        if (save_providers(&error))
+            return true;
+        append_ai_message(error.c_str());
+        return false;
     }
 
     void load_ui_config()
@@ -392,11 +330,11 @@ private:
         std::ifstream file(ZClawClient::ui_config_path());
         std::string line;
         while (std::getline(file, line)) {
-            std::vector<std::string> fields = split_tab_line(line);
+            std::vector<std::string> fields = zclaw::split_config_line(line);
             if (fields.size() < 2)
                 continue;
-            const std::string key = decode_field(fields[0]);
-            const std::string value = decode_field(fields[1]);
+            const std::string key = zclaw::decode_config_field(fields[0]);
+            const std::string value = zclaw::decode_config_field(fields[1]);
             if (key == "webhook_url")
                 ui_config_.webhook_url = value;
             else if (key == "agent_alias")
@@ -416,11 +354,11 @@ private:
         std::ofstream file(ZClawClient::ui_config_path(), std::ios::trunc);
         if (!file)
             return;
-        file << encode_field("webhook_url") << '\t' << encode_field(ui_config_.webhook_url) << '\n'
-             << encode_field("agent_alias") << '\t' << encode_field(ui_config_.agent_alias) << '\n'
-             << encode_field("webhook_secret") << '\t' << encode_field(ui_config_.webhook_secret) << '\n'
-             << encode_field("bearer_token") << '\t' << encode_field(ui_config_.bearer_token) << '\n'
-             << encode_field("setup_complete") << '\t' << (ui_config_.setup_complete ? "1" : "0") << '\n';
+        file << zclaw::encode_config_field("webhook_url") << '\t' << zclaw::encode_config_field(ui_config_.webhook_url) << '\n'
+             << zclaw::encode_config_field("agent_alias") << '\t' << zclaw::encode_config_field(ui_config_.agent_alias) << '\n'
+             << zclaw::encode_config_field("webhook_secret") << '\t' << zclaw::encode_config_field(ui_config_.webhook_secret) << '\n'
+             << zclaw::encode_config_field("bearer_token") << '\t' << zclaw::encode_config_field(ui_config_.bearer_token) << '\n'
+             << zclaw::encode_config_field("setup_complete") << '\t' << (ui_config_.setup_complete ? "1" : "0") << '\n';
     }
 
     static const char *provider_field_name(ProviderEditField field)
@@ -882,6 +820,7 @@ private:
         else if (setup_edit_field_ == SetupEditField::Model)
             setup_provider_.model = value;
         setup_edit_field_ = SetupEditField::None;
+        save_setup_provider();
         render_setup();
     }
 
@@ -1772,11 +1711,7 @@ private:
         setup_in_flight_ = false;
         if (ok) {
             ui_config_ = config;
-            if (providers_.empty())
-                providers_.push_back(setup_provider_);
-            else
-                providers_[0] = setup_provider_;
-            save_providers();
+            save_setup_provider();
             save_ui_config();
         }
         append_ai_message(text.c_str());
@@ -1806,6 +1741,7 @@ private:
 
         if (settings_view_ == SettingsView::SetupProviders) {
             setup_provider_ = provider_preset(setup_provider_selected_);
+            save_setup_provider();
             settings_selected_ = 0;
             render_setup();
             return;
