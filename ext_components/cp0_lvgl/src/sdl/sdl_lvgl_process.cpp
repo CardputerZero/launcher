@@ -126,6 +126,7 @@ public:
         (void)keep_root;
         return -1;
 #else
+        cp0_process_group::enable_subreaper();
         pid_t pid = fork();
         if (pid < 0)
             return -1;
@@ -147,9 +148,10 @@ public:
 #if !defined(_WIN32)
         if (pid <= 0)
             return;
-        killpg(static_cast<pid_t>(pid), SIGTERM);
-        int status = 0;
-        waitpid(static_cast<pid_t>(pid), &status, WNOHANG);
+        if (!cp0_process_group::terminate_and_reap(static_cast<pid_t>(pid),
+                                                   static_cast<pid_t>(pid)))
+            std::fprintf(stderr, "[process] failed to stop and reap pgid=%d\n",
+                         static_cast<int>(pid));
 #else
         (void)pid;
 #endif
