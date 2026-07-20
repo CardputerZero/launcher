@@ -8,7 +8,7 @@
 #
 # It will, on enable:
 #   * install the Debian `adbd` package if missing,
-#   * embed the bundled default authorized key into /adb_keys,
+#   * require at least one device-specific, UI-approved host key,
 #   * install a systemd drop-in so the gadget shows a friendly name
 #     ("CardputerZero" / serial "CardputerZero-xxxx"),
 #   * make sure the USB controller is in peripheral mode (editing config.txt and
@@ -18,13 +18,18 @@
 # Exit codes:
 #   0   success, ADB is running
 #   10  success, but a REBOOT is required (USB was switched to peripheral mode)
+#   11  no host has been paired yet
 #   1   error
 set -e
 
 SELF_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 GADGET="$SELF_DIR/cardputer-adb-gadget"
-DEFAULT_KEY="$SELF_DIR/adbkey.pub"
 ADB_KEYS=/adb_keys
+# Tests run this helper without privileges. Root executions always use the
+# production path, regardless of inherited environment variables.
+if [ "$(id -u)" -ne 0 ] && [ -n "${CARDPUTER_ADB_TEST_ROOT:-}" ]; then
+    ADB_KEYS="$CARDPUTER_ADB_TEST_ROOT/adb_keys"
+fi
 DROPIN_DIR=/etc/systemd/system/adbd.service.d
 DROPIN="$DROPIN_DIR/cardputer.conf"
 
@@ -113,12 +118,47 @@ EOF
     fi
 }
 
-install_default_key() {
-    [ -f "$DEFAULT_KEY" ] || return 0
-    if [ ! -f "$ADB_KEYS" ] || ! grep -qFf "$DEFAULT_KEY" "$ADB_KEYS" 2>/dev/null; then
-        cat "$DEFAULT_KEY" >> "$ADB_KEYS"
-        log "embedded default adb key into $ADB_KEYS"
+prepare_authorizations() {
+    umask 077
+    touch "$ADB_KEYS"
+    chmod 600 "$ADB_KEYS"
+
+    # Remove the key shipped by older images. Keeping it after an upgrade would
+    # leave those devices exposed even though new images no longer bundle it.
+    if grep -qE '[[:space:]]cardputer-zero-default([[:space:]]|$)' "$ADB_KEYS"; then
+        tmp="${ADB_KEYS}.tmp.$$"
+        grep -vE '[[:space:]]cardputer-zero-default([[:space:]]|$)' "$ADB_KEYS" > "$tmp" || true
+        chmod 600 "$tmp"
+        mv "$tmp" "$ADB_KEYS"
+        log "removed legacy shared adb authorization"
     fi
+}
+
+authorization_count() {
+    list_authorizations | wc -l
+}
+
+valid_public_key() {
+    key=$1
+    blob=${key%% *}
+    [ "$blob" != "$key" ] && [ -n "${key#* }" ] || return 1
+    case "$blob" in QAAAA[A-Za-z0-9+/]*=*) ;; *) return 1 ;; esac
+    [ ${#blob} -eq 700 ] || return 1
+    printf '%s' "$blob" | base64 -d >/dev/null 2>&1 || return 1
+    [ "$(printf '%s' "$blob" | base64 -d 2>/dev/null | wc -c)" -eq 524 ]
+}
+
+list_authorizations() {
+    [ -f "$ADB_KEYS" ] || return 0
+    while IFS= read -r line; do
+        blob=${line%% *}
+        [ "$blob" != "$line" ] || continue
+        valid_public_key "$line" || continue
+        fingerprint=$(printf '%s' "$blob" | sha256sum | awk '{print $1}')
+        label=${line#* }
+        label=$(printf '%s' "$label" | tr '\t' ' ')
+        printf 'authorization=%s\t%s\n' "$fingerprint" "$label"
+    done < "$ADB_KEYS"
 }
 
 install_dropin() {
@@ -189,8 +229,12 @@ stop_serial_gadget() {
 }
 
 cmd_enable() {
+    prepare_authorizations
+    [ "$(authorization_count)" -gt 0 ] || {
+        log "pair a host in Settings before enabling ADB"
+        exit 11
+    }
     ensure_adbd_installed
-    install_default_key
     setup_better_shell
     install_dropin
     stop_serial_gadget
@@ -226,16 +270,67 @@ cmd_disable() {
 
 cmd_status() {
     peripheral_ready && echo "peripheral=yes" || echo "peripheral=no"
-    echo "adbd=$(systemctl is-active adbd.service 2>/dev/null || echo inactive)"
-    echo "enabled=$(systemctl is-enabled adbd.service 2>/dev/null || echo disabled)"
+    adbd=$(systemctl is-active adbd.service 2>/dev/null || true)
+    enabled=$(systemctl is-enabled adbd.service 2>/dev/null || true)
+    echo "adbd=${adbd:-inactive}"
+    echo "enabled=${enabled:-disabled}"
+    echo "authorizations=$(authorization_count)"
+    list_authorizations
 }
 
-# Append an extra authorized host key (the CLI form of "allow this computer").
+# Add a UI-approved host public key. adb public keys contain a base64-encoded
+# Android RSA key followed by a host label.
 cmd_authorize() {
     key="$1"
     [ -n "$key" ] || die "usage: cardputer-adb authorize <pubkey|file>"
-    if [ -f "$key" ]; then cat "$key" >> "$ADB_KEYS"; else echo "$key" >> "$ADB_KEYS"; fi
+    if [ -f "$key" ]; then key=$(sed -n '1p' "$key"); fi
+    key=$(printf '%s' "$key" | tr -d '\r\n')
+    valid_public_key "$key" || die "invalid adb public key"
+    prepare_authorizations
+    blob=${key%% *}
+    if awk -v blob="$blob" '$1 == blob { found=1 } END { exit found ? 0 : 1 }' "$ADB_KEYS"; then
+        log "host key already authorized"
+        return
+    fi
+    printf '%s\n' "$key" >> "$ADB_KEYS"
     log "authorized host key"
+}
+
+cmd_revoke() {
+    fingerprint="$1"
+    case "$fingerprint" in *[!0-9a-f]*|'') die "invalid authorization fingerprint" ;; esac
+    [ ${#fingerprint} -eq 64 ] || die "invalid authorization fingerprint"
+    prepare_authorizations
+    tmp="${ADB_KEYS}.tmp.$$"
+    : > "$tmp"
+    while IFS= read -r line; do
+        blob=${line%% *}
+        current=$(printf '%s' "$blob" | sha256sum | awk '{print $1}')
+        [ "$current" = "$fingerprint" ] || printf '%s\n' "$line" >> "$tmp"
+    done < "$ADB_KEYS"
+    chmod 600 "$tmp"
+    mv "$tmp" "$ADB_KEYS"
+    systemctl restart adbd.service 2>/dev/null || true
+    log "revoked host key"
+}
+
+cmd_migrate() {
+    before=0
+    if [ -f "$ADB_KEYS" ]; then
+        before=$(grep -cE '[[:space:]]cardputer-zero-default([[:space:]]|$)' "$ADB_KEYS" || true)
+    fi
+    prepare_authorizations
+    if [ "$before" -gt 0 ] && systemctl is-active --quiet adbd.service 2>/dev/null; then
+        systemctl restart adbd.service || die "removed legacy key but failed to restart adbd"
+    fi
+}
+
+cmd_clear_authorizations() {
+    umask 077
+    : > "$ADB_KEYS"
+    chmod 600 "$ADB_KEYS"
+    systemctl restart adbd.service 2>/dev/null || true
+    log "cleared all adb authorizations"
 }
 
 case "$1" in
@@ -243,5 +338,8 @@ case "$1" in
     disable)   cmd_disable ;;
     status)    cmd_status ;;
     authorize) shift; cmd_authorize "$@" ;;
-    *) echo "Usage: $0 {enable|disable|status|authorize <pubkey>}" >&2; exit 1 ;;
+    revoke) shift; cmd_revoke "$@" ;;
+    migrate) cmd_migrate ;;
+    clear-authorizations) cmd_clear_authorizations ;;
+    *) echo "Usage: $0 {enable|disable|status|authorize <pubkey>|revoke <fingerprint>|clear-authorizations|migrate}" >&2; exit 1 ;;
 esac

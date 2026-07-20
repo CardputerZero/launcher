@@ -11,6 +11,7 @@
 
 #include "ui.h"
 #include "ui_app_page.hpp"
+#include "ui_low_battery.h"
 #include <stdio.h>
 #include <cstdlib>
 #include "lvgl/src/widgets/gif/lv_gif.h"
@@ -33,6 +34,7 @@ void init()
 {
     home = std::make_unique<LauncherUiRuntime>();
     home->start();
+    launcher_battery_ui::init_warning();
 }
 
 } // namespace launcher_ui
