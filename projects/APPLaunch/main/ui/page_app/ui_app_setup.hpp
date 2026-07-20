@@ -255,6 +255,7 @@ public:
 };
 
 class Bluetooth {
+    struct AsyncState { bool alive = true; uint64_t request_id = 0; };
     struct ListRow {
         int device_index;
         const char *title;
@@ -263,6 +264,8 @@ class Bluetooth {
     enum class ListMode { Managed, Scan };
 
 public:
+    Bluetooth();
+    ~Bluetooth();
     static void append(UISetupPage &p, std::vector<MenuItem> &menu);
     void enter_devices(UISetupPage &page);
     void enter_alias(UISetupPage &page);
@@ -303,7 +306,9 @@ private:
     static int set_discoverable(int on);
     static int device_command(const char *cmd, const char *address);
     static int device_list(const char *cmd, cp0_bt_device_t *out, int max_devices);
+    static int rfkill_blocked();
 
+    std::shared_ptr<AsyncState> async_state_;
     cp0_bt_device_t devices_[CP0_BT_DEVICE_MAX];
     int device_count_ = 0;
     int list_sel_ = 0;

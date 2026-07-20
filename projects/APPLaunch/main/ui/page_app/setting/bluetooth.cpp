@@ -3,6 +3,15 @@
 
 namespace setting {
 
+Bluetooth::Bluetooth() : async_state_(std::make_shared<AsyncState>()) {}
+
+Bluetooth::~Bluetooth()
+{
+    async_state_->alive = false;
+    if (async_state_->request_id)
+        cp0_signal_sudo_cancel(async_state_->request_id, nullptr);
+}
+
 void Bluetooth::append(UISetupPage &p, std::vector<MenuItem> &menu)
 {
     UISetupPage *page = &p;
@@ -557,6 +566,28 @@ int Bluetooth::set_power(int on)
     return api_int({"BtPower", std::to_string(on)});
 }
 
+int Bluetooth::rfkill_blocked()
+{
+    const char *argv[] = {
+        "/usr/sbin/rfkill", "--noheadings", "--output", "TYPE,SOFT", nullptr
+    };
+    char output[512] = {};
+    if (cp0_process_capture_argv(argv, output, sizeof(output)) != 0)
+        return -1;
+
+    std::istringstream lines(output);
+    std::string line;
+    while (std::getline(lines, line)) {
+        std::istringstream fields(line);
+        std::string type;
+        std::string soft;
+        fields >> type >> soft;
+        if (type == "bluetooth")
+            return soft == "blocked" ? 1 : 0;
+    }
+    return -1;
+}
+
 int Bluetooth::set_alias(const std::string &alias)
 {
     return api_int({"BtAlias", alias});
@@ -602,10 +633,61 @@ void Bluetooth::toggle_power(UISetupPage &page)
     for (auto &m : page.menu_items_) {
         if (m.label != "Bluetooth") continue;
         bool on = m.sub_items[0].toggle_state;
-        if (!on)
+        if (!on) {
             stop_scan_timer();
-        set_power(on ? 1 : 0);
-        refresh_status(page);
+            set_power(0);
+            refresh_status(page);
+            break;
+        }
+
+        if (async_state_->request_id) {
+            refresh_status(page);
+            break;
+        }
+
+        int blocked = rfkill_blocked();
+        if (blocked <= 0) {
+            if (blocked < 0)
+                std::fprintf(stderr, "Bluetooth: unable to query /usr/sbin/rfkill; trying BlueZ power on\n");
+            set_power(1);
+            refresh_status(page);
+            break;
+        }
+
+        struct Context {
+            Bluetooth *bluetooth;
+            UISetupPage *page;
+            std::weak_ptr<AsyncState> state;
+        };
+        auto *ctx = new (std::nothrow) Context{this, &page, async_state_};
+        if (!ctx) {
+            refresh_status(page);
+            break;
+        }
+
+        uint64_t request_id = 0;
+        int rc = -1;
+        cp0_signal_sudo_argv_async({"/usr/sbin/rfkill", "unblock", "bluetooth"}, 60000, 30000,
+            [ctx](int result_code, int exit_code) {
+                std::unique_ptr<Context> owned(ctx);
+                auto state = ctx->state.lock();
+                if (!state || !state->alive) return;
+                state->request_id = 0;
+                if (result_code == CP0_SUDO_RESULT_SUCCESS && exit_code == 0) {
+                    if (ctx->bluetooth->set_power(1) != 0)
+                        std::fprintf(stderr, "Bluetooth: BlueZ power on failed after rfkill unblock\n");
+                } else {
+                    std::fprintf(stderr, "Bluetooth: sudo /usr/sbin/rfkill unblock bluetooth failed\n");
+                }
+                ctx->bluetooth->refresh_status(*ctx->page);
+                ctx->page->build_sub_view();
+            }, [&](int code, uint64_t id) { rc = code; request_id = id; });
+        if (rc != 0) {
+            delete ctx;
+            refresh_status(page);
+        } else {
+            async_state_->request_id = request_id;
+        }
         break;
     }
 }
