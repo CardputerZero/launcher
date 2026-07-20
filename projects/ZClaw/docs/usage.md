@@ -35,6 +35,8 @@ The available presets are:
 
 For a custom provider, the API URL must begin with `http://` or `https://`. Quickstart uses the agent alias `zclaw` unless the saved UI configuration contains another alias.
 
+Model Settings saves the selected provider and each API URL, API key, or model value as soon as the entry is confirmed with `Enter`. Confirmed values are restored the next time ZClaw starts, even if Quickstart has not been run.
+
 The generated ZeroClaw configuration binds the gateway to `127.0.0.1:42617`, requires pairing, uses a 180-second request timeout, and allows 600 seconds for long-running requests. The UI endpoint is reset to `http://127.0.0.1:42617/webhook`.
 
 ## Chat
