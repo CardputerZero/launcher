@@ -25,6 +25,7 @@
 #include "hal_lvgl_bsp.h"
 #include "launcher_platform.hpp"
 #include "cp0_lvgl_file.hpp"
+#include "ui_low_battery.h"
 #define APP_CONSOLE_EXIT_EVENT (lv_event_code_t)(LV_EVENT_LAST + 1)
 
 namespace launcher_wifi {
@@ -612,6 +613,7 @@ public:
     void update_battery_status(const cp0_battery_info_t &bat)
     {
         top_bar_.update_battery(bat);
+        launcher_battery_ui::update_warning(bat);
     }
 
     void set_page_title(const std::string &title)
@@ -805,6 +807,7 @@ public:
 
     void update_battery_status(const cp0_battery_info_t &bat)
     {
+        launcher_battery_ui::update_warning(bat);
         if (bat.valid)
         {
             int soc = bat.soc;

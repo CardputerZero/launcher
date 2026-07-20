@@ -211,6 +211,14 @@ def _control_text(config: PackageConfig) -> str:
 def _postinst_text(config: PackageConfig) -> str:
     service_file = f"/{_posix_path(config.service_path / f'{config.app_name}.service')}"
     service_name = f"{config.app_name}.service"
+    adb_migration = ""
+    if config.app_name == APP_NAME:
+        adb_migration = f"""
+ADB_HELPER=/{_posix_path(config.install_prefix / 'adb/cardputer-adb')}
+if [ -x "$ADB_HELPER" ]; then
+    "$ADB_HELPER" migrate
+fi
+"""
     if config.service_scope == "system":
         return f"""#!/bin/sh
 set -e
@@ -219,6 +227,7 @@ chown 1000:1000 /var/cache/{config.app_name} || true
 ln -sfn /var/cache/{config.app_name} /usr/share/{config.app_name}/cache
 SERVICE_NAME="{service_name}"
 SERVICE_FILE="{service_file}"
+{adb_migration}
 
 systemd_is_running() {{
     [ -d /run/systemd/system ] && [ "$(ps -p 1 -o comm= 2>/dev/null)" = "systemd" ]
@@ -246,6 +255,7 @@ APP_UID=1000
 APP_USER="$(getent passwd "$APP_UID" | cut -d: -f1)"
 SERVICE_NAME="{service_name}"
 SERVICE_FILE="{service_file}"
+{adb_migration}
 
 systemd_is_running() {{
     [ -d /run/systemd/system ] && [ "$(ps -p 1 -o comm= 2>/dev/null)" = "systemd" ]

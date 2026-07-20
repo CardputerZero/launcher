@@ -603,6 +603,23 @@ extern "C" void init_sudo_signals(void)
         std::list<std::string> argv;
         if (command == "AdbSet") {
             argv = {cp0_file_path("adb_helper"), value == "1" ? "enable" : "disable"};
+        } else if (command == "AdbAuthorize") {
+            if (value.size() < 680 || value.size() > 2048 || value.find('\n') != std::string::npos ||
+                value.find('\r') != std::string::npos) {
+                if (started) started(-EINVAL, 0);
+                return;
+            }
+            argv = {cp0_file_path("adb_helper"), "authorize", value};
+        } else if (command == "AdbRevoke") {
+            const bool valid = value.size() == 64 && std::all_of(value.begin(), value.end(),
+                [](unsigned char c) { return std::isdigit(c) || (c >= 'a' && c <= 'f'); });
+            if (!valid) {
+                if (started) started(-EINVAL, 0);
+                return;
+            }
+            argv = {cp0_file_path("adb_helper"), "revoke", value};
+        } else if (command == "AdbClearAuthorizations") {
+            argv = {cp0_file_path("adb_helper"), "clear-authorizations"};
         } else if (command == "NtpSet") {
             argv = {"timedatectl", "set-ntp", value == "1" ? "true" : "false"};
         } else if (command == "TimeSet") {
