@@ -29,6 +29,7 @@ int main()
     const std::vector<ProviderConfig> original = {
         {"zclaw", "custom", "model\\name\nnext", "https://example.com/a\tb", "key\\value\nline"},
         {"second", "ollama", "llama3.1", "http://127.0.0.1:11434", ""},
+        {"zclaw", "openai", "gpt-4.1-mini", "https://api.openai.com/v1", "openai-key"},
     };
     std::string error;
     assert(zclaw::save_provider_configs(path, original, &error));
@@ -43,6 +44,50 @@ int main()
     assert(loaded.size() == original.size());
     for (size_t i = 0; i < original.size(); ++i)
         assert(same_provider(loaded[i], original[i]));
+
+    ProviderConfig active = loaded[0];
+    const ProviderConfig custom_default = {
+        "zclaw", "custom", "", "https://api.example.com/v1", ""
+    };
+    zclaw::activate_provider_config(&loaded, &active, custom_default);
+    assert(active.uri == original[0].uri);
+    assert(loaded[0].uri == original[0].uri);
+
+    const ProviderConfig openai_default = {
+        "zclaw", "openai", "default-model", "https://default.invalid/v1", ""
+    };
+    zclaw::activate_provider_config(&loaded, &active, openai_default);
+    assert(active.family == "openai");
+    assert(active.api_key == "openai-key");
+    active.model = "edited-openai-model";
+    zclaw::activate_provider_config(&loaded, &active, custom_default);
+    assert(active.family == "custom");
+    assert(active.uri == original[0].uri);
+    zclaw::activate_provider_config(&loaded, &active, openai_default);
+    assert(active.model == "edited-openai-model");
+
+    ProviderConfig edited_active = active;
+    edited_active.api_key = "updated-key";
+    assert(zclaw::replace_provider_config(&loaded, &active, 0, edited_active));
+    assert(active.api_key == "updated-key");
+    assert(loaded[0].api_key == "updated-key");
+    const ProviderConfig fallback = {
+        "zclaw", "openai", "fallback", "https://api.openai.com/v1", ""
+    };
+    assert(zclaw::erase_provider_config(&loaded, &active, 0, fallback));
+    assert(!loaded.empty());
+    assert(same_provider(active, loaded[0]));
+
+    std::vector<ProviderConfig> only_active = {active};
+    assert(zclaw::erase_provider_config(&only_active, &active, 0, fallback));
+    assert(only_active.empty());
+    assert(same_provider(active, fallback));
+
+    const std::string ui_path = std::string(dir) + "/ui.tsv";
+    assert(zclaw::atomic_write_config(ui_path, "token\tsecret\n", &error));
+    struct stat ui_st {};
+    assert(::stat(ui_path.c_str(), &ui_st) == 0);
+    assert((ui_st.st_mode & 0777) == 0600);
 
     const std::vector<ProviderConfig> replacement = {
         {"zclaw", "openai", "gpt-4.1-mini", "https://api.openai.com/v1", "new-key"},
@@ -69,6 +114,7 @@ int main()
     assert(loaded.size() == 1 && loaded[0].alias == "legacy");
 
     assert(::unlink(path.c_str()) == 0);
+    assert(::unlink(ui_path.c_str()) == 0);
     assert(::rmdir(dir) == 0);
     return 0;
 }
