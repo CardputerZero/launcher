@@ -1519,7 +1519,7 @@ private:
             "else "
             "exec env TERM=st-256color COLORTERM=truecolor bash -i; "
             "fi"
-        }, "ST", "st: failed to open PTY\r\n");
+        }, "CLI", "cli: failed to open PTY\r\n");
     }
 
     void stop_pty()
