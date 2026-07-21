@@ -493,9 +493,9 @@ bool apply_quickstart_config(UiConfig *config, ProviderConfig provider, std::str
         !config_set("gateway.long_running_request_timeout_secs", "600", error) ||
         !config_set(provider_prefix + ".model", provider.model, error))
         return false;
-    if (!provider.uri.empty() && !config_set(provider_prefix + ".uri", provider.uri, error))
+    if (!config_set(provider_prefix + ".uri", provider.uri, error))
         return false;
-    if (!provider.api_key.empty() && !config_set(provider_prefix + ".api_key", provider.api_key, error))
+    if (!config_set(provider_prefix + ".api_key", provider.api_key, error))
         return false;
 
     if (!ensure_agent(agent, error) ||

@@ -1,6 +1,7 @@
 #include "zclaw_provider_store.h"
 
 #include <cerrno>
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
@@ -88,6 +89,55 @@ std::vector<std::string> split_config_line(const std::string &line)
     return fields;
 }
 
+void activate_provider_config(std::vector<ProviderConfig> *providers, ProviderConfig *active,
+                              const ProviderConfig &selected_default)
+{
+    if (!providers || !active)
+        return;
+
+    if (providers->empty())
+        providers->push_back(*active);
+    else
+        (*providers)[0] = *active;
+
+    if (active->family == selected_default.family)
+        return;
+
+    const auto existing = std::find_if(providers->begin() + 1, providers->end(),
+                                       [&](const ProviderConfig &provider) {
+                                           return provider.family == selected_default.family;
+                                       });
+    ProviderConfig selected = selected_default;
+    if (existing != providers->end()) {
+        selected = *existing;
+        providers->erase(existing);
+    }
+    providers->insert(providers->begin(), selected);
+    *active = selected;
+}
+
+bool replace_provider_config(std::vector<ProviderConfig> *providers, ProviderConfig *active,
+                             std::size_t index, const ProviderConfig &replacement)
+{
+    if (!providers || !active || index >= providers->size())
+        return false;
+    (*providers)[index] = replacement;
+    if (index == 0)
+        *active = replacement;
+    return true;
+}
+
+bool erase_provider_config(std::vector<ProviderConfig> *providers, ProviderConfig *active,
+                           std::size_t index, const ProviderConfig &empty_default)
+{
+    if (!providers || !active || index >= providers->size())
+        return false;
+    providers->erase(providers->begin() + static_cast<std::ptrdiff_t>(index));
+    if (index == 0)
+        *active = providers->empty() ? empty_default : (*providers)[0];
+    return true;
+}
+
 bool load_provider_configs(const std::string &path, std::vector<ProviderConfig> *providers)
 {
     if (!providers)
@@ -111,27 +161,17 @@ bool load_provider_configs(const std::string &path, std::vector<ProviderConfig> 
     return !file.bad();
 }
 
-bool save_provider_configs(const std::string &path, const std::vector<ProviderConfig> &providers,
-                           std::string *error)
+bool atomic_write_config(const std::string &path, const std::string &contents, std::string *error)
 {
     if (error)
         error->clear();
-
-    std::string contents;
-    for (const ProviderConfig &provider : providers) {
-        contents += encode_config_field(provider.alias) + '\t' +
-                    encode_config_field(provider.family) + '\t' +
-                    encode_config_field(provider.model) + '\t' +
-                    encode_config_field(provider.uri) + '\t' +
-                    encode_config_field(provider.api_key) + '\n';
-    }
 
     std::string temp_path = path + ".tmp.XXXXXX";
     std::vector<char> temp_name(temp_path.begin(), temp_path.end());
     temp_name.push_back('\0');
     const int fd = ::mkstemp(temp_name.data());
     if (fd < 0) {
-        set_error(error, "Could not create provider settings file");
+        set_error(error, "Could not create settings file");
         return false;
     }
 
@@ -147,17 +187,31 @@ bool save_provider_configs(const std::string &path, const std::vector<ProviderCo
     }
     if (!ok) {
         errno = saved_errno;
-        set_error(error, "Could not write provider settings");
+        set_error(error, "Could not write settings");
         ::unlink(temp_name.data());
         return false;
     }
 
     if (::rename(temp_name.data(), path.c_str()) != 0) {
-        set_error(error, "Could not replace provider settings");
+        set_error(error, "Could not replace settings");
         ::unlink(temp_name.data());
         return false;
     }
     return true;
+}
+
+bool save_provider_configs(const std::string &path, const std::vector<ProviderConfig> &providers,
+                           std::string *error)
+{
+    std::string contents;
+    for (const ProviderConfig &provider : providers) {
+        contents += encode_config_field(provider.alias) + '\t' +
+                    encode_config_field(provider.family) + '\t' +
+                    encode_config_field(provider.model) + '\t' +
+                    encode_config_field(provider.uri) + '\t' +
+                    encode_config_field(provider.api_key) + '\n';
+    }
+    return atomic_write_config(path, contents, error);
 }
 
 }  // namespace zclaw
