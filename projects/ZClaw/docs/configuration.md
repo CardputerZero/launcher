@@ -96,4 +96,6 @@ The UI reads and writes two escaped, tab-separated files in `~/.zeroclaw`:
 
 Tabs, newlines, and backslashes are escaped when written. These formats are implementation details rather than a public interchange format; preserve field ordering and escaping if another component needs to edit them.
 
+The first provider record is the active Setup provider. Selecting another provider family moves its existing record to the front instead of recreating it from defaults, so values survive switching away and back. A preset is created only when that family has no saved record. Both TSV files are written through a mode-`0600` temporary file, flushed, and atomically renamed over the previous file.
+
 Because credentials are stored as plain text, packaging and diagnostic tooling must not collect these files by default.

@@ -25,6 +25,7 @@
 #include <pthread.h>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -312,17 +313,26 @@ private:
         return zclaw::save_provider_configs(ZClawClient::providers_config_path(), providers_, error);
     }
 
+    void report_save_error(const std::string &error)
+    {
+        append_ai_message(error.empty() ? "Could not save settings." : error.c_str());
+    }
+
     bool save_setup_provider()
     {
-        if (providers_.empty())
-            providers_.push_back(setup_provider_);
+        std::vector<ProviderConfig> candidate = providers_;
+        if (candidate.empty())
+            candidate.push_back(setup_provider_);
         else
-            providers_[0] = setup_provider_;
+            candidate[0] = setup_provider_;
         std::string error;
-        if (save_providers(&error))
-            return true;
-        append_ai_message(error.c_str());
-        return false;
+        ZClawClient::ensure_storage_dir();
+        if (!zclaw::save_provider_configs(ZClawClient::providers_config_path(), candidate, &error)) {
+            report_save_error(error);
+            return false;
+        }
+        providers_ = std::move(candidate);
+        return true;
     }
 
     void load_ui_config()
@@ -348,17 +358,20 @@ private:
         }
     }
 
-    void save_ui_config()
+    bool save_ui_config()
     {
         ZClawClient::ensure_storage_dir();
-        std::ofstream file(ZClawClient::ui_config_path(), std::ios::trunc);
-        if (!file)
-            return;
-        file << zclaw::encode_config_field("webhook_url") << '\t' << zclaw::encode_config_field(ui_config_.webhook_url) << '\n'
-             << zclaw::encode_config_field("agent_alias") << '\t' << zclaw::encode_config_field(ui_config_.agent_alias) << '\n'
-             << zclaw::encode_config_field("webhook_secret") << '\t' << zclaw::encode_config_field(ui_config_.webhook_secret) << '\n'
-             << zclaw::encode_config_field("bearer_token") << '\t' << zclaw::encode_config_field(ui_config_.bearer_token) << '\n'
-             << zclaw::encode_config_field("setup_complete") << '\t' << (ui_config_.setup_complete ? "1" : "0") << '\n';
+        std::string contents;
+        contents += zclaw::encode_config_field("webhook_url") + '\t' + zclaw::encode_config_field(ui_config_.webhook_url) + '\n';
+        contents += zclaw::encode_config_field("agent_alias") + '\t' + zclaw::encode_config_field(ui_config_.agent_alias) + '\n';
+        contents += zclaw::encode_config_field("webhook_secret") + '\t' + zclaw::encode_config_field(ui_config_.webhook_secret) + '\n';
+        contents += zclaw::encode_config_field("bearer_token") + '\t' + zclaw::encode_config_field(ui_config_.bearer_token) + '\n';
+        contents += zclaw::encode_config_field("setup_complete") + '\t' + (ui_config_.setup_complete ? "1" : "0") + '\n';
+        std::string error;
+        if (zclaw::atomic_write_config(ZClawClient::ui_config_path(), contents, &error))
+            return true;
+        report_save_error(error);
+        return false;
     }
 
     static const char *provider_field_name(ProviderEditField field)
@@ -813,6 +826,7 @@ private:
 
     void apply_setup_edit(const std::string &value)
     {
+        const ProviderConfig previous = setup_provider_;
         if (setup_edit_field_ == SetupEditField::Uri)
             setup_provider_.uri = value;
         else if (setup_edit_field_ == SetupEditField::ApiKey)
@@ -820,7 +834,8 @@ private:
         else if (setup_edit_field_ == SetupEditField::Model)
             setup_provider_.model = value;
         setup_edit_field_ = SetupEditField::None;
-        save_setup_provider();
+        if (!save_setup_provider())
+            setup_provider_ = previous;
         render_setup();
     }
 
@@ -918,11 +933,8 @@ private:
         render_settings_main();
     }
 
-    void open_setup_panel()
+    void sync_setup_provider_selection()
     {
-        if (settings_panel_open() || settings_animating_)
-            return;
-        close_input_dialog();
         if (setup_provider_.family == "openrouter") setup_provider_selected_ = 1;
         else if (setup_provider_.family == "anthropic") setup_provider_selected_ = 2;
         else if (setup_provider_.family == "ollama") setup_provider_selected_ = 3;
@@ -930,6 +942,14 @@ private:
         else if (setup_provider_.family == "custom") setup_provider_selected_ = 5;
         else setup_provider_selected_ = 0;
         setup_provider_scroll_ = 0;
+    }
+
+    void open_setup_panel()
+    {
+        if (settings_panel_open() || settings_animating_)
+            return;
+        close_input_dialog();
+        sync_setup_provider_selection();
         create_settings_panel();
         if (first_run_needed())
             render_setup_providers();
@@ -1499,11 +1519,17 @@ private:
 
     void finish_pairing_result(bool ok, const std::string &text, const UiConfig &config)
     {
+        if (ok)
+            append_ai_message(text.c_str());
         if (ok) {
+            const UiConfig previous = ui_config_;
             ui_config_ = config;
-            save_ui_config();
+            if (!save_ui_config()) {
+                ui_config_ = previous;
+            }
         }
-        append_ai_message(text.c_str());
+        if (!ok)
+            append_ai_message(text.c_str());
         if (settings_panel_open() && settings_view_ == SettingsView::Authorization)
             render_authorization();
     }
@@ -1570,8 +1596,14 @@ private:
         provider.family = "openai-compatible";
         provider.model = "model";
         provider.uri = "https://api.example.com/v1";
+        const std::vector<ProviderConfig> previous = providers_;
         providers_.push_back(provider);
-        save_providers();
+        std::string error;
+        if (!save_providers(&error)) {
+            providers_ = previous;
+            report_save_error(error);
+            return;
+        }
         provider_selected_ = (int)providers_.size();
         provider_detail_index_ = (int)providers_.size() - 1;
         settings_selected_ = 0;
@@ -1582,8 +1614,17 @@ private:
     {
         if (provider_detail_index_ < 0 || provider_detail_index_ >= (int)providers_.size())
             return;
-        providers_.erase(providers_.begin() + provider_detail_index_);
-        save_providers();
+        const std::vector<ProviderConfig> previous_providers = providers_;
+        const ProviderConfig previous_setup = setup_provider_;
+        zclaw::erase_provider_config(&providers_, &setup_provider_,
+                                     static_cast<size_t>(provider_detail_index_), provider_preset(0));
+        std::string error;
+        if (!save_providers(&error)) {
+            providers_ = previous_providers;
+            setup_provider_ = previous_setup;
+            report_save_error(error);
+            return;
+        }
         provider_detail_index_ = -1;
         if (provider_selected_ > (int)providers_.size())
             provider_selected_ = (int)providers_.size();
@@ -1628,10 +1669,19 @@ private:
         if (provider_edit_field_ == ProviderEditField::None)
             return;
 
-        ProviderConfig &provider = providers_[provider_detail_index_];
+        const std::vector<ProviderConfig> previous_providers = providers_;
+        const ProviderConfig previous_setup = setup_provider_;
+        ProviderConfig provider = providers_[provider_detail_index_];
         provider_field_value(provider, provider_edit_field_) = value;
         provider_edit_field_ = ProviderEditField::None;
-        save_providers();
+        zclaw::replace_provider_config(&providers_, &setup_provider_,
+                                       static_cast<size_t>(provider_detail_index_), provider);
+        std::string error;
+        if (!save_providers(&error)) {
+            providers_ = previous_providers;
+            setup_provider_ = previous_setup;
+            report_save_error(error);
+        }
         render_provider_detail();
     }
 
@@ -1709,13 +1759,20 @@ private:
     void finish_setup_result(bool ok, const std::string &text, const UiConfig &config)
     {
         setup_in_flight_ = false;
+        bool persisted = ok;
+        if (ok)
+            append_ai_message(text.c_str());
         if (ok) {
+            const UiConfig previous = ui_config_;
             ui_config_ = config;
-            save_setup_provider();
-            save_ui_config();
+            if (!save_setup_provider() || !save_ui_config()) {
+                ui_config_ = previous;
+                persisted = false;
+            }
         }
-        append_ai_message(text.c_str());
-        if (ok && settings_panel_open() && settings_view_ == SettingsView::Setup) {
+        if (!ok)
+            append_ai_message(text.c_str());
+        if (persisted && settings_panel_open() && settings_view_ == SettingsView::Setup) {
             render_setup();
             close_settings_panel();
         }
@@ -1730,6 +1787,7 @@ private:
             if (setup_in_flight_)
                 return;
             if (settings_selected_ == 0) {
+                sync_setup_provider_selection();
                 render_setup_providers();
             } else if (settings_selected_ == setup_initialize_row()) {
                 start_setup();
@@ -1740,8 +1798,16 @@ private:
         }
 
         if (settings_view_ == SettingsView::SetupProviders) {
-            setup_provider_ = provider_preset(setup_provider_selected_);
-            save_setup_provider();
+            const std::vector<ProviderConfig> previous_providers = providers_;
+            const ProviderConfig previous_setup = setup_provider_;
+            const ProviderConfig selected = provider_preset(setup_provider_selected_);
+            zclaw::activate_provider_config(&providers_, &setup_provider_, selected);
+            std::string error;
+            if (!save_providers(&error)) {
+                providers_ = previous_providers;
+                setup_provider_ = previous_setup;
+                report_save_error(error);
+            }
             settings_selected_ = 0;
             render_setup();
             return;
@@ -1751,9 +1817,12 @@ private:
             if (settings_selected_ == 0) {
                 open_text_dialog("Pairing code", "", InputMode::PairingCode);
             } else if (settings_selected_ == 4) {
+                const UiConfig previous = ui_config_;
                 ui_config_.bearer_token.clear();
-                save_ui_config();
-                append_ai_message("Authorization token cleared.");
+                if (save_ui_config())
+                    append_ai_message("Authorization token cleared.");
+                else
+                    ui_config_ = previous;
                 render_authorization();
             }
             return;
