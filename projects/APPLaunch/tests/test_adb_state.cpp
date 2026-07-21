@@ -23,4 +23,17 @@ int main()
     assert(!adb_state_after_failure(off, true));
     assert(adb_state_after_failure(AdbStatus{}, true));
     assert(!adb_state_after_failure(AdbStatus{}, false));
+    AdbStatus paired = parse_adb_status("adbd=inactive\nenabled=disabled\nauthorizations=2\n");
+    assert(paired.valid && paired.authorizations == 2);
+    const std::string blob = "QAAAA" + std::string(694, 'A') + "=";
+    assert(adb_public_key_valid(blob + " workstation@user"));
+    assert(!adb_public_key_valid(blob));
+    assert(!adb_public_key_valid("not-a-key host"));
+    assert(!adb_public_key_valid(blob + " host\nsecond"));
+    auto authorizations = parse_adb_authorizations(
+        ("authorization=" + std::string(64, 'a') + "\thost-one@workstation\n"
+         "authorization=bad\tignored\n").c_str());
+    assert(authorizations.size() == 1);
+    assert(authorizations[0].fingerprint == std::string(64, 'a'));
+    assert(authorizations[0].label == "host-one@workstation");
 }
