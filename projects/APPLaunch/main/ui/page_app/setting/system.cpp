@@ -18,7 +18,17 @@ void Developer::append(UISetupPage &p, std::vector<MenuItem> &menu)
     MenuItem m;
     m.label = "Developer";
     bool adb_en = UISetupPage::config_get_int("adb_debug", 0) != 0;
-    m.sub_items = {{"ADB", true, adb_en, [page]() { page->developer_.toggle_adb(*page); }}};
+    m.sub_items = {
+        {"ADB", true, adb_en, [page]() { page->developer_.toggle_adb(*page); }},
+        {"Pair host key", false, false, [page]() { page->developer_.enter_pair_view(*page); }},
+        {"Authorizations: 0", false, false, nullptr},
+        {"Manage authorized hosts", false, false, [page]() { page->developer_.enter_revoke_view(*page); }},
+        {"Clear authorizations", false, false, [page]() {
+            page->enter_confirm_action("Clear ADB authorizations?", [page]() {
+                page->developer_.clear_authorizations(*page);
+            });
+        }},
+    };
     m.on_enter = [page]() { page->developer_.refresh_adb_status(*page); };
     menu.push_back(m);
 }
@@ -34,6 +44,14 @@ void Developer::toggle_adb(UISetupPage &page)
     }
     bool want_on = page.menu_items_[idx].sub_items[0].toggle_state;
     const bool previous = !want_on;
+    if (want_on) {
+        refresh_adb_status(page);
+        if (page.menu_items_[idx].sub_items[2].label == "Authorizations: 0") {
+            page.menu_items_[idx].sub_items[0].toggle_state = false;
+            enter_pair_view(page, true);
+            return;
+        }
+    }
     show_status(want_on ? "Enabling ADB" : "Disabling ADB", "Please wait...", Modal::BUSY);
     struct Context {
         Developer *developer;
@@ -96,7 +114,172 @@ bool Developer::refresh_adb_status(UISetupPage &page)
     AdbStatus status = parse_adb_status(out.c_str());
     if (!status.valid) return false;
     update_toggle(page, adb_state_after_failure(status, false), true);
+    char count[32];
+    snprintf(count, sizeof(count), "Authorizations: %d", status.authorizations);
+    page.menu_items_[idx].sub_items[2].label = count;
+    authorizations_ = parse_adb_authorizations(out.c_str());
+    if (authorization_selected_ >= static_cast<int>(authorizations_.size()))
+        authorization_selected_ = std::max(0, static_cast<int>(authorizations_.size()) - 1);
     return true;
+}
+
+void Developer::enter_pair_view(UISetupPage &page, bool enable_after_pair)
+{
+    enable_after_pair_ = enable_after_pair;
+    pair_key_.clear();
+    page.view_state_ = UISetupPage::ViewState::ADB_PAIR;
+    lv_obj_t *cont = page.ui_obj_["list_cont"];
+    lv_obj_clean(cont);
+
+    guide_label(cont, 8, 5, "Pair ADB host", 0xFFFFFF,
+                launcher_fonts().get("Montserrat-Bold.ttf", 14, LV_FREETYPE_FONT_STYLE_BOLD));
+    guide_label(cont, 8, 28, "Paste the host's adbkey.pub:", 0xAAAAAA, &lv_font_montserrat_10);
+    pair_input_label_ = guide_label(cont, 8, 48, "_", 0xFFFFFF, &lv_font_montserrat_10);
+    lv_obj_set_width(pair_input_label_, 304);
+    lv_label_set_long_mode(pair_input_label_, LV_LABEL_LONG_CLIP);
+    pair_hint_label_ = guide_label(cont, 8, 82, "OK: authorize   ESC: cancel", 0x777777,
+                                   &lv_font_montserrat_10);
+}
+
+void Developer::enter_revoke_view(UISetupPage &page)
+{
+    refresh_adb_status(page);
+    authorization_selected_ = 0;
+    page.view_state_ = UISetupPage::ViewState::ADB_AUTHORIZATIONS;
+    build_authorizations_view(page);
+}
+
+void Developer::build_authorizations_view(UISetupPage &page)
+{
+    lv_obj_t *cont = page.ui_obj_["list_cont"];
+    lv_obj_clean(cont);
+    guide_label(cont, 8, 3, "Authorized ADB hosts", 0xFFFFFF,
+                launcher_fonts().get("Montserrat-Bold.ttf", 13, LV_FREETYPE_FONT_STYLE_BOLD));
+    if (authorizations_.empty()) {
+        guide_label(cont, 8, 48, "No authorized hosts", 0x888888, &lv_font_montserrat_12);
+    } else {
+        const int first = std::max(0, authorization_selected_ - 1);
+        const int last = std::min(static_cast<int>(authorizations_.size()), first + 3);
+        for (int i = first; i < last; ++i) {
+            const int y = 27 + (i - first) * 28;
+            if (i == authorization_selected_)
+                guide_chip(cont, 4, y - 2, 312, 25, 0x2A2A2A, 0x444444, 2, 0);
+            std::string label = authorizations_[i].label;
+            if (label.size() > 25) label.resize(25);
+            guide_label(cont, 10, y, label.c_str(), i == authorization_selected_ ? 0xFFFFFF : 0xAAAAAA,
+                        &lv_font_montserrat_10);
+            std::string short_id = authorizations_[i].fingerprint.substr(0, 12);
+            guide_label(cont, 218, y, short_id.c_str(), 0x666666, &lv_font_montserrat_10);
+        }
+    }
+    guide_label(cont, 8, UISetupPage::LIST_H - 15,
+                authorizations_.empty() ? "ESC: back" : "OK: revoke   ESC: back",
+                0x777777, &lv_font_montserrat_10);
+}
+
+void Developer::handle_authorizations_key(UISetupPage &page, uint32_t key)
+{
+    if (key == KEY_ESC || key == KEY_LEFT) {
+        page.view_state_ = UISetupPage::ViewState::SUB;
+        page.build_sub_view();
+        return;
+    }
+    if (key == KEY_UP && authorization_selected_ > 0) {
+        --authorization_selected_;
+        build_authorizations_view(page);
+    } else if (key == KEY_DOWN && authorization_selected_ + 1 < static_cast<int>(authorizations_.size())) {
+        ++authorization_selected_;
+        build_authorizations_view(page);
+    } else if ((key == KEY_ENTER || key == KEY_RIGHT) && !authorizations_.empty()) {
+        const std::string fingerprint = authorizations_[authorization_selected_].fingerprint;
+        UISetupPage *page_ptr = &page;
+        page.enter_confirm_action("Revoke selected ADB host?", [this, page_ptr, fingerprint]() {
+            run_admin_action(*page_ptr, {"AdbRevoke", fingerprint}, "Revoking ADB host",
+                             "Removing this key...", false);
+        });
+    }
+}
+
+void Developer::handle_pair_key(UISetupPage &page, uint32_t key)
+{
+    if (key == KEY_ESC || key == KEY_LEFT) {
+        pair_key_.clear();
+        page.view_state_ = UISetupPage::ViewState::SUB;
+        page.build_sub_view();
+        return;
+    }
+    if (key == KEY_ENTER) {
+        submit_pairing(page);
+        return;
+    }
+    if (key == KEY_BACKSPACE) {
+        if (!pair_key_.empty()) pair_key_.pop_back();
+    } else if (page.cur_elm_ && page.cur_elm_->utf8[0] && pair_key_.size() < 2048) {
+        pair_key_ += page.cur_elm_->utf8;
+    }
+    if (pair_input_label_) {
+        std::string shown = pair_key_.size() > 40 ? "..." + pair_key_.substr(pair_key_.size() - 40) : pair_key_;
+        shown += "_";
+        lv_label_set_text(pair_input_label_, shown.c_str());
+    }
+}
+
+void Developer::submit_pairing(UISetupPage &page)
+{
+    if (!adb_public_key_valid(pair_key_)) {
+        if (pair_hint_label_) {
+            lv_label_set_text(pair_hint_label_, "Invalid adbkey.pub public key");
+            lv_obj_set_style_text_color(pair_hint_label_, lv_color_hex(0xEB5F5F), 0);
+        }
+        return;
+    }
+    run_admin_action(page, {"AdbAuthorize", pair_key_}, "Pairing ADB host",
+                     "Authorizing this key...", enable_after_pair_);
+}
+
+void Developer::clear_authorizations(UISetupPage &page)
+{
+    run_admin_action(page, {"AdbClearAuthorizations"}, "Clearing ADB keys",
+                     "Revoking every host...", false);
+}
+
+void Developer::run_admin_action(UISetupPage &page, std::list<std::string> args,
+                                 const char *title, const char *detail, bool enable_after)
+{
+    show_status(title, detail, Modal::BUSY);
+    struct Context { Developer *self; UISetupPage *page; std::weak_ptr<AsyncState> state; bool enable; };
+    auto *ctx = new (std::nothrow) Context{this, &page, async_state_, enable_after};
+    if (!ctx) { show_status("ADB authorization failed", "Out of memory", Modal::ERROR); return; }
+    uint64_t request_id = 0;
+    int rc = -1;
+    cp0_signal_system_admin_async(std::move(args), 60000, 30000,
+        [ctx](int result_code, int exit_code) {
+            std::unique_ptr<Context> owned(ctx);
+            auto state = ctx->state.lock();
+            if (!state || !state->alive) return;
+            state->request_id = 0;
+            auto result = static_cast<cp0_sudo_result_t>(result_code);
+            if (result != CP0_SUDO_RESULT_SUCCESS) {
+                ctx->self->show_result_error(result, exit_code);
+                return;
+            }
+            ctx->self->pair_key_.clear();
+            ctx->self->close_status();
+            ctx->page->view_state_ = UISetupPage::ViewState::SUB;
+            ctx->self->refresh_adb_status(*ctx->page);
+            ctx->page->build_sub_view();
+            if (ctx->enable) {
+                int idx = ctx->page->find_menu("Developer");
+                if (idx >= 0) ctx->page->menu_items_[idx].sub_items[0].toggle_state = true;
+                ctx->self->toggle_adb(*ctx->page);
+            }
+        }, [&](int code, uint64_t id) { rc = code; request_id = id; });
+    if (rc != 0) {
+        delete ctx;
+        show_status("ADB authorization failed", "Unable to start request", Modal::ERROR);
+        return;
+    }
+    async_state_->request_id = request_id;
 }
 
 void Developer::update_toggle(UISetupPage &page, bool enabled, bool save)

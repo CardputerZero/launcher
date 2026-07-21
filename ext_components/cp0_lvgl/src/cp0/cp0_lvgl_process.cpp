@@ -374,7 +374,7 @@ public:
         std::exit(0);
 #else
         std::printf("[CP0] shutdown\n");
-        const std::vector<std::string> argv = {"sudo", "shutdown", "-h", "now"};
+        const std::vector<std::string> argv = {"sudo", "poweroff"};
         run_argv(argv, 1);
 #endif
     }

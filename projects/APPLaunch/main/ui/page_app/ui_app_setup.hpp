@@ -154,6 +154,12 @@ public:
     void stop_usb_guide_anims();
     void handle_usb_guide_key(UISetupPage &page, uint32_t key);
     void handle_status_key(UISetupPage &page, uint32_t key);
+    void enter_pair_view(UISetupPage &page, bool enable_after_pair = false);
+    void enter_revoke_view(UISetupPage &page);
+    void build_authorizations_view(UISetupPage &page);
+    void handle_authorizations_key(UISetupPage &page, uint32_t key);
+    void handle_pair_key(UISetupPage &page, uint32_t key);
+    void clear_authorizations(UISetupPage &page);
     bool status_active() const { return status_overlay_ != nullptr; }
 private:
     struct AsyncState { bool alive = true; uint64_t request_id = 0; };
@@ -166,11 +172,20 @@ private:
     void close_status();
     void update_toggle(UISetupPage &page, bool enabled, bool save);
     void show_result_error(cp0_sudo_result_t result, int exit_code);
+    void submit_pairing(UISetupPage &page);
+    void run_admin_action(UISetupPage &page, std::list<std::string> args,
+                          const char *title, const char *detail, bool enable_after);
     std::shared_ptr<AsyncState> async_state_;
     Modal modal_ = Modal::NONE;
     lv_obj_t *status_overlay_ = nullptr;
     bool usb_guide_enabling_ = true;
     lv_obj_t *usb_guide_knob_ = nullptr;
+    std::string pair_key_;
+    lv_obj_t *pair_input_label_ = nullptr;
+    lv_obj_t *pair_hint_label_ = nullptr;
+    bool enable_after_pair_ = false;
+    std::vector<AdbAuthorization> authorizations_;
+    int authorization_selected_ = 0;
 };
 
 class RTC {
@@ -392,7 +407,7 @@ class UISetupPage : public AppPage
 {
     enum class ViewState { MAIN, SUB, VALUE_SELECT, WIFI_LIST, WIFI_PW, BT_LIST, BT_ALIAS,
                            SOUNDCARD_CARDS, SOUNDCARD_CONTROLS, SOUNDCARD_DETAIL,
-                           USB_GUIDE };
+                           USB_GUIDE, ADB_PAIR, ADB_AUTHORIZATIONS };
 
     using SubItem = setting::SubItem;
     using MenuItem = setting::MenuItem;
@@ -582,6 +597,10 @@ private:
         } else if (val_title_ == "Reboot?" || val_title_ == "Shutdown?" || val_title_ == "Run Setup?") {
             if (val_sel_idx_ == 0 && confirm_action_) confirm_action_();
             confirm_action_ = nullptr;
+        } else if (confirm_action_) {
+            auto action = std::move(confirm_action_);
+            confirm_action_ = nullptr;
+            if (val_sel_idx_ == 0) action();
         } else if (val_title_ == "Year" || val_title_ == "Month" || val_title_ == "Day" ||
                    val_title_ == "Hour" || val_title_ == "Minute" || val_title_ == "Second") {
             rtc_.apply_value(*this);
@@ -1206,6 +1225,9 @@ private:
         else if (view_state_ == ViewState::SOUNDCARD_CARDS) soundcard_.build_cards_view(*this);
         else if (view_state_ == ViewState::SOUNDCARD_CONTROLS) soundcard_.build_controls_view(*this);
         else if (view_state_ == ViewState::SOUNDCARD_DETAIL) soundcard_.build_detail_view(*this);
+        else if (view_state_ == ViewState::ADB_PAIR) developer_.enter_pair_view(*this);
+        else if (view_state_ == ViewState::ADB_AUTHORIZATIONS)
+            developer_.build_authorizations_view(*this);
     }
 
     // Bounce animation for orange arrows (small Y displacement + return)
@@ -1379,6 +1401,12 @@ private:
         case ViewState::USB_GUIDE:
             if (released) developer_.handle_usb_guide_key(*this, key);
             break;
+        case ViewState::ADB_PAIR:
+            if (released) developer_.handle_pair_key(*this, key);
+            break;
+        case ViewState::ADB_AUTHORIZATIONS:
+            if (released) developer_.handle_authorizations_key(*this, key);
+            break;
         }
     }
 
@@ -1500,6 +1528,7 @@ private:
         }
         case KEY_ESC:
         case KEY_LEFT:
+            confirm_action_ = nullptr;
             view_state_ = ViewState::SUB;
             transition_back_level();
             break;
