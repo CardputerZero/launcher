@@ -289,7 +289,7 @@ Related files:
 
 | File | Purpose |
 | --- | --- |
-| `ext_components/cp0_lvgl/include/compat/input_keys.h` | Compatible input key definitions |
+| `ext_components/cp0_lvgl/include/input_keys.h` | Compatible input key definitions |
 | `ext_components/cp0_lvgl/include/keyboard_input.h` | APPLaunch private input header |
 | `ext_components/cp0_lvgl/include/keyboard_input.h` | cp0_lvgl input interface |
 | `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_keyboard.c` | Device-side keyboard input implementation |
@@ -419,13 +419,13 @@ sudo apt-get install scons pkg-config libsdl2-dev libfreetype-dev libinput-dev l
 
 ### 7.3 Missing Cross-compilation Sysroot
 
-`linux_x86_cross_cp0_config_defaults.mk` uses `SDK/github_source/static_lib_v0.0.4` as the sysroot. If it does not exist, `SConstruct` tries to download `sdk_bsp.tar.gz`. This fails when network access is restricted.
+`linux_x86_cross_cp0_config_defaults.mk` uses `SDK/github_source/static_lib_v0.0.6` as the sysroot. If it does not exist, `SConstruct` tries to download `sdk_bsp.tar.gz`. This fails when network access is restricted.
 
 Check:
 
 ```bash
-ls -l ../../SDK/github_source/static_lib_v0.0.4
-cat ../../SDK/github_source/static_lib_v0.0.4/version 2>/dev/null || true
+ls -l ../../SDK/github_source/static_lib_v0.0.6
+cat ../../SDK/github_source/static_lib_v0.0.6/version 2>/dev/null || true
 ```
 
 If the download fails, prepare the sysroot ahead of time, or complete one build in a network-enabled environment to populate the cache.

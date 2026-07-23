@@ -81,18 +81,18 @@ struct app
 
 | Type | Construction | Launch function | Examples |
 | --- | --- | --- | --- |
-| Built-in page | `page_v<PageT>` / `append_page_app<PageT>` | ページを構築し `lv_disp_load_scr()` を呼ぶ | `CLI`, `GAME`, `SETTING`, `Compass` |
+| Built-in page | `page_v<PageT>` / `append_page_app<PageT>` | ページを構築し `cp0_lvgl_start_app_page()` を呼ぶ | `CLI`, `GAME`, `SETTING`, `LORA` |
 | Terminal command | `exec, terminal=true` | `launch_Exec_in_terminal()` が `UISTPage` を作成して `exec()` を呼ぶ | `Python`, `Terminal=true` の `.desktop` アプリ |
 | External process | `exec, terminal=false` | `launch_Exec()` | AppStore, Calculator |
 
 ## 5. Fixed Application Registration
 
-組み込みエントリは `launch.cpp` の `kBuiltinApps[]` として宣言されています。各エントリは、ラベル、アイコン、設定 key、Settings で設定可能か、常に有効かを持つ `AppDescriptor` を保持します。
+固定エントリは `builtin_app_registry.cpp` の `BUILTIN_APPS[]` として宣言されています。各エントリは descriptor、外部 command メタデータ、または組み込みページ appender を持ちます。
 
 代表的なエントリ:
 
 ```cpp
-constexpr BuiltinAppRegistration kBuiltinApps[] = {
+constexpr BuiltinAppRegistration BUILTIN_APPS[] = {
     {{"Python", "python_100.png", "app_Python", false, true}, "python3", true, false, false, nullptr},
     {{"STORE", "store_100.png", "app_Store", false, true},
      "/usr/share/APPLaunch/bin/M5CardputerZero-AppStore", false, true, true, nullptr},

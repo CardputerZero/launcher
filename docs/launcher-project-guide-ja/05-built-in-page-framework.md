@@ -93,7 +93,7 @@ public:
 };
 ```
 
-一部のゲームやフルスクリーンページは `AppPageRoot` を継承し、デフォルトの top bar を使わずに `320x170` 全体を自分で占有します。例として `UIGamePage`、`UICompassPage`、`UITankBattlePage` があります。
+一部のゲームは `AppPageRoot` を継承し、`320x170` 全体を占有します。現在の例は `UIGamePage` と `UITankBattlePage` です。
 
 ## 3. Top Bar and Status Refresh
 
@@ -180,13 +180,8 @@ if (navigate_home)
 | `UISTPage` | `ui_app_st.hpp` | `CLI` or terminal external command | `AppPage` | 端末エミュレータ。PTY read/write、ANSI/VT シーケンス、キーボード escape sequence をサポート |
 | `UIGamePage` | `ui_app_game.hpp` | `GAME` | `AppPageRoot` | Snake game。フルスクリーンのカスタム描画で LVGL timer により駆動 |
 | `UISetupPage` | `ui_app_setup.hpp` | `SETTING` | `AppPage` | システム設定、アプリ切り替え、brightness、volume、WiFi、camera resolution など |
-| `UICompassPage` | `ui_app_compass.hpp` | `Compass` | `AppPageRoot` | コンパスページ。sensor thread + UI timer |
 | `UIIpPanelPage` | `ui_app_ip_panel.hpp` | `IP_PANEL` | `AppPage` | ネットワークインターフェース/IP 情報リスト。毎秒更新 |
-| `UIFilePage` | `ui_app_file.hpp` | `FILE` | `AppPage` | ファイルブラウザ。ディレクトリ一覧と enter/back navigation |
 | `UISSHPage` | `ui_app_ssh.hpp` | `SSH` | `AppPage` | SSH パラメータ入力。接続後に `UISTPage` を埋め込む |
-| `UIMeshPage` | `ui_app_mesh.hpp` | `MESH` | `AppPage` | Mesh メッセージ一覧、入力 overlay、send/refresh |
-| `UIRecPage` | `ui_app_rec.hpp` | `REC` | Custom `rec_page` | 録音/再生/ファイル一覧と非同期リソース管理 |
-| `UICameraPage` | `ui_app_camera.hpp` | `CAMERA` | `AppPage` | カメラ preview、gallery、capture、status page |
 | `UILoraPage` | `ui_app_lora.hpp` | `LORA` | `AppPage` | LoRa 業務ページ。内部に C スタイルの create/destroy インターフェースも含む |
 | `UITankBattlePage` | `ui_app_tank_battle.hpp` | `TANK` | `AppPageRoot` | Tank mini-game。フルスクリーン、固定キー mapping |
 
@@ -194,10 +189,10 @@ if (navigate_home)
 
 ## 6. Page Registration and Display Order
 
-組み込みエントリは `launch.cpp` の `kBuiltinApps[]` で宣言されます。最初の 5 つの有効なエントリが、まず 5 つのホームカルーセルスロットを初期化します。
+固定エントリは `builtin_app_registry.cpp` の `BUILTIN_APPS[]` で宣言されます。カルーセルは現在 index を中心に前後 2 件を参照し、登録数に合わせて index を循環正規化します。
 
 ```cpp
-constexpr BuiltinAppRegistration kBuiltinApps[] = {
+constexpr BuiltinAppRegistration BUILTIN_APPS[] = {
     {{"Python", "python_100.png", "app_Python", false, true}, "python3", true, false, false, nullptr},
     {{"STORE", "store_100.png", "app_Store", false, true},
      "/usr/share/APPLaunch/bin/M5CardputerZero-AppStore", false, true, true, nullptr},
@@ -207,13 +202,12 @@ constexpr BuiltinAppRegistration kBuiltinApps[] = {
 };
 ```
 
-組み込みページの表示可否は現在 `kBuiltinApps[]` と `AppDescriptor.config_key` によって駆動されます。`Launch::rebuild_builtin_apps()` は各 descriptor を追加する前に `launcher_app_registry_is_enabled()` を呼び、Settings の変更は `launcher_app_registry_set_enabled()` の後に `Launch::applications_reload()` を呼びます。
+組み込みページの表示可否は `BUILTIN_APPS[]` と `AppDescriptor.config_key` によって駆動されます。`Launch::rebuild_builtin_apps()` は registry に有効なエントリの追加を委譲します。
 
 規約:
 
 - `Store`、`CLI`、`Game`、`Setting` は settings page で常に有効で、無効化できません。
-- `Compass` は現在 `launch.cpp` で無条件に追加され、`UISetupPage` の Launcher toggle list では制御されません。
-- `IP_PANEL`、`FILE`、`SSH`、`MESH`、`REC`、`CAMERA`、`LORA`、`TANK` などのページは Linux デバイスビルドでのみ追加されます。SDL ビルドでは `#if defined(__linux__) && !defined(HAL_PLATFORM_SDL)` により制限されます。
+- `LORA` は全プラットフォームの toggle 対象です。`IP_PANEL`、`SSH`、`TANK` は Linux 真機ビルドでのみ登録されます。
 - 動的 `.desktop` アプリケーションは組み込みページの後にスキャンされ追加されます。ディレクトリ変更は watcher により 3 秒ごとに確認されます。
 
 ## 7. Page Code Skeleton

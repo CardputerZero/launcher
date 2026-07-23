@@ -237,34 +237,36 @@ Loading rules:
 - `TryExec` is currently not used by `applications_load()`.
 - The `applications/` directory is watched. It is polled every 3 seconds, and changes clear dynamic apps and rescan the directory.
 
-## 6. Configuration API
+## 6. Configuration API and Persistence Paths
 
-The configuration interface is declared in `ext_components/cp0_lvgl/include/cp0_lvgl_app.h`:
+The current configuration service is called through `cp0_signal_config_api`. It supports the `Init`, `Save`, `GetInt`, `SetInt`, `GetStr`, and `SetStr` commands. The service is implemented in `ext_components/cp0_lvgl/src/cp0_config_service.cpp`; the device and SDL backends register the signal in `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_config.cpp` and `ext_components/cp0_lvgl/src/sdl/sdl_lvgl_config.cpp`.
 
-```c
-void cp0_config_init(void);
-int cp0_config_get_int(const char *key, int default_val);
-void cp0_config_set_int(const char *key, int val);
-const char *cp0_config_get_str(const char *key, const char *default_val);
-void cp0_config_set_str(const char *key, const char *val);
-void cp0_config_save(void);
-```
-
-Usage conventions:
-
-- Always provide a default value when reading, so pages keep running if a setting is missing.
-- Call `cp0_config_save()` after writing to persist changes.
-- The device-side implementation is in `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_config.cpp`.
-- The SDL compatibility implementation is in `ext_components/cp0_lvgl/src/sdl/sdl_lvgl_config.cpp`.
-
-Typical usage:
+Typical read:
 
 ```cpp
-int volume = cp0_config_get_int("volume", cp0_volume_read());
-cp0_volume_write(new_val);
-cp0_config_set_int("volume", new_val);
-cp0_config_save();
+int value = default_value;
+cp0_signal_config_api(
+    {"GetInt", key, std::to_string(default_value)},
+    [&](int code, std::string data) {
+        if (code == 0) value = std::stoi(data);
+    });
 ```
+
+A write must call `SetInt` / `SetStr` and then `Save`. The current settings page and application registry restore the previous value when saving fails:
+
+```cpp
+cp0_signal_config_api({"SetInt", key, std::to_string(value)}, set_callback);
+cp0_signal_config_api({"Save"}, save_callback);
+```
+
+Always provide a default when reading. `SetInt` / `SetStr` only update the in-memory entries; persistence is complete only after `Save` succeeds.
+
+| Runtime | Path selection |
+| --- | --- |
+| Device | `$HOME/.config/cardputerzero/config.json`; falls back to `/root/.config/cardputerzero/config.json` when `HOME` is empty |
+| SDL | `$APPLAUNCH_SDL_CONFIG_DIR/config.json`, then `$XDG_CONFIG_HOME/applaunch-sdl/config.json`, then `$HOME/.config/applaunch-sdl/config.json`; if none are available, `sdl_config/config.json` under the runtime data directory |
+
+Both backends write a temporary file, call `fsync()`, and rename it over the destination.
 
 ## 7. Configuration Key List
 
@@ -274,36 +276,30 @@ The `Launcher` menu in `UISetupPage` saves `app_<Name>`:
 
 | Configuration key | Default | Meaning | Notes |
 | --- | --- | --- | --- |
-| `app_Python` | `1` | Python entry display toggle | Visible in settings, but Python is fixed in `launch.cpp`; currently this toggle does not affect fixed entries |
+| `app_Python` | `1` | Python entry | always-on, cannot be disabled |
 | `app_Store` | `1` | Store entry | always-on, cannot be disabled |
 | `app_CLI` | `1` | CLI entry | always-on, cannot be disabled |
 | `app_Game` | `1` | GAME entry | always-on, cannot be disabled |
 | `app_Setting` | `1` | SETTING entry | always-on, cannot be disabled |
-| `app_Game` | `1` | GAME built-in page | Read by `launch.cpp` |
-| `app_Math` | `1` | Calculator external application | Read by `launch.cpp` |
-| `app_IP_Panel` | `1` | IP_PANEL built-in page | Read under Linux non-SDL builds |
-| `app_File` | `1` | FILE built-in page | Read under Linux non-SDL builds |
-| `app_SSH` | `1` | SSH built-in page | Read under Linux non-SDL builds |
-| `app_Mesh` | `1` | MESH built-in page | Read under Linux non-SDL builds |
-| `app_Rec` | `1` | REC built-in page | Read under Linux non-SDL builds |
-| `app_Camera` | `1` | CAMERA built-in page | Read under Linux non-SDL builds |
-| `app_LoRa` | `1` | LORA built-in page | Read under Linux non-SDL builds |
-| `app_Tank` | `1` | TANK built-in page | Read under Linux non-SDL builds |
+| `app_Math` | `1` | Calculator external application | Configurable |
+| `app_LoRa` | `1` | LORA built-in page | Configurable and registered for every build target |
+| `app_IP_Panel` | `1` | IP_PANEL built-in page | Configurable; registered only in Linux non-SDL builds |
+| `app_SSH` | `1` | SSH built-in page | Configurable; registered only in Linux non-SDL builds |
+| `app_Tank` | `1` | TANK built-in page | Configurable; registered only in Linux non-SDL builds |
 
-Note: `Compass` currently has no corresponding `app_Compass` setting and is added unconditionally by `launch.cpp`.
+These entries come from `BUILTIN_APPS[]` in `projects/APPLaunch/main/ui/builtin_app_registry.cpp`. Entries with `configurable=false` or `always_on=true` are always enabled; other entries default to enabled when their key is absent.
 
 ### 7.2 System and Page Configuration
 
 | Configuration key | Read/write location | Meaning |
 | --- | --- | --- |
-| `brightness` | `UISetupPage`, `ext_components/cp0_lvgl/src/commount.c` | Backlight brightness value; restored at startup and written by the settings page |
-| `volume` | `UISetupPage`, `commount.c` | System volume; restored at startup and written by the settings page |
+| `brightness` | `UISetupPage`, `ext_components/cp0_lvgl/src/commount.cpp` | Backlight brightness value; restored at startup and written by the settings page |
+| `volume` | `UISetupPage`, `commount.cpp` | System volume; restored at startup and written by the settings page |
 | `dark_time` | `UISetupPage` | Screen-off timeout, options are `0/10/30/60/300` seconds |
-| `cam_resolution` | `UISetupPage`, camera page may read it | Camera resolution option index |
-| `startup_mode` | `UISetupPage` | Startup mode, currently `Launcher` / `CLI` |
-| `extport_usb` | `UISetupPage` | Expansion-port USB toggle |
-| `extport_5vout` | `UISetupPage` | Expansion-port 5V output toggle |
-| `run_as_user` | `cp0_lvgl_process.cpp`, `cp0_lvgl_pty.cpp` | User configuration for dropping privileges in external processes / PTY commands |
+| `bt_named_only` | Bluetooth settings | Whether to show only named Bluetooth devices; defaults to `1` |
+| `run_as_user` | `cp0_process_commands.cpp`, `cp0_sudo_async.cpp` | User configuration for dropping privileges in external processes / PTY commands |
+
+`extport_usb` and `extport_5vout` are GPIO names passed to `cp0_signal_settings_api`, not configuration-file keys.
 
 ### 7.3 Temporary Business Inputs
 
@@ -311,37 +307,33 @@ The following are mostly in-memory page state and are not persisted by default:
 
 - Host/Port/User defaults in `UISSHPage` are initialized in the constructor and are not written to configuration.
 - The `UIMeshPage` message input buffer only exists in page memory.
-- The current path and selected row in `UIFilePage` only exist in page memory.
 - The network interface list in `UIIpPanelPage` is refreshed every second from `cp0_network_list()`.
 
 ## 8. Settings-Page Configuration Write Paths
 
 `UISetupPage` is where configuration keys are concentrated. Typical functions:
 
-- `menu_init()`: builds the settings menu and reads `app_*`, `extport_*`.
-- `save_app_toggle()`: saves launcher application toggles.
-- `enter_brightness_adjust()` / `apply_value_selection()`: applies brightness, volume, screen-off timeout, resolution, and startup mode.
-- `apply_volume()`: writes system volume and saves `volume`.
+- `menu_init()`: builds the settings menu through the settings controllers.
+- `launcher_app_registry_set_enabled()`: saves configurable `app_*` toggles and restores the previous value when saving fails.
+- `Screen::apply_value()`: applies and saves brightness and screen-off timeout.
+- `Speaker::apply_value()`: writes system volume and saves `volume`.
+- `Bluetooth::toggle_named_only()`: saves `bt_named_only`.
 
 Example:
 
 ```cpp
-void save_app_toggle(int idx)
+bool launcher_app_registry_set_enabled(const AppDescriptor &desc, bool enabled)
 {
-    std::size_t app_count = 0;
-    const AppDescriptor *apps = launcher_app_registry_entries(&app_count);
-    const AppDescriptor &desc = apps[idx];
-    bool enabled = menu_items_[0].sub_items[idx].toggle_state;
-    launcher_app_registry_set_enabled(desc, enabled);
-    config_save();
+    if (desc.always_on || !desc.configurable) return true;
+    // SetInt, Save, and restore the old value if either step fails.
 }
 ```
 
 When changing configuration keys, check all of the following in sync:
 
-- `AppDescriptor` entries in `kBuiltinApps[]`.
-- `launcher_app_registry_entries()` / `save_app_toggle()` in `UISetupPage`.
-- `launcher_app_registry_is_enabled()` in `launch.cpp`.
+- `AppDescriptor` entries in `BUILTIN_APPS[]`.
+- The Launcher settings controller that uses `launcher_app_registry_entries()`.
+- `launcher_app_registry_is_enabled()` / `launcher_app_registry_set_enabled()` in `app_registry.cpp`.
 - Documentation and default configuration.
 
 ## 9. Resource Naming Recommendations
@@ -358,6 +350,6 @@ When changing configuration keys, check all of the following in sync:
 - `cp0_file_path()` classifies only by extension and does not check whether the file exists.
 - The `.desktop` `Icon` value does not automatically call `cp0_file_path()`; use a path that LVGL can read directly, or keep it consistent with existing templates.
 - If a new resource is used on the device side, confirm that packaging scripts include `projects/APPLaunch/APPLaunch/share/...` in the install package.
-- If `cp0_config_save()` is forgotten after writing configuration, the value will be lost after reboot.
-- `app_*` toggles affect the list the next time `Launch` is constructed; changing them at runtime may not immediately update the fixed home list, depending on whether a rebuild/restart is triggered.
+- If `Save` does not succeed after `SetInt` / `SetStr`, the value will be lost after reboot.
+- Changing an `app_*` toggle notifies Launcher to rebuild the application list; always-on entries are unaffected by toggle writes.
 - `run_as_user` affects the execution identity of external processes and PTY commands. Check this setting when debugging permission issues.
