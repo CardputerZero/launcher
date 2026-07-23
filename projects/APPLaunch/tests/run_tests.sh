@@ -46,6 +46,7 @@ ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
 "$build_dir/test_developer_page_model"
 "$(dirname "$0")/test_cardputer_adb.sh"
 python3 "$(dirname "$0")/test_adb_packaging.py"
+python3 "$(dirname "$0")/test_appstore_packaging.py"
 ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     -I"$(dirname "$0")/../main/include" \
     -I"$(dirname "$0")/../../../ext_components/cp0_lvgl/include" \
