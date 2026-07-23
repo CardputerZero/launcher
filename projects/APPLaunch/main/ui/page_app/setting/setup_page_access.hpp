@@ -79,6 +79,7 @@ public:
     int audio_volume_read() const;
     int audio_volume_write(int value) const;
     bool gpio_set(const char *name, int value) const;
+    int gpio_get(const char *name) const;
 
     void set_view(SetupViewState view);
     bool enter_help();

@@ -95,6 +95,11 @@ bool SetupPageAccess::gpio_set(const char *name, int value) const
     return UISetupPage::gpio_set(name, value);
 }
 
+int SetupPageAccess::gpio_get(const char *name) const
+{
+    return UISetupPage::gpio_get(name);
+}
+
 void SetupPageAccess::set_view(SetupViewState view)
 {
     page_.model_.view = view;

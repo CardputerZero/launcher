@@ -80,6 +80,20 @@ bool UISetupPage::gpio_set(const char *name, int val)
     return succeeded;
 }
 
+int UISetupPage::gpio_get(const char *name)
+{
+    if (!name || !*name) return -1;
+    int value = -1;
+    cp0_signal_settings_api({"GpioGet", std::string(name)},
+                            [&](int code, std::string data) {
+                                int parsed = -1;
+                                if (code == 0 && setup_values::parse_nonnegative_int(data, parsed) &&
+                                    (parsed == 0 || parsed == 1))
+                                    value = parsed;
+                            });
+    return value;
+}
+
 int UISetupPage::audio_volume_read()
 {
     int volume = -1;

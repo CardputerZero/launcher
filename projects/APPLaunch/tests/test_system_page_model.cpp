@@ -37,19 +37,8 @@ int main()
     assert(std::string(update_request(UpdateAction::UpdateLauncher)) ==
            "UpdateLauncherBackground");
 
-    auto toggle = extport_toggle_outcome(false, true, true, true, true);
-    assert(toggle.committed && toggle.value);
-    assert(!toggle.restore_gpio && !toggle.restore_config);
-
-    toggle = extport_toggle_outcome(true, false, false, false, false);
-    assert(!toggle.committed && toggle.value);
-    assert(!toggle.restore_gpio && !toggle.restore_config);
-
-    toggle = extport_toggle_outcome(false, true, true, false, false);
-    assert(!toggle.committed && !toggle.value);
-    assert(toggle.restore_gpio && !toggle.restore_config);
-
-    toggle = extport_toggle_outcome(true, false, true, true, false);
-    assert(!toggle.committed && toggle.value);
-    assert(toggle.restore_gpio && toggle.restore_config);
+    assert(extport_toggle_value(false, true, true));
+    assert(!extport_toggle_value(true, false, true));
+    assert(extport_toggle_value(true, false, false));
+    assert(!extport_toggle_value(false, true, false));
 }

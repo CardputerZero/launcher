@@ -45,17 +45,9 @@ const char *update_request(UpdateAction action)
     return "";
 }
 
-ExtPortToggleOutcome extport_toggle_outcome(bool previous,
-                                            bool desired,
-                                            bool gpio_succeeded,
-                                            bool config_set_succeeded,
-                                            bool save_succeeded)
+bool extport_toggle_value(bool previous, bool desired, bool gpio_succeeded)
 {
-    const bool committed = gpio_succeeded && config_set_succeeded && save_succeeded;
-    return {committed,
-            committed ? desired : previous,
-            gpio_succeeded && !committed,
-            config_set_succeeded && !committed};
+    return gpio_succeeded ? desired : previous;
 }
 
 } // namespace system_page
