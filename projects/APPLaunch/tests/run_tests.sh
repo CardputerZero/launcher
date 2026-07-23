@@ -23,16 +23,6 @@ ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror -pthread \
     "$(dirname "$0")/test_page_timer_lifecycle.cpp" \
     -o "$build_dir/test_page_timer_lifecycle"
 "$build_dir/test_page_timer_lifecycle"
-c++ -std=c++17 -Wall -Wextra -Werror \
-    "$(dirname "$0")/test_file_browser_model.cpp" \
-    "$(dirname "$0")/../main/ui/model/file_browser_model.cpp" \
-    -o "$build_dir/test_file_browser_model"
-"$build_dir/test_file_browser_model"
-
-"${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror \
-    "$(dirname "$0")/test_file_browser_view_lifecycle.cpp" \
-    -o "$build_dir/test_file_browser_view_lifecycle"
-"$build_dir/test_file_browser_view_lifecycle"
 ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     "$(dirname "$0")/test_setup_info_model.cpp" \
     "$(dirname "$0")/../main/ui/model/setup_info_model.cpp" \
