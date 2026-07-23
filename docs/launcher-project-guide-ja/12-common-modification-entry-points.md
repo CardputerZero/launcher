@@ -12,7 +12,7 @@ git status --short
 | Task | Main files/directories | Key points | Verification |
 | --- | --- | --- | --- |
 | 組み込みページを追加 | `projects/APPLaunch/main/ui/page_app/` | `ui_app_xxx.hpp` を作成し、`AppPage` を継承 | SDL2 でビルドし、ページを開く |
-| ホームに組み込みページを登録 | `projects/APPLaunch/main/ui/launch.cpp` | `kBuiltinApps[]` に `append_page_app<PageT>` エントリを追加 | ホームカルーセルにアイコンが表示される |
+| ホームに組み込みページを登録 | `projects/APPLaunch/main/ui/builtin_app_registry.cpp` | `BUILTIN_APPS[]` に `append_page_app<PageT>` エントリを追加 | ホームカルーセルにアイコンが表示される |
 | 組み込みページ表示トグルを制御 | `projects/APPLaunch/main/ui/page_app/ui_app_setup.hpp`, `projects/APPLaunch/main/ui/launch.cpp` | Settings が `AppDescriptor.config_key` を書き、Launcher が `launcher_app_registry_is_enabled()` を読む | Settings で切替後、再起動またはホーム更新 |
 | 外部 `.desktop` アプリを追加 | `projects/APPLaunch/APPLaunch/applications/` | ファイル名は `.desktop` で終わり、`Name` と `Exec` を含む必要がある | skip ログなしでホームに表示される |
 | アイコンを追加 | `projects/APPLaunch/APPLaunch/share/images/` | 組み込みページは `img_path()`、`.desktop` は `Icon=share/images/xxx.png` を使う | `missing/unreadable` ログがない |
@@ -60,21 +60,16 @@ git status --short
 | --- | --- | --- | --- |
 | SETTING | `projects/APPLaunch/main/ui/page_app/ui_app_setup.hpp` | `SETTING` / `setting_100.png` | Settings ページ。app toggles、brightness、volume、WiFi、camera などを含む |
 | GAME | `projects/APPLaunch/main/ui/page_app/ui_app_game.hpp` | `GAME` / `game_100.png` | 組み込みゲームエントリ |
-| Compass | `projects/APPLaunch/main/ui/page_app/ui_app_compass.hpp` | `Compass` / `compass_needle_80.png` | Compass ページ |
 | IP_PANEL | `projects/APPLaunch/main/ui/page_app/ui_app_ip_panel.hpp` | `IP_PANEL` / `ip_panel_100.png` | IP 情報パネル。デバイスで有効 |
-| FILE | `projects/APPLaunch/main/ui/page_app/ui_app_file.hpp` | `FILE` / `file_100.png` | File ページ。デバイスで有効 |
 | SSH | `projects/APPLaunch/main/ui/page_app/ui_app_ssh.hpp` | `SSH` / `ssh_100.png` | SSH ページ。デバイスで有効 |
-| MESH | `projects/APPLaunch/main/ui/page_app/ui_app_mesh.hpp` | `MESH` / `mesh_100.png` | Mesh ページ。デバイスで有効 |
-| REC | `projects/APPLaunch/main/ui/page_app/ui_app_rec.hpp` | `REC` / `rec_100.png` | 録音ページ。デバイスで有効 |
-| CAMERA | `projects/APPLaunch/main/ui/page_app/ui_app_camera.hpp` | `CAMERA` / `camera_100.png` | Camera ページ。デバイスで有効 |
 | LORA | `projects/APPLaunch/main/ui/page_app/ui_app_lora.hpp` | `LORA` / `lora_100.png` | LoRa ページ。デバイスで有効 |
 | TANK | `projects/APPLaunch/main/ui/page_app/ui_app_tank_battle.hpp` | `TANK` / `tank_100.png` | Tank game。デバイスで有効 |
 | CLI/terminal | `projects/APPLaunch/main/ui/page_app/ui_app_st.hpp` | `CLI` / `cli_100.png` | `UISTPage`。bash、python、`Terminal=true` アプリで使用 |
 
-固定エントリは `kBuiltinApps[]` で宣言されます:
+固定エントリは `builtin_app_registry.cpp` の `BUILTIN_APPS[]` で宣言されます:
 
 ```cpp
-constexpr BuiltinAppRegistration kBuiltinApps[] = {
+constexpr BuiltinAppRegistration BUILTIN_APPS[] = {
     {{"Python", "python_100.png", "app_Python", false, true}, "python3", true, false, false, nullptr},
     {{"STORE", "store_100.png", "app_Store", false, true},
      "/usr/share/APPLaunch/bin/M5CardputerZero-AppStore", false, true, true, nullptr},
@@ -140,18 +135,19 @@ Type=Application
 | Volume | SETTING -> Speaker -> Volume | `volume` | `ui_app_setup.hpp`, `cp0_volume_read/write()` |
 | Camera resolution | SETTING -> Camera -> Resolution | `cam_resolution` | `ui_app_setup.hpp`。camera page が読み取る |
 | Startup mode | Settings page の関連選択 | `startup_mode` | `ui_app_setup.hpp` |
-| USB extension port | SETTING -> ExtPort | `extport_usb` | `ui_app_setup.hpp` |
-| 5V output | SETTING -> ExtPort | `extport_5vout` | `ui_app_setup.hpp` |
+| Bluetooth named devices only | SETTING -> Bluetooth | `bt_named_only` | `setting/bluetooth.cpp`, `setting/bluetooth_service.cpp` |
+| USB extension port | SETTING -> ExtPort | settings GPIO name `extport_usb` | `cp0_settings_policy.cpp` |
+| 5V output | SETTING -> ExtPort | settings GPIO name `extport_5vout` | `cp0_settings_policy.cpp` |
 | External app runtime user | 手動設定 | `run_as_user` | `cp0_lvgl_process.cpp`, `cp0_lvgl_pty.cpp` |
 
 設定実装:
 
 | File | Description |
 | --- | --- |
-| `ext_components/cp0_lvgl/include/cp0_lvgl_app.h` | `cp0_config_get_int/set_int/get_str/set_str/save` の宣言 |
-| `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_config.cpp` | デバイス側設定 read/write。`/var/lib/applaunch/settings` に保存 |
-| `ext_components/cp0_lvgl/src/sdl/sdl_lvgl_config.cpp` | SDL2 互換実装 |
-| `ext_components/cp0_lvgl/src/commount.c` | 起動時に保存済み輝度と音量を適用 |
+| `ext_components/cp0_lvgl/src/cp0_config_service.cpp` | `cp0_signal_config_api` の `Init/Save/GetInt/SetInt/GetStr/SetStr` commands |
+| `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_config.cpp` | デバイス設定を `~/.config/cardputerzero/config.json` に保存 |
+| `ext_components/cp0_lvgl/src/sdl/sdl_lvgl_config.cpp` | SDL config directory と環境変数の優先順位 |
+| `projects/APPLaunch/main/ui/page_app/ui_app_setup.cpp` | APPLaunch config signal helper |
 
 ## 7. ビルド入口表
 

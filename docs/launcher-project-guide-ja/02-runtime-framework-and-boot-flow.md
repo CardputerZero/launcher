@@ -4,20 +4,17 @@
 
 ## 1. Runtime Framework Overview
 
-APPLaunch は単一プロセスの LVGL アプリケーションです。メインスレッドがプラットフォーム初期化、UI オブジェクト作成、最初のフレーム更新を行い、その後 `lv_timer_handler()` によって駆動されるループに入ります。
+APPLaunch は単一プロセスの LVGL アプリケーションです。プロセス入口は APPLaunch 固有のループを持たず、`cp0_lvgl` の共有 runner `cp0_lvgl_run()` に setup/teardown callback を渡します。
 
 ```text
 APPLaunch process
 ├── main.cpp
-│   ├── lv_init()
-│   ├── cp0_lvgl_init()
-│   ├── lv_event_register_id()
-│   ├── ui_init()
-│   └── while (1)
-│       ├── APPLaunch_lock()
-│       ├── lv_timer_handler()
-│       └── usleep(5000)
-└── ui_init()
+│   └── cp0_lvgl_run(options)
+│       ├── lv_init() / cp0_lvgl_init()
+│       ├── setup callback: launcher_ui::init() / ui_screensaver_init()
+│       ├── lv_timer_handler() + semaphore wait
+│       └── teardown callback: launcher_ui::deinit()
+└── launcher_ui::init()
     └── LauncherUiRuntime()
         ├── create_display()
         ├── Create Launch / UILaunchPage bound objects
@@ -26,7 +23,7 @@ APPLaunch process
 
 主要な特徴:
 
-- LVGL 初期化とプラットフォーム適応初期化は `main()` で一度だけ実行されます。
+- LVGL 初期化とプラットフォーム適応初期化は共有 runner で一度だけ実行されます。
 - ホーム UI は `LauncherUiRuntime` の制御下で作成され、実際のオブジェクトは `UILaunchPage::create_screen()` で作られます。
 - `Launch` / `Launch` は、アプリケーションリスト、起動方式、ステータスバー更新、動的アプリケーションディレクトリの監視を担当します。
 - `ui_init()` の直後に `lv_obj_invalidate()` + `lv_refr_now(NULL)` で最初のホームフレームを強制更新し、起動後の自然な更新を待つ間に黒画面が出ることを避けます。
@@ -35,7 +32,8 @@ APPLaunch process
 
 | Path | Role |
 | --- | --- |
-| `projects/APPLaunch/main/src/main.cpp` | プロセスエントリポイント、LVGL メインループ、外部アプリケーション実行時ロック検出 |
+| `projects/APPLaunch/main/src/main.cpp` | runner options と APPLaunch の setup/teardown callback |
+| `ext_components/cp0_lvgl/src/cp0_lvgl_app_runner.cpp` | LVGL/プラットフォーム初期化、timer loop、semaphore wait、service shutdown |
 | `projects/APPLaunch/main/ui/ui.cpp` | `ui_init()`、グローバルな `LauncherUiRuntime home` を作成する |
 | `projects/APPLaunch/main/ui/launcher_ui_runtime.cpp` | LVGL テーマを設定し、ホーム画面を作成し、Launch 連携オブジェクトを作成する |
 | `projects/APPLaunch/main/ui/ui_launch_page.cpp` | ホーム画面、起動 GIF、ホーム loading、入力グループ |
@@ -49,35 +47,25 @@ APPLaunch process
 ```cpp
 int main(void)
 {
-    static const std::string default_lock_file = cp0_file_path("lock_file");
-    lock_file = default_lock_file.c_str();
-
-    lv_init();
-    cp0_lvgl_init();
-
-    if (LV_EVENT_KEYBOARD == 0)
-        LV_EVENT_KEYBOARD = lv_event_register_id();
-
-    ui_init();
-
-    lv_obj_invalidate(lv_scr_act());
-    lv_refr_now(NULL);
-
-    while (1) {
-        APPLaunch_lock();
-        lv_timer_handler();
-        usleep(5000);
-    }
+    Cp0LvglRunOptions options;
+    options.setup = []() {
+        if (LV_EVENT_KEYBOARD == 0) LV_EVENT_KEYBOARD = lv_event_register_id();
+        launcher_ui::init();
+        ui_screensaver_init();
+        return true;
+    };
+    options.teardown = []() { launcher_ui::deinit(); };
+    return cp0_lvgl_run(std::move(options));
 }
 ```
 
 ### 3.1 Initialization Phase
 
-1. `cp0_file_path("lock_file")` が実行時ロックファイルのパスを解決します。
-2. `lv_init()` が LVGL コアオブジェクト、メモリ、タイマー、display/indev 抽象を初期化します。
-3. `cp0_lvgl_init()` がプラットフォーム層を初期化します。display、入力、framebuffer/SDL、システムシグナル、その他の機能が対象です。
-4. `lv_event_register_id()` がカスタムキーボードイベント `LV_EVENT_KEYBOARD` を登録します。
-5. `ui_init()` が APPLaunch 独自の UI 構築フローに入ります。
+1. runner が `lv_init()` と `cp0_lvgl_init()` を実行します。
+2. default display が存在することを確認した後、APPLaunch の setup callback を呼びます。
+3. setup が `LV_EVENT_KEYBOARD` を登録し、`launcher_ui::init()` と `ui_screensaver_init()` を実行します。
+4. runner が最初の invalidate/refresh を行い、`lv_timer_handler()` を駆動します。timer がない場合は semaphore、ある場合は期限付き wait を使います。
+5. 終了時は teardown 後に sudo/RPC/camera/IMU/audio/PTY/input/WiFi/LoRa/battery/LVGL を順序どおり停止します。
 
 ### 3.2 First-Frame Refresh
 
@@ -90,20 +78,19 @@ lv_refr_now(NULL);
 
 このステップの目的は通常の更新ではなく、現在のアクティブ画面の内容を framebuffer/SDL window へ強制的に flush することです。ホームオブジェクトが作成された直後に、後続の `lv_timer_handler()` だけに頼ると一瞬黒画面が見える場合があります。最初のフレームを強制することで、起動時の挙動をより決定的にします。
 
-### 3.3 Main Loop
+### 3.3 Shared Runner Loop
 
-メインループは 5 ms 間隔で動作します。
+ループは固定 5 ms polling ではなく、`lv_timer_handler()` の次回期限を使います。
 
 ```text
 Each loop iteration
-  -> APPLaunch_lock()
   -> lv_timer_handler()
-  -> sleep 5ms
+  -> no timer: wait on semaphore
+  -> timer ready: timed wait until next deadline
 ```
 
-- `APPLaunch_lock()` は外部アプリケーションがフォアグラウンドを占有しているか確認します。
 - `lv_timer_handler()` は LVGL タイマー、アニメーション、入力イベント、再描画を駆動します。
-- `usleep(5000)` は CPU 使用率と更新間隔を制御します。
+- `cp0_lvgl_wake()` は resume callback から semaphore を post し、新しい timer や作業をすぐに処理します。
 
 ## 4. From `ui_init()` to Home Object Creation
 
@@ -268,11 +255,11 @@ cp0_signal_audio_api_play_asset("startup.mp3");
 
 ```text
 main()
-  -> cp0_file_path("lock_file")
-  -> lv_init()
-  -> cp0_lvgl_init()
-  -> register LV_EVENT_KEYBOARD
-  -> ui_init()
+  -> cp0_lvgl_run(options)
+      -> lv_init()
+      -> cp0_lvgl_init()
+      -> setup: register LV_EVENT_KEYBOARD
+      -> setup: launcher_ui::init()
       -> new LauncherUiRuntime
           -> create_display()
               -> new LauncherFonts
@@ -292,54 +279,16 @@ main()
                   -> Create status bar and application directory watch timers
               -> launch_page_->init_input_group()
               -> load_home_screen() or start_startup_gif()
-  -> lv_obj_invalidate(lv_scr_act())
-  -> lv_refr_now(NULL)
-  -> while forever
-      -> APPLaunch_lock()
-      -> lv_timer_handler()
-      -> usleep(5000)
+      -> lv_obj_invalidate(lv_screen_active())
+      -> lv_refr_now(nullptr)
+      -> lv_timer_handler() / semaphore wait
+      -> teardown: launcher_ui::deinit()
+      -> shared service shutdown
 ```
 
-## 8. External Application Runtime Lock `APPLaunch_lock()`
+## 8. External Application Foreground Handoff
 
-`APPLaunch_lock()` は、APPLaunch と外部の独立プロセスの間で、フォアグラウンド描画の関係を調整します。
-
-```cpp
-void APPLaunch_lock()
-{
-    int holder_pid = 0;
-    cp0_process_check_lock(lock_file, &holder_pid);
-
-    if (holder_pid == 0) {
-        LVGL_RUN_FLAGE = 1;
-        lv_obj_invalidate(lv_scr_act());
-    } else {
-        if (LVGL_HOME_KEY_FLAG) {
-            // Kill the external application after HOME is held for 5 seconds.
-            cp0_process_kill(holder_pid, 3000);
-        }
-        LVGL_RUN_FLAGE = 0;
-    }
-}
-```
-
-実際のコードには複数の状態変数があります。
-
-- `lvgl_lock`: 各ループで LVGL 更新復帰を繰り返すことを避けます。ロック解除後に一度だけ `invalidate` します。
-- `home_back_status` / `start_time`: HOME キーが押され続けている時間を追跡します。
-- `holder_pid`: 現在ロックファイルを保持している外部プロセスの PID。
-
-ロジック:
-
-```text
-No external application holds the lock
-  -> APPLaunch restores LVGL_RUN_FLAGE=1
-  -> If just recovered from the locked state, redraw the current screen
-
-An external application holds the lock
-  -> APPLaunch sets LVGL_RUN_FLAGE=0 and pauses its own rendering
-  -> If the HOME key has been held for >= 5 seconds, try to kill the external application
-```
+`Launch::launch_Exec()` は外部プロセスの実行前に screensaver foreground を下げ、入力 group を解除し、LVGL timer を停止します。その後 `cp0_signal_process_api({"ExecBlocking", ...})` を呼び、終了後に timer、ホーム入力 group、ホーム screen、foreground flag を復元します。フォアグラウンド切り替えはメインループの lock-file polling ではなく、この blocking 起動経路で完結します。
 
 ## 9. Notes
 
@@ -348,4 +297,4 @@ An external application holds the lock
 - SDL プラットフォームでは、起動 GIF はデフォルトでスキップされます。`logo_output.gif` を確認して再生するのはデバイス側だけです。
 - ホーム入力は `UILaunchPage::bind_home_input_group()` を通して再バインドする必要があります。組み込みページや端末ページからホーム画面へ戻る場合も、このグループを復元する必要があります。
 - 外部の独立アプリケーションが実行中は `LVGL_RUN_FLAGE=0` になります。この期間に APPLaunch が UI 更新を続けるとは想定しないでください。
-- `APPLaunch_lock()` は `cp0_process_exec_blocking()` とロックファイルの協調に依存します。外部アプリケーションが異常終了してロックが解放されない場合、ホーム画面が更新されないように見えることがあります。その場合はロックファイルと holder PID を調査してください。
+- 外部アプリから復帰できない場合は、`ExecBlocking` callback の完了と `launch_Exec()` の timer/input/foreground 復元を調査してください。

@@ -6,7 +6,7 @@ This chapter explains how to extend APPLaunch, focusing on four common change ty
 
 | Entry point | Purpose |
 | --- | --- |
-| `projects/APPLaunch/main/ui/launch.cpp` | Fixed app list, dynamic `.desktop` scanning, launching built-in pages or external processes |
+| `projects/APPLaunch/main/ui/builtin_app_registry.cpp` | `BUILTIN_APPS` built-in app registry and page factories |
 | `projects/APPLaunch/main/ui/page_app/` | Built-in page implementation directory; pages are usually header-only `.hpp` files |
 | `projects/APPLaunch/main/ui/ui_app_page.hpp` | Shared page capabilities such as `AppPage`, top bar, `img_path()`, and `audio_path()` |
 | `projects/APPLaunch/main/ui/generate_page_app_includes.py` | Automatically generates `generated/page_app.h` before build and includes every `page_app/*.hpp` file |
@@ -17,7 +17,7 @@ This chapter explains how to extend APPLaunch, focusing on four common change ty
 
 APPLaunch has two kinds of app sources:
 
-- **Built-in pages**: compiled into the APPLaunch process and registered in `kBuiltinApps[]` with `append_page_app<PageT>`. When opened, APPLaunch creates a `PageT` object and switches to its screen.
+- **Built-in pages**: compiled into the APPLaunch process and registered in `BUILTIN_APPS[]` in `builtin_app_registry.cpp` with `append_page_app<PageT>`. When opened, APPLaunch creates a `PageT` object and switches to its screen.
 - **External apps**: launched as independent processes through a fixed `Exec` value or a `.desktop` descriptor. For non-terminal apps, the Launcher pauses its LVGL timer, waits for the child process to exit, and then returns to the home page.
 
 ## 2. Adding a Built-in Page
@@ -103,7 +103,7 @@ If you check manually, `generated/page_app.h` should contain:
 
 ### 2.3 Register the Page in the Home App List
 
-Open `projects/APPLaunch/main/ui/launch.cpp` and add a built-in registration to `kBuiltinApps[]`:
+Open `projects/APPLaunch/main/ui/builtin_app_registry.cpp` and add a built-in registration to `BUILTIN_APPS[]`:
 
 ```cpp
 {{"MYTOOL", "mytool_100.png", "app_MyTool", true, false},
@@ -121,7 +121,7 @@ Registration fields:
 
 ### 2.4 Add a Settings Page Toggle
 
-The `Launcher` menu in Settings is generated from `launcher_app_registry_entries()`. To expose a toggle, set `AppDescriptor.configurable=true` in the `kBuiltinApps[]` entry:
+The `Launcher` menu in Settings is generated from `launcher_app_registry_entries()`. To expose a toggle, set `AppDescriptor.configurable=true` in the `BUILTIN_APPS[]` entry:
 
 ```cpp
 {{"MYTOOL", "mytool_100.png", "app_MyTool", true, false},
@@ -341,7 +341,7 @@ The Settings page is centralized in `projects/APPLaunch/main/ui/page_app/ui_app_
 
 Steps:
 
-1. Add or update the app's `AppDescriptor` in `kBuiltinApps[]`.
+1. Add or update the app's `AppDescriptor` in `BUILTIN_APPS[]` in `builtin_app_registry.cpp`.
 2. Set `configurable=true` and choose a full `config_key`, such as `app_MyTool`.
 3. Open the Settings page, enter the `Launcher` menu, and toggle O/X.
 4. Settings calls `launcher_app_registry_set_enabled()` and notifies the Launcher to rebuild the built-in list.
@@ -351,11 +351,14 @@ Steps:
 Find the corresponding group in `menu_init()` and add an item to `sub_items`:
 
 ```cpp
-{"My Option", true, cp0_config_get_int("my_option", 1) != 0, [this]() {
-    bool en = cp0_config_get_int("my_option", 1) == 0;
-    cp0_config_set_int("my_option", en ? 1 : 0);
-    cp0_config_save();
-}},
+cp0_signal_config_api({"GetInt", "my_option", "1"}, [](int code, std::string value) {
+    if (code != 0) return;
+    const bool enabled = value != "0";
+    cp0_signal_config_api({"SetInt", "my_option", enabled ? "0" : "1"},
+                          [](int set_code, std::string) {
+        if (set_code == 0) cp0_signal_config_api({"Save"}, nullptr);
+    });
+});
 ```
 
 For second-level or third-level pages that choose values, refer to these existing implementations:
@@ -383,7 +386,7 @@ sudo sed -i 's/^app_Game=.*/app_Game=1/' /var/lib/applaunch/settings
 systemctl --user restart APPLaunch.service
 ```
 
-If you add many configuration items, remember that the current maximum is 32 entries. After that limit, `cp0_config_set_*` returns directly and the setting will not be saved.
+Configuration reads and writes report results through `cp0_signal_config_api` callbacks. Persist updates with `{"Save"}` and check the callback status code.
 
 ## 6. Verification Checklist When Extending
 

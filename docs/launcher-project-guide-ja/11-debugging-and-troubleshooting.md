@@ -289,7 +289,7 @@ APPLAUNCH_LINUX_KEYBOARD_DEVICE=/dev/input/eventX sudo /usr/share/APPLaunch/bin/
 
 | File | Purpose |
 | --- | --- |
-| `ext_components/cp0_lvgl/include/compat/input_keys.h` | 互換入力キー定義 |
+| `ext_components/cp0_lvgl/include/input_keys.h` | 互換入力キー定義 |
 | `ext_components/cp0_lvgl/include/keyboard_input.h` | APPLaunch private input header |
 | `ext_components/cp0_lvgl/include/keyboard_input.h` | cp0_lvgl input interface |
 | `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_keyboard.c` | デバイス側キーボード入力実装 |
@@ -419,13 +419,13 @@ sudo apt-get install scons pkg-config libsdl2-dev libfreetype-dev libinput-dev l
 
 ### 7.3 クロスコンパイル sysroot 不足
 
-`linux_x86_cross_cp0_config_defaults.mk` は `SDK/github_source/static_lib_v0.0.4` を sysroot として使います。存在しない場合、`SConstruct` は `sdk_bsp.tar.gz` のダウンロードを試みます。ネットワークアクセスが制限されていると失敗します。
+`linux_x86_cross_cp0_config_defaults.mk` は `SDK/github_source/static_lib_v0.0.6` を sysroot として使います。存在しない場合、`SConstruct` は `sdk_bsp.tar.gz` のダウンロードを試みます。ネットワークアクセスが制限されていると失敗します。
 
 確認:
 
 ```bash
-ls -l ../../SDK/github_source/static_lib_v0.0.4
-cat ../../SDK/github_source/static_lib_v0.0.4/version 2>/dev/null || true
+ls -l ../../SDK/github_source/static_lib_v0.0.6
+cat ../../SDK/github_source/static_lib_v0.0.6/version 2>/dev/null || true
 ```
 
 ダウンロードに失敗する場合は、事前に sysroot を用意するか、ネットワークが利用できる環境で一度ビルドしてキャッシュを作成してください。

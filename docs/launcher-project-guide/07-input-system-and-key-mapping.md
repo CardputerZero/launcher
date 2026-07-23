@@ -226,7 +226,7 @@ Note: `elm` is freed after the callback returns, so pages must not keep the poin
 
 If a page handles `LV_EVENT_KEYBOARD` directly, it usually uses the raw `KEY_*` values. If a page delegates to LVGL's widget focus mechanism, it relies on `data->key`.
 
-`ext_components/cp0_lvgl/include/compat/input_keys.h` includes `<linux/input.h>` on Linux and provides common compatible `KEY_*` definitions on non-Linux platforms, so SDL/desktop builds can also compile page code.
+`ext_components/cp0_lvgl/include/input_keys.h` includes `<linux/input.h>` on Linux and provides common compatible `KEY_*` definitions on non-Linux platforms, so SDL/desktop builds can also compile page code.
 
 ## 6. Home Screen Key Mapping
 
@@ -254,7 +254,6 @@ Home screen behavior:
 | `KEY_LEFT` or `Z` | pressed/repeat | Play `switch.wav`, call `switch_right()`, and rotate right to the next item |
 | `KEY_RIGHT` or `C` | pressed/repeat | Play `switch.wav`, call `switch_left()`, and rotate left to the next item |
 | `KEY_ENTER` | released | Play `enter.wav` and launch the current app |
-| `KEY_F12` | released | Toggle the green full-screen debug overlay and set `lvping_lock` |
 | `KEY_UP` / `KEY_DOWN` or `F` / `X` | pressed/repeat | No action is currently defined on the home screen |
 
 Note: `handle_home_key()` handles left/right keys on press, so a long press may generate repeat events and switch continuously. ENTER launches on release to avoid repeated launches while the key is held down. The log tag still contains `main_key_switch` for compatibility with older debugging output.
@@ -270,12 +269,7 @@ Each page independently binds `LV_EVENT_KEYBOARD` on its `root_screen_`. Common 
 | `UISetupPage` | `ui_app_setup.hpp` | UP/DOWN or F/X selects, ENTER/RIGHT or C enters/confirms, ESC/LEFT or Z returns, some pages support R/D |
 | `UIGamePage` | `ui_app_game.hpp` | uses the common page key handling; ESC returns |
 | `UIIpPanelPage` | `ui_app_ip_panel.hpp` | F/X/Z/C map to LV_KEY_*; UP/DOWN selects; ESC returns |
-| `UIFilePage` | `ui_app_file.hpp` | UP/DOWN selects; RIGHT/ENTER enters; LEFT goes to parent; ESC returns home or to the parent |
 | `UISSHPage` | `ui_app_ssh.hpp` | UP/DOWN switches Host/Port/User; character input; BACKSPACE deletes; ENTER connects; ESC returns |
-| `UIMeshPage` | `ui_app_mesh.hpp` | S opens input; R refreshes; UP/DOWN browses; ENTER sends; BACKSPACE deletes; ESC cancels/returns |
-| `UICameraPage` | `ui_app_camera.hpp` | ESC returns/exits page; ENTER takes photo/confirms; UP/DOWN/LEFT/RIGHT navigate; 1-5 shortcut buttons |
-| `UIRecPage` | `ui_app_rec.hpp` | Handles navigation, confirm, and return based on recording/list state |
-| `UICompassPage` | `ui_app_compass.hpp` | F4/F6 calibrates or switches; ESC returns |
 | `UILoraPage` | `ui_app_lora.hpp` | Converts KEY_UP/DOWN/LEFT/RIGHT/ENTER/ESC/BACKSPACE/DELETE to LV_KEY_* and passes them to business logic |
 | `UITankBattlePage` | `ui_app_tank_battle.hpp` | `33(F)` up, `45(X)` down, `44(Z)` left, `46(C)` right, `57(SPACE)` fire, ESC returns |
 
@@ -353,10 +347,8 @@ LVGL_RUN_FLAGE = 1;
 Meaning:
 
 - While an external process is running, APPLaunch pauses the LVGL timer and stops receiving normal keyboard queue events.
-- ESC state still updates `LVGL_HOME_KEY_FLAG`, which is used by `APPLaunch_lock()` or external-process return logic.
+- ESC state still updates `LVGL_HOME_KEY_FLAG`, which is used by the external-process return logic.
 - After the external process exits, the home screen, input group, and LVGL timer are restored.
-
-`main.cpp::APPLaunch_lock()` also checks the lock-file holder. If an external app holds the lock and ESC is held for about 5 seconds, it calls `cp0_process_kill(holder_pid, 3000)` to try to terminate the external app.
 
 ## 11. Input Group Switching
 

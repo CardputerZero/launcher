@@ -226,7 +226,7 @@ free(elm);
 
 ページが `LV_EVENT_KEYBOARD` を直接処理する場合、通常は生の `KEY_*` 値を使います。ページが LVGL のウィジェットフォーカス機構へ委譲する場合は、`data->key` に依存します。
 
-`ext_components/cp0_lvgl/include/compat/input_keys.h` は Linux では `<linux/input.h>` をインクルードし、非 Linux プラットフォームでは一般的な互換 `KEY_*` 定義を提供するため、SDL/デスクトップビルドでもページコードをコンパイルできます。
+`ext_components/cp0_lvgl/include/input_keys.h` は Linux では `<linux/input.h>` をインクルードし、非 Linux プラットフォームでは一般的な互換 `KEY_*` 定義を提供するため、SDL/デスクトップビルドでもページコードをコンパイルできます。
 
 ## 6. ホーム画面のキー割り当て
 
@@ -254,7 +254,6 @@ static uint32_t fzxc_to_arrow(uint32_t key)
 | `KEY_LEFT` or `Z` | pressed/repeat | `switch.wav` を再生し、`switch_right()` を呼び、右方向に次の項目へ回転 |
 | `KEY_RIGHT` or `C` | pressed/repeat | `switch.wav` を再生し、`switch_left()` を呼び、左方向に次の項目へ回転 |
 | `KEY_ENTER` | released | `enter.wav` を再生し、現在のアプリを起動 |
-| `KEY_F12` | released | 緑色の全画面デバッグオーバーレイを切り替え、`lvping_lock` を設定 |
 | `KEY_UP` / `KEY_DOWN` or `F` / `X` | pressed/repeat | ホーム画面では現在アクション未定義 |
 
 注意: `handle_home_key()` は left/right キーを press 時に処理するため、長押しすると repeat イベントで連続切り替えが発生します。ENTER はキーを押し続けたまま起動が繰り返されないよう release 時に起動します。ログタグには古いデバッグ出力との互換性のため、まだ `main_key_switch` が含まれています。
@@ -270,12 +269,7 @@ static uint32_t fzxc_to_arrow(uint32_t key)
 | `UISetupPage` | `ui_app_setup.hpp` | UP/DOWN または F/X で選択、ENTER/RIGHT または C で入る/確定、ESC/LEFT または Z で戻る。一部ページは R/D 対応 |
 | `UIGamePage` | `ui_app_game.hpp` | 共通ページキー処理を使用。ESC で戻る |
 | `UIIpPanelPage` | `ui_app_ip_panel.hpp` | F/X/Z/C を LV_KEY_* へ変換。UP/DOWN で選択、ESC で戻る |
-| `UIFilePage` | `ui_app_file.hpp` | UP/DOWN で選択、RIGHT/ENTER で入る、LEFT で親へ、ESC でホームまたは親へ戻る |
 | `UISSHPage` | `ui_app_ssh.hpp` | UP/DOWN で Host/Port/User 切替、文字入力、BACKSPACE で削除、ENTER で接続、ESC で戻る |
-| `UIMeshPage` | `ui_app_mesh.hpp` | S で入力を開く、R で更新、UP/DOWN で閲覧、ENTER で送信、BACKSPACE で削除、ESC でキャンセル/戻る |
-| `UICameraPage` | `ui_app_camera.hpp` | ESC で戻る/ページ終了、ENTER で撮影/確定、UP/DOWN/LEFT/RIGHT で移動、1-5 はショートカットボタン |
-| `UIRecPage` | `ui_app_rec.hpp` | 録音/一覧状態に応じてナビゲーション、確定、戻るを処理 |
-| `UICompassPage` | `ui_app_compass.hpp` | F4/F6 でキャリブレーションまたは切替、ESC で戻る |
 | `UILoraPage` | `ui_app_lora.hpp` | KEY_UP/DOWN/LEFT/RIGHT/ENTER/ESC/BACKSPACE/DELETE を LV_KEY_* へ変換し、業務ロジックへ渡す |
 | `UITankBattlePage` | `ui_app_tank_battle.hpp` | `33(F)` 上、`45(X)` 下、`44(Z)` 左、`46(C)` 右、`57(SPACE)` 発射、ESC で戻る |
 
@@ -353,10 +347,8 @@ LVGL_RUN_FLAGE = 1;
 意味:
 
 - 外部プロセス実行中、APPLaunch は LVGL タイマーを停止し、通常のキュー経由キーボードイベントを受け取らなくなります。
-- ESC 状態は `LVGL_HOME_KEY_FLAG` に更新され続け、`APPLaunch_lock()` や外部プロセス復帰ロジックで使われます。
+- ESC 状態は `LVGL_HOME_KEY_FLAG` に更新され続け、外部プロセス復帰ロジックで使われます。
 - 外部プロセス終了後、ホーム画面、入力グループ、LVGL タイマーが復元されます。
-
-`main.cpp::APPLaunch_lock()` はロックファイル保持者も確認します。外部アプリがロックを保持しており、ESC が約 5 秒押され続けると、`cp0_process_kill(holder_pid, 3000)` を呼んで外部アプリの終了を試みます。
 
 ## 11. 入力グループの切り替え
 

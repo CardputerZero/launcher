@@ -6,7 +6,7 @@
 
 | Entry point | Purpose |
 | --- | --- |
-| `projects/APPLaunch/main/ui/launch.cpp` | 固定アプリリスト、動的 `.desktop` スキャン、組み込みページまたは外部プロセスの起動 |
+| `projects/APPLaunch/main/ui/builtin_app_registry.cpp` | `BUILTIN_APPS` 組み込みアプリ登録表とページファクトリ |
 | `projects/APPLaunch/main/ui/page_app/` | 組み込みページ実装ディレクトリ。ページは通常 header-only の `.hpp` ファイル |
 | `projects/APPLaunch/main/ui/ui_app_page.hpp` | `AppPage`、トップバー、`img_path()`、`audio_path()` などの共通ページ機能 |
 | `projects/APPLaunch/main/ui/generate_page_app_includes.py` | ビルド前に `generated/page_app.h` を自動生成し、すべての `page_app/*.hpp` ファイルを include |
@@ -17,7 +17,7 @@
 
 APPLaunch には 2 種類のアプリソースがあります。
 
-- **組み込みページ**: APPLaunch プロセスにコンパイルされ、`kBuiltinApps[]` で `append_page_app<PageT>` を使って登録されます。開くと APPLaunch が `PageT` オブジェクトを作成し、その画面へ切り替えます。
+- **組み込みページ**: APPLaunch プロセスにコンパイルされ、`builtin_app_registry.cpp` の `BUILTIN_APPS[]` で `append_page_app<PageT>` を使って登録されます。開くと APPLaunch が `PageT` オブジェクトを作成し、その画面へ切り替えます。
 - **外部アプリ**: 固定 `Exec` 値または `.desktop` 記述子を通じて独立プロセスとして起動されます。非ターミナルアプリでは、Launcher は LVGL タイマーを一時停止し、子プロセス終了を待ってからホームページへ戻ります。
 
 ## 2. 組み込みページを追加する
@@ -103,7 +103,7 @@ ui/generate_page_app_includes.py
 
 ### 2.3 ホームのアプリリストへ登録
 
-`projects/APPLaunch/main/ui/launch.cpp` を開き、`kBuiltinApps[]` に組み込み登録を追加します。
+`projects/APPLaunch/main/ui/builtin_app_registry.cpp` を開き、`BUILTIN_APPS[]` に組み込み登録を追加します。
 
 ```cpp
 {{"MYTOOL", "mytool_100.png", "app_MyTool", true, false},
@@ -121,7 +121,7 @@ ui/generate_page_app_includes.py
 
 ### 2.4 Settings ページのトグルを追加
 
-Settings の `Launcher` メニューは `launcher_app_registry_entries()` から生成されます。表示トグルを出すには、`kBuiltinApps[]` エントリの `AppDescriptor.configurable` を `true` にします。
+Settings の `Launcher` メニューは `launcher_app_registry_entries()` から生成されます。表示トグルを出すには、`BUILTIN_APPS[]` エントリの `AppDescriptor.configurable` を `true` にします。
 
 ```cpp
 {{"MYTOOL", "mytool_100.png", "app_MyTool", true, false},
@@ -341,7 +341,7 @@ Settings ページは `projects/APPLaunch/main/ui/page_app/ui_app_setup.hpp` に
 
 手順:
 
-1. `kBuiltinApps[]` でアプリの `AppDescriptor` を追加または更新します。
+1. `builtin_app_registry.cpp` の `BUILTIN_APPS[]` でアプリの `AppDescriptor` を追加または更新します。
 2. `configurable=true` にし、`app_MyTool` のような完全な `config_key` を選びます。
 3. Settings ページを開き、`Launcher` メニューへ入り、O/X を切り替えます。
 4. Settings は `launcher_app_registry_set_enabled()` を呼び、Launcher に組み込みアプリリストの再構築を通知します。
@@ -351,11 +351,14 @@ Settings ページは `projects/APPLaunch/main/ui/page_app/ui_app_setup.hpp` に
 `menu_init()` の対応するグループを探し、`sub_items` に項目を追加します。
 
 ```cpp
-{"My Option", true, cp0_config_get_int("my_option", 1) != 0, [this]() {
-    bool en = cp0_config_get_int("my_option", 1) == 0;
-    cp0_config_set_int("my_option", en ? 1 : 0);
-    cp0_config_save();
-}},
+cp0_signal_config_api({"GetInt", "my_option", "1"}, [](int code, std::string value) {
+    if (code != 0) return;
+    const bool enabled = value != "0";
+    cp0_signal_config_api({"SetInt", "my_option", enabled ? "0" : "1"},
+                          [](int set_code, std::string) {
+        if (set_code == 0) cp0_signal_config_api({"Save"}, nullptr);
+    });
+});
 ```
 
 値を選択する第 2 階層または第 3 階層ページについては、既存実装を参照してください。
@@ -383,7 +386,7 @@ sudo sed -i 's/^app_Game=.*/app_Game=1/' /var/lib/applaunch/settings
 systemctl --user restart APPLaunch.service
 ```
 
-設定項目を多数追加する場合、現在の最大数が 32 エントリであることに注意してください。この上限を超えると `cp0_config_set_*` はすぐ return し、設定は保存されません。
+設定の読み書き結果は `cp0_signal_config_api` のコールバックで報告されます。更新後は `{"Save"}` で永続化し、コールバックのステータスコードを確認してください。
 
 ## 6. 拡張時の確認チェックリスト
 
