@@ -4,6 +4,18 @@
 
 #if LV_USE_FREETYPE
 #include "lvgl/src/libs/freetype/lv_freetype.h"
+#else
+#ifndef LV_FREETYPE_FONT_STYLE_NORMAL
+typedef int lv_freetype_font_style_t;
+#define LV_FREETYPE_FONT_STYLE_NORMAL 0
+#define LV_FREETYPE_FONT_STYLE_ITALIC (1 << 0)
+#define LV_FREETYPE_FONT_STYLE_BOLD (1 << 1)
+#endif
+#ifndef LV_FREETYPE_FONT_RENDER_MODE_BITMAP
+typedef int lv_freetype_font_render_mode_t;
+#define LV_FREETYPE_FONT_RENDER_MODE_BITMAP 0
+#define LV_FREETYPE_FONT_RENDER_MODE_OUTLINE 1
+#endif
 #endif
 
 #include <cstdint>
@@ -20,13 +32,11 @@ public:
     Cp0FontService(const Cp0FontService &) = delete;
     Cp0FontService &operator=(const Cp0FontService &) = delete;
 
-#if LV_USE_FREETYPE
     lv_font_t *get(const char *font_name, uint16_t size,
                    lv_freetype_font_style_t style = LV_FREETYPE_FONT_STYLE_NORMAL,
                    lv_freetype_font_render_mode_t render_mode = LV_FREETYPE_FONT_RENDER_MODE_BITMAP);
     lv_font_t *get_mono(const char *font_name, uint16_t size,
                         lv_freetype_font_style_t style = LV_FREETYPE_FONT_STYLE_NORMAL);
-#endif
 
     lv_font_t *fallback(uint16_t size) const;
     void release();
