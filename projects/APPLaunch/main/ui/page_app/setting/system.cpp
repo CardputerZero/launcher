@@ -9,7 +9,6 @@ namespace {
 
 void apply_extport_toggle(UISetupPage &page,
                           std::size_t index,
-                          const char *config_key,
                           const char *gpio_name)
 {
     SetupPageAccess access(page);
@@ -18,20 +17,10 @@ void apply_extport_toggle(UISetupPage &page,
 
     SubItem &item = menu->sub_items[index];
     const bool desired = item.toggle_state;
-    const bool previous = access.config_get_int(config_key, desired ? 0 : 1) != 0;
+    const int current = access.gpio_get(gpio_name);
+    const bool previous = current >= 0 ? current != 0 : !desired;
     const bool gpio_succeeded = access.gpio_set(gpio_name, desired ? 1 : 0);
-    const bool config_set_succeeded =
-        gpio_succeeded && access.config_set_int(config_key, desired ? 1 : 0);
-    const bool save_succeeded = config_set_succeeded && access.config_save();
-    const auto outcome = system_page::extport_toggle_outcome(
-        previous, desired, gpio_succeeded, config_set_succeeded, save_succeeded);
-
-    if (outcome.restore_gpio) access.gpio_set(gpio_name, previous ? 1 : 0);
-    if (outcome.restore_config) {
-        access.config_set_int(config_key, previous ? 1 : 0);
-        access.config_save();
-    }
-    item.toggle_state = outcome.value;
+    item.toggle_state = system_page::extport_toggle_value(previous, desired, gpio_succeeded);
 }
 
 } // namespace
@@ -156,14 +145,14 @@ void ExtPort::append(UISetupPage &page, std::vector<MenuItem> &menu)
     MenuItem item;
     item.label = "ExtPort";
     SetupPageAccess access(page);
-    bool usb_enabled = access.config_get_int("extport_usb", 1) != 0;
-    bool output_enabled = access.config_get_int("extport_5vout", 1) != 0;
+    bool usb_enabled = access.gpio_get("GROVE5V") == 1;
+    bool output_enabled = access.gpio_get("EXT5V") == 1;
     item.sub_items = {
         {"GROVE5V", true, usb_enabled, [page_ptr]() {
-            apply_extport_toggle(*page_ptr, 0, "extport_usb", "GROVE5V");
+            apply_extport_toggle(*page_ptr, 0, "GROVE5V");
         }},
         {"EXT5V", true, output_enabled, [page_ptr]() {
-            apply_extport_toggle(*page_ptr, 1, "extport_5vout", "EXT5V");
+            apply_extport_toggle(*page_ptr, 1, "EXT5V");
         }},
     };
     menu.push_back(item);

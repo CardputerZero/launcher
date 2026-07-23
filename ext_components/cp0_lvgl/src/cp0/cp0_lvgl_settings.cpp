@@ -140,11 +140,6 @@ public:
     using callback_t = std::function<void(int, std::string)>;
     using arg_t = cp0::settings::Arguments;
 
-    SettingsSystem()
-    {
-        apply_extport_config();
-    }
-
     void api_call(arg_t arg, callback_t callback)
     {
         try {
@@ -257,12 +252,6 @@ private:
         }
     }
 
-    void apply_extport_config()
-    {
-        set_named_gpio(cp0::settings::PowerOutput::Grove5V, config_get_int("extport_usb", 1));
-        set_named_gpio(cp0::settings::PowerOutput::Ext5V, config_get_int("extport_5vout", 1));
-    }
-
     int set_named_gpio(cp0::settings::PowerOutput output, int val)
     {
         std::lock_guard<std::mutex> lock(gpio_mutex_);
@@ -371,19 +360,6 @@ private:
                        : -EINVAL;
         }
         return -ENOENT;
-    }
-
-    static int config_get_int(const char *key, int default_val)
-    {
-        int val = default_val;
-        cp0_signal_config_api({"GetInt", key ? std::string(key) : std::string(), std::to_string(default_val)},
-                              [&](int code, std::string data) {
-                                  int parsed = 0;
-                                  if (code == 0 &&
-                                      cp0::settings::parse_switch_response(data, parsed))
-                                      val = parsed;
-                              });
-        return val;
     }
 
     static void copy_string(char *dst, size_t dst_size, const std::string &src)

@@ -124,6 +124,7 @@ private:
     static bool config_set_int(const char *key, int val);
     static bool config_save();
     static bool gpio_set(const char *name, int val);
+    static int gpio_get(const char *name);
     static int audio_volume_read();
     static int audio_volume_write(int val);
     void play_audio_file(const std::string &path);
