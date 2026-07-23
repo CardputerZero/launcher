@@ -167,16 +167,16 @@ aarch64-linux-gnu-g++ --version
 Cross-compilation also requires device-side headers and libraries. APPLaunch's top-level `SConstruct` automatically prepares the SDK static sysroot during cross-compilation:
 
 ```text
-SDK/github_source/static_lib_v0.0.4
+SDK/github_source/static_lib_v0.0.6
 ```
 
-If that directory is missing or its `version` file does not match `v0.0.4`, the build script downloads this release package:
+If that directory is missing or its `version` file does not match `v0.0.6`, the build script downloads this release package:
 
 ```text
-https://github.com/CardputerZero/M5CardputerZero-UserDemo/releases/download/v0.0.4/sdk_bsp.tar.gz
+https://github.com/CardputerZero/M5CardputerZero-UserDemo/releases/download/v0.0.6/sdk_bsp.tar.gz
 ```
 
-Therefore the first cross-compilation needs network access. In offline environments, prepare `SDK/github_source/static_lib_v0.0.4` in advance.
+Therefore the first cross-compilation needs network access. In offline environments, prepare `SDK/github_source/static_lib_v0.0.6` in advance.
 
 ## 4. Installing Dependencies on macOS
 
@@ -297,8 +297,8 @@ build/config/config_tmp.mk
 The content looks like:
 
 ```make
-CONFIG_TOOLCHAIN_SYSROOT="/path/to/launcher/SDK/github_source/static_lib_v0.0.4"
-CONFIG_TOOLCHAIN_FLAGS="-I/path/to/launcher/SDK/github_source/static_lib_v0.0.4/usr/include/aarch64-linux-gnu"
+CONFIG_TOOLCHAIN_SYSROOT="/path/to/launcher/SDK/github_source/static_lib_v0.0.6"
+CONFIG_TOOLCHAIN_FLAGS="-I/path/to/launcher/SDK/github_source/static_lib_v0.0.6/usr/include/aarch64-linux-gnu"
 ```
 
 After reading it, the SDK build system appends:
@@ -500,11 +500,11 @@ if "cross" in os.environ.get("CONFIG_DEFAULT_FILE", ''):
 It then generates `build/config/config_tmp.mk` with:
 
 ```text
-CONFIG_TOOLCHAIN_SYSROOT="SDK/github_source/static_lib_v0.0.4"
+CONFIG_TOOLCHAIN_SYSROOT="SDK/github_source/static_lib_v0.0.6"
 CONFIG_TOOLCHAIN_FLAGS="-I.../usr/include/aarch64-linux-gnu"
 ```
 
-If `SDK/github_source/static_lib_v0.0.4` is missing or its version does not match, it downloads `sdk_bsp.tar.gz`. This sysroot provides cross-compilation with:
+If `SDK/github_source/static_lib_v0.0.6` is missing or its version does not match, it downloads `sdk_bsp.tar.gz`. This sysroot provides cross-compilation with:
 
 - Device-side system libraries.
 - Headers and libraries for FreeType, libpng, libcamera, libjpeg, and others.
@@ -655,7 +655,7 @@ CONFIG_V9_5_LV_FS_POSIX_PATH="/usr/share/APPLaunch/"
 CONFIG_APPLAUNCH_WIN_X86_CROSS_CP0=y
 ```
 
-The cross-build output is `dist/M5CardputerZero-APPLaunch` with no `.exe` suffix because the target is Linux AArch64. The first cross-build may download the SDK sysroot package into `SDK/github_source/static_lib_v0.0.4`.
+The cross-build output is `dist/M5CardputerZero-APPLaunch` with no `.exe` suffix because the target is Linux AArch64. The first cross-build may download the SDK sysroot package into `SDK/github_source/static_lib_v0.0.6`.
 
 ## 11. Key SCons Logic
 
@@ -691,7 +691,7 @@ EXT_COMPONENTS_PATH
 SConscript(str(sdk_path / "tools" / "scons" / "project.py"), variant_dir=os.getcwd(), duplicate=0)
 ```
 
-6. Checks and downloads `static_lib_v0.0.4` during cross-compilation.
+6. Checks and downloads `static_lib_v0.0.6` during cross-compilation.
 
 ### 11.2 SDK `project.py`
 
@@ -863,7 +863,7 @@ Windows cross-compilation should use `aarch64-linux-gnu-gcc.exe`; check `CONFIG_
 
 ### 14.6 Failed to Download `sdk_bsp.tar.gz`
 
-Cause: the first cross-compilation needs to download `static_lib_v0.0.4`, but the network is unavailable or GitHub access failed.
+Cause: the first cross-compilation needs to download `static_lib_v0.0.6`, but the network is unavailable or GitHub access failed.
 
 Fix:
 
@@ -872,8 +872,8 @@ Fix:
 3. For offline environments, prepare this manually:
 
 ```text
-SDK/github_source/static_lib_v0.0.4/
-└── version    # content should be v0.0.4
+SDK/github_source/static_lib_v0.0.6/
+└── version    # content should be v0.0.6
 ```
 
 If the directory exists but the version does not match, the top-level `SConstruct` still tries to update it.
@@ -890,8 +890,8 @@ $CONFIG_TOOLCHAIN_SYSROOT/usr/include/libcamera
 Fix:
 
 ```bash
-ls SDK/github_source/static_lib_v0.0.4/usr/include/libcamera
-ls SDK/github_source/static_lib_v0.0.4/usr/lib/aarch64-linux-gnu | grep camera
+ls SDK/github_source/static_lib_v0.0.6/usr/include/libcamera
+ls SDK/github_source/static_lib_v0.0.6/usr/lib/aarch64-linux-gnu | grep camera
 ```
 
 If they are missing, update the sysroot package or install device-side development libraries and rebuild the sysroot.
@@ -907,9 +907,9 @@ sudo apt install -y libinput-dev libxkbcommon-dev libudev-dev
 Cross-compilation: check the sysroot:
 
 ```bash
-ls SDK/github_source/static_lib_v0.0.4/usr/lib/aarch64-linux-gnu/libinput.*
-ls SDK/github_source/static_lib_v0.0.4/usr/lib/aarch64-linux-gnu/libxkbcommon.*
-ls SDK/github_source/static_lib_v0.0.4/usr/lib/aarch64-linux-gnu/libudev.*
+ls SDK/github_source/static_lib_v0.0.6/usr/lib/aarch64-linux-gnu/libinput.*
+ls SDK/github_source/static_lib_v0.0.6/usr/lib/aarch64-linux-gnu/libxkbcommon.*
+ls SDK/github_source/static_lib_v0.0.6/usr/lib/aarch64-linux-gnu/libudev.*
 ```
 
 ### 14.9 Old Backend Still Used After Switching Configuration

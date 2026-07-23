@@ -237,34 +237,36 @@ Sysplause=true
 - `TryExec` は現在 `applications_load()` では使われていません。
 - `applications/` ディレクトリは監視されます。3 秒ごとにポーリングされ、変更があると動的アプリをクリアしてディレクトリを再スキャンします。
 
-## 6. 設定 API
+## 6. 設定 API と永続化パス
 
-設定インターフェースは `ext_components/cp0_lvgl/include/cp0_lvgl_app.h` で宣言されています。
+現在の設定サービスは `cp0_signal_config_api` 経由で呼び出し、`Init`、`Save`、`GetInt`、`SetInt`、`GetStr`、`SetStr` をサポートします。サービス本体は `ext_components/cp0_lvgl/src/cp0_config_service.cpp` にあり、デバイス版と SDL 版はそれぞれ `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_config.cpp`、`ext_components/cp0_lvgl/src/sdl/sdl_lvgl_config.cpp` で signal を登録します。
 
-```c
-void cp0_config_init(void);
-int cp0_config_get_int(const char *key, int default_val);
-void cp0_config_set_int(const char *key, int val);
-const char *cp0_config_get_str(const char *key, const char *default_val);
-void cp0_config_set_str(const char *key, const char *val);
-void cp0_config_save(void);
-```
-
-利用上の慣例:
-
-- 読み取り時は必ずデフォルト値を渡し、設定が欠けていてもページが動作を継続できるようにします。
-- 変更を永続化するには、書き込み後に `cp0_config_save()` を呼びます。
-- デバイス側実装は `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_config.cpp` にあります。
-- SDL 互換実装は `ext_components/cp0_lvgl/src/sdl/sdl_lvgl_config.cpp` にあります。
-
-典型的な使い方:
+典型的な読み取り:
 
 ```cpp
-int volume = cp0_config_get_int("volume", cp0_volume_read());
-cp0_volume_write(new_val);
-cp0_config_set_int("volume", new_val);
-cp0_config_save();
+int value = default_value;
+cp0_signal_config_api(
+    {"GetInt", key, std::to_string(default_value)},
+    [&](int code, std::string data) {
+        if (code == 0) value = std::stoi(data);
+    });
 ```
+
+書き込みは `SetInt` / `SetStr` の後に `Save` を呼びます。現在の設定ページとアプリ登録処理は、保存に失敗した場合に以前の値を復元します。
+
+```cpp
+cp0_signal_config_api({"SetInt", key, std::to_string(value)}, set_callback);
+cp0_signal_config_api({"Save"}, save_callback);
+```
+
+読み取り時は常にデフォルト値を指定してください。`SetInt` / `SetStr` はメモリ上の項目だけを更新し、`Save` が成功して初めて永続化が完了します。
+
+| 実行環境 | パスの選択規則 |
+| --- | --- |
+| デバイス | `$HOME/.config/cardputerzero/config.json`。`HOME` が空の場合は `/root/.config/cardputerzero/config.json` |
+| SDL | `$APPLAUNCH_SDL_CONFIG_DIR/config.json`、`$XDG_CONFIG_HOME/applaunch-sdl/config.json`、`$HOME/.config/applaunch-sdl/config.json` の順。いずれも利用できない場合はランタイム data ディレクトリ配下の `sdl_config/config.json` |
+
+どちらのバックエンドも一時ファイルへ書き込み、`fsync()` 後に正式ファイルへ rename します。
 
 ## 7. 設定キー一覧
 
@@ -274,36 +276,30 @@ cp0_config_save();
 
 | Configuration key | Default | 意味 | 備考 |
 | --- | --- | --- | --- |
-| `app_Python` | `1` | Python エントリ表示トグル | 設定には表示されますが、Python は `launch.cpp` で固定されています。現在このトグルは固定エントリには影響しません |
+| `app_Python` | `1` | Python エントリ | 常時有効、無効化不可 |
 | `app_Store` | `1` | Store エントリ | 常時有効、無効化不可 |
 | `app_CLI` | `1` | CLI エントリ | 常時有効、無効化不可 |
 | `app_Game` | `1` | GAME エントリ | 常時有効、無効化不可 |
 | `app_Setting` | `1` | SETTING エントリ | 常時有効、無効化不可 |
-| `app_Game` | `1` | GAME 組み込みページ | `launch.cpp` から読み取られる |
-| `app_Math` | `1` | Calculator 外部アプリケーション | `launch.cpp` から読み取られる |
-| `app_IP_Panel` | `1` | IP_PANEL 組み込みページ | Linux 非 SDL ビルドで読み取られる |
-| `app_File` | `1` | FILE 組み込みページ | Linux 非 SDL ビルドで読み取られる |
-| `app_SSH` | `1` | SSH 組み込みページ | Linux 非 SDL ビルドで読み取られる |
-| `app_Mesh` | `1` | MESH 組み込みページ | Linux 非 SDL ビルドで読み取られる |
-| `app_Rec` | `1` | REC 組み込みページ | Linux 非 SDL ビルドで読み取られる |
-| `app_Camera` | `1` | CAMERA 組み込みページ | Linux 非 SDL ビルドで読み取られる |
-| `app_LoRa` | `1` | LORA 組み込みページ | Linux 非 SDL ビルドで読み取られる |
-| `app_Tank` | `1` | TANK 組み込みページ | Linux 非 SDL ビルドで読み取られる |
+| `app_Math` | `1` | Calculator 外部アプリケーション | 設定可能 |
+| `app_LoRa` | `1` | LORA 組み込みページ | 設定可能。すべてのビルドターゲットで登録 |
+| `app_IP_Panel` | `1` | IP_PANEL 組み込みページ | 設定可能。Linux 非 SDL ビルドのみ登録 |
+| `app_SSH` | `1` | SSH 組み込みページ | 設定可能。Linux 非 SDL ビルドのみ登録 |
+| `app_Tank` | `1` | TANK 組み込みページ | 設定可能。Linux 非 SDL ビルドのみ登録 |
 
-注意: `Compass` には現在対応する `app_Compass` 設定がなく、`launch.cpp` により無条件で追加されます。
+これらは `projects/APPLaunch/main/ui/builtin_app_registry.cpp` の `BUILTIN_APPS[]` に基づきます。`configurable=false` または `always_on=true` の項目は常に有効で、それ以外は設定 key がない場合に既定で有効です。
 
 ### 7.2 システムとページ設定
 
 | Configuration key | 読み書き箇所 | 意味 |
 | --- | --- | --- |
-| `brightness` | `UISetupPage`, `ext_components/cp0_lvgl/src/commount.c` | バックライト輝度値。起動時に復元され、設定ページから書き込まれる |
-| `volume` | `UISetupPage`, `commount.c` | システム音量。起動時に復元され、設定ページから書き込まれる |
+| `brightness` | `UISetupPage`, `ext_components/cp0_lvgl/src/commount.cpp` | バックライト輝度値。起動時に復元され、設定ページから書き込まれる |
+| `volume` | `UISetupPage`, `commount.cpp` | システム音量。起動時に復元され、設定ページから書き込まれる |
 | `dark_time` | `UISetupPage` | 画面オフタイムアウト。選択肢は `0/10/30/60/300` 秒 |
-| `cam_resolution` | `UISetupPage`, camera page may read it | カメラ解像度オプションのインデックス |
-| `startup_mode` | `UISetupPage` | 起動モード。現在は `Launcher` / `CLI` |
-| `extport_usb` | `UISetupPage` | 拡張ポート USB トグル |
-| `extport_5vout` | `UISetupPage` | 拡張ポート 5V 出力トグル |
-| `run_as_user` | `cp0_lvgl_process.cpp`, `cp0_lvgl_pty.cpp` | 外部プロセス / PTY コマンドで権限を下げる際のユーザー設定 |
+| `bt_named_only` | Bluetooth 設定 | 名前のある Bluetooth デバイスだけを表示するか。既定値は `1` |
+| `run_as_user` | `cp0_process_commands.cpp`, `cp0_sudo_async.cpp` | 外部プロセス / PTY コマンドで権限を下げる際のユーザー設定 |
+
+`extport_usb` と `extport_5vout` は `cp0_signal_settings_api` に渡す GPIO 名であり、設定ファイルの key ではありません。
 
 ### 7.3 一時的な業務入力
 
@@ -311,37 +307,33 @@ cp0_config_save();
 
 - `UISSHPage` の Host/Port/User のデフォルト値はコンストラクタで初期化され、設定には書き込まれません。
 - `UIMeshPage` のメッセージ入力バッファはページメモリ内にだけ存在します。
-- `UIFilePage` の現在パスと選択行はページメモリ内にだけ存在します。
 - `UIIpPanelPage` のネットワークインターフェース一覧は `cp0_network_list()` から毎秒更新されます。
 
 ## 8. 設定ページの書き込み経路
 
 `UISetupPage` は設定キーが集中している場所です。典型的な関数:
 
-- `menu_init()`: 設定メニューを構築し、`app_*`、`extport_*` を読み取ります。
-- `save_app_toggle()`: ランチャーアプリのトグルを保存します。
-- `enter_brightness_adjust()` / `apply_value_selection()`: 輝度、音量、画面オフタイムアウト、解像度、起動モードを適用します。
-- `apply_volume()`: システム音量を書き込み、`volume` を保存します。
+- `menu_init()`: 各設定 controller を通じて設定メニューを構築します。
+- `launcher_app_registry_set_enabled()`: 設定可能な `app_*` を保存し、失敗時は以前の値を復元します。
+- `Screen::apply_value()`: 輝度と画面オフタイムアウトを適用、保存します。
+- `Speaker::apply_value()`: システム音量を書き込み、`volume` を保存します。
+- `Bluetooth::toggle_named_only()`: `bt_named_only` を保存します。
 
 例:
 
 ```cpp
-void save_app_toggle(int idx)
+bool launcher_app_registry_set_enabled(const AppDescriptor &desc, bool enabled)
 {
-    std::size_t app_count = 0;
-    const AppDescriptor *apps = launcher_app_registry_entries(&app_count);
-    const AppDescriptor &desc = apps[idx];
-    bool enabled = menu_items_[0].sub_items[idx].toggle_state;
-    launcher_app_registry_set_enabled(desc, enabled);
-    config_save();
+    if (desc.always_on || !desc.configurable) return true;
+    // SetInt、Save。いずれかが失敗した場合は以前の値を復元する。
 }
 ```
 
 設定キーを変更するときは、次のすべてを同期して確認してください。
 
-- `kBuiltinApps[]` の `AppDescriptor` エントリ。
-- `UISetupPage` の `launcher_app_registry_entries()` / `save_app_toggle()`。
-- `launch.cpp` の `launcher_app_registry_is_enabled()`。
+- `BUILTIN_APPS[]` の `AppDescriptor` エントリ。
+- `launcher_app_registry_entries()` を使用する Launcher 設定 controller。
+- `app_registry.cpp` の `launcher_app_registry_is_enabled()` / `launcher_app_registry_set_enabled()`。
 - ドキュメントとデフォルト設定。
 
 ## 9. リソース命名の推奨事項
@@ -358,6 +350,6 @@ void save_app_toggle(int idx)
 - `cp0_file_path()` は拡張子だけで分類し、ファイルが存在するかは確認しません。
 - `.desktop` の `Icon` 値は自動的に `cp0_file_path()` を呼びません。LVGL が直接読めるパスにするか、既存テンプレートと整合させてください。
 - デバイス側で新しいリソースを使う場合、パッケージングスクリプトが `projects/APPLaunch/APPLaunch/share/...` をインストールパッケージへ含めていることを確認してください。
-- 設定を書き込んだ後に `cp0_config_save()` を忘れると、再起動後に値が失われます。
-- `app_*` トグルは次回 `Launch` が構築されるときのリストに影響します。実行中に変更しても、再構築/再起動が発生するかどうかによって、固定ホームリストにはすぐ反映されない場合があります。
+- `SetInt` / `SetStr` の後に `Save` が成功しなければ、再起動後に値が失われます。
+- `app_*` の変更は Launcher にアプリ一覧の再構築を通知します。常時有効の項目はトグル書き込みの影響を受けません。
 - `run_as_user` は外部プロセスと PTY コマンドの実行ユーザーに影響します。権限問題をデバッグするときはこの設定を確認してください。
