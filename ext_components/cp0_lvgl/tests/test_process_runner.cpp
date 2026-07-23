@@ -1,4 +1,5 @@
 #include "../src/cp0_process_runner.hpp"
+#include <algorithm>
 #include <cassert>
 #include <cerrno>
 #include <chrono>
@@ -215,4 +216,17 @@ int main()
     assert(sigpending(&pending) == 0 && sigismember(&pending, SIGPIPE));
     timespec zero{0, 0}; assert(sigtimedwait(&pipe_set, nullptr, &zero) == SIGPIPE);
     assert(pthread_sigmask(SIG_SETMASK, &old_set, nullptr) == 0);
+
+    std::string secret_input = "secret\n";
+    bool input_consumed = false;
+    auto consumed = cp0_runner::run(
+        {"/bin/sh", "-c", "IFS= read -r value; [ \"$value\" = secret ]; sleep 0.05"},
+        &secret_input, {}, &cancel, 1000, 1024, UINT32_MAX, UINT32_MAX, {}, {}, {},
+        [&] {
+            std::fill(secret_input.begin(), secret_input.end(), '\0');
+            secret_input.clear();
+            input_consumed = true;
+        });
+    assert(consumed.exit_code == 0);
+    assert(input_consumed && secret_input.empty());
 }
