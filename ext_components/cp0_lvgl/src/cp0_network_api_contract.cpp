@@ -185,7 +185,8 @@ std::string encode_scan_payload(const cp0_wifi_ap_t *access_points, int count)
     for (int index = 0; index < count; ++index) {
         const auto &access_point = access_points[index];
         payload += escape_field(access_point.ssid) + ':' + std::to_string(access_point.signal) + ':' +
-            escape_field(access_point.security) + ':' + std::to_string(access_point.in_use ? 1 : 0) + '\n';
+            escape_field(access_point.security) + ':' + std::to_string(access_point.in_use ? 1 : 0) + ':' +
+            std::to_string(access_point.saved ? 1 : 0) + '\n';
     }
     return payload;
 }
@@ -207,15 +208,18 @@ int decode_scan_payload(const std::string &payload, cp0_wifi_ap_t *access_points
         std::vector<std::string> fields;
         int signal = 0;
         int in_use = 0;
-        if (!split_record(record, fields) || fields.size() != 4 || fields[0].empty() ||
+        int saved = 0;
+        if (!split_record(record, fields) || (fields.size() != 4 && fields.size() != 5) || fields[0].empty() ||
             !parse_integer(fields[1], 0, 100, signal) ||
-            !parse_integer(fields[3], 0, 1, in_use))
+            !parse_integer(fields[3], 0, 1, in_use) ||
+            (fields.size() == 5 && !parse_integer(fields[4], 0, 1, saved)))
             continue;
         cp0_wifi_ap_t decoded{};
         copy_string(decoded.ssid, fields[0]);
         decoded.signal = signal;
         copy_string(decoded.security, fields[2]);
         decoded.in_use = in_use;
+        decoded.saved = saved;
         access_points[count++] = decoded;
     }
     return count;

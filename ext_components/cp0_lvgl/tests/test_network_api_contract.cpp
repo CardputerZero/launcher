@@ -87,6 +87,7 @@ void test_scan_payload_round_trip_and_validation()
     source[0].signal = 76;
     std::strcpy(source[0].security, "WPA2\\WPA3");
     source[0].in_use = 1;
+    source[0].saved = 1;
     std::strcpy(source[1].ssid, "guest\nlevel2");
     source[1].signal = 40;
     std::strcpy(source[1].security, "OPEN");
@@ -96,7 +97,7 @@ void test_scan_payload_round_trip_and_validation()
     assert(cp0::network::decode_scan_payload(payload, decoded, 4) == 2);
     assert(std::string(decoded[0].ssid) == source[0].ssid);
     assert(std::string(decoded[0].security) == source[0].security);
-    assert(decoded[0].signal == 76 && decoded[0].in_use == 1);
+    assert(decoded[0].signal == 76 && decoded[0].in_use == 1 && decoded[0].saved == 1);
     assert(std::string(decoded[1].ssid) == source[1].ssid);
 
     const std::string malformed =

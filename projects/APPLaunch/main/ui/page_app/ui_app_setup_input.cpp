@@ -59,9 +59,17 @@ void UISetupPage::on_event(lv_event_t *event)
     if (pressed) {
         if (key != KEY_UP && key != KEY_DOWN) return;
         uint32_t now = lv_tick_get();
-        if (now - last_repeat_tick_ < REPEAT_INTERVAL_MS) return;
+        const bool wifi_repeat = view_state_ == ViewState::WIFI_LIST &&
+                                 item->key_state == KBD_KEY_REPEATED;
+        const uint32_t repeat_interval = view_state_ == ViewState::WIFI_LIST
+            ? SetupWifiListViewModel::KEY_REPEAT_INTERVAL_MS : REPEAT_INTERVAL_MS;
+        if ((view_state_ != ViewState::WIFI_LIST || wifi_repeat) &&
+            now - last_repeat_tick_ < repeat_interval) return;
         last_repeat_tick_ = now;
     } else if (key == KEY_UP || key == KEY_DOWN) {
+        // WiFi navigation is handled on press/repeat. A release must not delay
+        // the next physical press.
+        if (view_state_ == ViewState::WIFI_LIST) return;
         uint32_t now = lv_tick_get();
         if (now - last_repeat_tick_ < REPEAT_INTERVAL_MS) return;
         last_repeat_tick_ = now;
@@ -134,6 +142,7 @@ void UISetupPage::on_root_deleted()
     cancel_scroll_animations();
     lifecycle_.root_deleted();
     stop_power_timer();
+    wifi_.shutdown();
     info_.stop_timer();
     bluetooth_.shutdown();
     developer_.shutdown();

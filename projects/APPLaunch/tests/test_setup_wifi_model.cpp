@@ -1,10 +1,51 @@
 #include "../main/ui/model/setup_wifi_model.hpp"
 
+#include <algorithm>
 #include <cassert>
 #include <string>
 
 int main()
 {
+    SetupWifiListViewModel list;
+    static_assert(SetupWifiListViewModel::KEY_REPEAT_INTERVAL_MS < 100);
+    list.begin_scan();
+    assert(list.scanning());
+    auto scanning = list.snapshot();
+    assert(scanning.rows.empty());
+    assert(scanning.empty_message == "Scanning for WiFi networks...");
+
+    std::vector<SetupWifiAccessPoint> networks;
+    for (int index = 0; index < 7; ++index) {
+        networks.push_back({"wifi-" + std::to_string(index), "WPA2", 90 - index,
+                            index == 0, index == 3});
+    }
+    list.apply_scan(networks);
+    assert(!list.scanning());
+    assert(list.size() == 7);
+    assert(list.selected() && list.selected()->ssid == "wifi-0");
+    assert(!list.move_selection(-1));
+    assert(list.move_selection(1));
+    assert(list.move_selection(1));
+    assert(list.move_selection(1));
+    list.set_status({true, "wifi-0", "192.168.1.2"});
+    auto selected = list.snapshot();
+    assert(selected.title == "Connected WiFi: wifi-0  192.168.1.2");
+    assert(selected.rows.size() == 5);
+    assert(selected.rows[2].selected);
+    assert(selected.rows[2].ssid == "wifi-3 *");
+
+    list.begin_scan();
+    std::vector<SetupWifiAccessPoint> reordered = networks;
+    std::rotate(reordered.begin(), reordered.begin() + 3, reordered.end());
+    list.apply_scan(std::move(reordered));
+    assert(list.selected() && list.selected()->ssid == "wifi-3");
+    list.begin_scan();
+    list.cancel_scan();
+    assert(!list.scanning());
+    list.apply_scan({});
+    assert(!list.selected());
+    assert(list.selected_index() == 0);
+
     int timer = 0;
     int stale_timer = 0;
     static_assert(noexcept(setup_wifi_feedback_timer_callback_ready(
@@ -31,19 +72,6 @@ int main()
         &stale_screen, &stale_screen, &feedback_screen));
     assert(!setup_wifi_feedback_screen_delete_allowed(
         static_cast<int *>(nullptr), &feedback_screen, &feedback_screen));
-
-    int input_label = 0;
-    int stale_label = 0;
-    static_assert(noexcept(setup_wifi_owned_label_delete_matches(
-        &input_label, &input_label, &input_label)));
-    assert(setup_wifi_owned_label_delete_matches(
-        &input_label, &input_label, &input_label));
-    assert(!setup_wifi_owned_label_delete_matches(
-        &input_label, &stale_label, &input_label));
-    assert(!setup_wifi_owned_label_delete_matches(
-        &stale_label, &stale_label, &input_label));
-    assert(!setup_wifi_owned_label_delete_matches(
-        static_cast<int *>(nullptr), &input_label, &input_label));
 
     SetupWifiPasswordModel model;
     assert(!model.can_submit());

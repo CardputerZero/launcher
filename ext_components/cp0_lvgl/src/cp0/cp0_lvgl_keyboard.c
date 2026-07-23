@@ -126,7 +126,8 @@ static const char *getenv_default(const char *name, const char *dflt)
  *  Parameters
  * ============================================================ */
 #define EVDEV_KEYCODE_OFFSET   8
-#define REPEAT_DELAY_MS      500   /* delay before first repeat */
+#define REPEAT_DELAY_MS      500   /* delay before repeating text input */
+#define NAV_REPEAT_DELAY_MS  180   /* shorter delay for directional navigation */
 #define REPEAT_RATE_MS        30   /* interval between subsequent repeats */
 
 /* ============================================================
@@ -282,9 +283,14 @@ int cp0_keyboard_inject_text(const char *utf8)
  *  Key repeat control
  * ============================================================ */
 static void repeat_start(struct kbd_ctx *kc) {
+    const uint32_t key_code = kc->repeat_template.key_code;
+    const uint32_t delay_ms =
+        key_code == KEY_UP || key_code == KEY_DOWN ||
+        key_code == KEY_LEFT || key_code == KEY_RIGHT
+            ? NAV_REPEAT_DELAY_MS : REPEAT_DELAY_MS;
     struct itimerspec ts = {
         .it_interval = { .tv_sec = 0, .tv_nsec = (long)REPEAT_RATE_MS  * 1000000L },
-        .it_value    = { .tv_sec = 0, .tv_nsec = (long)REPEAT_DELAY_MS * 1000000L },
+        .it_value    = { .tv_sec = 0, .tv_nsec = (long)delay_ms * 1000000L },
     };
     timerfd_settime(kc->repeat_fd, 0, &ts, NULL);
     kc->repeating = true;
