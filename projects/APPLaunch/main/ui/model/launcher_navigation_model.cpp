@@ -101,17 +101,6 @@ bool LauncherNavigationModel::cancel_navigation()
     return true;
 }
 
-bool LauncherNavigationModel::toggle_diagnostic_overlay()
-{
-    diagnostic_overlay_visible_ = !diagnostic_overlay_visible_;
-    return diagnostic_overlay_visible_;
-}
-
-void LauncherNavigationModel::set_diagnostic_overlay_visible(bool visible)
-{
-    diagnostic_overlay_visible_ = visible;
-}
-
 size_t LauncherNavigationModel::selected_page() const
 {
     return selected_page_;
@@ -122,12 +111,7 @@ bool LauncherNavigationModel::is_animating() const
     return is_animating_;
 }
 
-bool LauncherNavigationModel::diagnostic_overlay_visible() const
-{
-    return diagnostic_overlay_visible_;
-}
-
 bool LauncherNavigationModel::keyboard_navigation_enabled() const
 {
-    return !diagnostic_overlay_visible_ && !is_animating_;
+    return !is_animating_;
 }

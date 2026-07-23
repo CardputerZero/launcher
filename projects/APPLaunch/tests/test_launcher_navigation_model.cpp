@@ -115,18 +115,5 @@ int main()
     assert(model.selected_page() == 0);
     model.finish_navigation();
 
-    assert(model.toggle_diagnostic_overlay());
-    assert(model.diagnostic_overlay_visible());
-    assert(!model.keyboard_navigation_enabled());
-    assert(!model.toggle_diagnostic_overlay());
-    assert(!model.diagnostic_overlay_visible());
-    assert(model.keyboard_navigation_enabled());
-
-    model.set_diagnostic_overlay_visible(true);
-    assert(model.diagnostic_overlay_visible());
-    assert(!model.keyboard_navigation_enabled());
-    model.set_diagnostic_overlay_visible(false);
-    assert(!model.diagnostic_overlay_visible());
-    assert(model.keyboard_navigation_enabled());
     return 0;
 }

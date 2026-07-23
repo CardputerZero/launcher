@@ -99,7 +99,6 @@ private:
     lv_obj_t *left_arrow_button_ = nullptr;
     lv_obj_t *right_arrow_button_ = nullptr;
     lv_obj_t *carousel_container_ = nullptr;
-    lv_obj_t *green_bg_ = nullptr;
     lv_timer_t *startup_sound_timer_ = nullptr;
     lv_timer_t *startup_delay_timer_ = nullptr;
     StartupTimerContext *startup_sound_context_ = nullptr;
