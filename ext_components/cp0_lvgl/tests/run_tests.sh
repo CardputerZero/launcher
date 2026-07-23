@@ -390,6 +390,10 @@ trap 'rm -f "$binary"' EXIT HUP INT TERM
 "$binary"
 
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror \
+    -I"$root/src" "$root/tests/test_sudo_command.cpp" -o "$binary"
+"$binary"
+
+"${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror \
     -I"$root/src" "$root/tests/test_sudo_c_api_boundary.cpp" -o "$binary"
 "$binary"
 

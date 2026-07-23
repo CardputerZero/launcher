@@ -171,17 +171,15 @@ jobs:
         cp projects/AppStore/dist/M5CardputerZero-AppStore projects/APPLaunch/dist/bin/
         cp projects/Calculator/dist/M5CardputerZero-Calculator projects/APPLaunch/dist/bin/
         cp projects/ZClaw/dist/ZClaw projects/APPLaunch/dist/bin/
-        mkdir -p projects/APPLaunch/APPLaunch/applications
-        cp projects/ZClaw/dist/APPLaunch/applications/zclaw.desktop projects/APPLaunch/APPLaunch/applications/
-        mkdir -p projects/APPLaunch/dist/APPLaunch/share/images
-        cp projects/AppStore/dist/APPLaunch/share/images/store_wordmark.png projects/APPLaunch/dist/APPLaunch/share/images/ 2>/dev/null || true
-        cp projects/AppStore/dist/APPLaunch/share/images/store_arrow_*.png projects/APPLaunch/dist/APPLaunch/share/images/ 2>/dev/null || true
+        mkdir -p projects/APPLaunch/dist/APPLaunch
+        cp -a projects/AppStore/dist/APPLaunch/. projects/APPLaunch/dist/APPLaunch/
+        cp -a projects/ZClaw/dist/APPLaunch/. projects/APPLaunch/dist/APPLaunch/
 
     - name: Bundle LaunchWizard into APPLaunch package tree
       run: |
-        mkdir -p projects/APPLaunch/APPLaunch/bin
-        cp projects/LaunchWizard/dist/LaunchWizard projects/APPLaunch/APPLaunch/bin/LaunchWizard
-        chmod 0755 projects/APPLaunch/APPLaunch/bin/LaunchWizard
+        mkdir -p projects/APPLaunch/dist/APPLaunch/bin
+        cp projects/LaunchWizard/dist/LaunchWizard projects/APPLaunch/dist/APPLaunch/bin/LaunchWizard
+        chmod 0755 projects/APPLaunch/dist/APPLaunch/bin/LaunchWizard
 
     - name: Build .deb package
       run: |

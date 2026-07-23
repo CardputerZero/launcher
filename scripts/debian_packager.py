@@ -39,7 +39,6 @@ OPTIONAL_BINARIES = (
     "M5CardputerZero-Calculator",
     "ZClaw",
 )
-APPSTORE_IMAGE_PATTERNS = ("store_wordmark.png", "store_arrow_*.png")
 
 
 class PackError(RuntimeError):
@@ -140,14 +139,11 @@ def _find_binary(src_dir: Path, bin_name: str) -> Path:
     raise PackError(f"binary {bin_name} not found in {src_dir} or {src_dir / 'bin'}")
 
 
-def _default_app_tree(project_dir: Path, src_dir: Path, app_name: str) -> Path:
-    for candidate in (project_dir / app_name, src_dir / app_name):
-        if candidate.is_dir():
-            return candidate
-    raise PackError(
-        f"{app_name} resource tree not found. Expected one of: "
-        f"{project_dir / app_name}, {src_dir / app_name}"
-    )
+def _default_app_tree(src_dir: Path, app_name: str) -> Path:
+    candidate = src_dir / app_name
+    if candidate.is_dir():
+        return candidate
+    raise PackError(f"{app_name} resource tree not found: {candidate}")
 
 
 def _copy_tree(src: Path, dst: Path) -> None:
@@ -168,27 +164,6 @@ def _copy_optional_binaries(src_dir: Path, package_root: Path, config: PackageCo
         mode = 0o644 if name.endswith(".py") else 0o755
         _copy_file(source, package_root / Path(*config.bin_path.parts) / name, mode=mode)
         copied.append(name)
-    return copied
-
-
-def _copy_appstore_images(project_dir: Path, app_dst: Path) -> list[str]:
-    appstore_dir = project_dir.parent / "AppStore"
-    image_roots = (
-        appstore_dir / "dist" / "APPLaunch" / "share" / "images",
-        appstore_dir / "APPLaunch" / "share" / "images",
-        appstore_dir / "share" / "images",
-    )
-    images_src = next((path for path in image_roots if path.is_dir()), None)
-    if images_src is None:
-        return []
-    images_dst = app_dst / "share" / "images"
-    images_dst.mkdir(parents=True, exist_ok=True)
-    copied: list[str] = []
-    for pattern in APPSTORE_IMAGE_PATTERNS:
-        for image in sorted(images_src.glob(pattern)):
-            if image.is_file():
-                shutil.copy2(image, images_dst / image.name)
-                copied.append(image.name)
     return copied
 
 
@@ -448,7 +423,11 @@ def prepare_package_tree(
     ):
         _mkdir(paths.package_root, directory)
 
-    app_src = _resolve_path(app_tree, paths.project_dir) if app_tree else _default_app_tree(paths.project_dir, paths.src_dir, config.app_name)
+    app_src = (
+        _resolve_path(app_tree, paths.project_dir)
+        if app_tree
+        else _default_app_tree(paths.src_dir, config.app_name)
+    )
     app_dst = paths.package_root / Path(*config.install_prefix.parts)
     _copy_tree(app_src, app_dst)
 
@@ -456,12 +435,6 @@ def prepare_package_tree(
     _copy_file(binary, paths.package_root / Path(*config.bin_path.parts) / config.bin_name, mode=0o755)
 
     copied_bins = _copy_optional_binaries(paths.src_dir, paths.package_root, config)
-    copied_images = (
-        _copy_appstore_images(paths.project_dir, app_dst)
-        if config.app_name == APP_NAME
-        else []
-    )
-
     _write_text(paths.package_root / "DEBIAN" / "control", _control_text(config))
     _write_text(paths.package_root / "DEBIAN" / "postinst", _postinst_text(config), mode=0o755)
     _write_text(paths.package_root / "DEBIAN" / "prerm", _prerm_text(config), mode=0o755)
@@ -475,8 +448,6 @@ def prepare_package_tree(
     print(f"  app tree: {app_src}")
     if copied_bins:
         print(f"  optional binaries: {', '.join(copied_bins)}")
-    if copied_images:
-        print(f"  AppStore images: {', '.join(copied_images)}")
 
 
 def _tar_filter(tar_info: tarfile.TarInfo) -> tarfile.TarInfo:
