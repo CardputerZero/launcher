@@ -2,17 +2,19 @@
 #include "hal/hal_network.h"
 #include "hal/hal_settings.h"
 #include "hal_lvgl_bsp.h"
+#include "../cp0_network_api_contract.hpp"
+#include "../cp0_callback_result.hpp"
+#include "../cp0_signal_registration.hpp"
 
 #include <algorithm>
 #include <arpa/inet.h>
-#include <cstdlib>
 #include <cstring>
 #include <ifaddrs.h>
 #include <functional>
 #include <list>
 #include <memory>
+#include <mutex>
 #include <net/if.h>
-#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -37,48 +39,51 @@ public:
 
     void api_call(arg_t arg, callback_t callback)
     {
-        const std::string cmd = arg.empty() ? "" : arg.front();
-        if (cmd == "Status") {
-            report(callback, 0, encode_status(get_status()));
-        } else if (cmd == "Scan") {
-            int max_count = arg.size() >= 2 ? std::atoi(nth_arg(arg, 1).c_str()) : CP0_WIFI_AP_MAX;
-            std::vector<cp0_wifi_ap_t> aps(static_cast<size_t>(std::max(0, max_count)));
+        cp0::CallbackResult result(std::move(callback));
+        try {
+        cp0::network::ApiRequest request;
+        if (!cp0::network::parse_api_request(arg, request)) {
+            result.complete(-1, cp0::network::invalid_api_request_message());
+            return;
+        }
+        switch (request.command) {
+        case cp0::network::ApiCommand::Status:
+            result.complete(0, cp0::network::encode_status_payload(get_status()));
+            break;
+        case cp0::network::ApiCommand::Scan: {
+            std::vector<cp0_wifi_ap_t> aps(static_cast<size_t>(request.scan_limit));
             int count = scan(aps.empty() ? nullptr : aps.data(), static_cast<int>(aps.size()));
-            report(callback, count, encode_scan(aps.data(), count));
-        } else if (cmd == "Connect") {
-            report(callback, hal_wifi_connect(nth_arg(arg, 1).c_str(), nth_arg(arg, 2).c_str()), "");
-        } else if (cmd == "Disconnect" || cmd == "ProfileDisconnectActive") {
-            report(callback, hal_wifi_disconnect(), "");
-        } else if (cmd == "ProfileForget") {
-            report(callback, 0, "");
-        } else if (cmd == "ProfileExists") {
-            const std::string ssid = nth_arg(arg, 1);
+            result.complete(count, cp0::network::encode_scan_payload(aps.data(), count));
+            break;
+        }
+        case cp0::network::ApiCommand::Connect:
+            result.complete(hal_wifi_connect(request.ssid.c_str(), request.password.c_str()), "");
+            break;
+        case cp0::network::ApiCommand::Disconnect:
+        case cp0::network::ApiCommand::ProfileDisconnectActive:
+            result.complete(hal_wifi_disconnect(), "");
+            break;
+        case cp0::network::ApiCommand::ProfileForget:
+            result.complete(0, "");
+            break;
+        case cp0::network::ApiCommand::ProfileExists: {
             cp0_wifi_status_t st = get_status();
-            report(callback, ssid == st.ssid ? 1 : 0, "");
-        } else if (cmd == "RadioEnabled") {
-            report(callback, 1, "");
-        } else if (cmd == "RadioSetEnabled") {
-            report(callback, 0, "");
-        } else {
-            report(callback, -1, "unknown wifi api command");
+            result.complete(request.ssid == st.ssid ? 1 : 0, "");
+            break;
+        }
+        case cp0::network::ApiCommand::RadioEnabled:
+            result.complete(1, "");
+            break;
+        case cp0::network::ApiCommand::RadioSetEnabled:
+            result.complete(0, "");
+            break;
+        }
+        } catch (...) {
+            result.complete(-1, "network api failure");
         }
     }
 
 private:
-    static void report(callback_t callback, int code, const std::string &data)
-    {
-        if (callback)
-            callback(code, data);
-    }
-
-    static std::string nth_arg(const arg_t &arg, size_t index)
-    {
-        auto it = arg.begin();
-        for (size_t i = 0; i < index && it != arg.end(); ++i)
-            ++it;
-        return it == arg.end() ? std::string() : *it;
-    }
-
     static cp0_wifi_status_t get_status()
     {
         hal_wifi_status_t hal = hal_wifi_get_status();
@@ -107,21 +112,19 @@ private:
         return count;
     }
 
-    static std::string encode_status(const cp0_wifi_status_t &st)
-    {
-        std::ostringstream oss;
-        oss << st.connected << ':' << st.ssid << ':' << st.ip << ':' << st.signal;
-        return oss.str();
-    }
-
-    static std::string encode_scan(const cp0_wifi_ap_t *aps, int count)
-    {
-        std::ostringstream oss;
-        for (int i = 0; aps && i < count; ++i)
-            oss << aps[i].ssid << ':' << aps[i].signal << ':' << aps[i].security << ':' << aps[i].in_use << '\n';
-        return oss.str();
-    }
 };
+
+} // namespace
+
+namespace {
+
+using WifiRegistration = cp0::SignalRegistration<decltype(cp0_signal_wifi_api)>;
+
+WifiRegistration &wifi_registration()
+{
+    static WifiRegistration registration;
+    return registration;
+}
 
 } // namespace
 
@@ -149,10 +152,21 @@ extern "C" int cp0_network_list(cp0_netif_info_t *entries, int max_entries, int 
 
 extern "C" void init_wifi(void)
 {
-    auto wifi = std::make_shared<WifiSystem>();
-    cp0_signal_wifi_api.append([wifi](std::list<std::string> arg, std::function<void(int, std::string)> callback) {
-        wifi->api_call(std::move(arg), std::move(callback));
+    static std::once_flag initialized;
+    std::call_once(initialized, []() {
+        auto wifi = std::make_shared<WifiSystem>();
+        wifi_registration().replace(
+            cp0_signal_wifi_api,
+            [wifi](std::list<std::string> arg,
+                   std::function<void(int, std::string)> callback) {
+                wifi->api_call(std::move(arg), std::move(callback));
+            });
     });
+}
+
+extern "C" void deinit_wifi(void)
+{
+    wifi_registration().reset();
 }
 
 extern "C" int hal_network_list(hal_netif_info_t *entries, int max_entries, int *out_count)

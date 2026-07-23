@@ -2,8 +2,10 @@
 #include "cp0_lvgl_app.h"
 
 #include "cp0_lvgl_log.h"
+#include "../cp0_settings_policy.hpp"
+#include "../cp0_signal_registration.hpp"
+#include "../cp0_sync_signal.hpp"
 
-#include <algorithm>
 #include <cerrno>
 #include <cstdio>
 #include <cstdlib>
@@ -11,7 +13,7 @@
 #include <ctime>
 #include <fcntl.h>
 #include <functional>
-#include <iterator>
+#include <limits>
 #include <list>
 #include <memory>
 #include <mutex>
@@ -136,58 +138,91 @@ class SettingsSystem
 {
 public:
     using callback_t = std::function<void(int, std::string)>;
-    using arg_t = std::list<std::string>;
-
-    SettingsSystem()
-    {
-        apply_extport_config();
-    }
+    using arg_t = cp0::settings::Arguments;
 
     void api_call(arg_t arg, callback_t callback)
     {
-        const std::string cmd = arg.empty() ? "" : arg.front();
-        if (cmd == "BacklightRead") {
+        try {
+        if (!cp0::settings::valid_arguments(arg)) {
+            report(callback, -1, "invalid settings api request");
+            return;
+        }
+        switch (cp0::settings::command_from(arg)) {
+        case cp0::settings::Command::BacklightRead: {
             int val = backlight_read();
             report(callback, val < 0 ? -1 : 0, std::to_string(val));
-        } else if (cmd == "BacklightMax") {
+            break;
+        }
+        case cp0::settings::Command::BacklightMax: {
             int val = backlight_max();
             report(callback, val < 0 ? -1 : 0, std::to_string(val));
-        } else if (cmd == "BacklightWrite") {
-            int val = backlight_write(std::atoi(nth_arg(arg, 1).c_str()));
+            break;
+        }
+        case cp0::settings::Command::BacklightWrite: {
+            int requested = 0;
+            if (!cp0::settings::integer_argument(
+                    arg, 1, 0, std::numeric_limits<int>::max(), requested)) {
+                report(callback, -1, "invalid settings api request");
+                break;
+            }
+            int val = backlight_write(requested);
             report(callback, val < 0 ? -1 : 0, std::to_string(val));
-        } else if (cmd == "Log") {
-            const std::string topic = nth_arg(arg, 1);
-            const std::string message = nth_arg(arg, 2);
+            break;
+        }
+        case cp0::settings::Command::Log: {
+            const std::string topic = cp0::settings::argument_at(arg, 1);
+            const std::string message = cp0::settings::argument_at(arg, 2);
             settings_log(topic.c_str(), message.c_str());
             report(callback, 0, "");
-        } else if (cmd == "TimeStr") {
+            break;
+        }
+        case cp0::settings::Command::TimeStr: {
             char buf[32] = {};
             time_str(buf, sizeof(buf));
             report(callback, 0, buf);
-        } else if (cmd == "GpioSet") {
-            const std::string name = nth_arg(arg, 1);
-            int val = std::atoi(nth_arg(arg, 2).c_str());
-            int ret = set_named_gpio(name.c_str(), val);
+            break;
+        }
+        case cp0::settings::Command::GpioSet: {
+            const auto output = cp0::settings::power_output_from_name(cp0::settings::argument_at(arg, 1));
+            int requested = 0;
+            if (!cp0::settings::integer_argument(arg, 2, 0, 1, requested)) {
+                report(callback, -1, "invalid settings api request");
+                break;
+            }
+            int ret = set_named_gpio(output, requested);
             report(callback, ret, ret == 0 ? "ok" : std::string("gpio set failed: ") + std::to_string(-ret));
-        } else if (cmd == "GpioGet") {
-            const std::string name = nth_arg(arg, 1);
-            int val = get_named_gpio(name.c_str());
+            break;
+        }
+        case cp0::settings::Command::GpioGet: {
+            int val = get_named_gpio(cp0::settings::power_output_from_name(cp0::settings::argument_at(arg, 1)));
             if (val < 0)
                 report(callback, val, std::string("gpio get failed: ") + std::to_string(-val));
             else
                 report(callback, 0, std::to_string(val));
-        } else {
+            break;
+        }
+        case cp0::settings::Command::Unknown:
+        default:
             report(callback, -1, "unknown settings api command");
+            break;
+        }
+        } catch (...) {
+            report(callback, -1, "settings api failure");
         }
     }
 
-    static int api_int(const arg_t &arg, int default_value = -1)
+    static int api_int(const arg_t &arg,
+                       int default_value,
+                       int minimum,
+                       int maximum)
     {
         int result = default_value;
-        cp0_signal_settings_api(arg, [&](int code, std::string data) {
-            if (code >= 0)
-                result = std::atoi(data.c_str());
-        });
+        cp0::signal::invoke_noexcept([&] { cp0_signal_settings_api(arg, [&](int code, std::string data) {
+            int parsed = 0;
+            if (code == 0 &&
+                cp0::settings::parse_integer_response(data, minimum, maximum, parsed))
+                result = parsed;
+        }); });
         return result;
     }
 
@@ -196,10 +231,10 @@ public:
         if (!buf || buf_size <= 0)
             return;
         buf[0] = '\0';
-        cp0_signal_settings_api({"TimeStr"}, [&](int code, std::string data) {
+        cp0::signal::invoke_noexcept([&] { cp0_signal_settings_api({"TimeStr"}, [&](int code, std::string data) {
             if (code == 0)
                 copy_string(buf, static_cast<size_t>(buf_size), data);
-        });
+        }); });
         if (buf[0] == '\0')
             fallback_time_str(buf, buf_size);
     }
@@ -210,27 +245,24 @@ private:
 
     void report(callback_t callback, int code, const std::string &data)
     {
-        if (callback)
+        if (!callback) return;
+        try {
             callback(code, data);
+        } catch (...) {
+        }
     }
 
-    void apply_extport_config()
-    {
-        set_named_gpio("GROVE5V", config_get_int("extport_usb", 1));
-        set_named_gpio("EXT5V", config_get_int("extport_5vout", 1));
-    }
-
-    int set_named_gpio(const char *name, int val)
+    int set_named_gpio(cp0::settings::PowerOutput output, int val)
     {
         std::lock_guard<std::mutex> lock(gpio_mutex_);
-        if (is_grove5v_name(name)) {
+        if (output == cp0::settings::PowerOutput::Grove5V) {
             int ret = write_led_value(kGrove5vLedPaths, val);
             if (ret != -ENOENT)
                 return ret;
             const ExtPortGpioMap &map = active_gpio_map_locked();
             return set_gpio_value(map.chip_path, map.grove5v_line, map.grove5v_active_low, "GROVE5V", val);
         }
-        if (is_ext5v_name(name)) {
+        if (output == cp0::settings::PowerOutput::Ext5V) {
             int ret = write_led_value(kExt5vLedPaths, val);
             if (ret != -ENOENT)
                 return ret;
@@ -240,17 +272,17 @@ private:
         return -EINVAL;
     }
 
-    int get_named_gpio(const char *name)
+    int get_named_gpio(cp0::settings::PowerOutput output)
     {
         std::lock_guard<std::mutex> lock(gpio_mutex_);
-        if (is_grove5v_name(name)) {
+        if (output == cp0::settings::PowerOutput::Grove5V) {
             int value = read_led_value(kGrove5vLedPaths);
             if (value != -ENOENT)
                 return value;
             const ExtPortGpioMap &map = active_gpio_map_locked();
             return get_gpio_value(map.chip_path, map.grove5v_line, map.grove5v_active_low, "GROVE5V");
         }
-        if (is_ext5v_name(name)) {
+        if (output == cp0::settings::PowerOutput::Ext5V) {
             int value = read_led_value(kExt5vLedPaths);
             if (value != -ENOENT)
                 return value;
@@ -270,7 +302,7 @@ private:
 
     int set_gpio_value(const char *chip_path, unsigned int line, bool active_low, const char *consumer, int val)
     {
-        int bit = (val ? 1 : 0) ^ (active_low ? 1 : 0);
+        int bit = cp0::settings::physical_line_value(val, active_low);
         int fd = gpio_v2_request_output(chip_path, line, consumer, bit);
         if (fd < 0)
             return fd;
@@ -281,13 +313,13 @@ private:
     int get_gpio_value(const char *chip_path, unsigned int line, bool active_low, const char *consumer)
     {
         int value = gpio_v2_read_input(chip_path, line, consumer);
-        return value < 0 ? value : (value ^ (active_low ? 1 : 0));
+        return value < 0 ? value : cp0::settings::logical_line_value(value, active_low);
     }
 
     template <size_t N>
     static int write_led_value(const char *const (&paths)[N], int val)
     {
-        const char value = val ? '1' : '0';
+        const char value = cp0::settings::switch_value(val) ? '1' : '0';
         for (const char *path : paths) {
             int fd = open(path, O_WRONLY | O_CLOEXEC);
             if (fd < 0) {
@@ -321,37 +353,13 @@ private:
                 return -err;
             if (size == 0)
                 return -EIO;
-            return std::strtol(buf, nullptr, 10) != 0 ? 1 : 0;
+            int value = 0;
+            return cp0::settings::parse_integer_file_line(
+                       std::string_view(buf, static_cast<std::size_t>(size)), 0, 1, value)
+                       ? value
+                       : -EINVAL;
         }
         return -ENOENT;
-    }
-
-    static int config_get_int(const char *key, int default_val)
-    {
-        int val = default_val;
-        cp0_signal_config_api({"GetInt", key ? std::string(key) : std::string(), std::to_string(default_val)},
-                              [&](int code, std::string data) {
-                                  if (code == 0)
-                                      val = std::atoi(data.c_str());
-                              });
-        return val;
-    }
-
-    static bool is_grove5v_name(const char *name)
-    {
-        return name && (std::strcmp(name, "GROVE5V") == 0 || std::strcmp(name, "extport_usb") == 0);
-    }
-
-    static bool is_ext5v_name(const char *name)
-    {
-        return name && (std::strcmp(name, "EXT5V") == 0 || std::strcmp(name, "extport_5vout") == 0);
-    }
-
-    static std::string nth_arg(const arg_t &arg, size_t index)
-    {
-        auto it = arg.begin();
-        std::advance(it, std::min(index, arg.size()));
-        return it == arg.end() ? std::string() : *it;
     }
 
     static void copy_string(char *dst, size_t dst_size, const std::string &src)
@@ -375,26 +383,34 @@ private:
         std::snprintf(buf, static_cast<size_t>(buf_size), "%02d:%02d", t->tm_hour, t->tm_min);
     }
 
-    static int read_int_file(const char *path, int default_value)
+    static int read_int_file(const char *path,
+                             int default_value,
+                             int minimum,
+                             int maximum)
     {
         FILE *f = std::fopen(path, "r");
         if (!f)
             return default_value;
-        int val = default_value;
-        if (std::fscanf(f, "%d", &val) != 1)
-            val = default_value;
+        char buffer[64] = {};
+        const bool read_succeeded = std::fgets(buffer, sizeof(buffer), f) != nullptr;
         std::fclose(f);
-        return val;
+        int value = default_value;
+        return read_succeeded && cp0::settings::parse_integer_file_line(
+                                     buffer, minimum, maximum, value)
+                   ? value
+                   : default_value;
     }
 
     int backlight_read()
     {
-        return read_int_file("/sys/class/backlight/backlight/brightness", -1);
+        return read_int_file("/sys/class/backlight/backlight/brightness", -1, 0,
+                             std::numeric_limits<int>::max());
     }
 
     int backlight_max()
     {
-        return read_int_file("/sys/class/backlight/backlight/max_brightness", 100);
+        return read_int_file("/sys/class/backlight/backlight/max_brightness", 100, 1,
+                             std::numeric_limits<int>::max());
     }
 
     int backlight_write(int val)
@@ -407,9 +423,9 @@ private:
         FILE *f = std::fopen("/sys/class/backlight/backlight/brightness", "w");
         if (!f)
             return -1;
-        std::fprintf(f, "%d", val);
-        std::fclose(f);
-        return val;
+        const int written = std::fprintf(f, "%d", val);
+        const int close_result = std::fclose(f);
+        return written > 0 && close_result == 0 ? val : -1;
     }
 
     void settings_log(const char *topic, const char *message)
@@ -427,24 +443,32 @@ extern "C" void init_settings(void)
     cp0_zmq_log_init();
     cp0_zmq_log("settings", "init_settings");
     auto settings = std::make_shared<SettingsSystem>();
-    cp0_signal_settings_api.append([settings](std::list<std::string> arg, std::function<void(int, std::string)> callback) {
-        settings->api_call(std::move(arg), std::move(callback));
-    });
+    static cp0::SignalRegistration<decltype(cp0_signal_settings_api)> registration;
+    registration.replace(cp0_signal_settings_api,
+                         [settings](std::list<std::string> arg,
+                                    std::function<void(int, std::string)> callback) {
+                             settings->api_call(std::move(arg), std::move(callback));
+                         });
 }
 
 extern "C" int cp0_backlight_read(void)
 {
-    return SettingsSystem::api_int({"BacklightRead"});
+    return SettingsSystem::api_int(
+        {"BacklightRead"}, -1, 0, std::numeric_limits<int>::max());
 }
 
 extern "C" int cp0_backlight_max(void)
 {
-    return SettingsSystem::api_int({"BacklightMax"}, 100);
+    return SettingsSystem::api_int(
+        {"BacklightMax"}, 100, 1, std::numeric_limits<int>::max());
 }
 
 extern "C" int cp0_backlight_write(int val)
 {
-    return SettingsSystem::api_int({"BacklightWrite", std::to_string(val)});
+    if (val < 0) return -1;
+    return SettingsSystem::api_int(
+        {"BacklightWrite", std::to_string(val)}, -1, 0,
+        std::numeric_limits<int>::max());
 }
 
 extern "C" void cp0_time_str(char *buf, int buf_size)

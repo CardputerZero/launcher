@@ -8,6 +8,9 @@
 
 #include "lvgl/lvgl.h"
 #include "cp0_lvgl_app.h"
+#include "app_directory_watcher.h"
+#include "ui_loading.h"
+#include "model/launcher_navigation_model.hpp"
 
 #include <functional>
 #include <list>
@@ -58,34 +61,42 @@ private:
     friend struct app;
 
     void go_back_home();
+    bool begin_page_launch();
     void launch_Exec_in_terminal(const std::string &exec, bool sysplause = true);
     void launch_Exec(const std::string &exec, bool keep_root = false);
     void applications_load();
-    void inotify_init_watch();
-    void release_dir_watcher();
-    void release_watch_timer();
-    void release_esc_hold_timer();
     void refresh_home_carousel();
     void applications_reload();
     void rebuild_builtin_apps();
     int normalized_app_index(int index) const;
     const app *app_at_index(int index) const;
 
-    static void lv_go_back_home(void *arg);
-    static void app_dir_watch_cb(lv_timer_t *timer);
-    static void esc_hold_timer_cb(lv_timer_t *timer);
-    static void app_registry_changed_cb(void *user_data);
+    static void lv_go_back_home(void *arg) noexcept;
+    static void esc_force_home_cb(void *user_data) noexcept;
+    static void app_registry_changed_cb(void *user_data) noexcept;
 
     std::weak_ptr<UILaunchPage> launch_page_;
     int current_app = 2;
-    cp0_watcher_t dir_watcher_ = NULL;
-    lv_timer_t *watch_timer_ = nullptr;
-    lv_timer_t *esc_hold_timer_ = nullptr;
-    uint32_t esc_hold_start_tick_ = 0;
-    bool esc_hold_active_ = false;
-    bool force_home_pending_ = false;
+    AppDirectoryWatcher app_directory_watcher_;
+    LauncherPageLifecycleModel page_lifecycle_;
     int fixed_count = 0;
     bool bound_ = false;
     std::list<app> app_list;
     std::shared_ptr<void> app_Page;
 };
+
+template <class PageT>
+app::app(std::string name, std::string icon, page_t<PageT>)
+    : Name(std::move(name)), Icon(std::move(icon))
+{
+    launch = [](Launch *owner) {
+        if (!owner->begin_page_launch()) return;
+        ui_loading::show("Loading...");
+        lv_refr_now(nullptr);
+        auto page = std::make_shared<PageT>();
+        owner->app_Page = page;
+        page->navigate_home = std::bind(&Launch::go_back_home, owner);
+        ui_loading::hide();
+        cp0_lvgl_start_app_page(*page);
+    };
+}

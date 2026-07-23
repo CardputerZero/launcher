@@ -6,6 +6,8 @@
 #include <string.h>
 #include <unistd.h>
 #include "cp0_lvgl.h"
+#include "../cp0_display_screenshot_contract.hpp"
+#include <pthread.h>
 
 static int find_st7789v_fbdev(char *dev_path, size_t buf_size)
 {
@@ -40,6 +42,12 @@ static int find_st7789v_fbdev(char *dev_path, size_t buf_size)
 
 void init_freambuffer_disp()
 {
+    static pthread_mutex_t init_mutex = PTHREAD_MUTEX_INITIALIZER;
+    pthread_mutex_lock(&init_mutex);
+    if (lv_display_get_default() != NULL) {
+        pthread_mutex_unlock(&init_mutex);
+        return;
+    }
 #if LV_USE_LINUX_DRM
     const char *device = getenv("LV_LINUX_DRM_DEVICE");
     char *detected_device = NULL;
@@ -51,6 +59,7 @@ void init_freambuffer_disp()
     if (device == NULL || device[0] == '\0') {
         fprintf(stderr, "Failed to find a connected DRM device\n");
         lv_free(detected_device);
+        pthread_mutex_unlock(&init_mutex);
         return;
     }
 
@@ -59,6 +68,7 @@ void init_freambuffer_disp()
     if (disp == NULL) {
         fprintf(stderr, "Failed to create DRM display\n");
         lv_free(detected_device);
+        pthread_mutex_unlock(&init_mutex);
         return;
     }
 
@@ -66,6 +76,7 @@ void init_freambuffer_disp()
         fprintf(stderr, "Failed to initialize DRM device: %s\n", device);
         lv_display_delete(disp);
         lv_free(detected_device);
+        pthread_mutex_unlock(&init_mutex);
         return;
     }
 
@@ -78,6 +89,7 @@ void init_freambuffer_disp()
     lv_display_t *disp = lv_linux_fbdev_create();
     if (disp == NULL) {
         printf("Failed to create fbdev display!\n");
+        pthread_mutex_unlock(&init_mutex);
         return;
     }
 
@@ -99,4 +111,5 @@ void init_freambuffer_disp()
     lv_coord_t h = lv_display_get_vertical_resolution(disp);
     printf("Framebuffer resolution: %dx%d\n", w, h);
 #endif
+    pthread_mutex_unlock(&init_mutex);
 }

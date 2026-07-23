@@ -21,12 +21,58 @@ lv_timer_t *warning_timer = nullptr;
 uint32_t flash_tick = 0;
 uint32_t rendered_seconds = 0;
 
+void overlay_deleted_cb(lv_event_t *event) noexcept
+{
+    try {
+        if (lv_event_get_code(event) != LV_EVENT_DELETE ||
+            lv_event_get_target(event) != lv_event_get_current_target(event) ||
+            lv_event_get_target(event) != overlay)
+            return;
+        overlay = nullptr;
+        tint = nullptr;
+        countdown_label = nullptr;
+        rendered_warning = LowBatteryWarning::None;
+        rendered_seconds = 0;
+    } catch (...) {
+        overlay = nullptr;
+        tint = nullptr;
+        countdown_label = nullptr;
+        rendered_warning = LowBatteryWarning::None;
+        rendered_seconds = 0;
+    }
+}
+
+void critical_child_deleted_cb(lv_event_t *event) noexcept
+{
+    try {
+        if (lv_event_get_code(event) != LV_EVENT_DELETE ||
+            lv_event_get_target(event) != lv_event_get_current_target(event)) return;
+        lv_obj_t *deleted = static_cast<lv_obj_t *>(lv_event_get_target(event));
+        if (deleted != tint && deleted != countdown_label) return;
+        if (deleted == tint) tint = nullptr;
+        if (deleted == countdown_label) countdown_label = nullptr;
+        if (overlay)
+            lv_obj_add_flag(overlay, LV_OBJ_FLAG_HIDDEN);
+        rendered_warning = LowBatteryWarning::None;
+        rendered_seconds = 0;
+    } catch (...) {
+        tint = nullptr;
+        countdown_label = nullptr;
+        rendered_warning = LowBatteryWarning::None;
+        rendered_seconds = 0;
+    }
+}
+
 void create_overlay()
 {
-    if (overlay || !lv_layer_top())
-        return;
+    if (overlay && tint && countdown_label) return;
+    if (overlay) lv_obj_delete(overlay);
+    if (!lv_layer_top()) return;
 
     overlay = lv_obj_create(lv_layer_top());
+    if (!overlay)
+        return;
+    lv_obj_add_event_cb(overlay, overlay_deleted_cb, LV_EVENT_DELETE, nullptr);
     lv_obj_remove_style_all(overlay);
     lv_obj_set_pos(overlay, 0, 0);
     lv_obj_set_size(overlay, kScreenWidth, kScreenHeight);
@@ -34,6 +80,11 @@ void create_overlay()
     lv_obj_add_flag(overlay, LV_OBJ_FLAG_IGNORE_LAYOUT);
 
     tint = lv_obj_create(overlay);
+    if (!tint) {
+        lv_obj_delete(overlay);
+        return;
+    }
+    lv_obj_add_event_cb(tint, critical_child_deleted_cb, LV_EVENT_DELETE, nullptr);
     lv_obj_remove_style_all(tint);
     lv_obj_set_size(tint, kScreenWidth, kScreenHeight);
     lv_obj_set_style_bg_color(tint, lv_color_hex(0xFF0000), 0);
@@ -41,6 +92,10 @@ void create_overlay()
     lv_obj_clear_flag(tint, (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
 
     lv_obj_t *panel = lv_obj_create(overlay);
+    if (!panel) {
+        lv_obj_delete(overlay);
+        return;
+    }
     lv_obj_remove_style_all(panel);
     lv_obj_set_pos(panel, 18, 73);
     lv_obj_set_size(panel, 284, 94);
@@ -50,6 +105,10 @@ void create_overlay()
     lv_obj_set_style_border_width(panel, 2, 0);
 
     lv_obj_t *title = lv_label_create(panel);
+    if (!title) {
+        lv_obj_delete(overlay);
+        return;
+    }
     lv_label_set_text(title, "LOW BATTERY");
     lv_obj_set_width(title, 260);
     lv_obj_set_pos(title, 12, 10);
@@ -58,6 +117,12 @@ void create_overlay()
     lv_obj_set_style_text_font(title, &lv_font_montserrat_14, 0);
 
     countdown_label = lv_label_create(panel);
+    if (!countdown_label) {
+        lv_obj_delete(overlay);
+        return;
+    }
+    lv_obj_add_event_cb(
+        countdown_label, critical_child_deleted_cb, LV_EVENT_DELETE, nullptr);
     lv_obj_set_width(countdown_label, 260);
     lv_obj_set_pos(countdown_label, 12, 36);
     lv_obj_set_style_text_align(countdown_label, LV_TEXT_ALIGN_CENTER, 0);
@@ -65,6 +130,10 @@ void create_overlay()
     lv_obj_set_style_text_font(countdown_label, &lv_font_montserrat_14, 0);
 
     lv_obj_t *message = lv_label_create(panel);
+    if (!message) {
+        lv_obj_delete(overlay);
+        return;
+    }
     lv_label_set_text(message, "Shut down now or connect a charger.");
     lv_obj_set_width(message, 260);
     lv_obj_set_pos(message, 12, 64);
@@ -88,7 +157,7 @@ void render(uint32_t now, bool force = false)
     }
 
     create_overlay();
-    if (!overlay)
+    if (!overlay || !tint || !countdown_label)
         return;
     lv_obj_move_foreground(overlay);
     lv_obj_clear_flag(overlay, LV_OBJ_FLAG_HIDDEN);
@@ -109,8 +178,10 @@ void render(uint32_t now, bool force = false)
     }
 }
 
-void timer_cb(lv_timer_t *)
+void timer_cb(lv_timer_t *timer) noexcept
 {
+    try {
+    if (timer != warning_timer) return;
     const uint32_t now = lv_tick_get();
     render(now);
     if (overlay && flow.warning() != LowBatteryWarning::None &&
@@ -127,24 +198,59 @@ void timer_cb(lv_timer_t *)
     render(now, true);
     if (flow.confirm_shutdown(confirmation.valid != 0, (confirmation.flags & 1) != 0, now))
         cp0_system_shutdown();
+    } catch (...) {
+        if (overlay)
+            lv_obj_add_flag(overlay, LV_OBJ_FLAG_HIDDEN);
+    }
 }
 
 } // namespace
 
 void init_warning()
 {
+    try {
     if (warning_timer)
         return;
     flow.reset();
     warning_timer = lv_timer_create(timer_cb, 250, nullptr);
     update_warning(cp0_battery_read());
+    } catch (...) {
+        if (warning_timer) {
+            lv_timer_delete(warning_timer);
+            warning_timer = nullptr;
+        }
+        if (overlay)
+            lv_obj_add_flag(overlay, LV_OBJ_FLAG_HIDDEN);
+        flow.reset();
+    }
 }
 
 void update_warning(const cp0_battery_info_t &info)
 {
+    try {
     const uint32_t now = lv_tick_get();
     flow.update(info.valid != 0, info.soc, (info.flags & 1) != 0, now);
     render(now, true);
+    } catch (...) {
+        if (overlay)
+            lv_obj_add_flag(overlay, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
+void shutdown_warning()
+{
+    if (warning_timer) {
+        lv_timer_delete(warning_timer);
+        warning_timer = nullptr;
+    }
+    if (overlay)
+        lv_obj_delete(overlay);
+    overlay = nullptr;
+    tint = nullptr;
+    countdown_label = nullptr;
+    flow.reset();
+    rendered_warning = LowBatteryWarning::None;
+    rendered_seconds = 0;
 }
 
 } // namespace launcher_battery_ui

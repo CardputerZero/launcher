@@ -3,6 +3,10 @@
 #include "commount.h"
 #include "lvgl/lvgl.h"
 #include "sdl_lvgl.h"
+#include "../cp0_keyboard_key_contract.h"
+#include "../cp0_keyboard_input_lifecycle.h"
+#include "../cp0_keyboard_queue.h"
+#include "../cp0_keyboard_text.h"
 
 
 #include "lvgl/src/drivers/sdl/lv_sdl_mouse.h"
@@ -25,6 +29,9 @@ typedef struct {
 
 static void cp0_sdl_keyboard_read(lv_indev_t *indev, lv_indev_data_t *data);
 static void cp0_sdl_keyboard_delete_cb(lv_event_t *event);
+static cp0_keyboard_input_lifecycle_t keyboard_lifecycle;
+static pthread_mutex_t keyboard_init_mutex = PTHREAD_MUTEX_INITIALIZER;
+static int mouse_initialized;
 
 __attribute__((weak)) int ui_screensaver_filter_key(const struct key_item *elm)
 {
@@ -37,23 +44,11 @@ __attribute__((weak)) void ui_global_hint_on_key(const struct key_item *elm)
     (void)elm;
 }
 
-static uint32_t cp0_utf8_first_codepoint(const char *s)
+static cp0_keyboard_key_handler_t global_key_handler;
+
+void cp0_keyboard_set_global_key_handler(cp0_keyboard_key_handler_t handler)
 {
-    const unsigned char *p = (const unsigned char *)s;
-    if (p[0] == '\0')
-        return 0;
-    if (p[0] < 0x80)
-        return p[0];
-    if ((p[0] & 0xe0) == 0xc0 && (p[1] & 0xc0) == 0x80)
-        return ((uint32_t)(p[0] & 0x1f) << 6) | (uint32_t)(p[1] & 0x3f);
-    if ((p[0] & 0xf0) == 0xe0 && (p[1] & 0xc0) == 0x80 && (p[2] & 0xc0) == 0x80)
-        return ((uint32_t)(p[0] & 0x0f) << 12) | ((uint32_t)(p[1] & 0x3f) << 6) |
-               (uint32_t)(p[2] & 0x3f);
-    if ((p[0] & 0xf8) == 0xf0 && (p[1] & 0xc0) == 0x80 && (p[2] & 0xc0) == 0x80 &&
-        (p[3] & 0xc0) == 0x80)
-        return ((uint32_t)(p[0] & 0x07) << 18) | ((uint32_t)(p[1] & 0x3f) << 12) |
-               ((uint32_t)(p[2] & 0x3f) << 6) | (uint32_t)(p[3] & 0x3f);
-    return 0;
+    global_key_handler = handler;
 }
 
 static uint32_t cp0_evdev_process_key(uint16_t code)
@@ -124,65 +119,6 @@ static uint32_t cp0_sdl_ctrl_to_lv_key(SDL_Keycode key)
         return LV_KEY_END;
     default:
         return 0;
-    }
-}
-
-static const char *cp0_sdl_ctrl_utf8(SDL_Keycode key)
-{
-    switch (key) {
-    case SDLK_RETURN:
-    case SDLK_KP_ENTER:
-        return "\r";
-    case SDLK_BACKSPACE:
-        return "\x7f";
-    case SDLK_TAB:
-        return "\t";
-    case SDLK_ESCAPE:
-        return "\x1b";
-    case SDLK_UP:
-        return "\033[A";
-    case SDLK_DOWN:
-        return "\033[B";
-    case SDLK_RIGHT:
-        return "\033[C";
-    case SDLK_LEFT:
-        return "\033[D";
-    case SDLK_HOME:
-        return "\033[H";
-    case SDLK_END:
-        return "\033[F";
-    case SDLK_DELETE:
-        return "\033[3~";
-    case SDLK_PAGEUP:
-        return "\033[5~";
-    case SDLK_PAGEDOWN:
-        return "\033[6~";
-    case SDLK_F1:
-        return "\033OP";
-    case SDLK_F2:
-        return "\033OQ";
-    case SDLK_F3:
-        return "\033OR";
-    case SDLK_F4:
-        return "\033OS";
-    case SDLK_F5:
-        return "\033[15~";
-    case SDLK_F6:
-        return "\033[17~";
-    case SDLK_F7:
-        return "\033[18~";
-    case SDLK_F8:
-        return "\033[19~";
-    case SDLK_F9:
-        return "\033[20~";
-    case SDLK_F10:
-        return "\033[21~";
-    case SDLK_F11:
-        return "\033[23~";
-    case SDLK_F12:
-        return "\033[24~";
-    default:
-        return NULL;
     }
 }
 
@@ -275,6 +211,8 @@ static uint32_t cp0_sdl_scancode_to_linux_key(SDL_Scancode scancode)
         return KEY_0;
     case SDL_SCANCODE_RETURN:
         return KEY_ENTER;
+    case SDL_SCANCODE_KP_ENTER:
+        return KEY_KPENTER;
     case SDL_SCANCODE_ESCAPE:
         return KEY_ESC;
     case SDL_SCANCODE_BACKSPACE:
@@ -401,34 +339,41 @@ const char *kbd_state_name(int state)
     }
 }
 
-static bool cp0_sdl_queue_has_data(void)
-{
-    bool has_data;
-    pthread_mutex_lock(&keyboard_mutex);
-    has_data = !STAILQ_EMPTY(&keyboard_queue);
-    pthread_mutex_unlock(&keyboard_mutex);
-    return has_data;
-}
-
 static void cp0_sdl_enqueue_key(const struct key_item *event)
 {
-    struct key_item *elm = malloc(sizeof(*elm));
-    if (elm == NULL)
-        return;
-    *elm = *event;
-    elm->flage = 0;
+    (void)cp0_keyboard_queue_push(event);
+}
 
-    if (elm->key_code == KEY_ESC)
-        LVGL_HOME_KEY_FLAG = elm->key_state;
+int cp0_keyboard_inject(uint32_t key_code, int key_state, uint32_t mods)
+{
+    if (key_state != KBD_KEY_RELEASED && key_state != KBD_KEY_PRESSED &&
+        key_state != KBD_KEY_REPEATED)
+        return -1;
+    struct key_item item = {0};
+    item.key_code = key_code;
+    item.key_state = key_state;
+    item.mods = mods;
+    const char *control = cp0_keyboard_control_utf8(key_code);
+    if (control) snprintf(item.utf8, sizeof(item.utf8), "%s", control);
+    snprintf(item.sym_name, sizeof(item.sym_name), "RPC_%u", key_code);
+    return cp0_keyboard_queue_push(&item);
+}
 
-    if (LVGL_RUN_FLAGE) {
-        pthread_mutex_lock(&keyboard_mutex);
-        STAILQ_INSERT_TAIL(&keyboard_queue, elm, entries);
-        pthread_mutex_unlock(&keyboard_mutex);
+int cp0_keyboard_inject_text(const char *utf8)
+{
+    if (!utf8 || cp0_keyboard_utf8_validate(utf8) != 0) return -1;
+    const char *cursor = utf8;
+    while (*cursor) {
+        struct key_item item = {0};
+        size_t length = 0;
+        if (cp0_keyboard_utf8_decode_one(cursor, &item.codepoint, &length) != 0) return -1;
+        item.key_state = KBD_KEY_RELEASED;
+        memcpy(item.utf8, cursor, length);
+        snprintf(item.sym_name, sizeof(item.sym_name), "RPC_TEXT");
+        if (cp0_keyboard_queue_push(&item) != 0) return -1;
+        cursor += length;
     }
-    else {
-        free(elm);
-    }
+    return 0;
 }
 
 static void cp0_sdl_fill_key_meta(cp0_sdl_keyboard_t *kbd, const SDL_KeyboardEvent *event)
@@ -456,7 +401,7 @@ static void cp0_sdl_fill_key_meta(cp0_sdl_keyboard_t *kbd, const SDL_KeyboardEve
     if (name != NULL)
         snprintf(kbd->current.sym_name, sizeof(kbd->current.sym_name), "%s", name);
 
-    const char *ctrl_utf8 = cp0_sdl_ctrl_utf8(sym);
+    const char *ctrl_utf8 = cp0_keyboard_control_utf8(kbd->current.key_code);
     if (ctrl_utf8 != NULL)
         snprintf(kbd->current.utf8, sizeof(kbd->current.utf8), "%s", ctrl_utf8);
 
@@ -471,11 +416,11 @@ static void cp0_sdl_set_text_key(cp0_sdl_keyboard_t *kbd, const char *utf8)
         kbd->current_valid = true;
     }
 
-    size_t len = strlen(utf8);
-    size_t n = len < sizeof(kbd->current.utf8) - 1 ? len : sizeof(kbd->current.utf8) - 1;
-    memcpy(kbd->current.utf8, utf8, n);
-    kbd->current.utf8[n] = '\0';
-    kbd->current.codepoint = cp0_utf8_first_codepoint(kbd->current.utf8);
+    (void)cp0_keyboard_utf8_copy(kbd->current.utf8, sizeof(kbd->current.utf8), utf8);
+    size_t decoded_length = 0;
+    if (cp0_keyboard_utf8_decode_one(
+            kbd->current.utf8, &kbd->current.codepoint, &decoded_length) != 0)
+        kbd->current.codepoint = 0;
 }
 
 static void cp0_sdl_remember_active_key(cp0_sdl_keyboard_t *kbd, SDL_Scancode scancode,
@@ -514,10 +459,8 @@ static void cp0_sdl_keyboard_read(lv_indev_t *indev, lv_indev_data_t *data)
     data->state = LV_INDEV_STATE_RELEASED;
     data->continue_reading = false;
 
-    pthread_mutex_lock(&keyboard_mutex);
-    if (!STAILQ_EMPTY(&keyboard_queue)) {
-        struct key_item *elm = STAILQ_FIRST(&keyboard_queue);
-        STAILQ_REMOVE_HEAD(&keyboard_queue, entries);
+    struct key_item *elm = cp0_keyboard_queue_pop();
+    if (elm) {
 
         int swallowed = ui_screensaver_filter_key(elm);
         if (!swallowed) {
@@ -525,18 +468,20 @@ static void cp0_sdl_keyboard_read(lv_indev_t *indev, lv_indev_data_t *data)
             if (root != NULL)
                 lv_obj_send_event(root, (lv_event_code_t)LV_EVENT_KEYBOARD, elm);
 
-            ui_global_hint_on_key(elm);
+            if (global_key_handler)
+                global_key_handler(elm);
+            else
+                ui_global_hint_on_key(elm);
 
             data->key = cp0_evdev_process_key(elm->key_code);
             if (data->key)
                 data->state = (lv_indev_state_t)elm->key_state;
         }
         if (data->key || swallowed) {
-            data->continue_reading = !STAILQ_EMPTY(&keyboard_queue);
+            data->continue_reading = cp0_keyboard_queue_has_data();
         }
         free(elm);
     }
-    pthread_mutex_unlock(&keyboard_mutex);
 }
 
 static void cp0_sdl_keyboard_delete_cb(lv_event_t *event)
@@ -547,11 +492,16 @@ static void cp0_sdl_keyboard_delete_cb(lv_event_t *event)
         lv_indev_set_driver_data(indev, NULL);
         lv_indev_set_read_cb(indev, NULL);
         free(kbd);
+        cp0_keyboard_queue_clear();
     }
+    pthread_mutex_lock(&keyboard_init_mutex);
+    cp0_keyboard_input_handle_deleted(&keyboard_lifecycle, indev);
+    pthread_mutex_unlock(&keyboard_init_mutex);
 }
 
 void lv_sdl_keyboard_handler(SDL_Event *event)
 {
+    if (event == NULL) return;
     uint32_t win_id = UINT32_MAX;
     switch (event->type) {
     case SDL_KEYDOWN:
@@ -578,6 +528,7 @@ void lv_sdl_keyboard_handler(SDL_Event *event)
         return;
 
     cp0_sdl_keyboard_t *kbd = lv_indev_get_driver_data(indev);
+    if (kbd == NULL) return;
     if (event->type == SDL_KEYDOWN) {
         cp0_sdl_fill_key_meta(kbd, &event->key);
         uint32_t ctrl_key = cp0_sdl_ctrl_to_lv_key(event->key.keysym.sym);
@@ -616,29 +567,40 @@ void lv_sdl_keyboard_handler(SDL_Event *event)
             kbd->current_valid = false;
     }
 
-    while (cp0_sdl_queue_has_data())
+    while (cp0_keyboard_queue_has_data())
         lv_indev_read(indev);
 }
 
 
 void init_sdl_input(void)
 {
-    static int input_initialized = 0;
-    if (input_initialized)
+    pthread_mutex_lock(&keyboard_init_mutex);
+    if (!cp0_keyboard_input_begin_create(&keyboard_lifecycle)) {
+        pthread_mutex_unlock(&keyboard_init_mutex);
         return;
+    }
 
-    STAILQ_INIT(&keyboard_queue);
+    cp0_keyboard_queue_init();
     if (LV_EVENT_KEYBOARD == 0)
         LV_EVENT_KEYBOARD = lv_event_register_id();
 
-    lv_sdl_mouse_create();
-    if (cp0_sdl_keyboard_create() == NULL)
+    if (!mouse_initialized) {
+        lv_sdl_mouse_create();
+        mouse_initialized = 1;
+    }
+    lv_indev_t *indev = cp0_sdl_keyboard_create();
+    cp0_keyboard_input_finish_create(&keyboard_lifecycle, indev);
+    if (indev == NULL)
         fprintf(stderr, "cp0_lvgl: failed to create SDL keyboard input\n");
 
-    input_initialized = 1;
+    pthread_mutex_unlock(&keyboard_init_mutex);
 }
 
 void init_input(void)
 {
     init_sdl_input();
+}
+
+void deinit_input(void)
+{
 }

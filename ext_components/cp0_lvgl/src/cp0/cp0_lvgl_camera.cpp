@@ -1,11 +1,15 @@
 #include "hal_lvgl_bsp.h"
+#include "cp0_camera_frame_codec.hpp"
+#include "cp0_camera_viewport.hpp"
+#include "../cp0_camera_api_contract.hpp"
+#include "../cp0_callback_contract.hpp"
+#include "../cp0_signal_registration.hpp"
 
 #include <algorithm>
 #include <atomic>
 #include <cctype>
 #include <cstdio>
 #include <cstdint>
-#include <cstdlib>
 #include <cstring>
 #include <ctime>
 #include <functional>
@@ -19,9 +23,7 @@
 #include <utility>
 #include <vector>
 
-#if __has_include(<jpeglib.h>) && __has_include(<libcamera/camera.h>)
-#define CP0_CAMERA_HAS_LIBCAMERA 1
-#include <jpeglib.h>
+#if CP0_CAMERA_HAS_LIBCAMERA
 #include <linux/dma-buf.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
@@ -36,8 +38,6 @@
 #include <libcamera/property_ids.h>
 #include <libcamera/request.h>
 #include <libcamera/stream.h>
-#else
-#define CP0_CAMERA_HAS_LIBCAMERA 0
 #endif
 
 /*
@@ -60,6 +60,14 @@ public:
     ~CameraSystem()
     {
         close_camera();
+    }
+
+    void shutdown()
+    {
+        close_camera();
+        std::lock_guard<std::mutex> lock(mutex_);
+        status_callback_ = {};
+        frame_callback_ = {};
     }
 
     void api_call(arg_t arg, callback_t callback)
@@ -126,9 +134,7 @@ private:
     int stream_stride_ = 320 * 2;
     libcamera::PixelFormat stream_format_ = libcamera::formats::RGB565;
     libcamera::Rectangle scaler_crop_max_{};
-    int zoom_percent_ = 100;
-    int view_x_percent_ = 50;
-    int view_y_percent_ = 50;
+    cp0_camera::Viewport viewport_;
 
     std::atomic<bool> capture_requested_{false};
     std::string pending_capture_path_;
@@ -138,10 +144,11 @@ private:
 
     void report(callback_t callback, int code, const std::string &data)
     {
-        if (callback)
-            callback(code, data);
-        else if (status_callback_)
-            status_callback_(code, data);
+        if (!callback) {
+            std::lock_guard<std::mutex> lock(mutex_);
+            callback = status_callback_;
+        }
+        cp0::callback::invoke(callback, code, data);
     }
 
     static std::string nth_arg(const arg_t &arg, size_t n)
@@ -153,33 +160,32 @@ private:
         return *it;
     }
 
-    static int to_int(const std::string &value, int fallback)
-    {
-        if (value.empty())
-            return fallback;
-        char *end = nullptr;
-        long ret = std::strtol(value.c_str(), &end, 10);
-        return end && *end == '\0' ? static_cast<int>(ret) : fallback;
-    }
-
     void SetCallback(arg_t arg, callback_t callback)
     {
         (void)arg;
-        status_callback_ = callback;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            status_callback_ = callback;
+        }
         report(callback, 0, "camera callback set\n");
     }
 
     void SetFrameCallback(arg_t arg, callback_t callback)
     {
         (void)arg;
-        frame_callback_ = callback;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            frame_callback_ = callback;
+        }
         report(callback, 0, "camera frame callback set\n");
     }
 
     void Open(arg_t arg, callback_t callback)
     {
-        const int width = to_int(nth_arg(arg, 1), 320);
-        const int height = to_int(nth_arg(arg, 2), 150);
+        const int width = cp0_camera_api::parse_integer_argument(
+            nth_arg(arg, 1), cp0_camera_api::DEFAULT_WIDTH);
+        const int height = cp0_camera_api::parse_integer_argument(
+            nth_arg(arg, 2), cp0_camera_api::DEFAULT_HEIGHT);
         const int ret = open_camera(width, height);
         report(callback, ret, ret == 0 ? "camera open\n" : "camera open failed\n");
     }
@@ -204,8 +210,10 @@ private:
     void Capture(arg_t arg, callback_t callback)
     {
         std::string path = nth_arg(arg, 1);
-        const int width = to_int(nth_arg(arg, 2), 320);
-        const int height = to_int(nth_arg(arg, 3), 150);
+        const int width = cp0_camera_api::parse_integer_argument(
+            nth_arg(arg, 2), cp0_camera_api::DEFAULT_WIDTH);
+        const int height = cp0_camera_api::parse_integer_argument(
+            nth_arg(arg, 3), cp0_camera_api::DEFAULT_HEIGHT);
 
         const int ret = capture(path, width, height, callback);
         if (ret != 0)
@@ -236,9 +244,13 @@ private:
     {
         (void)arg;
 #if CP0_CAMERA_HAS_LIBCAMERA
-        std::lock_guard<std::mutex> lock(mutex_);
-        zoom_percent_ = zoom_percent_ < 250 ? 250 : 500;
-        report(callback, 0, zoom_status_text_locked());
+        std::string payload;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            viewport_.zoom_in();
+            payload = viewport_.status_text();
+        }
+        report(callback, 0, payload);
 #else
         report(callback, -10, "camera unavailable: libcamera/jpeg headers not found\n");
 #endif
@@ -248,13 +260,13 @@ private:
     {
         (void)arg;
 #if CP0_CAMERA_HAS_LIBCAMERA
-        std::lock_guard<std::mutex> lock(mutex_);
-        zoom_percent_ = zoom_percent_ > 250 ? 250 : 100;
-        if (zoom_percent_ == 100) {
-            view_x_percent_ = 50;
-            view_y_percent_ = 50;
+        std::string payload;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            viewport_.zoom_out();
+            payload = viewport_.status_text();
         }
-        report(callback, 0, zoom_status_text_locked());
+        report(callback, 0, payload);
 #else
         report(callback, -10, "camera unavailable: libcamera/jpeg headers not found\n");
 #endif
@@ -263,14 +275,15 @@ private:
     void Pan(arg_t arg, callback_t callback)
     {
 #if CP0_CAMERA_HAS_LIBCAMERA
-        const int dx = to_int(nth_arg(arg, 1), 0);
-        const int dy = to_int(nth_arg(arg, 2), 0);
-        std::lock_guard<std::mutex> lock(mutex_);
-        if (zoom_percent_ > 100) {
-            view_x_percent_ = std::max(0, std::min(100, view_x_percent_ + dx * 8));
-            view_y_percent_ = std::max(0, std::min(100, view_y_percent_ + dy * 8));
+        const int dx = cp0_camera_api::parse_integer_argument(nth_arg(arg, 1), 0);
+        const int dy = cp0_camera_api::parse_integer_argument(nth_arg(arg, 2), 0);
+        std::string payload;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            viewport_.pan(dx, dy);
+            payload = viewport_.status_text();
         }
-        report(callback, 0, zoom_status_text_locked());
+        report(callback, 0, payload);
 #else
         (void)arg;
         report(callback, -10, "camera unavailable: libcamera/jpeg headers not found\n");
@@ -308,14 +321,6 @@ private:
         return std::string(path);
     }
 
-    static bool is_supported_preview_format(const libcamera::PixelFormat &format)
-    {
-        return format == libcamera::formats::RGB888 ||
-               format == libcamera::formats::BGR888 ||
-               format == libcamera::formats::XRGB8888 ||
-               format == libcamera::formats::XBGR8888 ||
-               format == libcamera::formats::RGB565;
-    }
 
     static void dma_buf_sync(int fd, uint64_t flags)
     {
@@ -325,44 +330,16 @@ private:
         ioctl(fd, DMA_BUF_IOCTL_SYNC, &sync);
     }
 
-    static void rgb565_to_rgb888(uint16_t p, uint8_t &r, uint8_t &g, uint8_t &b)
-    {
-        r = ((p >> 11) & 0x1F) << 3;
-        g = ((p >> 5) & 0x3F) << 2;
-        b = (p & 0x1F) << 3;
-        r |= r >> 5;
-        g |= g >> 6;
-        b |= b >> 5;
-    }
-
-    static uint16_t rgb888_to_rgb565(uint8_t r, uint8_t g, uint8_t b)
-    {
-        return static_cast<uint16_t>(((r & 0xF8) << 8) |
-                                     ((g & 0xFC) << 3) |
-                                     (b >> 3));
-    }
-
-    std::string zoom_status_text_locked() const
-    {
-        char buf[96];
-        std::snprintf(buf, sizeof(buf), "ZOOM %d %d %d\n", zoom_percent_, view_x_percent_, view_y_percent_);
-        return std::string(buf);
-    }
 
     libcamera::Rectangle crop_rect_locked() const
     {
-        if (zoom_percent_ <= 100 || scaler_crop_max_.width <= 0 || scaler_crop_max_.height <= 0)
-            return scaler_crop_max_;
-
-        const int max_width = static_cast<int>(scaler_crop_max_.width);
-        const int max_height = static_cast<int>(scaler_crop_max_.height);
-        int crop_w = std::max(1, max_width * 100 / zoom_percent_);
-        int crop_h = std::max(1, max_height * 100 / zoom_percent_);
-        int max_x = std::max(0, max_width - crop_w);
-        int max_y = std::max(0, max_height - crop_h);
-        int x = scaler_crop_max_.x + max_x * std::max(0, std::min(100, view_x_percent_)) / 100;
-        int y = scaler_crop_max_.y + max_y * std::max(0, std::min(100, view_y_percent_)) / 100;
-        return libcamera::Rectangle(x, y, crop_w, crop_h);
+        const cp0_camera::CropRectangle crop = viewport_.crop({
+            scaler_crop_max_.x,
+            scaler_crop_max_.y,
+            static_cast<int>(scaler_crop_max_.width),
+            static_cast<int>(scaler_crop_max_.height),
+        });
+        return libcamera::Rectangle(crop.x, crop.y, crop.width, crop.height);
     }
 
     void apply_crop_locked(libcamera::Request *request) const
@@ -372,122 +349,6 @@ private:
         request->controls().set(libcamera::controls::ScalerCrop, crop_rect_locked());
     }
 
-    bool convert_to_rgb565(const uint8_t *src, size_t bytes_used, std::vector<uint16_t> &rgb565)
-    {
-        std::vector<uint8_t> rgb;
-        if (!convert_to_rgb888(src, bytes_used, rgb))
-            return false;
-        rgb565.assign(stream_w_ * stream_h_, 0);
-        for (int i = 0; i < stream_w_ * stream_h_; ++i)
-            rgb565[i] = rgb888_to_rgb565(rgb[i * 3 + 0], rgb[i * 3 + 1], rgb[i * 3 + 2]);
-        return true;
-    }
-
-    std::string make_frame_payload(const std::vector<uint16_t> &rgb565, int width, int height)
-    {
-        std::string payload;
-        char header[64];
-        const int header_len = std::snprintf(header, sizeof(header), "FRAME %d %d RGB565\n", width, height);
-        payload.assign(header, header_len);
-        payload.append(reinterpret_cast<const char *>(rgb565.data()), rgb565.size() * sizeof(uint16_t));
-        return payload;
-    }
-
-    bool convert_to_rgb888(const uint8_t *src, size_t bytes_used, std::vector<uint8_t> &rgb)
-    {
-        const bool is_rgb888 = stream_format_ == libcamera::formats::RGB888;
-        const bool is_bgr888 = stream_format_ == libcamera::formats::BGR888;
-        const bool is_xrgb8888 = stream_format_ == libcamera::formats::XRGB8888;
-        const bool is_xbgr8888 = stream_format_ == libcamera::formats::XBGR8888;
-        const bool is_rgb565 = stream_format_ == libcamera::formats::RGB565;
-        const int bytes_per_pixel = is_rgb888 || is_bgr888 ? 3 : is_rgb565 ? 2 : 4;
-        const int min_stride = stream_w_ * bytes_per_pixel;
-        const int row_stride = stream_stride_ > 0 ? stream_stride_ : min_stride;
-
-        if (row_stride < min_stride)
-            return false;
-
-        rgb.assign(stream_w_ * stream_h_ * 3, 0);
-        for (int y = 0; y < stream_h_; ++y)
-        {
-            const size_t row_offset = static_cast<size_t>(y) * row_stride;
-            if (row_offset + min_stride > bytes_used)
-                return y > 0;
-
-            const uint8_t *line = src + row_offset;
-            const int dst_y = stream_h_ - 1 - y;
-            for (int x = 0; x < stream_w_; ++x)
-            {
-                const int dst_x = stream_w_ - 1 - x;
-                const int dst = (dst_y * stream_w_ + dst_x) * 3;
-                uint8_t r = 0, g = 0, b = 0;
-
-                if (is_rgb888)
-                {
-                    const uint8_t *p = line + x * 3;
-                    r = p[0]; g = p[1]; b = p[2];
-                }
-                else if (is_bgr888)
-                {
-                    const uint8_t *p = line + x * 3;
-                    b = p[0]; g = p[1]; r = p[2];
-                }
-                else if (is_xrgb8888)
-                {
-                    const uint8_t *p = line + x * 4;
-                    b = p[0]; g = p[1]; r = p[2];
-                }
-                else if (is_xbgr8888)
-                {
-                    const uint8_t *p = line + x * 4;
-                    r = p[0]; g = p[1]; b = p[2];
-                }
-                else if (is_rgb565)
-                {
-                    const uint8_t *p = line + x * 2;
-                    rgb565_to_rgb888(static_cast<uint16_t>(p[0] | (p[1] << 8)), r, g, b);
-                }
-
-                rgb[dst + 0] = r;
-                rgb[dst + 1] = g;
-                rgb[dst + 2] = b;
-            }
-        }
-        return true;
-    }
-
-    static bool save_jpeg_rgb888(const std::string &path, const uint8_t *rgb, int width, int height, int quality = 90)
-    {
-        FILE *fp = std::fopen(path.c_str(), "wb");
-        if (!fp)
-            return false;
-
-        jpeg_compress_struct cinfo;
-        jpeg_error_mgr jerr;
-        cinfo.err = jpeg_std_error(&jerr);
-        jpeg_create_compress(&cinfo);
-        jpeg_stdio_dest(&cinfo, fp);
-        cinfo.image_width = width;
-        cinfo.image_height = height;
-        cinfo.input_components = 3;
-        cinfo.in_color_space = JCS_RGB;
-        jpeg_set_defaults(&cinfo);
-        jpeg_set_quality(&cinfo, quality, TRUE);
-        jpeg_start_compress(&cinfo, TRUE);
-
-        while (cinfo.next_scanline < cinfo.image_height)
-        {
-            JSAMPROW row_pointer[1];
-            row_pointer[0] = const_cast<JSAMPROW>(&rgb[cinfo.next_scanline * width * 3]);
-            jpeg_write_scanlines(&cinfo, row_pointer, 1);
-        }
-
-        jpeg_finish_compress(&cinfo);
-        jpeg_destroy_compress(&cinfo);
-        std::fclose(fp);
-        chmod(path.c_str(), 0666);
-        return true;
-    }
 
     int open_camera_impl(int width, int height)
     {
@@ -556,7 +417,7 @@ private:
         }
 
         cfg = config_->at(0);
-        if (!is_supported_preview_format(cfg.pixelFormat))
+        if (!cp0_camera_frame_codec::is_supported_preview_format(cfg.pixelFormat))
         {
             close_camera_locked();
             return -8;
@@ -628,6 +489,8 @@ private:
             return ret;
 
         std::lock_guard<std::mutex> lock(mutex_);
+        if (capture_requested_.load())
+            return -13;
         pending_capture_path_ = path_arg.empty() ? make_photo_path() : path_arg;
         pending_capture_callback_ = callback;
         capture_requested_.store(true);
@@ -657,10 +520,16 @@ private:
         int save_h = 0;
         int frame_w = 0;
         int frame_h = 0;
-        bool should_capture = capture_requested_.exchange(false);
+        bool should_capture = false;
 
         {
             std::lock_guard<std::mutex> lock(mutex_);
+            should_capture = capture_requested_.exchange(false);
+            if (should_capture)
+            {
+                save_path = pending_capture_path_;
+                callback = pending_capture_callback_;
+            }
             auto map_it = mapped_buffers_.find(buffer);
             if (map_it != mapped_buffers_.end())
             {
@@ -671,16 +540,17 @@ private:
                     bytes_used = std::min(bytes_used, static_cast<size_t>(metadata.planes()[0].bytesused));
 
                 dma_buf_sync(map_it->second.fd, DMA_BUF_SYNC_START | DMA_BUF_SYNC_READ);
-                if (frame_callback_ && convert_to_rgb565(src, bytes_used, frame_rgb565))
+                if (frame_callback_ && cp0_camera_frame_codec::convert_to_rgb565(
+                        src, bytes_used, stream_w_, stream_h_, stream_stride_, stream_format_,
+                        frame_rgb565))
                 {
                     frame_w = stream_w_;
                     frame_h = stream_h_;
                     frame_callback = frame_callback_;
                 }
-                if (should_capture && convert_to_rgb888(src, bytes_used, rgb))
+                if (should_capture && cp0_camera_frame_codec::convert_to_rgb888(
+                        src, bytes_used, stream_w_, stream_h_, stream_stride_, stream_format_, rgb))
                 {
-                    save_path = pending_capture_path_;
-                    callback = pending_capture_callback_;
                     save_w = stream_w_;
                     save_h = stream_h_;
                 }
@@ -689,11 +559,15 @@ private:
         }
 
         if (frame_callback && !frame_rgb565.empty())
-            frame_callback(0, make_frame_payload(frame_rgb565, frame_w, frame_h));
+            cp0::callback::invoke(
+                frame_callback, 0,
+                cp0_camera_frame_codec::make_frame_payload(frame_rgb565, frame_w, frame_h));
 
-        if (!save_path.empty())
+        if (should_capture)
         {
-            bool ok = save_jpeg_rgb888(save_path, rgb.data(), save_w, save_h, 90);
+            const bool ok = !save_path.empty() && !rgb.empty() && save_w > 0 && save_h > 0 &&
+                            cp0_camera_frame_codec::save_jpeg_rgb888(
+                                save_path, rgb.data(), save_w, save_h, 90);
             report(callback, ok ? 0 : -12, ok ? save_path + "\n" : "camera save failed\n");
         }
 
@@ -713,6 +587,8 @@ private:
         const bool was_streaming = streaming_;
         streaming_ = false;
         capture_requested_.store(false);
+        pending_capture_path_.clear();
+        pending_capture_callback_ = nullptr;
         frame_callback_ = nullptr;
 
         if (camera_)
@@ -773,16 +649,60 @@ private:
     void close_camera()
     {
 #if CP0_CAMERA_HAS_LIBCAMERA
-        std::lock_guard<std::mutex> lock(mutex_);
-        close_camera_locked();
+        callback_t cancelled_capture_callback;
+        bool cancelled_capture = false;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            cancelled_capture = capture_requested_.load();
+            if (cancelled_capture)
+                cancelled_capture_callback = pending_capture_callback_;
+            close_camera_locked();
+        }
+        if (cancelled_capture)
+            report(cancelled_capture_callback, -12, "camera capture failed\n");
 #endif
     }
 };
 
+namespace {
+
+std::shared_ptr<CameraSystem> &camera_system()
+{
+    static auto camera = std::make_shared<CameraSystem>();
+    return camera;
+}
+
+cp0::SignalRegistration<decltype(cp0_signal_camera_api)> &camera_registration()
+{
+    static cp0::SignalRegistration<decltype(cp0_signal_camera_api)> registration;
+    return registration;
+}
+
+} // namespace
+
 extern "C" void init_camera(void)
 {
-    std::shared_ptr<CameraSystem> camera = std::make_shared<CameraSystem>();
+    const auto camera = camera_system();
+    camera_registration().replace(cp0_signal_camera_api,
+                         [camera](std::list<std::string> arg,
+                                  std::function<void(int, std::string)> callback) {
+                             try {
+                                 camera->api_call(std::move(arg), callback);
+                             } catch (...) {
+                                 cp0::callback::invoke(
+                                     callback, -1, "camera backend failure\n");
+                             }
+                         });
+}
 
-    cp0_signal_camera_api.append([camera](std::list<std::string> arg, std::function<void(int, std::string)> callback)
-                                  { camera->api_call(arg, callback); });
+extern "C" void deinit_camera(void) noexcept
+{
+    try {
+        camera_registration().reset();
+    } catch (...) {
+    }
+    try {
+        camera_system()->shutdown();
+    } catch (...) {
+    }
 }

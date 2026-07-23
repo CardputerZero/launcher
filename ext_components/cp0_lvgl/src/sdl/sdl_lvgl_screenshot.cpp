@@ -1,26 +1,25 @@
 #include "hal_lvgl_bsp.h"
 #include "lvgl/lvgl.h"
 #include "lvgl/src/drivers/sdl/lv_sdl_window.h"
+#include "../cp0_callback_contract.hpp"
+#include "../cp0_display_screenshot_contract.hpp"
+#include "../cp0_init_once.hpp"
 
 #include <cerrno>
-#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
 #include <functional>
-#include <iterator>
 #include <list>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <sys/stat.h>
 #include <utility>
 #include <SDL.h>
 
 namespace {
-
-static void write_le16(FILE *f, uint16_t v) { fwrite(&v, 2, 1, f); }
-static void write_le32(FILE *f, uint32_t v) { fwrite(&v, 4, 1, f); }
 
 static int mkdir_p(const char *dir)
 {
@@ -45,24 +44,19 @@ public:
 
     void api_call(arg_t arg, callback_t callback)
     {
-        if (arg.empty()) {
-            report(callback, -1, "empty screenshot api");
+        cp0::screenshot::Request request;
+        if (!cp0::screenshot::parse_request(arg, request)) {
+            report(callback, -1, cp0::screenshot::invalid_request_message());
             return;
         }
-        if (arg.front() == "Save") {
-            const std::string dir = arg.size() >= 2 ? *std::next(arg.begin()) : std::string();
-            int ret = save_to_bmp(dir.c_str());
-            report(callback, ret, ret == 0 ? "screenshot saved\n" : "screenshot failed\n");
-            return;
-        }
-        report(callback, -1, "unknown screenshot api");
+        int ret = save_to_bmp(request.directory.c_str());
+        report(callback, ret, ret == 0 ? "screenshot saved\n" : "screenshot failed\n");
     }
 
 private:
-    static void report(callback_t callback, int code, const std::string &data)
+    static void report(const callback_t &callback, int code, const std::string &data)
     {
-        if (callback)
-            callback(code, data);
+        cp0::callback::invoke(callback, code, data);
     }
 
     static int save_to_bmp(const char *dir)
@@ -81,7 +75,8 @@ private:
 
         int w = 0;
         int h = 0;
-        if (SDL_GetRendererOutputSize(renderer, &w, &h) != 0 || w <= 0 || h <= 0)
+        if (SDL_GetRendererOutputSize(renderer, &w, &h) != 0 ||
+            !cp0::screenshot::valid_dimensions(w, h))
             return -4;
 
         SDL_Surface *surface = SDL_CreateRGBSurfaceWithFormat(0, w, h, 32, SDL_PIXELFORMAT_ARGB8888);
@@ -93,18 +88,19 @@ private:
             ret = -6;
         } else {
             std::time_t now = std::time(nullptr);
-            std::tm *t = std::localtime(&now);
-            if (!t) {
+            std::tm local{};
+            if (!localtime_r(&now, &local)) {
                 ret = -7;
             } else {
-                char filename[512];
-                std::snprintf(filename, sizeof(filename), "%s/scr_%04d%02d%02d_%02d%02d%02d_sdl.bmp",
-                              dir, t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
-                              t->tm_hour, t->tm_min, t->tm_sec);
-                if (SDL_SaveBMP(surface, filename) != 0) {
+                cp0::screenshot::Timestamp timestamp{local.tm_year + 1900, local.tm_mon + 1,
+                    local.tm_mday, local.tm_hour, local.tm_min, local.tm_sec};
+                std::string filename;
+                if (!cp0::screenshot::make_output_path(dir, timestamp, true, filename)) {
+                    ret = -7;
+                } else if (SDL_SaveBMP(surface, filename.c_str()) != 0) {
                     ret = -8;
                 } else {
-                    std::printf("[SDL SCREENSHOT] Saved screenshot: %s\n", filename);
+                    std::printf("[SDL SCREENSHOT] Saved screenshot: %s\n", filename.c_str());
                 }
             }
         }
@@ -118,8 +114,13 @@ private:
 
 extern "C" void init_screenshot(void)
 {
-    auto screenshot = std::make_shared<ScreenshotSystem>();
-    cp0_signal_screenshot_api.append([screenshot](std::list<std::string> arg, std::function<void(int, std::string)> callback) {
-        screenshot->api_call(std::move(arg), std::move(callback));
+    static cp0::InitOnce initialized;
+    initialized.run([] {
+        auto screenshot = std::make_shared<ScreenshotSystem>();
+        return static_cast<bool>(cp0_signal_screenshot_api.append(
+            [screenshot](std::list<std::string> arg,
+                         std::function<void(int, std::string)> callback) {
+                screenshot->api_call(std::move(arg), std::move(callback));
+            }));
     });
 }

@@ -25,6 +25,7 @@
 
 #include "keyboard_input.h"
 #include "cp0_lvgl_app.h"
+#include "cp0_font_service.hpp"
 
 // Launcher layout constants
 #define BORDER_COLOR_CENTER 0x444444
@@ -81,29 +82,10 @@ inline const cp0_battery_info_t *battery_info(lv_event_t *event)
 } // namespace events
 
 void init();
+void deinit();
 }
 
-class LauncherFonts
-{
-public:
-    LauncherFonts() = default;
-    ~LauncherFonts();
-
-    lv_font_t *get(const char *ttf_name, uint16_t size, lv_freetype_font_style_t style);
-    lv_font_t *get(const char *ttf_name, uint16_t size, lv_freetype_font_style_t style,
-                   lv_freetype_font_render_mode_t render_mode);
-    lv_font_t *get_mono(const char *ttf_name, uint16_t size, lv_freetype_font_style_t style);
-
-private:
-    void release();
-    lv_font_t *fallback(uint16_t size) const;
-    static std::string key(const char *ttf_name, uint16_t size, lv_freetype_font_style_t style,
-                           lv_freetype_font_render_mode_t render_mode);
-
-    std::unordered_map<std::string, lv_font_t *> fonts_;
-};
-
-LauncherFonts &launcher_fonts();
+inline Cp0FontService &launcher_fonts() { return cp0_fonts(); }
 #ifndef APP_PAGE_IMPLEMENTATION_UNIT
 #include "launch.h"
 #include "ui_launch_page.h"

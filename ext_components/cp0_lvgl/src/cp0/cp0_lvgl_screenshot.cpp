@@ -1,9 +1,12 @@
 #include "hal_lvgl_bsp.h"
+#include "../cp0_callback_contract.hpp"
+#include "../cp0_display_screenshot_contract.hpp"
+#include "../cp0_init_once.hpp"
 
 #include <functional>
-#include <iterator>
 #include <list>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <utility>
 
@@ -31,41 +34,19 @@ public:
 
     void api_call(arg_t arg, callback_t callback)
     {
-        if (arg.empty()) {
-            report(callback, -1, "empty screenshot api\n");
+        cp0::screenshot::Request request;
+        if (!cp0::screenshot::parse_request(arg, request)) {
+            report(callback, -1, cp0::screenshot::invalid_request_message());
             return;
         }
-
-        if (arg.front() == "Save") {
-            Save(std::move(arg), std::move(callback));
-            return;
-        }
-
-        report(callback, -1, "unknown screenshot api\n");
+        int ret = save_to_bmp(request.directory.c_str());
+        report(callback, ret, ret == 0 ? "screenshot saved\n" : "screenshot failed\n");
     }
 
 private:
-    static void report(callback_t callback, int code, const std::string &data)
+    static void report(const callback_t &callback, int code, const std::string &data)
     {
-        if (callback) callback(code, data);
-    }
-
-    static std::string first_arg_after_command(const arg_t &arg)
-    {
-        if (arg.size() < 2) return "";
-        return *std::next(arg.begin());
-    }
-
-    void Save(arg_t arg, callback_t callback)
-    {
-        std::string dir = first_arg_after_command(arg);
-        if (dir.empty()) {
-            report(callback, -1, "Save need dir\n");
-            return;
-        }
-
-        int ret = save_to_bmp(dir.c_str());
-        report(callback, ret, ret == 0 ? "screenshot saved\n" : "screenshot failed\n");
+        cp0::callback::invoke(callback, code, data);
     }
 
     static int save_to_bmp(const char *dir)
@@ -82,17 +63,25 @@ private:
             return -2;
         }
 
-        int w = vinfo.xres;
-        int h = vinfo.yres;
-        int bpp = vinfo.bits_per_pixel;
+        int w = static_cast<int>(vinfo.xres);
+        int h = static_cast<int>(vinfo.yres);
+        int bpp = static_cast<int>(vinfo.bits_per_pixel);
+        if (!cp0::screenshot::valid_dimensions(w, h) || (bpp != 16 && bpp != 32)) {
+            close(fd);
+            return -3;
+        }
         int fb_line_len = w * (bpp / 8);
 
         struct fb_fix_screeninfo finfo;
         if (ioctl(fd, FBIOGET_FSCREENINFO, &finfo) == 0)
             fb_line_len = finfo.line_length;
 
-        size_t fb_size = fb_line_len * h;
-        void *fbmem = mmap(NULL, fb_size, PROT_READ, MAP_SHARED, fd, 0);
+        cp0::screenshot::FramebufferLayout layout;
+        if (!cp0::screenshot::framebuffer_layout(w, h, bpp, fb_line_len, layout)) {
+            close(fd);
+            return -3;
+        }
+        void *fbmem = mmap(NULL, layout.mapped_size, PROT_READ, MAP_SHARED, fd, 0);
         if (fbmem == MAP_FAILED) {
             close(fd);
             return -3;
@@ -111,27 +100,29 @@ private:
         }
 
         time_t now = time(NULL);
-        struct tm *t = localtime(&now);
-        char filename[512];
-        snprintf(filename, sizeof(filename), "%s/scr_%04d%02d%02d_%02d%02d%02d.bmp",
-                 dir, t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
-                 t->tm_hour, t->tm_min, t->tm_sec);
+        struct tm local = {};
+        std::string filename;
+        if (!localtime_r(&now, &local) ||
+            !cp0::screenshot::make_output_path(dir,
+                {local.tm_year + 1900, local.tm_mon + 1, local.tm_mday,
+                    local.tm_hour, local.tm_min, local.tm_sec}, false, filename)) {
+            munmap(fbmem, layout.mapped_size);
+            close(fd);
+            return -4;
+        }
 
-        FILE *fp = fopen(filename, "wb");
+        FILE *fp = fopen(filename.c_str(), "wb");
         if (!fp) {
-            munmap(fbmem, fb_size);
+            munmap(fbmem, layout.mapped_size);
             close(fd);
             return -4;
         }
 
         int row_size = w * 3;
-        int pad = (4 - (row_size % 4)) % 4;
-        int bmp_row = row_size + pad;
-        uint32_t img_size = bmp_row * h;
-        uint32_t file_size = 54 + img_size;
+        int pad = static_cast<int>(layout.bmp_row_size) - row_size;
 
         fputc('B', fp); fputc('M', fp);
-        write_le32(fp, file_size);
+        write_le32(fp, layout.bmp_file_size);
         write_le16(fp, 0); write_le16(fp, 0);
         write_le32(fp, 54);
         write_le32(fp, 40);
@@ -140,7 +131,7 @@ private:
         write_le16(fp, 1);
         write_le16(fp, 24);
         write_le32(fp, 0);
-        write_le32(fp, img_size);
+        write_le32(fp, layout.bmp_image_size);
         write_le32(fp, 2835); write_le32(fp, 2835);
         write_le32(fp, 0); write_le32(fp, 0);
 
@@ -168,11 +159,14 @@ private:
             if (pad > 0) fwrite(padding, 1, pad, fp);
         }
 
-        fclose(fp);
-        munmap(fbmem, fb_size);
+        int write_failed = ferror(fp);
+        if (fclose(fp) != 0) write_failed = 1;
+        munmap(fbmem, layout.mapped_size);
         close(fd);
 
-        printf("[SCREENSHOT] Saved: %s (%dx%d %dbpp)\n", filename, w, h, bpp);
+        if (write_failed) return -5;
+
+        printf("[SCREENSHOT] Saved: %s (%dx%d %dbpp)\n", filename.c_str(), w, h, bpp);
         return 0;
     }
 };
@@ -181,8 +175,13 @@ private:
 
 extern "C" void init_screenshot(void)
 {
-    auto screenshot = std::make_shared<ScreenshotSystem>();
-    cp0_signal_screenshot_api.append([screenshot](std::list<std::string> arg, std::function<void(int, std::string)> callback) {
-        screenshot->api_call(std::move(arg), std::move(callback));
+    static cp0::InitOnce initialized;
+    initialized.run([] {
+        auto screenshot = std::make_shared<ScreenshotSystem>();
+        return static_cast<bool>(cp0_signal_screenshot_api.append(
+            [screenshot](std::list<std::string> arg,
+                         std::function<void(int, std::string)> callback) {
+                screenshot->api_call(std::move(arg), std::move(callback));
+            }));
     });
 }
