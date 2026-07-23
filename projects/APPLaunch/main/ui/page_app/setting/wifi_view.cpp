@@ -47,92 +47,162 @@ void commit_view(lv_obj_t *container, lv_obj_t *view)
 
 } // namespace
 
-bool WiFi::build_list(UISetupPage &page)
+void WiFiListView::reset_objects()
 {
+    root_ = nullptr;
+    title_ = nullptr;
+    empty_ = nullptr;
+    hint_ = nullptr;
+    title_text_.clear();
+    empty_text_.clear();
+    hint_text_.clear();
+    for (auto &row : rows_) row = {};
+}
+
+void WiFiListView::root_delete_cb(lv_event_t *event) noexcept
+{
+    if (!event || lv_event_get_target(event) != lv_event_get_current_target(event)) return;
+    auto *view = static_cast<WiFiListView *>(lv_event_get_user_data(event));
+    if (view && lv_event_get_target(event) == view->root_) view->reset_objects();
+}
+
+void WiFiListView::unmount()
+{
+    if (root_) lv_obj_delete(root_);
+    reset_objects();
+}
+
+bool WiFiListView::mount(UISetupPage &page)
+{
+    if (mounted()) return true;
     SetupPageAccess access(page);
     lv_obj_t *container = access.content_container();
     lv_obj_t *view = begin_view(container);
     if (!view) return false;
-    auto fail = [&] { lv_obj_delete(view); return false; };
+    root_ = view;
+    lv_obj_add_event_cb(view, root_delete_cb, LV_EVENT_DELETE, this);
+    auto fail = [&] {
+        if (root_) lv_obj_delete(root_);
+        reset_objects();
+        return false;
+    };
 
-    cp0_wifi_status_t status{};
-    cp0_wifi_status_read(&status);
-    char title_text[128];
-    if (status.connected)
-        snprintf(title_text, sizeof(title_text), "Connected WiFi: %.64s  %.40s", status.ssid,
-                 status.ip);
-    else
-        snprintf(title_text, sizeof(title_text), "WiFi: Not connected");
-    lv_obj_t *title = create_label(
-        view, title_text, 8, 2, 0x58A6FF,
+    title_ = create_label(
+        view, "", 8, 2, 0x58A6FF,
         launcher_fonts().get("Montserrat-Bold.ttf", 12, LV_FREETYPE_FONT_STYLE_BOLD));
-    if (!title) return fail();
-    access.apply_overflow(title, 8, access.layout().wifi_title_width, true);
+    if (!title_) return fail();
 
     if (!create_label(view, "SSID", 8, 18, 0x888888, &lv_font_montserrat_10) ||
         !create_label(view, "Security", 180, 18, 0x888888, &lv_font_montserrat_10) ||
         !create_label(view, "Signal", 270, 18, 0x888888, &lv_font_montserrat_10))
         return fail();
 
-    if (ap_count_ == 0) {
-        if (!create_label(view, "No networks found. Press R to rescan.", 8, 50, 0x666666,
-                          &lv_font_montserrat_12))
-            return fail();
-        commit_view(container, view);
-        return true;
-    }
+    empty_ = create_label(view, "", 8, 50, 0x666666, &lv_font_montserrat_12);
+    if (!empty_) return fail();
 
-    constexpr int visible_count = 5;
-    int offset = list_sel_ - visible_count / 2;
-    if (offset < 0) offset = 0;
-    if (offset > ap_count_ - visible_count) offset = ap_count_ - visible_count;
-    if (offset < 0) offset = 0;
-
-    for (int visible_index = 0;
-         visible_index < visible_count && visible_index + offset < ap_count_; ++visible_index) {
-        const int ap_index = visible_index + offset;
-        const bool selected = ap_index == list_sel_;
-        const cp0_wifi_ap_t &access_point = aps_[ap_index];
+    for (int visible_index = 0; visible_index < SetupWifiListViewModel::VISIBLE_ROWS;
+         ++visible_index) {
+        auto &row = rows_[visible_index];
         const int y = 30 + visible_index * 22;
+        row.background = lv_obj_create(view);
+        if (!row.background) return fail();
+        lv_obj_set_size(row.background, access.layout().screen_width - 8, 20);
+        lv_obj_set_pos(row.background, 4, y);
+        lv_obj_set_style_radius(row.background, 2, LV_PART_MAIN);
+        lv_obj_set_style_bg_color(row.background, lv_color_hex(0x1F3A5F), LV_PART_MAIN);
+        lv_obj_set_style_bg_opa(row.background, LV_OPA_COVER, LV_PART_MAIN);
+        lv_obj_set_style_border_width(row.background, 0, LV_PART_MAIN);
+        lv_obj_clear_flag(row.background, LV_OBJ_FLAG_SCROLLABLE);
 
-        if (selected) {
-            lv_obj_t *background = lv_obj_create(view);
-            if (!background) return fail();
-            lv_obj_set_size(background, access.layout().screen_width - 8, 20);
-            lv_obj_set_pos(background, 4, y);
-            lv_obj_set_style_radius(background, 2, LV_PART_MAIN);
-            lv_obj_set_style_bg_color(background, lv_color_hex(0x1F3A5F), LV_PART_MAIN);
-            lv_obj_set_style_bg_opa(background, LV_OPA_COVER, LV_PART_MAIN);
-            lv_obj_set_style_border_width(background, 0, LV_PART_MAIN);
-            lv_obj_clear_flag(background, LV_OBJ_FLAG_SCROLLABLE);
-        }
-
-        const uint32_t text_color =
-            access_point.in_use ? 0x58A6FF : (selected ? 0xFFFFFF : 0xCCCCCC);
-        char ssid_text[CP0_WIFI_SSID_MAX + 4];
-        snprintf(ssid_text, sizeof(ssid_text), has_saved_profile(access_point.ssid) ? "%s *" : "%s",
-                 access_point.ssid);
-        lv_obj_t *ssid = create_label(view, ssid_text, 8, y + 2, text_color,
-                                      &lv_font_montserrat_12);
-        if (!ssid) return fail();
-        lv_obj_set_width(ssid, 165);
-        lv_label_set_long_mode(ssid, LV_LABEL_LONG_CLIP);
-
-        if (!create_label(view, access_point.security[0] ? access_point.security : "Open", 180,
-                          y + 2, text_color, &lv_font_montserrat_10))
-            return fail();
-        char signal_text[16];
-        snprintf(signal_text, sizeof(signal_text), "%d%%", access_point.signal);
-        if (!create_label(view, signal_text, 275, y + 2, text_color,
-                          &lv_font_montserrat_10))
-            return fail();
+        row.ssid = create_label(view, "", 8, y + 2, 0xCCCCCC, &lv_font_montserrat_12);
+        row.security = create_label(view, "", 180, y + 2, 0xCCCCCC, &lv_font_montserrat_10);
+        row.signal = create_label(view, "", 275, y + 2, 0xCCCCCC, &lv_font_montserrat_10);
+        if (!row.ssid || !row.security || !row.signal) return fail();
+        lv_obj_set_width(row.ssid, 165);
+        lv_label_set_long_mode(row.ssid, LV_LABEL_LONG_CLIP);
+        lv_obj_add_flag(row.background, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(row.ssid, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(row.security, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(row.signal, LV_OBJ_FLAG_HIDDEN);
     }
 
-    if (!create_label(view, "OK:connect  R:rescan  D:forget  ESC:back", 8,
-                      access.content_height() - 14, 0x555555, &lv_font_montserrat_10))
-        return fail();
+    hint_ = create_label(view, "", 8, access.content_height() - 14, 0x555555,
+                         &lv_font_montserrat_10);
+    if (!hint_) return fail();
     commit_view(container, view);
     return true;
+}
+
+bool WiFiListView::render(UISetupPage &page, const SetupWifiListSnapshot &snapshot)
+{
+    if (!mount(page)) return false;
+    SetupPageAccess access(page);
+    if (title_text_ != snapshot.title) {
+        title_text_ = snapshot.title;
+        lv_label_set_text(title_, title_text_.c_str());
+        access.apply_overflow(title_, 8, access.layout().wifi_title_width, true);
+    }
+    if (empty_text_ != snapshot.empty_message) {
+        empty_text_ = snapshot.empty_message;
+        lv_label_set_text(empty_, empty_text_.c_str());
+    }
+    if (snapshot.rows.empty()) lv_obj_remove_flag(empty_, LV_OBJ_FLAG_HIDDEN);
+    else lv_obj_add_flag(empty_, LV_OBJ_FLAG_HIDDEN);
+    if (hint_text_ != snapshot.hint) {
+        hint_text_ = snapshot.hint;
+        lv_label_set_text(hint_, hint_text_.c_str());
+    }
+
+    for (int index = 0; index < SetupWifiListViewModel::VISIBLE_ROWS; ++index) {
+        auto &objects = rows_[index];
+        if (index >= static_cast<int>(snapshot.rows.size())) {
+            if (objects.visible) {
+                lv_obj_add_flag(objects.background, LV_OBJ_FLAG_HIDDEN);
+                lv_obj_add_flag(objects.ssid, LV_OBJ_FLAG_HIDDEN);
+                lv_obj_add_flag(objects.security, LV_OBJ_FLAG_HIDDEN);
+                lv_obj_add_flag(objects.signal, LV_OBJ_FLAG_HIDDEN);
+                objects.visible = false;
+            }
+            continue;
+        }
+        const auto &row = snapshot.rows[static_cast<std::size_t>(index)];
+        const uint32_t color = row.in_use ? 0x58A6FF : (row.selected ? 0xFFFFFF : 0xCCCCCC);
+        if (objects.ssid_text != row.ssid) {
+            objects.ssid_text = row.ssid;
+            lv_label_set_text(objects.ssid, objects.ssid_text.c_str());
+        }
+        if (objects.security_text != row.security) {
+            objects.security_text = row.security;
+            lv_label_set_text(objects.security, objects.security_text.c_str());
+        }
+        if (objects.signal_text != row.signal) {
+            objects.signal_text = row.signal;
+            lv_label_set_text(objects.signal, objects.signal_text.c_str());
+        }
+        if (!objects.visible || objects.color != color) {
+            objects.color = color;
+            lv_obj_set_style_text_color(objects.ssid, lv_color_hex(color), LV_PART_MAIN);
+            lv_obj_set_style_text_color(objects.security, lv_color_hex(color), LV_PART_MAIN);
+            lv_obj_set_style_text_color(objects.signal, lv_color_hex(color), LV_PART_MAIN);
+        }
+        if (!objects.visible || objects.selected != row.selected) {
+            objects.selected = row.selected;
+            if (row.selected) lv_obj_remove_flag(objects.background, LV_OBJ_FLAG_HIDDEN);
+            else lv_obj_add_flag(objects.background, LV_OBJ_FLAG_HIDDEN);
+        }
+        if (!objects.visible) {
+            lv_obj_remove_flag(objects.ssid, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_remove_flag(objects.security, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_remove_flag(objects.signal, LV_OBJ_FLAG_HIDDEN);
+            objects.visible = true;
+        }
+    }
+    return true;
+}
+
+bool WiFi::build_list(UISetupPage &page)
+{
+    return list_view_.render(page, list_view_model_.snapshot());
 }
 
 bool WiFi::show_connecting(UISetupPage &page, const char *ssid)
@@ -183,43 +253,73 @@ bool WiFi::show_forget_confirmation(UISetupPage &page, const std::string &ssid)
     return true;
 }
 
-bool WiFi::show_pw_input(UISetupPage &page)
+void WiFiPasswordView::reset_objects()
 {
+    root_ = nullptr;
+    input_ = nullptr;
+    hint_ = nullptr;
+}
+
+void WiFiPasswordView::root_delete_cb(lv_event_t *event) noexcept
+{
+    if (!event || lv_event_get_target(event) != lv_event_get_current_target(event)) return;
+    auto *view = static_cast<WiFiPasswordView *>(lv_event_get_user_data(event));
+    if (view && lv_event_get_target(event) == view->root_) view->reset_objects();
+}
+
+void WiFiPasswordView::unmount()
+{
+    if (root_) lv_obj_delete(root_);
+    reset_objects();
+}
+
+bool WiFiPasswordView::show(UISetupPage &page, const std::string &ssid)
+{
+    unmount();
     SetupPageAccess access(page);
     lv_obj_t *container = access.content_container();
     lv_obj_t *view = begin_view(container);
     if (!view) return false;
-    auto fail = [&] { lv_obj_delete(view); return false; };
+    root_ = view;
+    lv_obj_add_event_cb(view, root_delete_cb, LV_EVENT_DELETE, this);
+    auto fail = [&] {
+        if (root_) lv_obj_delete(root_);
+        reset_objects();
+        return false;
+    };
 
     char title_text[128];
-    snprintf(title_text, sizeof(title_text), "Connect: %s", password_model_.ssid().c_str());
+    snprintf(title_text, sizeof(title_text), "Connect: %s", ssid.c_str());
     if (!create_label(view, title_text, 10, 10, 0x58A6FF, &lv_font_montserrat_12) ||
         !create_label(view, "Password:", 10, 35, 0xCCCCCC, &lv_font_montserrat_12))
         return fail();
 
     lv_obj_t *input = create_label(view, "_", 90, 35, 0xFFFFFF, &lv_font_montserrat_14);
     if (!input) return fail();
-    lv_obj_add_event_cb(input, password_label_delete_cb, LV_EVENT_DELETE, this);
     lv_obj_set_width(input, 200);
     lv_label_set_long_mode(input, LV_LABEL_LONG_CLIP);
 
     lv_obj_t *hint = create_label(view, "Type pw, OK:connect, ESC:cancel", 10, 65,
                                   0x555555, &lv_font_montserrat_10);
     if (!hint) return fail();
-    lv_obj_add_event_cb(hint, password_label_delete_cb, LV_EVENT_DELETE, this);
 
     commit_view(container, view);
-    pw_input_lbl_ = input;
-    pw_hint_lbl_ = hint;
+    input_ = input;
+    hint_ = hint;
     access.set_view(SetupViewState::WIFI_PW);
     return true;
 }
 
-void WiFi::pw_update_display()
+void WiFiPasswordView::update_password(const std::string &display)
 {
-    if (!pw_input_lbl_) return;
-    const std::string display = password_model_.masked_display();
-    lv_label_set_text(pw_input_lbl_, display.c_str());
+    if (input_) lv_label_set_text(input_, display.c_str());
+}
+
+void WiFiPasswordView::set_hint(const char *text, uint32_t color)
+{
+    if (!hint_) return;
+    lv_label_set_text(hint_, text ? text : "");
+    lv_obj_set_style_text_color(hint_, lv_color_hex(color), LV_PART_MAIN);
 }
 
 } // namespace setting

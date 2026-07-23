@@ -3,6 +3,91 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <utility>
+#include <vector>
+
+struct SetupWifiAccessPoint
+{
+    std::string ssid;
+    std::string security;
+    int signal = 0;
+    bool in_use = false;
+    bool saved = false;
+};
+
+struct SetupWifiStatus
+{
+    bool connected = false;
+    std::string ssid;
+    std::string ip;
+};
+
+class SetupWifiListModel
+{
+public:
+    void begin_scan();
+    void cancel_scan() { scanning_ = false; }
+    void apply_scan(std::vector<SetupWifiAccessPoint> access_points);
+    void set_status(SetupWifiStatus status) { status_ = std::move(status); }
+    bool move_selection(int delta);
+
+    bool scanning() const { return scanning_; }
+    int selected_index() const { return selected_index_; }
+    std::size_t size() const { return access_points_.size(); }
+    const std::vector<SetupWifiAccessPoint> &access_points() const { return access_points_; }
+    const SetupWifiAccessPoint *selected() const;
+    const SetupWifiAccessPoint *at(int index) const;
+    const SetupWifiStatus &status() const { return status_; }
+
+private:
+    std::vector<SetupWifiAccessPoint> access_points_;
+    int selected_index_ = 0;
+    bool scanning_ = false;
+    SetupWifiStatus status_;
+};
+
+struct SetupWifiRowViewModel
+{
+    std::string ssid;
+    std::string security;
+    std::string signal;
+    bool selected = false;
+    bool in_use = false;
+};
+
+struct SetupWifiListSnapshot
+{
+    std::string title;
+    std::string empty_message;
+    std::string hint;
+    std::vector<SetupWifiRowViewModel> rows;
+};
+
+class SetupWifiListViewModel
+{
+public:
+    static constexpr int VISIBLE_ROWS = 5;
+    static constexpr std::uint32_t KEY_REPEAT_INTERVAL_MS = 60;
+
+    void begin_scan() { model_.begin_scan(); }
+    void cancel_scan() { model_.cancel_scan(); }
+    void apply_scan(std::vector<SetupWifiAccessPoint> access_points)
+    {
+        model_.apply_scan(std::move(access_points));
+    }
+    void set_status(SetupWifiStatus status) { model_.set_status(std::move(status)); }
+    bool move_selection(int delta) { return model_.move_selection(delta); }
+    SetupWifiListSnapshot snapshot() const;
+
+    bool scanning() const { return model_.scanning(); }
+    int selected_index() const { return model_.selected_index(); }
+    std::size_t size() const { return model_.size(); }
+    const SetupWifiAccessPoint *selected() const { return model_.selected(); }
+    const SetupWifiAccessPoint *at(int index) const { return model_.at(index); }
+
+private:
+    SetupWifiListModel model_;
+};
 
 template <typename CallbackTimer, typename ActiveTimer, typename Token>
 constexpr bool setup_wifi_feedback_timer_callback_ready(
@@ -16,15 +101,6 @@ constexpr bool setup_wifi_feedback_screen_delete_allowed(
     Target target, CurrentTarget current_target, TrackedScreen tracked_screen) noexcept
 {
     return target && target == current_target && target == tracked_screen;
-}
-
-template <typename EventTarget, typename CurrentTarget, typename OwnedLabel>
-constexpr bool setup_wifi_owned_label_delete_matches(EventTarget event_target,
-                                                      CurrentTarget current_target,
-                                                      OwnedLabel owned_label) noexcept
-{
-    return event_target && event_target == current_target &&
-           event_target == owned_label;
 }
 
 class SetupWifiPasswordModel

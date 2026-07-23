@@ -1,5 +1,6 @@
 #include "setup_wifi_model.hpp"
 
+#include <algorithm>
 #include <utility>
 
 namespace {
@@ -49,6 +50,86 @@ bool is_valid_utf8_text(const std::string &text)
 }
 
 } // namespace
+
+void SetupWifiListModel::begin_scan()
+{
+    scanning_ = true;
+}
+
+void SetupWifiListModel::apply_scan(std::vector<SetupWifiAccessPoint> access_points)
+{
+    std::string selected_ssid;
+    if (const auto *current = selected()) selected_ssid = current->ssid;
+
+    access_points_ = std::move(access_points);
+    scanning_ = false;
+    if (access_points_.empty()) {
+        selected_index_ = 0;
+        return;
+    }
+
+    const auto selected = std::find_if(access_points_.begin(), access_points_.end(),
+        [&](const SetupWifiAccessPoint &access_point) {
+            return !selected_ssid.empty() && access_point.ssid == selected_ssid;
+        });
+    if (selected != access_points_.end())
+        selected_index_ = static_cast<int>(std::distance(access_points_.begin(), selected));
+    else
+        selected_index_ = std::clamp(selected_index_, 0, static_cast<int>(access_points_.size()) - 1);
+}
+
+bool SetupWifiListModel::move_selection(int delta)
+{
+    if (access_points_.empty() || delta == 0) return false;
+    const int next = std::clamp(selected_index_ + delta, 0,
+                                static_cast<int>(access_points_.size()) - 1);
+    if (next == selected_index_) return false;
+    selected_index_ = next;
+    return true;
+}
+
+const SetupWifiAccessPoint *SetupWifiListModel::selected() const
+{
+    return at(selected_index_);
+}
+
+const SetupWifiAccessPoint *SetupWifiListModel::at(int index) const
+{
+    return index >= 0 && index < static_cast<int>(access_points_.size())
+        ? &access_points_[static_cast<std::size_t>(index)] : nullptr;
+}
+
+SetupWifiListSnapshot SetupWifiListViewModel::snapshot() const
+{
+    SetupWifiListSnapshot result;
+    const SetupWifiStatus &status = model_.status();
+    result.title = status.connected
+        ? "Connected WiFi: " + status.ssid + "  " + status.ip
+        : "WiFi: Not connected";
+    result.empty_message = model_.scanning()
+        ? "Scanning for WiFi networks..."
+        : "No networks found. Press R to rescan.";
+    result.hint = model_.scanning()
+        ? "Scanning...  OK:connect  D:forget  ESC:back"
+        : "OK:connect  R:rescan  D:forget  ESC:back";
+
+    const int count = static_cast<int>(model_.size());
+    int offset = model_.selected_index() - VISIBLE_ROWS / 2;
+    offset = std::max(0, std::min(offset, count - VISIBLE_ROWS));
+    for (int visible = 0; visible < VISIBLE_ROWS && offset + visible < count; ++visible) {
+        const int index = offset + visible;
+        const auto *access_point = model_.at(index);
+        if (!access_point) continue;
+        SetupWifiRowViewModel row;
+        row.ssid = access_point->ssid + (access_point->saved ? " *" : "");
+        row.security = access_point->security.empty() ? "Open" : access_point->security;
+        row.signal = std::to_string(access_point->signal) + "%";
+        row.selected = index == model_.selected_index();
+        row.in_use = access_point->in_use;
+        result.rows.push_back(std::move(row));
+    }
+    return result;
+}
 
 SetupWifiPasswordModel::~SetupWifiPasswordModel()
 {

@@ -18,6 +18,7 @@
 #include <sstream>
 #include <string>
 #include <thread>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -150,6 +151,19 @@ public:
         if (cp0_process_capture_argv(scan_argv, output, sizeof(output)) != 0)
             return 0;
 
+        std::unordered_set<std::string> saved_profiles;
+        char profiles_output[4096] = {};
+        const char *profiles_argv[] = {
+            "nmcli", "-t", "--escape", "no", "-f", "NAME", "con", "show", nullptr};
+        if (cp0_process_capture_argv(profiles_argv, profiles_output, sizeof(profiles_output)) == 0) {
+            std::istringstream lines(profiles_output);
+            std::string profile;
+            while (std::getline(lines, profile)) {
+                if (!profile.empty() && profile.back() == '\r') profile.pop_back();
+                if (!profile.empty()) saved_profiles.insert(profile);
+            }
+        }
+
         std::vector<cp0_wifi_ap_t> aps;
         for (const auto &parsed : cp0::network::parse_scan_output(output)) {
             cp0_wifi_ap_t ap{};
@@ -157,6 +171,7 @@ public:
             ap.signal = parsed.signal;
             cp0_copy_string(ap.security, sizeof(ap.security), parsed.security);
             ap.in_use = parsed.in_use ? 1 : 0;
+            ap.saved = saved_profiles.count(parsed.ssid) != 0 ? 1 : 0;
             aps.push_back(ap);
         }
 

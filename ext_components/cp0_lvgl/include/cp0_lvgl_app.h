@@ -29,6 +29,7 @@ typedef struct {
     int signal;
     char security[32];
     int in_use;
+    int saved;
 } cp0_wifi_ap_t;
 
 typedef struct {
