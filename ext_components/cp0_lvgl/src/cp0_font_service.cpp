@@ -11,11 +11,11 @@ Cp0FontService::~Cp0FontService()
     release();
 }
 
-#if LV_USE_FREETYPE
 lv_font_t *Cp0FontService::get(const char *font_name, uint16_t size,
                                lv_freetype_font_style_t style,
                                lv_freetype_font_render_mode_t render_mode)
 {
+#if LV_USE_FREETYPE
     std::lock_guard<std::mutex> lock(mutex_);
     const std::string path = resolve_path(font_name);
     if (path.empty()) return fallback(size);
@@ -33,6 +33,12 @@ lv_font_t *Cp0FontService::get(const char *font_name, uint16_t size,
         return fallback(size);
     }
     return font;
+#else
+    (void)font_name;
+    (void)style;
+    (void)render_mode;
+    return fallback(size);
+#endif
 }
 
 lv_font_t *Cp0FontService::get_mono(const char *font_name, uint16_t size,
@@ -42,6 +48,7 @@ lv_font_t *Cp0FontService::get_mono(const char *font_name, uint16_t size,
                static_cast<lv_freetype_font_render_mode_t>(2));
 }
 
+#if LV_USE_FREETYPE
 std::string Cp0FontService::resolve_path(const char *font_name)
 {
     if (!font_name || !font_name[0]) return {};
