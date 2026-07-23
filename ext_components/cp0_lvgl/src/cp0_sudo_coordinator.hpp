@@ -34,6 +34,7 @@ struct Request {
     int exec_timeout_ms = 0;
     int64_t deadline_ms = 0;
     std::atomic<bool> cancel_requested{false};
+    bool authentication_complete = false;
     size_t pending_bytes = 0;
 };
 
@@ -63,6 +64,7 @@ public:
     std::vector<Action> commit_reserved(uint64_t id, int64_t now_ms);
     std::vector<Action> release_reserved(uint64_t id, int64_t now_ms);
     std::vector<Action> enqueue(std::shared_ptr<Request> request, int64_t now_ms);
+    std::vector<Action> begin_shutdown(int error, int64_t now_ms);
     void requeue_actions(std::vector<Action> actions);
     std::vector<Action> fail_all(int error, int64_t now_ms);
     int cancel(uint64_t id, std::vector<Action> &actions, int64_t now_ms);
@@ -70,11 +72,14 @@ public:
     std::vector<Action> submit_password(uint64_t id);
     std::vector<Action> worker_auth_result(uint64_t id, cp0_sudo_result_t result,
                                            int exit_code, int64_t now_ms);
+    std::vector<Action> worker_authenticated(uint64_t id);
     OutputResult worker_output(uint64_t id, std::string data);
     void output_delivered(uint64_t id, size_t size);
     void worker_complete(uint64_t id, cp0_sudo_result_t result, int exit_code);
     std::shared_ptr<Request> find(uint64_t id) const;
     State state(uint64_t id) const;
+    bool accepting() const;
+    bool resume();
     size_t max_output_chunk() const { return pending_limit_; }
 
 private:
@@ -105,6 +110,7 @@ private:
     size_t pending_limit_;
     size_t terminal_limit_;
     size_t terminal_completions_pending_ = 0;
+    bool accepting_ = true;
 };
 
 } // namespace cp0_sudo

@@ -1,5 +1,9 @@
-#include <main.h>
+#include "cp0_lvgl_app_runner.hpp"
+#include "helloworld.hpp"
+
 int main(int argc, char *argv[])
 {
-    return lvgl_main();
+    (void)argc;
+    (void)argv;
+    return cp0_lvgl_run_app<UIIpPanelPage>();
 }

@@ -14,24 +14,64 @@ if "CONFIG_CP0_LVGL_COMPONENT_ENABLED" in os.environ or "CONFIG_SIGSLOT_COMPONEN
     SRCS = []
     INCLUDE = [ADir('include')]
     PRIVATE_INCLUDE = []
-    REQUIREMENTS = ['lvgl_component', 'eventpp', 'Miniaudio', 'RadioLib']
+    REQUIREMENTS = ['lvgl_component', 'eventpp']
     STATIC_LIB = []
     DYNAMIC_LIB = []
     DEFINITIONS = []
     DEFINITIONS_PRIVATE = []
     LDFLAGS = []
     LINK_SEARCH_PATH = []
+    optional_services = {
+        'AUDIO': 'audio',
+        'BATTERY': 'battery',
+        'BQ27220': 'bq27220',
+        'CAMERA': 'camera',
+        'CONFIG': 'config',
+        'FILESYSTEM': 'filesystem',
+        'IMU': 'imu',
+        'LORA': 'lara',
+        'OSINFO': 'osinfo',
+        'PROCESS': 'process',
+        'PTY': 'pty',
+        'SCREENSHOT': 'screenshot',
+        'SETTINGS': 'settings',
+        'SOUNDCARD': 'soundcard',
+        'WIFI': 'network',
+    }
+
+    def service_enabled(name):
+        return 'CONFIG_CP0_LVGL_INIT_' + name in os.environ
+
+    for name in optional_services:
+        if service_enabled(name):
+            DEFINITIONS += ['-DCONFIG_CP0_LVGL_INIT_' + name + '=1']
+    for name in ['RPC', 'SUDO', 'BLUETOOTH', 'SAVED_SETTINGS']:
+        if service_enabled(name):
+            DEFINITIONS += ['-DCONFIG_CP0_LVGL_INIT_' + name + '=1']
+
+    if service_enabled('AUDIO'):
+        REQUIREMENTS += ['Miniaudio']
+    if service_enabled('LORA'):
+        REQUIREMENTS += ['RadioLib']
+
     SRCS += Glob('src/*.c*')
     if 'CONFIG_V9_5_LV_USE_SDL' in os.environ:
         DEFINITIONS += ['-DHAL_PLATFORM_SDL=1']
         DEFINITIONS += pkg_config_cflags('sdl2')
         REQUIREMENTS += pkg_config_ldflags('sdl2')
-        SRCS += Glob('src/sdl/*.c*')
+        platform_srcs = Glob('src/sdl/*.c*')
+        platform_srcs += [
+            File('src/cp0/cp0_camera_viewport.cpp'),
+            File('src/cp0/cp0_desktop_exec_policy.cpp'),
+            File('src/cp0/cp0_process_commands.cpp'),
+            File('src/cp0/cp0_process_lifecycle.cpp'),
+        ]
     else:
-        SRCS += Glob('src/cp0/*.c*')
+        platform_srcs = Glob('src/cp0/*.c*')
         REQUIREMENTS += ['input', 'xkbcommon', 'udev', 'pthread']
         REQUIREMENTS += [':libdbus-1.so.3']
-        REQUIREMENTS += ['camera', 'camera-base', 'jpeg']
+        if service_enabled('CAMERA'):
+            REQUIREMENTS += ['camera', 'camera-base', 'jpeg']
         PRIVATE_INCLUDE += [toolchain_path('usr', 'include', 'dbus-1.0'),
                             toolchain_path('usr', 'lib', env.get('GCC_DUMPMACHINE', ''), 'dbus-1.0', 'include')]
 
@@ -42,6 +82,19 @@ if "CONFIG_CP0_LVGL_COMPONENT_ENABLED" in os.environ or "CONFIG_SIGSLOT_COMPONEN
             DEFINITIONS += ['-DCP0_LVGL_USE_ZMQ_RPC=1']
             if 'zmq' not in REQUIREMENTS:
                 REQUIREMENTS += ['zmq']
+
+    source_selected_services = {'AUDIO', 'CAMERA', 'IMU', 'LORA'}
+    for source in platform_srcs:
+        source_name = str(source).lower()
+        disabled = any(token in source_name and not service_enabled(name)
+                       for name, token in optional_services.items()
+                       if name in source_selected_services)
+        # The LoRa implementation historically used "lara" in one filename,
+        # while the bridge service uses the correct "lora" spelling.
+        if not service_enabled('LORA') and ('lora' in source_name or 'lara' in source_name):
+            disabled = True
+        if not disabled:
+            SRCS.append(source)
 
     env["COMPONENTS"].append(
         {

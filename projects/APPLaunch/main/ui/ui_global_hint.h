@@ -7,9 +7,9 @@
 /*
  * ui_global_hint.h
  *
- * Global on-screen hint/toast overlay for the launcher and any sub-app
- * page. Shows a short, transient banner near the top of the active
- * screen when specific keys are pressed.
+ * Global launcher shortcut dispatcher for the launcher and sub-app pages.
+ * Key classification lives in GlobalHintPolicy; this module executes the
+ * resulting media, screenshot, and transient hint actions.
  *
  * Hooked from the cp0_lvgl keyboard dispatch after LV_EVENT_KEYBOARD
  * has been sent to the active screen.
@@ -22,17 +22,21 @@ struct key_item;
 
 #ifdef __cplusplus
 namespace ui_global_hint {
-void on_key(const struct key_item *elm);
+void on_key(const struct key_item *elm) noexcept;
+void shutdown();
 }
 
 extern "C" {
 #endif
 
 /* Call on every key_item dequeued from the keyboard queue.
- * Decides whether to show a transient toast hint; a no-op for
- * keys that don't match the rules.
+ * Executes a matching global shortcut; a no-op for unrelated keys.
  */
+#ifdef __cplusplus
+void ui_global_hint_on_key(const struct key_item *elm) noexcept;
+#else
 void ui_global_hint_on_key(const struct key_item *elm);
+#endif
 
 #ifdef __cplusplus
 }

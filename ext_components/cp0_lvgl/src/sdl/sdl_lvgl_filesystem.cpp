@@ -2,9 +2,12 @@
 #include "cp0_lvgl_filesystem.hpp"
 #include "hal/hal_paths.h"
 #include "hal_lvgl_bsp.h"
+#include "../cp0_filesystem_api.hpp"
+#include "../cp0_posix_filesystem.hpp"
+#include "../cp0_resource_path_policy.hpp"
+#include "../cp0_c_api_boundary.hpp"
+#include "../cp0_init_once.hpp"
 
-#include <algorithm>
-#include <cctype>
 #include <cerrno>
 #include <cstdint>
 #include <cstdlib>
@@ -15,6 +18,7 @@
 #include <iterator>
 #include <list>
 #include <limits>
+#include <mutex>
 #include <new>
 #include <sstream>
 #include <string>
@@ -65,69 +69,17 @@ extern "C" const char *hal_path_audio_dir(void) { return s_audio_dir; }
 
 namespace {
 
-static void copy_cstr(char *dst, size_t dst_size, const char *src)
-{
-    if (!dst || dst_size == 0)
-        return;
-    if (!src)
-        src = "";
-    std::strncpy(dst, src, dst_size - 1);
-    dst[dst_size - 1] = '\0';
-}
-
 static bool starts_with(const std::string &value, const char *prefix)
 {
     const std::string p(prefix ? prefix : "");
     return value.compare(0, p.size(), p) == 0;
 }
 
-static bool has_lvgl_drive(const std::string &file)
-{
-    return file.size() >= 2 && std::isalpha(static_cast<unsigned char>(file[0])) && file[1] == ':';
-}
-
-static std::string lower_ext(const std::string &file)
-{
-    const size_t dot = file.find_last_of('.');
-    if (dot == std::string::npos)
-        return "";
-    std::string ext = file.substr(dot + 1);
-    std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) {
-        return static_cast<char>(std::tolower(c));
-    });
-    return ext;
-}
-
-static bool is_image_ext(const std::string &ext)
-{
-    return ext == "png" || ext == "gif" || ext == "jpg" || ext == "jpeg" || ext == "svg";
-}
-
-static bool is_audio_ext(const std::string &ext)
-{
-    return ext == "wav" || ext == "mp3" || ext == "ogg";
-}
-
-static bool is_font_ext(const std::string &ext)
-{
-    return ext == "ttf" || ext == "otf";
-}
-
-static std::string strip_app_root_prefix(const std::string &file)
-{
-    static constexpr const char *kAppRoot = "/usr/share/APPLaunch/";
-    if (starts_with(file, kAppRoot))
-        return file.substr(std::strlen(kAppRoot));
-    if (starts_with(file, "APPLaunch/"))
-        return file.substr(std::strlen("APPLaunch/"));
-    return file;
-}
-
 static std::string join_path(const char *base, const std::string &rel)
 {
     if (rel.empty())
         return base ? std::string(base) : std::string();
-    if (rel.front() == '/' || has_lvgl_drive(rel))
+    if (rel.front() == '/' || cp0::filesystem::has_lvgl_drive(rel))
         return rel;
     std::string out = base ? std::string(base) : std::string(".");
     if (!out.empty() && out.back() != '/')
@@ -138,8 +90,8 @@ static std::string join_path(const char *base, const std::string &rel)
 
 static std::string resource_path(const char *base, const char *prefix, const std::string &file)
 {
-    std::string rel = strip_app_root_prefix(file);
-    if (has_lvgl_drive(rel)) {
+    std::string rel = cp0::filesystem::strip_app_root_prefix(file);
+    if (cp0::filesystem::has_lvgl_drive(rel)) {
         rel = rel.substr(2);
         while (!rel.empty() && rel.front() == '/')
             rel.erase(rel.begin());
@@ -165,65 +117,13 @@ public:
 
     void api_call(arg_t arg, callback_t callback)
     {
-        auto report = [&](int code, const std::string &data) {
-            if (callback)
-                callback(code, data);
-        };
-
-        if (arg.empty()) {
-            report(-1, "missing command");
-            return;
-        }
-
-        const std::string cmd = arg.front();
-        const std::string value = arg.size() >= 2 ? *std::next(arg.begin()) : std::string();
-        if (cmd == "Path") {
-            report(0, resolve_path(value));
-        } else if (cmd == "DirList") {
-            std::string data;
-            report(encode_dir_entries(value.c_str(), data), data);
-        } else if (cmd == "DirListDetail") {
-            std::string data;
-            report(encode_dir_entries_detail(value.c_str(), data), data);
-        } else if (cmd == "Exists") {
-            report(0, access(value.c_str(), R_OK) == 0 ? "1" : "0");
-        } else if (cmd == "ReadFile") {
-            const auto max_it = arg.size() >= 3 ? std::next(arg.begin(), 2) : arg.end();
-            const size_t max_bytes = max_it == arg.end() ? std::numeric_limits<size_t>::max()
-                : static_cast<size_t>(std::strtoull(max_it->c_str(), nullptr, 10));
-            std::string data;
-            report(read_file_limited(value, max_bytes, data), data);
-        } else if (cmd == "EnsureDirForUser") {
-            int ret = mkdir(value.c_str(), 0755);
-            struct stat st{};
-            report((ret == 0 || errno == EEXIST) && stat(value.c_str(), &st) == 0 && S_ISDIR(st.st_mode) ? 0 : -1, "");
-        } else if (cmd == "Touch") {
-            const auto slash = value.find_last_of('/');
-            if (slash != std::string::npos && slash > 0) {
-                const std::string parent = value.substr(0, slash);
-                struct stat st{};
-                if ((mkdir(parent.c_str(), 0755) != 0 && errno != EEXIST) ||
-                    stat(parent.c_str(), &st) != 0 || !S_ISDIR(st.st_mode)) {
-                    report(-1, "");
-                    return;
-                }
-            }
-            FILE *file = fopen(value.c_str(), "a");
-            if (file) fclose(file);
-            report(file ? 0 : -1, "");
-        } else if (cmd == "Remove") {
-            report(std::remove(value.c_str()) == 0 ? 0 : -1, "");
-        } else if (cmd == "WatchStart") {
-            cp0_watcher_t watcher = watch_start(value.c_str());
-            report(watcher ? 0 : -1, std::to_string(reinterpret_cast<uintptr_t>(watcher)));
-        } else if (cmd == "WatchPoll") {
-            report(0, std::to_string(watch_poll(parse_handle(value))));
-        } else if (cmd == "WatchStop") {
-            watch_stop(parse_handle(value));
-            report(0, "");
-        } else {
-            report(-2, "unknown command: " + cmd);
-        }
+        cp0_filesystem_api::Operations operations;
+        operations.resolve_path = resolve_path;
+        operations.ensure_directory = ensure_directory;
+        operations.watch_start = [this](const char *path) { return dir_watch_start(path); };
+        operations.watch_poll = [this](cp0_watcher_t watcher) { return dir_watch_poll(watcher); };
+        operations.watch_stop = [this](cp0_watcher_t watcher) { return dir_watch_stop(watcher); };
+        cp0_filesystem_api::dispatch(arg, operations, std::move(callback));
     }
 
     std::string path(std::string file) { return resolve_path(file); }
@@ -233,14 +133,28 @@ public:
         return list_dir(path, entries, max_entries, out_count);
     }
 
-    cp0_watcher_t dir_watch_start(const char *path) { return watch_start(path); }
-    int dir_watch_poll(cp0_watcher_t watcher) { return watch_poll(watcher); }
-    void dir_watch_stop(cp0_watcher_t watcher) { watch_stop(watcher); }
+    cp0_watcher_t dir_watch_start(const char *path)
+    {
+        return watchers_.add(native_watch_start(path));
+    }
+    int dir_watch_poll(cp0_watcher_t watcher)
+    {
+        return watchers_.poll(watcher, native_watch_poll);
+    }
+    int dir_watch_stop(cp0_watcher_t watcher)
+    {
+        return watchers_.stop(watcher, native_watch_stop) ? 0 : -1;
+    }
 
 private:
-    static cp0_watcher_t parse_handle(const std::string &value)
+    static int ensure_directory(const std::string &path)
     {
-        return reinterpret_cast<cp0_watcher_t>(static_cast<uintptr_t>(std::strtoull(value.c_str(), nullptr, 0)));
+        const int result = mkdir(path.c_str(), 0755);
+        struct stat status{};
+        return (result == 0 || errno == EEXIST) && stat(path.c_str(), &status) == 0 &&
+                S_ISDIR(status.st_mode)
+            ? 0
+            : -1;
     }
 
     static std::string resolve_path(const std::string &file)
@@ -272,14 +186,17 @@ private:
         if (file == "store_sync_cmd")
             return hal_path_store_sync_cmd();
 
-        const std::string ext = lower_ext(file);
-        if (is_image_ext(ext))
+        const cp0::filesystem::ResourceKind kind = cp0::filesystem::classify_resource(file);
+        if (kind != cp0::filesystem::ResourceKind::none &&
+            cp0::filesystem::has_parent_component(file))
+            return "";
+        if (kind == cp0::filesystem::ResourceKind::image)
             return resource_path(hal_path_images_dir(), "share/images", file);
-        if (is_audio_ext(ext))
+        if (kind == cp0::filesystem::ResourceKind::audio)
             return resource_path(hal_path_audio_dir(), "share/audio", file);
-        if (is_font_ext(ext))
+        if (kind == cp0::filesystem::ResourceKind::font)
             return resource_path(hal_path_font_dir(), "share/font", file);
-        if (has_lvgl_drive(file)) {
+        if (cp0::filesystem::has_lvgl_drive(file)) {
             std::string rel = file.substr(2);
             while (!rel.empty() && rel.front() == '/')
                 rel.erase(rel.begin());
@@ -290,126 +207,7 @@ private:
 
     static int list_dir(const char *path, cp0_dirent_t *entries, int max_entries, int *out_count)
     {
-        if (out_count)
-            *out_count = 0;
-        if (!path || !out_count)
-            return -1;
-        if (!entries || max_entries <= 0)
-            return 0;
-
-        DIR *dir = opendir(path);
-        if (!dir)
-            return -errno;
-
-        struct dirent *ent = nullptr;
-        while ((ent = readdir(dir)) != nullptr) {
-            if (is_dot_entry(ent->d_name))
-                continue;
-            if (*out_count >= max_entries)
-                break;
-            cp0_dirent_t &entry = entries[*out_count];
-            copy_cstr(entry.name, sizeof(entry.name), ent->d_name);
-            entry.is_dir = ent->d_type == DT_DIR ? 1 : 0;
-            if (ent->d_type == DT_UNKNOWN) {
-                std::string child = join_path(path, ent->d_name);
-                struct stat st;
-                entry.is_dir = stat(child.c_str(), &st) == 0 && S_ISDIR(st.st_mode) ? 1 : 0;
-            }
-            ++(*out_count);
-        }
-        closedir(dir);
-        return 0;
-    }
-
-    static int encode_dir_entries(const char *path, std::string &data)
-    {
-        DIR *dir = opendir(path);
-        if (!dir) return -errno;
-        try {
-            std::ostringstream out;
-            struct dirent *ent = nullptr;
-            while ((ent = readdir(dir)) != nullptr) {
-                if (is_dot_entry(ent->d_name)) continue;
-                bool is_dir = ent->d_type == DT_DIR;
-                if (ent->d_type == DT_UNKNOWN) {
-                    struct stat st{};
-                    is_dir = stat(join_path(path, ent->d_name).c_str(), &st) == 0 && S_ISDIR(st.st_mode);
-                }
-                out << (is_dir ? 'D' : 'F') << '\t' << encode_field(ent->d_name) << '\n';
-            }
-            data = out.str();
-        } catch (const std::bad_alloc &) {
-            closedir(dir);
-            return -ENOMEM;
-        }
-        closedir(dir);
-        return 0;
-    }
-
-    static int read_file_limited(const std::string &path, size_t max_bytes, std::string &data)
-    {
-        std::ifstream file(path, std::ios::binary | std::ios::ate);
-        if (!file) return errno ? -errno : -EIO;
-        const std::streamoff length = file.tellg();
-        if (length < 0) return -EIO;
-        if (static_cast<uintmax_t>(length) > max_bytes) return -EFBIG;
-        try {
-            data.resize(static_cast<size_t>(length));
-        } catch (const std::bad_alloc &) {
-            return -ENOMEM;
-        }
-        file.seekg(0);
-        if (length > 0 && !file.read(&data[0], length)) {
-            data.clear();
-            return -EIO;
-        }
-        return 0;
-    }
-
-    static int encode_dir_entries_detail(const char *path, std::string &data)
-    {
-        DIR *dir = opendir(path);
-        if (!dir) return -errno;
-        try {
-            std::ostringstream out;
-            struct dirent *ent = nullptr;
-            while ((ent = readdir(dir)) != nullptr) {
-                if (is_dot_entry(ent->d_name)) continue;
-                const std::string full = join_path(path, ent->d_name);
-                struct stat st;
-                if (stat(full.c_str(), &st) != 0) continue;
-                out << (S_ISDIR(st.st_mode) ? 'D' : 'F') << '\t' << static_cast<long long>(st.st_size)
-                    << '\t' << encode_field(ent->d_name) << '\n';
-            }
-            data = out.str();
-        } catch (const std::bad_alloc &) {
-            closedir(dir);
-            return -ENOMEM;
-        }
-        closedir(dir);
-        return 0;
-    }
-
-    static bool is_dot_entry(const char *name)
-    {
-        return name && name[0] == '.' &&
-               (name[1] == '\0' || (name[1] == '.' && name[2] == '\0'));
-    }
-
-    static std::string encode_field(const char *value)
-    {
-        static constexpr char hex[] = "0123456789ABCDEF";
-        std::string encoded;
-        for (const unsigned char c : std::string(value ? value : "")) {
-            if (c == '%' || c == '\t' || c == '\n' || c == '\r') {
-                encoded.push_back('%');
-                encoded.push_back(hex[c >> 4]);
-                encoded.push_back(hex[c & 0x0f]);
-            } else {
-                encoded.push_back(static_cast<char>(c));
-            }
-        }
-        return encoded;
+        return cp0_posix_filesystem::list_directory(path, entries, max_entries, out_count, true);
     }
 
     static void snapshot(SdlWatcher *watcher)
@@ -427,7 +225,7 @@ private:
         }
     }
 
-    static cp0_watcher_t watch_start(const char *path)
+    static cp0_watcher_t native_watch_start(const char *path)
     {
         if (!path || !path[0])
             return nullptr;
@@ -437,7 +235,7 @@ private:
         return watcher;
     }
 
-    static int watch_poll(cp0_watcher_t handle)
+    static int native_watch_poll(cp0_watcher_t handle)
     {
         if (!handle)
             return -1;
@@ -451,10 +249,12 @@ private:
         return changed ? 1 : 0;
     }
 
-    static void watch_stop(cp0_watcher_t watcher)
+    static void native_watch_stop(cp0_watcher_t watcher)
     {
         delete static_cast<SdlWatcher *>(watcher);
     }
+
+    cp0_filesystem_api::WatcherRegistry watchers_;
 };
 
 SdlFilesystem &filesystem()
@@ -472,12 +272,14 @@ std::string cp0_file_path(std::string file)
 
 extern "C" const char *cp0_file_path_c(const char *file)
 {
-    static thread_local std::unordered_map<std::string, std::string> paths;
-    std::string key = file ? file : "";
-    auto it = paths.find(key);
-    if (it == paths.end())
-        it = paths.emplace(key, cp0_file_path(key)).first;
-    return it->second.c_str();
+    return cp0::invoke_c_api_or("", [file] {
+        static thread_local std::unordered_map<std::string, std::string> paths;
+        std::string key = file ? file : "";
+        auto it = paths.find(key);
+        if (it == paths.end())
+            it = paths.emplace(key, cp0_file_path(key)).first;
+        return it->second.c_str();
+    });
 }
 
 extern "C" int cp0_dir_list(const char *path, cp0_dirent_t *entries, int max_entries, int *out_count)
@@ -497,12 +299,17 @@ extern "C" int cp0_dir_watch_poll(cp0_watcher_t watcher)
 
 extern "C" void cp0_dir_watch_stop(cp0_watcher_t watcher)
 {
-    filesystem().dir_watch_stop(watcher);
+    (void)filesystem().dir_watch_stop(watcher);
 }
 
 extern "C" void init_filesystem(void)
 {
-    cp0_signal_filesystem_api.append([](std::list<std::string> arg, std::function<void(int, std::string)> callback) {
-        filesystem().api_call(std::move(arg), std::move(callback));
+    static cp0::InitOnce initialized;
+    initialized.run([] {
+        return static_cast<bool>(cp0_signal_filesystem_api.append(
+            [](std::list<std::string> arg,
+               std::function<void(int, std::string)> callback) {
+                filesystem().api_call(std::move(arg), std::move(callback));
+            }));
     });
 }

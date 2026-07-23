@@ -5,15 +5,13 @@
  */
 
 #pragma once
-#include "sample_log.h"
-#include "../ui_app_page.hpp"
-#include "ui_app_st.hpp"
-#include "compat/input_keys.h"
-#include <unordered_map>
-#include <string>
-#include <vector>
+#include "../launcher_ui_app_page.hpp"
+#include "../model/async_operation_lifecycle.hpp"
+#include "../model/ssh_connection_model.hpp"
+#include "../model/ssh_view_build_contract.hpp"
 #include <memory>
-#include <functional>
+
+class UISTPage;
 
 // ============================================================
 //  SSH Client  UISSHPage
@@ -28,322 +26,39 @@ class UISSHPage : public AppPage
 {
     enum class ViewState { INPUT, TERMINAL };
 
-    struct InputField
-    {
-        const char *label;
-        std::string value;
-    };
-
 public:
-    UISSHPage() : AppPage()
-    {
-        set_page_title("SSH");
-        fields_.resize(3);
-        fields_[0] = {"Host", "192.168.1.1"};
-        fields_[1] = {"Port", "22"};
-        fields_[2] = {"User", "pi"};
-        creat_UI();
-        event_handler_init();
-    }
+    UISSHPage();
 
-    ~UISSHPage()
-    {
-        terminal_page_.reset();
-    }
+    ~UISSHPage();
 
 private:
     // ==================== data members ====================
-    std::unordered_map<std::string, lv_obj_t *> ui_obj_;
-    std::vector<InputField> fields_;
-    int active_field_ = 0;
+    SshConnectionModel model_;
+    lv_obj_t *background_ = nullptr;
+    lv_obj_t *form_container_ = nullptr;
     ViewState view_state_ = ViewState::INPUT;
     std::shared_ptr<UISTPage> terminal_page_;
     bool terminal_return_pending_ = false;
-
-    // ==================== keycode to char ====================
-    static char keycode_to_char(uint32_t key)
-    {
-        if (key >= KEY_1 && key <= KEY_9) return '1' + (key - KEY_1);
-        if (key == KEY_0) return '0';
-        static const char qwerty[] = "qwertyuiop";
-        if (key >= KEY_Q && key <= KEY_P) return qwerty[key - KEY_Q];
-        static const char asdf[] = "asdfghjkl";
-        if (key >= KEY_A && key <= KEY_L) return asdf[key - KEY_A];
-        static const char zxcv[] = "zxcvbnm";
-        if (key >= KEY_Z && key <= KEY_M) return zxcv[key - KEY_Z];
-        if (key == KEY_SPACE) return ' ';
-        // common symbols needed for IP addresses and hostnames
-        if (key == 52) return '.';  // KEY_DOT
-        if (key == 12) return '-';  // KEY_MINUS
-        return 0;
-    }
+    setting::AsyncOperationLifecycle restore_operation_;
+    setting::AsyncOperationLifecycle::Token restore_token_;
 
     // ==================== UI construction (input view) ====================
-    void creat_UI()
-    {
-        // ---- background ----
-        lv_obj_t *bg = lv_obj_create(ui_APP_Container);
-        lv_obj_set_size(bg, 320, 150);
-        lv_obj_set_pos(bg, 0, 0);
-        lv_obj_set_style_radius(bg, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_color(bg, lv_color_hex(0x0D1117), LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_opa(bg, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_border_width(bg, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_pad_all(bg, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_clear_flag(bg, LV_OBJ_FLAG_SCROLLABLE);
-        ui_obj_["bg"] = bg;
+    void create_ui();
 
-        // ---- title bar ----
-        lv_obj_t *title_bar = lv_obj_create(bg);
-        lv_obj_set_size(title_bar, 320, 22);
-        lv_obj_set_pos(title_bar, 0, 0);
-        lv_obj_set_style_radius(title_bar, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_color(title_bar, lv_color_hex(0x1F3A5F), LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_opa(title_bar, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_border_width(title_bar, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_pad_left(title_bar, 8, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_clear_flag(title_bar, LV_OBJ_FLAG_SCROLLABLE);
-
-        lv_obj_t *lbl_title = lv_label_create(title_bar);
-        lv_label_set_text(lbl_title, "SSH Client");
-        lv_obj_set_align(lbl_title, LV_ALIGN_LEFT_MID);
-        lv_obj_set_style_text_color(lbl_title, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_text_font(lbl_title, &lv_font_montserrat_14, LV_PART_MAIN | LV_STATE_DEFAULT);
-
-        lv_obj_t *lbl_hint_title = lv_label_create(title_bar);
-        lv_label_set_text(lbl_hint_title, "OK:Connect  ESC:Back");
-        lv_obj_set_align(lbl_hint_title, LV_ALIGN_RIGHT_MID);
-        lv_obj_set_x(lbl_hint_title, -4);
-        lv_obj_set_style_text_color(lbl_hint_title, lv_color_hex(0x7EA8D8), LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_text_font(lbl_hint_title, &lv_font_montserrat_10, LV_PART_MAIN | LV_STATE_DEFAULT);
-
-        // ---- input fields ----
-        build_input_fields();
-    }
-
-    void build_input_fields()
-    {
-        lv_obj_t *bg = ui_obj_["bg"];
-
-        // remove old field objects if they exist
-        for (int i = 0; i < 3; ++i)
-        {
-            std::string key_row = "field_row_" + std::to_string(i);
-            if (ui_obj_.count(key_row) && ui_obj_[key_row])
-            {
-                lv_obj_del(ui_obj_[key_row]);
-                ui_obj_[key_row] = nullptr;
-            }
-        }
-        if (ui_obj_.count("hint_lbl") && ui_obj_["hint_lbl"])
-        {
-            lv_obj_del(ui_obj_["hint_lbl"]);
-            ui_obj_["hint_lbl"] = nullptr;
-        }
-
-        int start_y = 30;
-        int field_h = 30;
-        int gap = 4;
-
-        for (int i = 0; i < 3; ++i)
-        {
-            bool active = (i == active_field_);
-            int y = start_y + i * (field_h + gap);
-
-            // field container
-            lv_obj_t *row = lv_obj_create(bg);
-            lv_obj_set_size(row, 300, field_h);
-            lv_obj_set_pos(row, 10, y);
-            lv_obj_set_style_radius(row, 4, LV_PART_MAIN | LV_STATE_DEFAULT);
-            lv_obj_set_style_border_width(row, active ? 1 : 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-            lv_obj_set_style_border_color(row, lv_color_hex(0x1F6FEB), LV_PART_MAIN | LV_STATE_DEFAULT);
-            lv_obj_set_style_pad_all(row, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-            lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
-
-            uint32_t bg_color = active ? 0x1F3A5F : 0x161B22;
-            lv_obj_set_style_bg_color(row, lv_color_hex(bg_color), LV_PART_MAIN | LV_STATE_DEFAULT);
-            lv_obj_set_style_bg_opa(row, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-
-            // active indicator bar
-            if (active)
-            {
-                lv_obj_t *bar = lv_obj_create(row);
-                lv_obj_set_size(bar, 3, field_h - 8);
-                lv_obj_set_pos(bar, 2, 3);
-                lv_obj_set_style_radius(bar, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
-                lv_obj_set_style_bg_color(bar, lv_color_hex(0x1F6FEB), LV_PART_MAIN | LV_STATE_DEFAULT);
-                lv_obj_set_style_bg_opa(bar, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-                lv_obj_set_style_border_width(bar, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-                lv_obj_clear_flag(bar, LV_OBJ_FLAG_SCROLLABLE);
-            }
-
-            // label (field name)
-            lv_obj_t *lbl = lv_label_create(row);
-            lv_label_set_text(lbl, fields_[i].label);
-            lv_obj_set_pos(lbl, 10, (field_h - 14) / 2);
-            lv_obj_set_style_text_color(lbl,
-                active ? lv_color_hex(0x58A6FF) : lv_color_hex(0x7EA8D8),
-                LV_PART_MAIN | LV_STATE_DEFAULT);
-            lv_obj_set_style_text_font(lbl, &lv_font_montserrat_12, LV_PART_MAIN | LV_STATE_DEFAULT);
-
-            // value (editable text)
-            lv_obj_t *val_lbl = lv_label_create(row);
-            std::string display = fields_[i].value;
-            if (active) display += "_";
-            lv_label_set_text(val_lbl, display.c_str());
-            lv_obj_set_pos(val_lbl, 60, (field_h - 14) / 2);
-            lv_obj_set_width(val_lbl, 228);
-            lv_label_set_long_mode(val_lbl, LV_LABEL_LONG_CLIP);
-            lv_obj_set_style_text_color(val_lbl,
-                active ? lv_color_hex(0xFFFFFF) : lv_color_hex(0xCCCCCC),
-                LV_PART_MAIN | LV_STATE_DEFAULT);
-            lv_obj_set_style_text_font(val_lbl, &lv_font_montserrat_14, LV_PART_MAIN | LV_STATE_DEFAULT);
-
-            std::string key_row = "field_row_" + std::to_string(i);
-            ui_obj_[key_row] = row;
-        }
-
-        // hint at bottom
-        lv_obj_t *lbl_bottom = lv_label_create(bg);
-        lv_label_set_text(lbl_bottom, "UP/DN:field  Type to edit  OK:Connect  ESC:Back");
-        lv_obj_set_pos(lbl_bottom, 10, 135);
-        lv_obj_set_width(lbl_bottom, 300);
-        lv_label_set_long_mode(lbl_bottom, LV_LABEL_LONG_CLIP);
-        lv_obj_set_style_text_color(lbl_bottom, lv_color_hex(0x555555), LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_text_font(lbl_bottom, &lv_font_montserrat_10, LV_PART_MAIN | LV_STATE_DEFAULT);
-        ui_obj_["hint_lbl"] = lbl_bottom;
-    }
+    bool build_input_fields();
+    void rebuild_or_restore(SshConnectionModel previous) noexcept;
 
     // ==================== connect via SSH ====================
-    void do_connect()
-    {
-        std::string host = fields_[0].value;
-        std::string port = fields_[1].value;
-        std::string user = fields_[2].value;
+    void do_connect();
 
-        if (host.empty()) return;
-
-        // Build ssh command
-        std::string cmd = "ssh -o StrictHostKeyChecking=no " + user + "@" + host;
-        if (!port.empty() && port != "22")
-            cmd += " -p " + port;
-
-        SLOGI("[SSH] Launching: %s", cmd.c_str());
-
-        // Create terminal page
-        terminal_page_ = std::make_shared<UISTPage>();
-
-        // Restore the SSH input view when the embedded terminal exits.
-        terminal_page_->navigate_home = [this]() {
-            if (terminal_return_pending_)
-                return;
-            terminal_return_pending_ = true;
-            lv_async_call(UISSHPage::static_restore_input_view, this);
-        };
-
-        // Switch to terminal screen
-        view_state_ = ViewState::TERMINAL;
-        terminal_return_pending_ = false;
-        lv_disp_load_scr(terminal_page_->screen());
-        lv_indev_set_group(lv_indev_get_next(NULL), terminal_page_->input_group());
-
-        // Launch ssh command
-        terminal_page_->exec(cmd);
-    }
-
-    static void static_restore_input_view(void *user)
-    {
-        auto *self = static_cast<UISSHPage *>(user);
-        if (self)
-            self->restore_input_view();
-    }
-
-    void restore_input_view()
-    {
-        lv_disp_load_scr(this->screen());
-        lv_indev_t *indev = lv_indev_get_next(NULL);
-        if (indev)
-            lv_indev_set_group(indev, this->input_group());
-
-        terminal_page_.reset();
-        view_state_ = ViewState::INPUT;
-        terminal_return_pending_ = false;
-    }
+    void restore_input_view();
 
     // ==================== event binding ====================
-    void event_handler_init()
-    {
-        lv_obj_add_event_cb(root_screen_, UISSHPage::static_lvgl_handler, LV_EVENT_ALL, this);
-    }
+    void event_handler_init();
 
-    static void static_lvgl_handler(lv_event_t *e)
-    {
-        UISSHPage *self = static_cast<UISSHPage *>(lv_event_get_user_data(e));
-        if (self) self->event_handler(e);
-    }
+    static void static_lvgl_handler(lv_event_t *e) noexcept;
+    static void static_owned_obj_delete_cb(lv_event_t *event) noexcept;
 
-    void event_handler(lv_event_t *e)
-    {
-        // Only handle input view events; terminal view is handled by UISTPage
-        if (view_state_ != ViewState::INPUT) return;
-
-        if (launcher_ui::events::is_key_released(e))
-        {
-            uint32_t key = launcher_ui::events::keyboard_key(e);
-
-            switch (key)
-            {
-            case KEY_UP:
-                if (active_field_ > 0)
-                {
-                    --active_field_;
-                    build_input_fields();
-                }
-                break;
-
-            case KEY_DOWN:
-                if (active_field_ < 2)
-                {
-                    ++active_field_;
-                    build_input_fields();
-                }
-                break;
-
-            case KEY_ENTER:
-                do_connect();
-                break;
-
-            case KEY_ESC:
-                if (navigate_home) navigate_home();
-                break;
-
-            case KEY_BACKSPACE:
-                if (!fields_[active_field_].value.empty())
-                {
-                    fields_[active_field_].value.pop_back();
-                    build_input_fields();
-                }
-                break;
-
-            default:
-            {
-                const struct key_item *elm = launcher_ui::events::keyboard_item(e);
-                if (elm && elm->utf8[0] && (unsigned char)elm->utf8[0] >= 0x20)
-                {
-                    fields_[active_field_].value += elm->utf8;
-                    build_input_fields();
-                    break;
-                }
-
-                char ch = keycode_to_char(key);
-                if (ch)
-                {
-                    fields_[active_field_].value += ch;
-                    build_input_fields();
-                }
-                break;
-            }
-            }
-        }
-    }
+    void event_handler(lv_event_t *e);
+    void detach_delete_callbacks();
 };
