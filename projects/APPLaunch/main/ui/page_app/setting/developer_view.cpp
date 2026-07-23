@@ -320,11 +320,11 @@ void Developer::build_usb_guide_view(UISetupPage &page)
     guide_label(cont, 232, 42, "USB-C", C_GREEN, f_msg);
     guide_chip(cont, 24, 28, 32, 44, 0x1A1A1C, 0x5A5C64, 6, 2);
     guide_chip(cont, 33, 33, 14, 34, 0x0E0E10, 0x0E0E10, 4, 0);
-    guide_label(cont, 26, 14, "HUB", en ? C_RED : C_GREEN, f_msg);
-    guide_label(cont, 28, 72, "USB", en ? C_GREEN : C_GREY, f_msg);
+    guide_label(cont, 26, 14, "USB", en ? C_GREEN : C_GREY, f_msg);
+    guide_label(cont, 28, 72, "HUB", en ? C_RED : C_GREEN, f_msg);
     const int thumb_top = 34, thumb_bot = 54;
     usb_guide_knob_ =
-        guide_chip(cont, 32, en ? thumb_top : thumb_bot, 16, 10, C_GREEN, 0x2A6F49, 3, 1);
+        guide_chip(cont, 32, en ? thumb_bot : thumb_top, 16, 10, C_GREEN, 0x2A6F49, 3, 1);
     if (usb_guide_knob_)
         lv_obj_add_event_cb(usb_guide_knob_, view_object_delete_cb, LV_EVENT_DELETE, this);
 
@@ -345,7 +345,7 @@ void Developer::build_usb_guide_view(UISetupPage &page)
     lv_anim_t animation;
     lv_anim_init(&animation);
     lv_anim_set_var(&animation, usb_guide_knob_);
-    lv_anim_set_values(&animation, en ? thumb_top : thumb_bot, en ? thumb_bot : thumb_top);
+    lv_anim_set_values(&animation, en ? thumb_bot : thumb_top, en ? thumb_top : thumb_bot);
     lv_anim_set_time(&animation, 650);
     lv_anim_set_playback_time(&animation, 650);
     lv_anim_set_repeat_count(&animation, LV_ANIM_REPEAT_INFINITE);
