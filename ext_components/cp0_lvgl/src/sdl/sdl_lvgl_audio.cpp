@@ -1,15 +1,18 @@
 #include "hal_lvgl_bsp.h"
+#include "../cp0_audio_api_contract.hpp"
+#include "../cp0_audio_runtime_lifecycle.hpp"
+#include "../cp0_signal_registration.hpp"
 
 #include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstdio>
-#include <cstdlib>
 #include <cstring>
 #include <functional>
 #include <iterator>
 #include <list>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <utility>
 
@@ -37,19 +40,17 @@ public:
 
     void setup(arg_t arg, callback_t callback)
     {
-        if (arg.empty())
+        cp0::audio::SetupRequest request;
+        if (!cp0::audio::parse_setup_request(arg, request)) {
+            report(callback, -1, cp0::audio::invalid_setup_request_message());
             return;
-
-        const std::string &cmd = arg.front();
-        if (cmd == "set_callback") {
+        }
+        if (request.command == cp0::audio::SetupCommand::SetCallback) {
             status_callback_ = std::move(callback);
-        } else if (cmd == "set_waveform" || cmd == "waveform") {
-            auto value = std::next(arg.begin());
-            waveform_enabled_ = value == arg.end() || arg_is_enable(*value);
-            if (value != arg.end() && arg_is_disable(*value))
-                waveform_enabled_ = false;
+        } else if (request.command == cp0::audio::SetupCommand::SetWaveform) {
+            waveform_enabled_ = request.waveform_enabled;
             emit_waveform_once();
-        } else if (cmd == "stop_play") {
+        } else {
             playing_ = false;
         }
     }
@@ -63,8 +64,9 @@ public:
 
     void api_call(arg_t arg, callback_t callback)
     {
-        if (arg.empty()) {
-            report(callback, -1, "empty audio api\n");
+        cp0::audio::ApiRequest request;
+        if (!cp0::audio::parse_api_request(arg, request)) {
+            report(callback, -1, cp0::audio::invalid_api_request_message());
             return;
         }
 
@@ -82,14 +84,24 @@ public:
             map_fun(CapFileSave),
             map_fun(SetCallback),
             map_fun(VolumeRead),
-            map_fun(VolumeWrite),
             map_fun(MuteRead),
             map_fun(MuteToggle),
             map_fun(SetSystemSoundNames),
-            map_fun(SystemSoundPlay),
-            map_fun(SystemSoundEnable),
         };
 #undef map_fun
+
+        if (request.command == cp0::audio::ApiCommand::VolumeWrite) {
+            VolumeWrite(request.value, callback);
+            return;
+        }
+        if (request.command == cp0::audio::ApiCommand::SystemSoundPlay) {
+            SystemSoundPlay(request.value, callback);
+            return;
+        }
+        if (request.command == cp0::audio::ApiCommand::SystemSoundEnable) {
+            SystemSoundEnable(request.enabled, callback);
+            return;
+        }
 
         for (const auto &it : cmd_map) {
             if (it.first == arg.front()) {
@@ -102,7 +114,7 @@ public:
 
 private:
     static constexpr int kDefaultVolume = 39;
-    static constexpr int kMaxVolume = 63;
+    static constexpr int kMaxVolume = 100;
     static constexpr int kRecWaveformSize = 128;
 
     callback_t status_callback_;
@@ -118,10 +130,7 @@ private:
 
     void report(callback_t callback, int code, const std::string &data)
     {
-        if (callback)
-            callback(code, data);
-        else if (status_callback_)
-            status_callback_(code, data);
+        cp0::audio::invoke_callback(callback ? callback : status_callback_, code, data);
     }
 
     static std::string first_arg_after_command(const arg_t &arg)
@@ -131,30 +140,12 @@ private:
         return *std::next(arg.begin());
     }
 
-    static bool arg_is_enable(const std::string &arg)
-    {
-        return arg == "1" || arg == "on" || arg == "true" || arg == "enable" || arg == "enabled";
-    }
-
-    static bool arg_is_disable(const std::string &arg)
-    {
-        return arg == "0" || arg == "off" || arg == "false" || arg == "disable" || arg == "disabled";
-    }
-
-    static int parse_volume_arg(const arg_t &arg)
-    {
-        std::string value = first_arg_after_command(arg);
-        if (value.empty())
-            return 0;
-        return std::atoi(value.c_str());
-    }
-
     void emit_waveform_once()
     {
         if (!waveform_enabled_ || !status_callback_)
             return;
         std::string waveform(sizeof(float) * kRecWaveformSize, '\0');
-        status_callback_(1, waveform);
+        cp0::audio::invoke_callback(status_callback_, 1, waveform);
     }
 
     static void put_u16_le(std::uint8_t *p, std::uint16_t v)
@@ -315,9 +306,9 @@ private:
         report(callback, 0, std::to_string(volume_));
     }
 
-    void VolumeWrite(arg_t arg, callback_t callback)
+    void VolumeWrite(int value, callback_t callback)
     {
-        volume_ = std::max(0, std::min(kMaxVolume, parse_volume_arg(arg)));
+        volume_ = value;
         report(callback, 0, std::to_string(volume_));
     }
 
@@ -346,9 +337,8 @@ private:
         report(callback, 0, "ok");
     }
 
-    void SystemSoundPlay(arg_t arg, callback_t callback)
+    void SystemSoundPlay(int index, callback_t callback)
     {
-        int index = std::atoi(first_arg_after_command(arg).c_str());
         if (index < 0 || index >= static_cast<int>(system_sound_names_.size())) {
             report(callback, -1, "invalid system sound index\n");
             return;
@@ -361,48 +351,85 @@ private:
         report(callback, 0, "system sound play\n");
     }
 
-    void SystemSoundEnable(arg_t arg, callback_t callback)
+    void SystemSoundEnable(bool enabled, callback_t callback)
     {
-        std::string value = first_arg_after_command(arg);
-        if (arg_is_disable(value))
-            system_sound_enabled_ = false;
-        else if (value.empty() || arg_is_enable(value))
-            system_sound_enabled_ = true;
-        else
-            system_sound_enabled_ = std::atoi(value.c_str()) != 0;
+        system_sound_enabled_ = enabled;
         report(callback, 0, system_sound_enabled_ ? "1" : "0");
     }
 };
 
+using AudioRegistrations = cp0::SignalRegistrationBundle<
+    decltype(cp0_signal_audio_play), decltype(cp0_signal_audio_cap),
+    decltype(cp0_signal_audio_setup), decltype(cp0_signal_audio_api),
+    decltype(cp0_signal_system_play)>;
+
+std::mutex g_audio_mutex;
 std::shared_ptr<AudioSystem> g_audio;
+AudioRegistrations g_audio_registrations;
+cp0::audio::RuntimeLifecycle g_audio_lifecycle;
+
+std::shared_ptr<AudioSystem> current_audio()
+{
+    std::lock_guard<std::mutex> lock(g_audio_mutex);
+    return g_audio;
+}
 
 } // namespace
 
 extern "C" void init_audio(void)
 {
-    if (g_audio)
+    std::lock_guard<std::mutex> lock(g_audio_mutex);
+    if (!g_audio_lifecycle.begin_init()) return;
+    try {
+    auto audio = std::make_shared<AudioSystem>();
+    if (!g_audio_registrations.replace(
+        cp0::bind_signal(cp0_signal_audio_play,
+                         [audio](std::string wav) { audio->play(std::move(wav)); }),
+        cp0::bind_signal(cp0_signal_audio_cap,
+                         [audio](bool enable) { audio->cap(enable); }),
+        cp0::bind_signal(cp0_signal_audio_setup,
+                         [audio](std::list<std::string> arg,
+                                 std::function<void(int, std::string)> callback) {
+                             try {
+                                 audio->setup(std::move(arg), callback);
+                             } catch (...) {
+                                 cp0::audio::invoke_callback(
+                                     callback, -1, "audio backend failure\n");
+                             }
+                         }),
+        cp0::bind_signal(cp0_signal_audio_api,
+                         [audio](std::list<std::string> arg,
+                                 std::function<void(int, std::string)> callback) {
+                             try {
+                                 audio->api_call(std::move(arg), callback);
+                             } catch (...) {
+                                 cp0::audio::invoke_callback(
+                                     callback, -1, "audio backend failure\n");
+                             }
+                         }),
+        cp0::bind_signal(cp0_signal_system_play,
+                         [audio](std::string name) { audio->system_play(std::move(name)); }))) {
+        g_audio_lifecycle.rollback_init();
         return;
+    }
+    g_audio = std::move(audio);
+    g_audio_lifecycle.commit_init();
+    } catch (...) {
+        g_audio_registrations.reset();
+        g_audio.reset();
+        g_audio_lifecycle.rollback_init();
+    }
+}
 
-    g_audio = std::make_shared<AudioSystem>();
-    cp0_signal_audio_play.append([](std::string wav) {
-        g_audio->play(wav);
-    });
-
-    cp0_signal_audio_cap.append([](bool enable) {
-        g_audio->cap(enable);
-    });
-
-    cp0_signal_audio_setup.append([](std::list<std::string> arg, std::function<void(int, std::string)> callback) {
-        g_audio->setup(std::move(arg), std::move(callback));
-    });
-
-    cp0_signal_audio_api.append([](std::list<std::string> arg, std::function<void(int, std::string)> callback) {
-        g_audio->api_call(std::move(arg), std::move(callback));
-    });
-
-    cp0_signal_system_play.append([](std::string name) {
-        g_audio->system_play(name);
-    });
+extern "C" void deinit_audio(void) noexcept
+{
+    try {
+        std::lock_guard<std::mutex> lock(g_audio_mutex);
+        if (!g_audio_lifecycle.begin_shutdown()) return;
+        g_audio_registrations.reset();
+        g_audio.reset();
+    } catch (...) {
+    }
 }
 
 extern "C" void hal_audio_init(void)
@@ -413,8 +440,8 @@ extern "C" void hal_audio_init(void)
 extern "C" void hal_audio_play(const char *path)
 {
     init_audio();
-    if (g_audio)
-        g_audio->play(path ? path : "");
+    const auto audio = current_audio();
+    if (audio) audio->play(path ? path : "");
 }
 
 extern "C" void hal_audio_play_sync(const char *path)
@@ -424,11 +451,11 @@ extern "C" void hal_audio_play_sync(const char *path)
 
 extern "C" void hal_audio_stop(void)
 {
-    if (g_audio)
-        g_audio->api_call({"PlayEnd"}, nullptr);
+    const auto audio = current_audio();
+    if (audio) audio->api_call({"PlayEnd"}, nullptr);
 }
 
 extern "C" void hal_audio_deinit(void)
 {
-    hal_audio_stop();
+    deinit_audio();
 }

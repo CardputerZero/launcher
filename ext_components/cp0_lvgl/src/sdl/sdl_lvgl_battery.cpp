@@ -1,40 +1,63 @@
 #include "hal_lvgl_bsp.h"
 #include "lvgl/lvgl.h"
 #include "cp0_lvgl_app.h"
+#include "../cp0_battery_lifecycle.hpp"
+#include "../cp0_battery_publish_gate.hpp"
+#include "../cp0_signal_registration.hpp"
+
 #include <functional>
 #include <memory>
 
-class BatterySystem
-{
-public:
-    void pub()
-    {
-        if (lv_c_event[CP0_C_EVENT_BATTERY] == 0)
-            return;
+namespace {
 
+void publish_battery()
+{
+    static cp0::battery::PublishGate gate;
+    gate.run([] {
+        const uint32_t event_code = lv_c_event[CP0_C_EVENT_BATTERY];
+        if (event_code == 0) return;
         cp0_battery_info_t info = cp0_battery_read();
-        lv_obj_t *root = lv_display_get_screen_active(NULL);
-        if (root != NULL)
-            lv_obj_send_event(root, (lv_event_code_t)lv_c_event[CP0_C_EVENT_BATTERY], (void *)&info);
-    }
-};
-
-static void battery_timer_cb(lv_timer_t *timer)
-{
-    auto *battery = static_cast<BatterySystem *>(lv_timer_get_user_data(timer));
-    if (battery != nullptr)
-        battery->pub();
+        lv_obj_t *root = lv_display_get_screen_active(nullptr);
+        if (root)
+            lv_obj_send_event(root, static_cast<lv_event_code_t>(event_code), &info);
+    });
 }
+
+void battery_timer_cb(lv_timer_t *)
+{
+    publish_battery();
+}
+
+cp0::battery::Lifecycle &battery_lifecycle()
+{
+    static cp0::battery::Lifecycle lifecycle;
+    return lifecycle;
+}
+
+} // namespace
 
 extern "C" void init_battery()
 {
-    static std::shared_ptr<BatterySystem> battery;
-    if (battery)
-        return;
+    battery_lifecycle().start(
+        [] {
+            using Registration = cp0::SignalRegistration<decltype(cp0_signal_battery_pub)>;
+            auto registration = std::make_shared<Registration>();
+            const bool registered = registration->replace(
+                cp0_signal_battery_pub, [](std::function<void()>) { publish_battery(); });
+            return cp0::battery::LifecycleResource{
+                registered, [registration] { registration->reset(); }};
+        },
+        [] {
+            lv_timer_t *timer = lv_timer_create(battery_timer_cb, 100, nullptr);
+            return cp0::battery::LifecycleResource{
+                timer != nullptr, [timer] {
+                    cp0::battery::release_timer_if_runtime_active(
+                        timer, lv_is_initialized(), lv_timer_delete);
+                }};
+        });
+}
 
-    battery = std::make_shared<BatterySystem>();
-    BatterySystem *battery_ptr = battery.get();
-    cp0_signal_battery_pub.append([battery_ptr](std::function<void()> fun)
-                                  { battery_ptr->pub(); });
-    lv_timer_create(battery_timer_cb, 100, battery_ptr);
+extern "C" void deinit_battery()
+{
+    battery_lifecycle().stop();
 }

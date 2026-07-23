@@ -49,7 +49,11 @@ All three default to disabled. The current ZClaw source does not branch on these
 
 ## Dependencies and generated assets
 
-`main/SConstruct` fetches `cpp-httplib` and compiles it with OpenSSL support. Runtime HTTP, HTTPS, and WebSocket communication therefore depends on the linked `ssl` and `crypto` libraries.
+`main/SConstruct` uses the SDK's lhv component with OpenSSL support. Runtime HTTP, HTTPS, and WebSocket communication therefore depends on lhv and the linked `ssl` and `crypto` libraries.
+
+HTTP requests use lhv's `sendAsync` event-loop API. WebSocket messages and
+approval decisions are callback-driven; blocking setup and process stages run
+on lhv's global asynchronous worker pool rather than a ZClaw-owned thread pool.
 
 The project stages static files into `build/static/APPLaunch` before linking:
 

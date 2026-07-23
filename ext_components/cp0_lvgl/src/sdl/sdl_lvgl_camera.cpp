@@ -1,10 +1,13 @@
 #include "hal_lvgl_bsp.h"
+#include "../cp0/cp0_camera_viewport.hpp"
+#include "../cp0_camera_api_contract.hpp"
+#include "../cp0_callback_contract.hpp"
+#include "../cp0_signal_registration.hpp"
 
 #include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstdio>
-#include <cstdlib>
 #include <cstring>
 #include <functional>
 #include <iterator>
@@ -29,6 +32,14 @@ public:
         close_camera();
     }
 
+    void shutdown()
+    {
+        close_camera();
+        std::lock_guard<std::mutex> lock(mutex_);
+        status_callback_ = {};
+        frame_callback_ = {};
+    }
+
     void api_call(arg_t arg, callback_t callback)
     {
         if (arg.empty()) {
@@ -38,22 +49,28 @@ public:
 
         const std::string command = arg.front();
         if (command == "SetCallback") {
-            std::lock_guard<std::mutex> lock(mutex_);
-            status_callback_ = std::move(callback);
-            report_locked(status_callback_, 0, "camera callback set\n");
+            {
+                std::lock_guard<std::mutex> lock(mutex_);
+                status_callback_ = callback;
+            }
+            report(std::move(callback), 0, "camera callback set\n");
             return;
         }
         if (command == "SetFrameCallback") {
-            std::lock_guard<std::mutex> lock(mutex_);
-            frame_callback_ = std::move(callback);
-            report_locked(frame_callback_, 0, "camera frame callback set\n");
+            {
+                std::lock_guard<std::mutex> lock(mutex_);
+                frame_callback_ = callback;
+            }
+            report(std::move(callback), 0, "camera frame callback set\n");
             return;
         }
         if (command == "Open" || command == "Start") {
-            const int width = to_int(nth_arg(arg, 1), 320);
-            const int height = to_int(nth_arg(arg, 2), 150);
-            open_camera(width, height);
-            report(callback, 0, "SDL camera open\n");
+            const int width = cp0_camera_api::parse_integer_argument(
+                nth_arg(arg, 1), cp0_camera_api::DEFAULT_WIDTH);
+            const int height = cp0_camera_api::parse_integer_argument(
+                nth_arg(arg, 2), cp0_camera_api::DEFAULT_HEIGHT);
+            const int result = open_camera(width, height);
+            report(callback, result, result == 0 ? "camera open\n" : "camera open failed\n");
             return;
         }
         if (command == "Close" || command == "Stop") {
@@ -63,8 +80,10 @@ public:
         }
         if (command == "Capture" || command == "Photo") {
             const std::string path = nth_arg(arg, 1);
-            const int width = to_int(nth_arg(arg, 2), width_);
-            const int height = to_int(nth_arg(arg, 3), height_);
+            const int width = cp0_camera_api::parse_integer_argument(
+                nth_arg(arg, 2), cp0_camera_api::DEFAULT_WIDTH);
+            const int height = cp0_camera_api::parse_integer_argument(
+                nth_arg(arg, 3), cp0_camera_api::DEFAULT_HEIGHT);
             const int ret = capture(path, width, height);
             report(callback, ret, ret == 0 ? path + "\n" : "camera capture failed\n");
             return;
@@ -74,26 +93,35 @@ public:
             return;
         }
         if (command == "ZoomIn") {
-            std::lock_guard<std::mutex> lock(mutex_);
-            zoom_percent_ = zoom_percent_ < 250 ? 250 : 500;
-            report_locked(callback, 0, zoom_payload_locked());
+            std::string payload;
+            {
+                std::lock_guard<std::mutex> lock(mutex_);
+                viewport_.zoom_in();
+                payload = viewport_.status_text();
+            }
+            report(std::move(callback), 0, payload);
             return;
         }
         if (command == "ZoomOut") {
-            std::lock_guard<std::mutex> lock(mutex_);
-            zoom_percent_ = zoom_percent_ > 250 ? 250 : 100;
-            if (zoom_percent_ == 100)
-                view_x_percent_ = view_y_percent_ = 50;
-            report_locked(callback, 0, zoom_payload_locked());
+            std::string payload;
+            {
+                std::lock_guard<std::mutex> lock(mutex_);
+                viewport_.zoom_out();
+                payload = viewport_.status_text();
+            }
+            report(std::move(callback), 0, payload);
             return;
         }
         if (command == "Pan") {
-            std::lock_guard<std::mutex> lock(mutex_);
-            const int dx = to_int(nth_arg(arg, 1), 0);
-            const int dy = to_int(nth_arg(arg, 2), 0);
-            view_x_percent_ = clamp(view_x_percent_ + dx * 8, 0, 100);
-            view_y_percent_ = clamp(view_y_percent_ + dy * 8, 0, 100);
-            report_locked(callback, 0, zoom_payload_locked());
+            const int dx = cp0_camera_api::parse_integer_argument(nth_arg(arg, 1), 0);
+            const int dy = cp0_camera_api::parse_integer_argument(nth_arg(arg, 2), 0);
+            std::string payload;
+            {
+                std::lock_guard<std::mutex> lock(mutex_);
+                viewport_.pan(dx, dy);
+                payload = viewport_.status_text();
+            }
+            report(std::move(callback), 0, payload);
             return;
         }
 
@@ -106,17 +134,10 @@ private:
     std::mutex mutex_;
     std::thread worker_;
     std::atomic<bool> running_{false};
-    int width_ = 320;
-    int height_ = 150;
-    int zoom_percent_ = 100;
-    int view_x_percent_ = 50;
-    int view_y_percent_ = 50;
+    int width_ = cp0_camera_api::DEFAULT_WIDTH;
+    int height_ = cp0_camera_api::DEFAULT_HEIGHT;
+    cp0_camera::Viewport viewport_;
     uint32_t frame_index_ = 0;
-
-    static int clamp(int value, int lo, int hi)
-    {
-        return std::max(lo, std::min(hi, value));
-    }
 
     static std::string nth_arg(const arg_t &arg, size_t n)
     {
@@ -127,40 +148,21 @@ private:
         return *it;
     }
 
-    static int to_int(const std::string &value, int fallback)
-    {
-        if (value.empty())
-            return fallback;
-        char *end = nullptr;
-        long ret = std::strtol(value.c_str(), &end, 10);
-        return end && *end == '\0' ? static_cast<int>(ret) : fallback;
-    }
-
     static uint16_t rgb565(uint8_t r, uint8_t g, uint8_t b)
     {
         return static_cast<uint16_t>(((r & 0xf8) << 8) | ((g & 0xfc) << 3) | (b >> 3));
     }
 
-    static void report(callback_t callback, int code, const std::string &data)
+    void report(callback_t callback, int code, const std::string &data)
     {
-        if (callback)
-            callback(code, data);
+        if (!callback) {
+            std::lock_guard<std::mutex> lock(mutex_);
+            callback = status_callback_;
+        }
+        cp0::callback::invoke(callback, code, data);
     }
 
-    static void report_locked(callback_t callback, int code, const std::string &data)
-    {
-        if (callback)
-            callback(code, data);
-    }
-
-    std::string zoom_payload_locked() const
-    {
-        char buf[64];
-        std::snprintf(buf, sizeof(buf), "ZOOM %d %d %d\n", zoom_percent_, view_x_percent_, view_y_percent_);
-        return buf;
-    }
-
-    void open_camera(int width, int height)
+    int open_camera(int width, int height)
     {
         close_camera();
         {
@@ -170,7 +172,13 @@ private:
             frame_index_ = 0;
         }
         running_.store(true);
-        worker_ = std::thread([this]() { frame_loop(); });
+        try {
+            worker_ = std::thread([this]() { frame_loop(); });
+        } catch (...) {
+            running_.store(false);
+            return -2;
+        }
+        return 0;
     }
 
     void close_camera()
@@ -191,8 +199,7 @@ private:
                 if (callback)
                     payload = make_frame_payload_locked();
             }
-            if (callback)
-                callback(0, payload);
+            cp0::callback::invoke(callback, 0, payload);
             std::this_thread::sleep_for(std::chrono::milliseconds(80));
         }
     }
@@ -201,12 +208,13 @@ private:
     {
         std::vector<uint16_t> pixels(static_cast<size_t>(width_) * height_);
         const uint32_t tick = frame_index_++;
-        const int pan_x = (view_x_percent_ - 50) * 2;
-        const int pan_y = (view_y_percent_ - 50) * 2;
+        const int zoom_percent = viewport_.zoom_percent();
+        const int pan_x = (viewport_.view_x_percent() - 50) * 2;
+        const int pan_y = (viewport_.view_y_percent() - 50) * 2;
         for (int y = 0; y < height_; ++y) {
             for (int x = 0; x < width_; ++x) {
-                int sx = (x * zoom_percent_) / 100 + pan_x + static_cast<int>(tick);
-                int sy = (y * zoom_percent_) / 100 + pan_y;
+                int sx = (x * zoom_percent) / 100 + pan_x + static_cast<int>(tick);
+                int sy = (y * zoom_percent) / 100 + pan_y;
                 uint8_t r = static_cast<uint8_t>((sx * 255) / std::max(1, width_));
                 uint8_t g = static_cast<uint8_t>((sy * 255) / std::max(1, height_));
                 uint8_t b = static_cast<uint8_t>((sx + sy + static_cast<int>(tick) * 3) & 0xff);
@@ -227,6 +235,11 @@ private:
     {
         if (path.empty())
             return -1;
+        uint32_t frame_index = 0;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            frame_index = frame_index_;
+        }
         FILE *file = std::fopen(path.c_str(), "wb");
         if (!file)
             return -1;
@@ -239,7 +252,7 @@ private:
                 uint8_t rgb[3] = {
                     static_cast<uint8_t>((x * 255) / width),
                     static_cast<uint8_t>((y * 255) / height),
-                    static_cast<uint8_t>((x + y + frame_index_) & 0xff),
+                    static_cast<uint8_t>((x + y + frame_index) & 0xff),
                 };
                 std::fwrite(rgb, 1, sizeof(rgb), file);
             }
@@ -250,10 +263,45 @@ private:
 
 } // namespace
 
+namespace {
+
+std::shared_ptr<CameraSystem> &camera_system()
+{
+    static auto camera = std::make_shared<CameraSystem>();
+    return camera;
+}
+
+cp0::SignalRegistration<decltype(cp0_signal_camera_api)> &camera_registration()
+{
+    static cp0::SignalRegistration<decltype(cp0_signal_camera_api)> registration;
+    return registration;
+}
+
+} // namespace
+
 extern "C" void init_camera(void)
 {
-    std::shared_ptr<CameraSystem> camera = std::make_shared<CameraSystem>();
-    cp0_signal_camera_api.append([camera](std::list<std::string> arg, std::function<void(int, std::string)> callback) {
-        camera->api_call(std::move(arg), std::move(callback));
-    });
+    const auto camera = camera_system();
+    camera_registration().replace(cp0_signal_camera_api,
+                         [camera](std::list<std::string> arg,
+                                  std::function<void(int, std::string)> callback) {
+                             try {
+                                 camera->api_call(std::move(arg), callback);
+                             } catch (...) {
+                                 cp0::callback::invoke(
+                                     callback, -1, "camera backend failure\n");
+                             }
+                         });
+}
+
+extern "C" void deinit_camera(void) noexcept
+{
+    try {
+        camera_registration().reset();
+    } catch (...) {
+    }
+    try {
+        camera_system()->shutdown();
+    } catch (...) {
+    }
 }

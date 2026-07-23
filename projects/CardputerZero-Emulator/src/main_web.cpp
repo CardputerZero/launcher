@@ -12,7 +12,10 @@
 #include <cstring>
 #include <emscripten.h>
 
-extern "C" { void ui_init(void); }
+extern "C" {
+void ui_init(void);
+void ui_deinit(void);
+}
 
 // APPLaunch's main.cpp defines LV_EVENT_BATTERY, but the web target
 // uses this main_web.cpp instead, so the symbol would be undefined.
@@ -180,6 +183,7 @@ static void main_loop() {
                 if(confirmed){
                     printf("[EMU] POWER — reset\n");
                     memset(g_lcd_buf,0,LCD_W*LCD_H*sizeof(uint32_t));
+                    ui_deinit();
                     ui_init();
                 }
                 g_side_pr=-1;

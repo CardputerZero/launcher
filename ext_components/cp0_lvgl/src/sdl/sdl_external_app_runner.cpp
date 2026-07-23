@@ -1,0 +1,83 @@
+#include "sdl_external_app_runner.hpp"
+
+#include "../cp0_external_process_group.hpp"
+
+#include <chrono>
+#include <cstdio>
+#include <thread>
+
+#if !defined(_WIN32)
+#include <signal.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#endif
+
+namespace sdl_external_app_runner {
+
+int run(const char *command, volatile int *home_key_flag)
+{
+#if defined(_WIN32)
+    (void)command;
+    (void)home_key_flag;
+    return -1;
+#else
+    const bool subreaper = cp0_process_group::enable_subreaper();
+    const pid_t pid = fork();
+    if (pid < 0) return -1;
+    if (pid == 0) {
+        setpgid(0, 0);
+        execlp("/bin/sh", "sh", "-c", command, static_cast<char *>(nullptr));
+        _exit(127);
+    }
+
+    setpgid(pid, pid);
+    std::fprintf(stderr, "[process] external app leader=%d pgid=%d subreaper=%d\n",
+                 static_cast<int>(pid), static_cast<int>(pid), subreaper ? 1 : 0);
+
+    int status = 0;
+    bool leader_reaped = false;
+    int exit_stage = 0;
+    auto key_down_since = std::chrono::steady_clock::time_point{};
+    auto terminate_since = std::chrono::steady_clock::time_point{};
+    while (true) {
+        cp0_process_group::reap_available(pid, pid, status, leader_reaped);
+        if (!cp0_process_group::exists(pid)) break;
+
+        if (home_key_flag) {
+            if (exit_stage == 0 && *home_key_flag) {
+                exit_stage = 1;
+                key_down_since = std::chrono::steady_clock::now();
+            } else if (exit_stage == 1) {
+                if (!*home_key_flag) {
+                    exit_stage = 0;
+                } else if (std::chrono::duration_cast<std::chrono::seconds>(
+                               std::chrono::steady_clock::now() - key_down_since)
+                               .count() >= 3) {
+                    exit_stage = 2;
+                    terminate_since = std::chrono::steady_clock::now();
+                    std::fprintf(stderr, "[process] ESC timeout: SIGTERM pgid=%d\n",
+                                 static_cast<int>(pid));
+                    killpg(pid, SIGTERM);
+                }
+            } else if (exit_stage == 2 &&
+                       std::chrono::duration_cast<std::chrono::seconds>(
+                           std::chrono::steady_clock::now() - terminate_since)
+                               .count() >= 2) {
+                exit_stage = 3;
+                std::fprintf(stderr, "[process] grace timeout: SIGKILL pgid=%d\n",
+                             static_cast<int>(pid));
+                killpg(pid, SIGKILL);
+            }
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+
+    cp0_process_group::reap_available(pid, pid, status, leader_reaped);
+    std::fprintf(stderr, "[process] external app group drained pgid=%d leader_reaped=%d\n",
+                 static_cast<int>(pid), leader_reaped ? 1 : 0);
+    if (home_key_flag) *home_key_flag = 0;
+    return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+#endif
+}
+
+} // namespace sdl_external_app_runner
