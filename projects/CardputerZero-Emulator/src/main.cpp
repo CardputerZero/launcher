@@ -249,6 +249,7 @@ static void render()
 #endif
 
 typedef void (*ui_init_fn)(void);
+typedef void (*ui_deinit_fn)(void);
 
 #if !defined(_WIN32) && !defined(__APPLE__)
 extern "C" {
@@ -306,6 +307,7 @@ static void emu_init_cp0_runtime()
 #ifdef EMU_STATIC_APP
 extern "C" {
     void ui_init(void);
+    void ui_deinit(void);
     void lv_sdl_keyboard_handler(SDL_Event *event);
 }
 // APPLaunch's src/main.cpp defines LV_EVENT_BATTERY, but the Windows
@@ -337,9 +339,27 @@ static void set_exe_dir()
     // Linux: usually launched from the right dir, or use /proc/self/exe
 }
 
+static unsigned emu_test_frame(const char *name)
+{
+    const char *value = getenv(name);
+    if (!value || !*value) return 0;
+
+    char *end = nullptr;
+    unsigned long frame = strtoul(value, &end, 10);
+    if (*end != '\0' || frame == 0) {
+        fprintf(stderr, "[EMU] Ignoring invalid %s=%s\n", name, value);
+        return 0;
+    }
+    return static_cast<unsigned>(frame);
+}
+
 int main(int argc, char *argv[])
 {
     set_exe_dir();
+
+    const unsigned test_reset_frame = emu_test_frame("EMU_TEST_RESET_FRAME");
+    const unsigned test_quit_frame = emu_test_frame("EMU_TEST_QUIT_FRAME");
+    const unsigned test_navigate_frame = emu_test_frame("EMU_TEST_NAVIGATE_FRAME");
 
 #ifdef EMU_STATIC_APP
     // Windows: app statically linked, no dlopen
@@ -361,7 +381,10 @@ int main(int argc, char *argv[])
     printf("  Modifiers: click Aa/fn/ctrl to toggle\n");
     printf("========================================\n");
 
-    SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO);
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) != 0) {
+        fprintf(stderr, "SDL init: %s\n", SDL_GetError());
+        return 1;
+    }
     IMG_Init(IMG_INIT_PNG);
 
     int win_w = (int)(SKIN_W * SCALE), win_h = (int)(SKIN_H * SCALE);
@@ -369,14 +392,28 @@ int main(int argc, char *argv[])
     g_win = SDL_CreateWindow("M5CardputerZero Emulator",
         SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
         win_w, win_h, SDL_WINDOW_SHOWN | SDL_WINDOW_ALLOW_HIGHDPI);
+    if (!g_win) {
+        fprintf(stderr, "window: %s\n", SDL_GetError());
+        return 1;
+    }
     g_ren = SDL_CreateRenderer(g_win, -1,
         SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+    if (!g_ren)
+        g_ren = SDL_CreateRenderer(g_win, -1, SDL_RENDERER_SOFTWARE);
+    if (!g_ren) {
+        fprintf(stderr, "renderer: %s\n", SDL_GetError());
+        return 1;
+    }
     SDL_RenderSetLogicalSize(g_ren, SKIN_W, SKIN_H);
 
     // On Retina, renderer output is 2x the window size
-    int render_w, render_h;
-    SDL_GetRendererOutputSize(g_ren, &render_w, &render_h);
-    g_dpi_scale = (float)render_w / (float)win_w;
+    int render_w = win_w, render_h = win_h;
+    if (SDL_GetRendererOutputSize(g_ren, &render_w, &render_h) != 0 ||
+        render_w <= 0 || render_h <= 0) {
+        render_w = win_w;
+        render_h = win_h;
+    }
+    g_dpi_scale = static_cast<float>(render_w) / static_cast<float>(win_w);
     printf("[EMU] Window: %dx%d  Renderer: %dx%d  DPI scale: %.1f\n",
            win_w, win_h, render_w, render_h, g_dpi_scale);
 
@@ -434,10 +471,16 @@ int main(int argc, char *argv[])
 
     ui_init_fn app_init = (ui_init_fn)emu_dlsym(app, "ui_init");
     if (!app_init) { fprintf(stderr, "[EMU] ui_init missing\n"); return 1; }
+    ui_deinit_fn app_deinit = (ui_deinit_fn)emu_dlsym(app, "ui_deinit");
+    if (!app_deinit)
+        printf("[EMU] ui_deinit unavailable; legacy app compatibility mode\n");
     app_init();
 #endif
     printf("[EMU] Running.\n");
 
+    unsigned frame_count = 0;
+    bool test_reset_done = false;
+    bool test_navigate_done = false;
     while (true) {
         SDL_Event ev;
         while (SDL_PollEvent(&ev)) {
@@ -465,10 +508,17 @@ int main(int argc, char *argv[])
                         printf("[EMU] POWER — resetting\n");
                         memset(g_lcd_buf, 0, LCD_W * LCD_H * sizeof(uint32_t));
 #ifdef EMU_STATIC_APP
+                        ui_deinit();
+                        printf("[EMU] App deinitialized\n");
                         ui_init();
 #else
+                        if (app_deinit) {
+                            app_deinit();
+                            printf("[EMU] App deinitialized\n");
+                        }
                         app_init();
 #endif
+                        printf("[EMU] App initialized\n");
                     }
                     g_side_pr = -1;
                 } else if (side >= 0) {
@@ -501,10 +551,47 @@ int main(int argc, char *argv[])
         lv_tick_inc(5);
         lv_timer_handler();
         render();
+        ++frame_count;
+        if (!test_navigate_done && test_navigate_frame && frame_count >= test_navigate_frame) {
+            printf("[EMU] TEST navigate at frame %u\n", frame_count);
+            inject_sdl_key(SDLK_RIGHT, true);
+            inject_sdl_key(SDLK_RIGHT, false);
+            test_navigate_done = true;
+        }
+        if (!test_reset_done && test_reset_frame && frame_count >= test_reset_frame) {
+            printf("[EMU] TEST reset at frame %u\n", frame_count);
+            memset(g_lcd_buf, 0, LCD_W * LCD_H * sizeof(uint32_t));
+#ifdef EMU_STATIC_APP
+            ui_deinit();
+            printf("[EMU] App deinitialized\n");
+            ui_init();
+#else
+            if (app_deinit) {
+                app_deinit();
+                printf("[EMU] App deinitialized\n");
+            }
+            app_init();
+#endif
+            printf("[EMU] App initialized\n");
+            test_reset_done = true;
+        }
+        if (test_quit_frame && frame_count >= test_quit_frame) {
+            printf("[EMU] TEST graceful quit at frame %u\n", frame_count);
+            goto done;
+        }
         SDL_Delay(5);
     }
 
 done:
+#ifdef EMU_STATIC_APP
+    ui_deinit();
+    printf("[EMU] App deinitialized\n");
+#else
+    if (app_deinit) {
+        app_deinit();
+        printf("[EMU] App deinitialized\n");
+    }
+#endif
     free(g_lcd_buf);
 #ifndef EMU_STATIC_APP
     emu_dlclose(app);

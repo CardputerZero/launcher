@@ -5,11 +5,19 @@
 #include "hal/hal_process.h"
 #include "hal/hal_settings.h"
 #include "cp0_lvgl_app.h"
+#include "keyboard_input.h"
 
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
+
+static cp0_keyboard_key_handler_t global_key_handler;
+
+void cp0_keyboard_set_global_key_handler(cp0_keyboard_key_handler_t handler)
+{
+    global_key_handler = handler;
+}
 
 int cp0_process_run_sudo(const char *password, const char *const *argv)
 { (void)password; (void)argv; return -1; }

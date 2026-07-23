@@ -1,7 +1,75 @@
 #define APP_PAGE_IMPLEMENTATION_UNIT
 #include "../ui_app_setup.hpp"
+#include "../../model/boot_action_policy.hpp"
+#include "../../model/setup_value_policy.hpp"
+#include "setup_page_access.hpp"
+
+#include <algorithm>
 
 namespace setting {
+namespace {
+
+void execute_boot_action(boot_actions::Action action)
+{
+    for (const auto operation : boot_actions::operation_plan(action)) {
+        bool succeeded = true;
+        switch (operation) {
+        case boot_actions::Operation::Reboot:
+            cp0_signal_process_api({"Reboot"}, nullptr);
+            break;
+        case boot_actions::Operation::Shutdown:
+            cp0_signal_process_api({"Shutdown"}, nullptr);
+            break;
+        case boot_actions::Operation::RemoveLauncherSettings:
+            succeeded = false;
+            cp0_signal_filesystem_api({"Remove", launcher_platform::path("launcher_settings")},
+                [&](int code, std::string) { succeeded = code == 0; });
+            break;
+        case boot_actions::Operation::TouchOobeMarker:
+            succeeded = false;
+            cp0_signal_filesystem_api({"Touch", launcher_platform::path("oobe_marker")},
+                [&](int code, std::string) { succeeded = code == 0; });
+            break;
+        }
+        if (!boot_actions::may_continue(operation, succeeded)) return;
+    }
+}
+
+int read_config_int_strict(const char *key, int fallback)
+{
+    int value = fallback;
+    cp0_signal_config_api({"GetInt", key, std::to_string(fallback)},
+        [&](int code, std::string data) {
+            int parsed = 0;
+            if (code == 0 && setup_values::parse_nonnegative_int(data, parsed)) value = parsed;
+        });
+    return value;
+}
+
+bool write_config_int_checked(const char *key, int value)
+{
+    bool succeeded = false;
+    cp0_signal_config_api({"SetInt", key, std::to_string(value)},
+                          [&](int code, std::string) { succeeded = code == 0; });
+    return succeeded;
+}
+
+bool save_config_checked()
+{
+    bool succeeded = false;
+    cp0_signal_config_api({"Save"},
+                          [&](int code, std::string) { succeeded = code == 0; });
+    return succeeded;
+}
+
+void restore_camera_resolution(int width, int height)
+{
+    write_config_int_checked("camera.resolution.width", width);
+    write_config_int_checked("camera.resolution.height", height);
+    save_config_checked();
+}
+
+} // namespace
 
 void Launcher::append(UISetupPage &p, std::vector<MenuItem> &menu)
 {
@@ -23,24 +91,27 @@ void Launcher::append(UISetupPage &p, std::vector<MenuItem> &menu)
 
 void Launcher::save_app_toggle(UISetupPage &page, const std::string &config_key)
 {
-    int launcher_idx = page.find_menu("Launcher");
-    if (launcher_idx < 0)
+    SetupPageAccess access(page);
+    MenuItem *launcher_menu = access.find_menu("Launcher");
+    if (!launcher_menu)
         return;
-    MenuItem &launcher_menu = page.menu_items_[launcher_idx];
 
     std::size_t app_count = 0;
     const AppDescriptor *apps = launcher_app_registry_entries(&app_count);
-    int visible_idx = 0;
+    std::size_t visible_idx = 0;
     for (std::size_t i = 0; i < app_count; ++i) {
         const AppDescriptor &desc = apps[i];
         if (!desc.configurable)
             continue;
         if (config_key == desc.config_key) {
-            if (visible_idx >= (int)launcher_menu.sub_items.size())
+            if (visible_idx >= launcher_menu->sub_items.size())
                 return;
-            bool enabled = launcher_menu.sub_items[visible_idx].toggle_state;
-            launcher_app_registry_set_enabled(desc, enabled);
-            UISetupPage::config_save();
+            bool enabled = launcher_menu->sub_items[visible_idx].toggle_state;
+            if (!launcher_app_registry_set_enabled(desc, enabled)) {
+                launcher_menu->sub_items[visible_idx].toggle_state =
+                    launcher_app_registry_is_enabled(desc);
+                return;
+            }
             launcher_app_registry_notify_changed();
             return;
         }
@@ -50,40 +121,44 @@ void Launcher::save_app_toggle(UISetupPage &page, const std::string &config_key)
 
 void Boot::factory_reset()
 {
-    cp0_signal_filesystem_api({"Remove", launcher_platform::path("launcher_settings")}, nullptr);
-    cp0_signal_process_api({"Reboot"}, nullptr);
+    execute_boot_action(boot_actions::Action::FactoryReset);
 }
 
 void Boot::append(UISetupPage &p, std::vector<MenuItem> &menu)
 {
-    UISetupPage *page = &p;
+    const auto make_item = [&p](boot_actions::Action action) {
+        const auto &view = boot_actions::presentation(action);
+        return SubItem{std::string(view.label), false, false, [&p, action]() {
+            const auto &selected = boot_actions::presentation(action);
+            SetupPageAccess(p).confirm(selected.confirmation_title.data(),
+                [action]() { execute_boot_action(action); });
+        }};
+    };
     MenuItem m;
     m.label = "Boot";
     m.sub_items = {
-        {"Reboot", false, false, [page]() {
-            page->enter_confirm_action("Reboot?", [page](){ cp0_signal_process_api({"Reboot"}, nullptr); });
-        }},
-        {"Shutdown", false, false, [page]() {
-            page->enter_confirm_action("Shutdown?", [page](){ cp0_signal_process_api({"Shutdown"}, nullptr); });
-        }},
+        make_item(boot_actions::Action::Reboot),
+        make_item(boot_actions::Action::Shutdown),
     };
     menu.push_back(m);
 }
 
 void Boot::rearm_oobe_and_reboot()
 {
-    cp0_signal_filesystem_api({"Touch", launcher_platform::path("oobe_marker")}, nullptr);
-    cp0_signal_process_api({"Reboot"}, nullptr);
+    execute_boot_action(boot_actions::Action::RearmOobe);
 }
 
 void Screen::append(UISetupPage &p, std::vector<MenuItem> &menu)
 {
     UISetupPage *page = &p;
+    Screen *controller = this;
     MenuItem m;
     m.label = "Screen";
     m.sub_items = {
-        {"Brightness", false, false, [page]() { page->screen_.enter_brightness_adjust(*page); }},
-        {"DarkTime", false, false, [page]() { page->screen_.enter_darktime_adjust(*page); }},
+        {"Brightness", false, false,
+            [controller, page]() { controller->enter_brightness_adjust(*page); }},
+        {"DarkTime", false, false,
+            [controller, page]() { controller->enter_darktime_adjust(*page); }},
     };
     menu.push_back(m);
 }
@@ -92,7 +167,8 @@ int Screen::backlight_read()
 {
     int value = -1;
     cp0_signal_settings_api({"BacklightRead"}, [&](int code, std::string data) {
-        if (code == 0) value = std::atoi(data.c_str());
+        int parsed = -1;
+        if (code == 0 && setup_values::parse_nonnegative_int(data, parsed)) value = parsed;
     });
     return value;
 }
@@ -101,121 +177,156 @@ int Screen::backlight_max()
 {
     int value = 100;
     cp0_signal_settings_api({"BacklightMax"}, [&](int code, std::string data) {
-        if (code == 0) value = std::atoi(data.c_str());
+        int parsed = 0;
+        if (code == 0 && setup_values::parse_nonnegative_int(data, parsed) && parsed > 0)
+            value = parsed;
     });
     return value;
 }
 
 void Screen::enter_brightness_adjust(UISetupPage &page)
 {
-    page.val_title_ = "Brightness";
-    page.val_options_ = {"100%", "75%", "50%", "25%"};
+    SetupPageAccess access(page);
+    const int maximum = backlight_max();
     bright_val_ = backlight_read();
-    int mx = backlight_max();
-    int pct = mx > 0 ? bright_val_ * 100 / mx : 100;
-    if (pct >= 87) page.val_sel_idx_ = 0;
-    else if (pct >= 62) page.val_sel_idx_ = 1;
-    else if (pct >= 37) page.val_sel_idx_ = 2;
-    else page.val_sel_idx_ = 3;
-    page.view_state_ = UISetupPage::ViewState::VALUE_SELECT;
-    page.transition_enter_level();
+    if (bright_val_ < 0 || bright_val_ > maximum)
+        bright_val_ = access.config_get_int("brightness", maximum);
+    bright_val_ = std::clamp(bright_val_, 1, maximum);
+    access.enter_value("Brightness", {"100%", "75%", "50%", "25%"},
+                       setup_values::brightness_index(bright_val_, maximum));
 }
 
 void Screen::apply_value(UISetupPage &page)
 {
-    if (page.val_title_ == "DarkTime") {
-        static const int times[] = {0, 10, 30, 60, 300};
-        UISetupPage::config_set_int("dark_time", times[page.val_sel_idx_]);
-        UISetupPage::config_save();
+    SetupPageAccess access(page);
+    if (access.value_title() == "DarkTime") {
+        const int previous = access.config_get_int("dark_time", 30);
+        const int desired = setup_values::dark_time_seconds(access.value_selection());
+        if (!access.config_set_int("dark_time", desired) || !access.config_save()) {
+            access.config_set_int("dark_time", previous);
+            access.config_save();
+        }
         return;
     }
+    if (access.value_title() != "Brightness") return;
 
-    int mx = backlight_max();
-    int pcts[] = {100, 75, 50, 25};
-    int new_val = mx * pcts[page.val_sel_idx_] / 100;
-    if (new_val < 1) new_val = 1;
-    cp0_signal_settings_api({"BacklightWrite", std::to_string(new_val)}, nullptr);
-    UISetupPage::config_set_int("brightness", new_val);
-    UISetupPage::config_save();
+    const int maximum = backlight_max();
+    const int new_val = setup_values::brightness_value(access.value_selection(), maximum);
+    bool write_succeeded = false;
+    int applied_value = new_val;
+    cp0_signal_settings_api({"BacklightWrite", std::to_string(new_val)},
+        [&](int code, std::string data) {
+            if (code != 0) return;
+            write_succeeded = true;
+            int parsed = 0;
+            if (setup_values::parse_nonnegative_int(data, parsed)) applied_value = parsed;
+        });
+    if (!write_succeeded) return;
+    const int previous_brightness = bright_val_;
+    const int applied_brightness = std::clamp(applied_value, 1, maximum);
+    const int previous_config = std::clamp(
+        access.config_get_int("brightness", previous_brightness), 1, maximum);
+    if (!access.config_set_int("brightness", applied_brightness) || !access.config_save()) {
+        access.config_set_int("brightness", previous_config);
+        access.config_save();
+        cp0_signal_settings_api(
+            {"BacklightWrite", std::to_string(previous_brightness)}, nullptr);
+        return;
+    }
+    bright_val_ = applied_brightness;
 }
 
 void Screen::enter_darktime_adjust(UISetupPage &page)
 {
-    static const int times[] = {0, 10, 30, 60, 300};
-    page.val_title_ = "DarkTime";
-    page.val_options_ = {"Never", "10S", "30S", "60S", "300S"};
-    const int saved = UISetupPage::config_get_int("dark_time", 30);
-    page.val_sel_idx_ = 2;
-    for (size_t i = 0; i < sizeof(times) / sizeof(times[0]); ++i) {
-        if (times[i] == saved) {
-            page.val_sel_idx_ = static_cast<int>(i);
-            break;
-        }
-    }
-    page.view_state_ = UISetupPage::ViewState::VALUE_SELECT;
-    page.transition_enter_level();
+    SetupPageAccess access(page);
+    access.enter_value("DarkTime", {"Never", "10S", "30S", "60S", "300S"},
+        setup_values::dark_time_index(access.config_get_int("dark_time", 30)));
 }
 
 void Speaker::append(UISetupPage &p, std::vector<MenuItem> &menu)
 {
     UISetupPage *page = &p;
+    Speaker *controller = this;
     MenuItem m;
     m.label = "Speaker";
-    m.sub_items = {{"Volume", false, false, [page]() { page->speaker_.enter_volume_adjust(*page); }}};
+    m.sub_items = {{"Volume", false, false,
+        [controller, page]() { controller->enter_volume_adjust(*page); }}};
     menu.push_back(m);
 }
 
 void Speaker::enter_volume_adjust(UISetupPage &page)
 {
-    page.val_title_ = "Volume";
-    page.val_options_ = {"100%", "75%", "50%", "25%", "0%"};
-    vol_val_ = UISetupPage::config_get_int("volume", UISetupPage::audio_volume_read());
-    int pct = vol_val_;
-    if (pct >= 87) page.val_sel_idx_ = 0;
-    else if (pct >= 62) page.val_sel_idx_ = 1;
-    else if (pct >= 37) page.val_sel_idx_ = 2;
-    else if (pct >= 12) page.val_sel_idx_ = 3;
-    else page.val_sel_idx_ = 4;
-    page.view_state_ = UISetupPage::ViewState::VALUE_SELECT;
-    page.transition_enter_level();
+    SetupPageAccess access(page);
+    vol_val_ = access.audio_volume_read();
+    if (!setup_values::volume_value_valid(vol_val_))
+        vol_val_ = read_config_int_strict("volume", 100);
+    vol_val_ = std::clamp(vol_val_, 0, 100);
+    access.enter_value("Volume", {"100%", "75%", "50%", "25%", "0%"},
+        setup_values::volume_index(vol_val_));
 }
 
 void Speaker::apply_value(UISetupPage &page)
 {
-    int pcts[] = {100, 75, 50, 25, 0};
-    int new_val = pcts[page.val_sel_idx_];
-    UISetupPage::audio_volume_write(new_val);
-    UISetupPage::config_set_int("volume", new_val);
-    UISetupPage::config_save();
+    SetupPageAccess access(page);
+    if (access.value_title() != "Volume") return;
+    const int requested = setup_values::volume_percent(access.value_selection());
+    const int previous_config = std::clamp(
+        read_config_int_strict("volume", vol_val_), 0, 100);
+    const int applied = access.audio_volume_write(requested);
+    if (!setup_values::volume_value_valid(applied)) return;
+    if (!write_config_int_checked("volume", applied) || !save_config_checked()) {
+        write_config_int_checked("volume", previous_config);
+        save_config_checked();
+        access.audio_volume_write(vol_val_);
+        return;
+    }
+    vol_val_ = applied;
 }
 
 void Camera::append(UISetupPage &p, std::vector<MenuItem> &menu)
 {
+    bool status_received = false;
+    int status_code = -1;
+    cp0_signal_camera_api({"Status"}, [&](int code, std::string) {
+        status_received = true;
+        status_code = code;
+    });
+    if (!setup_values::camera_available_from_status(status_received, status_code)) return;
+
     UISetupPage *page = &p;
+    Camera *controller = this;
     MenuItem m;
     m.label = "Camera";
-    m.sub_items = {{"Resolution", false, false, [page]() { page->camera_.enter_resolution(*page); }}};
+    m.sub_items = {{"Resolution", false, false,
+        [controller, page]() { controller->enter_resolution(*page); }}};
     menu.push_back(m);
 }
 
 void Camera::enter_resolution(UISetupPage &page)
 {
-    page.val_title_ = "Resolution";
-    page.val_options_ = {"1280x720", "640x480"};
-    const int width = UISetupPage::config_get_int("camera.resolution.width", 1280);
-    const int height = UISetupPage::config_get_int("camera.resolution.height", 720);
-    page.val_sel_idx_ = (width == 640 && height == 480) ? 1 : 0;
-    page.view_state_ = UISetupPage::ViewState::VALUE_SELECT;
-    page.transition_enter_level();
+    SetupPageAccess access(page);
+    int width = read_config_int_strict("camera.resolution.width", 1280);
+    int height = read_config_int_strict("camera.resolution.height", 720);
+    if (!setup_values::camera_resolution_supported(width, height)) {
+        width = 1280;
+        height = 720;
+    }
+    access.enter_value("Resolution", {"1280x720", "640x480"},
+        setup_values::camera_resolution_index(width, height));
 }
 
 void Camera::apply_value(UISetupPage &page)
 {
-    int width = 1280, height = 720;
-    if (page.val_sel_idx_ == 1) { width = 640; height = 480; }
-    UISetupPage::config_set_int("camera.resolution.width", width);
-    UISetupPage::config_set_int("camera.resolution.height", height);
-    UISetupPage::config_save();
+    SetupPageAccess access(page);
+    if (access.value_title() != "Resolution") return;
+    const auto resolution = setup_values::camera_resolution(access.value_selection());
+    const int previous_width = read_config_int_strict("camera.resolution.width", 1280);
+    const int previous_height = read_config_int_strict("camera.resolution.height", 720);
+    if (!write_config_int_checked("camera.resolution.width", resolution.width)) return;
+    if (!write_config_int_checked("camera.resolution.height", resolution.height) ||
+        !save_config_checked()) {
+        restore_camera_resolution(previous_width, previous_height);
+    }
 }
 
 } // namespace setting

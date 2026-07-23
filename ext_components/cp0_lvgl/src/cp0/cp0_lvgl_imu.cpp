@@ -1,10 +1,15 @@
 #include "cp0_lvgl_app.h"
 #include "hal_lvgl_bsp.h"
 #include "../cp0_app_internal_utils.h"
+#include "../cp0_callback_contract.hpp"
+#include "../cp0_imu_codec.hpp"
+#include "../cp0_imu_worker_contract.hpp"
+#include "../cp0_signal_registration.hpp"
 
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cmath>
 #include <cstring>
 #include <fstream>
@@ -132,8 +137,26 @@ public:
     using callback_t = std::function<void(int, std::string)>;
     using arg_t = std::list<std::string>;
 
+    ~ImuSystem() { stop(); }
+
+    void stop() noexcept
+    {
+        std::thread worker;
+        {
+            std::lock_guard<std::mutex> lock(worker_mutex_);
+            stopping_ = true;
+            cancel_calibration_.store(true);
+            calibration_wake_.notify_all();
+            if (calibration_worker_.joinable())
+                worker = std::move(calibration_worker_);
+        }
+        cp0::imu::cancel_and_join_worker(worker, [] {}, [] {});
+        calibrating_.store(false);
+    }
+
     void api_call(arg_t arg, callback_t callback)
     {
+        try {
         if (arg.empty()) {
             report(callback, -1, "empty imu api\n");
             return;
@@ -150,13 +173,15 @@ public:
         }
 
         report(callback, -1, "unknown imu api\n");
+        } catch (...) {
+            report(callback, -1, "imu api failure\n");
+        }
     }
 
 private:
-    void report(callback_t callback, int code, const std::string &data)
+    void report(const callback_t &callback, int code, const std::string &data)
     {
-        if (callback)
-            callback(code, data);
+        cp0::callback::invoke(callback, code, data);
     }
 
     void read(arg_t arg, callback_t callback)
@@ -164,7 +189,7 @@ private:
         (void)arg;
         cp0_compass_info_t info{};
         int ret = read_info(&info);
-        report(callback, ret, std::string(reinterpret_cast<const char *>(&info), sizeof(info)));
+        report(callback, ret, cp0::imu::encode_info(info));
     }
 
     void calibrate(callback_t callback)
@@ -172,16 +197,38 @@ private:
 #if defined(_WIN32)
         report(callback, -1, "compass calibration unavailable\n");
 #else
-        if (calibrating_.exchange(true)) {
-            report(callback, 1, "compass calibration already running\n");
-            return;
-        }
-
-        std::thread([this]() {
-            calibrate_worker();
-            calibrating_.store(false);
-        }).detach();
-        report(callback, 0, "compass calibration started\n");
+        cp0::imu::prepare_then_report(
+            [this] {
+                std::lock_guard<std::mutex> lock(worker_mutex_);
+                if (stopping_) return cp0::imu::StartOutcome::Stopping;
+                if (calibrating_.exchange(true))
+                    return cp0::imu::StartOutcome::AlreadyRunning;
+                try {
+                    cp0::imu::reap_completed_worker(calibration_worker_, false);
+                    cancel_calibration_.store(false);
+                    calibration_worker_ = std::thread([this]() {
+                        try {
+                            calibrate_worker();
+                        } catch (...) {
+                        }
+                        calibrating_.store(false);
+                    });
+                    return cp0::imu::StartOutcome::Started;
+                } catch (...) {
+                    calibrating_.store(false);
+                    return cp0::imu::StartOutcome::ThreadCreationFailed;
+                }
+            },
+            [this, &callback](cp0::imu::StartOutcome outcome) {
+                if (outcome == cp0::imu::StartOutcome::Started)
+                    report(callback, 0, "compass calibration started\n");
+                else if (outcome == cp0::imu::StartOutcome::AlreadyRunning)
+                    report(callback, 1, "compass calibration already running\n");
+                else if (outcome == cp0::imu::StartOutcome::Stopping)
+                    report(callback, -1, "compass calibration stopping\n");
+                else
+                    report(callback, -1, "compass calibration unavailable\n");
+            });
 #endif
     }
 
@@ -275,7 +322,8 @@ private:
         int samples = 0;
 
         auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-        while (std::chrono::steady_clock::now() < deadline) {
+        while (!cancel_calibration_.load() &&
+               std::chrono::steady_clock::now() < deadline) {
             float mag_x = 0.0f;
             float mag_y = 0.0f;
             float mag_z = 0.0f;
@@ -288,10 +336,12 @@ private:
                 max_z = std::max(max_z, mag_z);
                 samples++;
             }
-            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            std::unique_lock<std::mutex> lock(calibration_wait_mutex_);
+            calibration_wake_.wait_for(lock, std::chrono::milliseconds(20),
+                [this] { return cancel_calibration_.load(); });
         }
 
-        if (samples < 10)
+        if (cancel_calibration_.load() || samples < 10)
             return;
 
         std::lock_guard<std::mutex> lock(bias_mutex_);
@@ -303,12 +353,32 @@ private:
 #endif
 
     std::atomic<bool> calibrating_{false};
+    std::atomic<bool> cancel_calibration_{false};
+    std::mutex worker_mutex_;
+    std::mutex calibration_wait_mutex_;
+    std::condition_variable calibration_wake_;
+    std::thread calibration_worker_;
+    bool stopping_ = false;
     std::mutex bias_mutex_;
     bool mag_bias_valid_ = false;
     float mag_bias_x_ = 0.0f;
     float mag_bias_y_ = 0.0f;
     float mag_bias_z_ = 0.0f;
 };
+
+using ImuRegistration = cp0::SignalRegistration<decltype(cp0_signal_imu_api)>;
+
+struct ImuRuntime {
+    std::mutex mutex;
+    ImuRegistration registration;
+    std::shared_ptr<ImuSystem> service;
+};
+
+ImuRuntime &imu_runtime()
+{
+    static ImuRuntime runtime;
+    return runtime;
+}
 
 } // namespace
 
@@ -317,29 +387,62 @@ extern "C" int cp0_compass_read(cp0_compass_read_cb_t callback, void *user)
     cp0_compass_info_t info{};
     clear_info(&info, "IMU unavailable", 0);
     int ret = -1;
-    cp0_signal_imu_api({"Read"}, [&](int code, std::string data) {
-        ret = code;
-        if (data.size() == sizeof(info))
-            std::memcpy(&info, data.data(), sizeof(info));
-    });
-    if (callback)
-        callback(ret, &info, user);
+    try {
+        cp0_signal_imu_api({"Read"}, [&](int code, std::string data) {
+            ret = code;
+            if (!cp0::imu::decode_info(data, info))
+                ret = -1;
+        });
+    } catch (...) {
+        ret = -1;
+    }
+    cp0::callback::invoke_direct(callback, ret, &info, user);
     return ret;
 }
 
 extern "C" int cp0_compass_calibrate(void)
 {
     int ret = -1;
-    cp0_signal_imu_api({"Calibrate"}, [&](int code, std::string) {
-        ret = code;
-    });
+    try {
+        cp0_signal_imu_api({"Calibrate"}, [&](int code, std::string) {
+            ret = code;
+        });
+    } catch (...) {
+        ret = -1;
+    }
     return ret;
 }
 
 extern "C" void init_imu(void)
 {
-    std::shared_ptr<ImuSystem> imu = std::make_shared<ImuSystem>();
-    cp0_signal_imu_api.append([imu](std::list<std::string> arg, std::function<void(int, std::string)> callback) {
-        imu->api_call(std::move(arg), std::move(callback));
-    });
+    try {
+        ImuRuntime &runtime = imu_runtime();
+        std::lock_guard<std::mutex> lock(runtime.mutex);
+        if (runtime.service) return;
+        auto imu = std::make_shared<ImuSystem>();
+        if (!runtime.registration.replace(
+                cp0_signal_imu_api,
+                [imu](std::list<std::string> arg,
+                      std::function<void(int, std::string)> callback) {
+                    imu->api_call(std::move(arg), std::move(callback));
+                }))
+            return;
+        runtime.service = std::move(imu);
+    } catch (...) {
+    }
+}
+
+extern "C" void deinit_imu(void)
+{
+    try {
+        ImuRuntime &runtime = imu_runtime();
+        std::shared_ptr<ImuSystem> imu;
+        {
+            std::lock_guard<std::mutex> lock(runtime.mutex);
+            runtime.registration.reset();
+            imu = std::move(runtime.service);
+        }
+        if (imu) imu->stop();
+    } catch (...) {
+    }
 }

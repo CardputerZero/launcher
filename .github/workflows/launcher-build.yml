@@ -169,7 +169,6 @@ jobs:
       run: |
         mkdir -p projects/APPLaunch/dist/bin
         cp projects/AppStore/dist/M5CardputerZero-AppStore projects/APPLaunch/dist/bin/
-        cp projects/AppStore/dist/APPLaunch/bin/appstore.py projects/APPLaunch/dist/bin/
         cp projects/Calculator/dist/M5CardputerZero-Calculator projects/APPLaunch/dist/bin/
         cp projects/ZClaw/dist/ZClaw projects/APPLaunch/dist/bin/
         mkdir -p projects/APPLaunch/APPLaunch/applications

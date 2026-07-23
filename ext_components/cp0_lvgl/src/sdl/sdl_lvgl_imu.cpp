@@ -1,10 +1,14 @@
 #include "cp0_lvgl_app.h"
 #include "hal_lvgl_bsp.h"
+#include "../cp0_callback_contract.hpp"
+#include "../cp0_imu_codec.hpp"
+#include "../cp0_signal_registration.hpp"
 
 #include <cstring>
 #include <functional>
 #include <list>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <utility>
 
@@ -50,6 +54,7 @@ public:
 
     void api_call(arg_t arg, callback_t callback)
     {
+        try {
         if (arg.empty()) {
             report(callback, -1, "empty imu api\n");
             return;
@@ -58,7 +63,7 @@ public:
         if (arg.front() == "Read") {
             cp0_compass_info_t info{};
             int ret = read_info(&info);
-            report(callback, ret, std::string(reinterpret_cast<const char *>(&info), sizeof(info)));
+            report(callback, ret, cp0::imu::encode_info(info));
             return;
         }
 
@@ -68,6 +73,9 @@ public:
         }
 
         report(callback, -1, "unknown imu api\n");
+        } catch (...) {
+            report(callback, -1, "imu api failure\n");
+        }
     }
 
     int read_info(cp0_compass_info_t *info)
@@ -79,14 +87,25 @@ public:
     }
 
 private:
-    static void report(callback_t callback, int code, const std::string &data)
+    static void report(const callback_t &callback, int code, const std::string &data)
     {
-        if (callback)
-            callback(code, data);
+        cp0::callback::invoke(callback, code, data);
     }
 };
 
-std::shared_ptr<ImuSystem> g_imu;
+using ImuRegistration = cp0::SignalRegistration<decltype(cp0_signal_imu_api)>;
+
+struct ImuRuntime {
+    std::mutex mutex;
+    ImuRegistration registration;
+    std::shared_ptr<ImuSystem> service;
+};
+
+ImuRuntime &imu_runtime()
+{
+    static ImuRuntime runtime;
+    return runtime;
+}
 
 } // namespace
 
@@ -94,32 +113,58 @@ extern "C" int cp0_compass_read(cp0_compass_read_cb_t callback, void *user)
 {
     cp0_compass_info_t info{};
     int ret = -1;
-    cp0_signal_imu_api({"Read"}, [&](int code, std::string data) {
-        ret = code;
-        if (data.size() == sizeof(info))
-            std::memcpy(&info, data.data(), sizeof(info));
-    });
-    if (callback)
-        callback(ret, &info, user);
+    try {
+        cp0_signal_imu_api({"Read"}, [&](int code, std::string data) {
+            ret = code;
+            if (!cp0::imu::decode_info(data, info))
+                ret = -1;
+        });
+    } catch (...) {
+        ret = -1;
+    }
+    cp0::callback::invoke_direct(callback, ret, &info, user);
     return ret;
 }
 
 extern "C" int cp0_compass_calibrate(void)
 {
     int ret = -1;
-    cp0_signal_imu_api({"Calibrate"}, [&](int code, std::string) {
-        ret = code;
-    });
+    try {
+        cp0_signal_imu_api({"Calibrate"}, [&](int code, std::string) {
+            ret = code;
+        });
+    } catch (...) {
+        ret = -1;
+    }
     return ret;
 }
 
 extern "C" void init_imu(void)
 {
-    if (g_imu)
-        return;
+    try {
+        ImuRuntime &runtime = imu_runtime();
+        std::lock_guard<std::mutex> lock(runtime.mutex);
+        if (runtime.service) return;
+        auto imu = std::make_shared<ImuSystem>();
+        if (!runtime.registration.replace(
+                cp0_signal_imu_api,
+                [imu](std::list<std::string> arg,
+                      std::function<void(int, std::string)> callback) {
+                    imu->api_call(std::move(arg), std::move(callback));
+                }))
+            return;
+        runtime.service = std::move(imu);
+    } catch (...) {
+    }
+}
 
-    g_imu = std::make_shared<ImuSystem>();
-    cp0_signal_imu_api.append([](std::list<std::string> arg, std::function<void(int, std::string)> callback) {
-        g_imu->api_call(std::move(arg), std::move(callback));
-    });
+extern "C" void deinit_imu(void)
+{
+    try {
+        ImuRuntime &runtime = imu_runtime();
+        std::lock_guard<std::mutex> lock(runtime.mutex);
+        runtime.registration.reset();
+        runtime.service.reset();
+    } catch (...) {
+    }
 }

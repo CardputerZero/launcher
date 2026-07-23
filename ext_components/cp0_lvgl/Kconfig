@@ -13,4 +13,67 @@ config CP0_LVGL_USE_ZMQ_RPC
     bool "Enable cp0 lvgl local ZMQ automation RPC"
     default n
 
+menu "Optional runtime services"
+
+config CP0_LVGL_INIT_FILESYSTEM
+    bool "Initialize filesystem service"
+    default n
+config CP0_LVGL_INIT_CONFIG
+    bool "Initialize configuration service"
+    default n
+config CP0_LVGL_INIT_PTY
+    bool "Initialize PTY service"
+    default n
+config CP0_LVGL_INIT_RPC
+    bool "Initialize RPC service"
+    default n
+config CP0_LVGL_INIT_AUDIO
+    bool "Initialize audio service"
+    default n
+config CP0_LVGL_INIT_PROCESS
+    bool "Initialize process service"
+    default n
+config CP0_LVGL_INIT_SUDO
+    bool "Initialize sudo signals"
+    default n
+config CP0_LVGL_INIT_OSINFO
+    bool "Initialize OS information service"
+    default n
+config CP0_LVGL_INIT_SCREENSHOT
+    bool "Initialize screenshot service"
+    default n
+config CP0_LVGL_INIT_LORA
+    bool "Initialize LoRa service"
+    default n
+config CP0_LVGL_INIT_WIFI
+    bool "Initialize Wi-Fi service"
+    select CP0_LVGL_INIT_PROCESS
+    default n
+config CP0_LVGL_INIT_BLUETOOTH
+    bool "Initialize Bluetooth service"
+    default n
+config CP0_LVGL_INIT_SETTINGS
+    bool "Initialize settings service"
+    default n
+config CP0_LVGL_INIT_BQ27220
+    bool "Initialize BQ27220 service"
+    default n
+config CP0_LVGL_INIT_IMU
+    bool "Initialize IMU service"
+    default n
+config CP0_LVGL_INIT_SAVED_SETTINGS
+    bool "Apply saved LVGL settings"
+    default n
+config CP0_LVGL_INIT_BATTERY
+    bool "Initialize battery service"
+    default n
+config CP0_LVGL_INIT_CAMERA
+    bool "Initialize camera service"
+    default n
+config CP0_LVGL_INIT_SOUNDCARD
+    bool "Initialize sound card service"
+    default n
+
+endmenu
+
 endif

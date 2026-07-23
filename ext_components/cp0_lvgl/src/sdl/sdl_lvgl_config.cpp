@@ -2,70 +2,34 @@
 #include "hal/hal_paths.h"
 #include "hal_lvgl_bsp.h"
 
-#include "../cp0_config_json.h"
+#include "cp0_config_json.h"
+#include "../cp0_config_service.hpp"
+#include "../cp0_signal_registration.hpp"
 
 #include <cerrno>
-#include <cstdlib>
 #include <cstdio>
-#include <cstring>
-#include <functional>
-#include <list>
-#include <memory>
-#include <mutex>
-#include <string>
+#include <cstdlib>
 #include <fcntl.h>
+#include <memory>
+#include <string>
 #include <sys/stat.h>
 #include <unistd.h>
-#include <utility>
-#include <vector>
 
 namespace {
 
-constexpr int kMaxEntries = 64;
-constexpr int kKeyMax = 64;
-constexpr int kValMax = 256;
-
-static void copy_cstr(char *dst, size_t dst_size, const char *src)
+std::string join_path(const std::string &base, const char *leaf)
 {
-    if (!dst || dst_size == 0)
-        return;
-    if (!src)
-        src = "";
-    std::strncpy(dst, src, dst_size - 1);
-    dst[dst_size - 1] = '\0';
+    std::string path = base.empty() ? "." : base;
+    if (path.back() != '/')
+        path.push_back('/');
+    return path + leaf;
 }
 
-static std::string join_path(const std::string &base, const char *leaf)
+std::string config_dir()
 {
-    std::string out = base.empty() ? std::string(".") : base;
-    if (!out.empty() && out.back() != '/')
-        out.push_back('/');
-    out += leaf;
-    return out;
-}
-
-static int mkdir_p(const std::string &path)
-{
-    if (path.empty())
-        return -1;
-    char tmp[512];
-    copy_cstr(tmp, sizeof(tmp), path.c_str());
-    for (char *p = tmp + 1; *p; ++p) {
-        if (*p == '/') {
-            *p = '\0';
-            if (mkdir(tmp, 0755) != 0 && errno != EEXIST)
-                return -1;
-            *p = '/';
-        }
-    }
-    return (mkdir(tmp, 0755) == 0 || errno == EEXIST) ? 0 : -1;
-}
-
-static std::string config_dir()
-{
-    const char *env = std::getenv("APPLAUNCH_SDL_CONFIG_DIR");
-    if (env && env[0])
-        return env;
+    const char *configured = std::getenv("APPLAUNCH_SDL_CONFIG_DIR");
+    if (configured && configured[0])
+        return configured;
     const char *xdg = std::getenv("XDG_CONFIG_HOME");
     if (xdg && xdg[0])
         return join_path(xdg, "applaunch-sdl");
@@ -75,222 +39,79 @@ static std::string config_dir()
     return join_path(hal_path_data_dir() ? hal_path_data_dir() : ".", "sdl_config");
 }
 
-class ConfigSystem {
-public:
-    using callback_t = std::function<void(int, std::string)>;
-    using arg_t = std::list<std::string>;
-
-    ConfigSystem() { init(); }
-
-    void init()
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
-        load_locked();
+bool make_directories(const std::string &path)
+{
+    if (path.empty())
+        return false;
+    std::string partial;
+    partial.reserve(path.size());
+    for (char character : path) {
+        partial.push_back(character);
+        if (character == '/' && partial.size() > 1 &&
+            mkdir(partial.c_str(), 0755) != 0 && errno != EEXIST)
+            return false;
     }
+    return mkdir(path.c_str(), 0755) == 0 || errno == EEXIST;
+}
 
-    int get_int(const char *key, int default_val)
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
-        ensure_loaded_locked();
-        int idx = find_entry_locked(key);
-        return idx < 0 ? default_val : std::atoi(entries_[idx].val);
+void fsync_dir(const std::string &path)
+{
+#ifdef O_DIRECTORY
+    const int fd = open(path.c_str(), O_RDONLY | O_DIRECTORY);
+#else
+    const int fd = open(path.c_str(), O_RDONLY);
+#endif
+    if (fd >= 0) {
+        fsync(fd);
+        close(fd);
     }
+}
 
-    void set_int(const char *key, int val)
-    {
-        char buf[32];
-        std::snprintf(buf, sizeof(buf), "%d", val);
-        set_str(key, buf);
-    }
+bool load_config(cp0cfg::Entries &entries)
+{
+    FILE *fp = std::fopen(join_path(config_dir(), "config.json").c_str(), "r");
+    if (!fp)
+        return false;
+    std::string text;
+    char buffer[512];
+    size_t count = 0;
+    while ((count = std::fread(buffer, 1, sizeof(buffer), fp)) > 0)
+        text.append(buffer, count);
+    const bool read_ok = std::ferror(fp) == 0;
+    std::fclose(fp);
+    return read_ok && cp0cfg::from_json(text, entries);
+}
 
-    std::string get_str(const char *key, const char *default_val)
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
-        ensure_loaded_locked();
-        int idx = find_entry_locked(key);
-        return idx < 0 ? std::string(default_val ? default_val : "") : std::string(entries_[idx].val);
-    }
-
-    void set_str(const char *key, const char *val)
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
-        ensure_loaded_locked();
-        int idx = get_or_create_entry_locked(key);
-        if (idx >= 0)
-            copy_cstr(entries_[idx].val, sizeof(entries_[idx].val), val);
-    }
-
-    int save()
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
-        ensure_loaded_locked();
-        const std::string dir = config_dir();
-        if (mkdir_p(dir) != 0)
-            return -1;
-        std::vector<std::pair<std::string, std::string>> kv;
-        kv.reserve(count_);
-        for (int i = 0; i < count_; ++i)
-            kv.emplace_back(entries_[i].key, entries_[i].val);
-        const std::string json = cp0cfg::to_json(kv);
-        const std::string path = join_path(dir, "config.json");
-        const std::string tmp_path = path + ".tmp";
-        FILE *fp = std::fopen(tmp_path.c_str(), "w");
-        if (!fp)
-            return -1;
-        size_t written = std::fwrite(json.data(), 1, json.size(), fp);
-        if (written != json.size()) {
-            std::fclose(fp);
-            std::remove(tmp_path.c_str());
-            return -1;
-        }
-        if (std::fflush(fp) != 0 || fsync(fileno(fp)) != 0) {
-            std::fclose(fp);
-            std::remove(tmp_path.c_str());
-            return -1;
-        }
-        std::fclose(fp);
-        if (std::rename(tmp_path.c_str(), path.c_str()) != 0) {
-            std::remove(tmp_path.c_str());
-            return -1;
-        }
-        fsync_dir(dir.c_str());
-        return 0;
-    }
-
-    void api_call(arg_t arg, callback_t callback)
-    {
-        if (arg.empty()) {
-            report(callback, -1, "empty config api");
-            return;
-        }
-        const std::string cmd = arg.front();
-        if (cmd == "Init") {
-            init();
-            report(callback, 0, "ok");
-        } else if (cmd == "GetInt") {
-            report(callback, 0, std::to_string(get_int(nth_arg(arg, 1).c_str(), parse_int(nth_arg(arg, 2), 0))));
-        } else if (cmd == "SetInt") {
-            set_int(nth_arg(arg, 1).c_str(), parse_int(nth_arg(arg, 2), 0));
-            report(callback, 0, "ok");
-        } else if (cmd == "GetStr") {
-            report(callback, 0, get_str(nth_arg(arg, 1).c_str(), nth_arg(arg, 2).c_str()));
-        } else if (cmd == "SetStr") {
-            set_str(nth_arg(arg, 1).c_str(), nth_arg(arg, 2).c_str());
-            report(callback, 0, "ok");
-        } else if (cmd == "Save") {
-            int ret = save();
-            report(callback, ret, ret == 0 ? "ok" : "save failed");
-        } else {
-            report(callback, -1, "unknown config api");
-        }
-    }
-
-private:
-    struct Entry {
-        char key[kKeyMax];
-        char val[kValMax];
-    };
-
-    Entry entries_[kMaxEntries] = {};
-    int count_ = 0;
-    bool loaded_ = false;
-    std::mutex mutex_;
-
-    void ensure_loaded_locked()
-    {
-        if (!loaded_)
-            load_locked();
-    }
-
-    void load_locked()
-    {
-        count_ = 0;
-        loaded_ = true;
-        FILE *fp = std::fopen(join_path(config_dir(), "config.json").c_str(), "r");
-        if (!fp)
-            return;
-        std::string text;
-        char buf[512];
-        size_t n;
-        while ((n = std::fread(buf, 1, sizeof(buf), fp)) > 0)
-            text.append(buf, n);
-        std::fclose(fp);
-
-        std::vector<std::pair<std::string, std::string>> kv;
-        if (!cp0cfg::from_json(text, kv))
-            return;
-        for (const auto &e : kv) {
-            if (count_ >= kMaxEntries)
-                break;
-            copy_cstr(entries_[count_].key, sizeof(entries_[count_].key), e.first.c_str());
-            copy_cstr(entries_[count_].val, sizeof(entries_[count_].val), e.second.c_str());
-            ++count_;
-        }
-    }
-
-    int find_entry_locked(const char *key) const
-    {
-        if (!key || !key[0])
-            return -1;
-        for (int i = 0; i < count_; ++i) {
-            if (std::strcmp(entries_[i].key, key) == 0)
-                return i;
-        }
+int save_config(const cp0cfg::Entries &entries)
+{
+    const std::string dir = config_dir();
+    if (!make_directories(dir))
+        return -1;
+    const std::string path = join_path(dir, "config.json");
+    const std::string temporary = path + ".tmp";
+    const std::string json = cp0cfg::to_json(entries);
+    FILE *fp = std::fopen(temporary.c_str(), "w");
+    if (!fp)
+        return -1;
+    const bool written = std::fwrite(json.data(), 1, json.size(), fp) == json.size();
+    const bool flushed = written && std::fflush(fp) == 0 && fsync(fileno(fp)) == 0;
+    const bool closed = std::fclose(fp) == 0;
+    if (!flushed || !closed || std::rename(temporary.c_str(), path.c_str()) != 0) {
+        std::remove(temporary.c_str());
         return -1;
     }
-
-    int get_or_create_entry_locked(const char *key)
-    {
-        int idx = find_entry_locked(key);
-        if (idx >= 0)
-            return idx;
-        if (!key || !key[0] || count_ >= kMaxEntries)
-            return -1;
-        idx = count_++;
-        copy_cstr(entries_[idx].key, sizeof(entries_[idx].key), key);
-        entries_[idx].val[0] = '\0';
-        return idx;
-    }
-
-    static std::string nth_arg(const arg_t &arg, size_t index)
-    {
-        auto it = arg.begin();
-        for (size_t i = 0; i < index && it != arg.end(); ++i)
-            ++it;
-        return it == arg.end() ? std::string() : *it;
-    }
-
-    static int parse_int(const std::string &value, int fallback)
-    {
-        return value.empty() ? fallback : std::atoi(value.c_str());
-    }
-
-    static void report(callback_t callback, int code, const std::string &data)
-    {
-        if (callback)
-            callback(code, data);
-    }
-
-    static void fsync_dir(const char *path)
-    {
-#ifdef O_DIRECTORY
-        int fd = open(path, O_RDONLY | O_DIRECTORY);
-#else
-        int fd = open(path, O_RDONLY);
-#endif
-        if (fd >= 0) {
-            fsync(fd);
-            close(fd);
-        }
-    }
-};
+    fsync_dir(dir);
+    return 0;
+}
 
 } // namespace
 
 extern "C" void init_config(void)
 {
-    auto config = std::make_shared<ConfigSystem>();
-    cp0_signal_config_api.append([config](std::list<std::string> arg, std::function<void(int, std::string)> callback) {
-        config->api_call(std::move(arg), std::move(callback));
+    static cp0::SignalRegistration<decltype(cp0_signal_config_api)> registration;
+    auto config = std::make_shared<cp0cfg::ConfigService>(load_config, save_config);
+    registration.replace(cp0_signal_config_api, [config](std::list<std::string> arguments,
+                                                         std::function<void(int, std::string)> callback) {
+        config->api_call(std::move(arguments), std::move(callback));
     });
 }

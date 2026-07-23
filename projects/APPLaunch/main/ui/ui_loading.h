@@ -37,6 +37,7 @@ void show(const char *label);
 
 /* Hide the loading overlay. Safe to call when not shown (no-op). */
 void hide();
+void shutdown();
 
 } // namespace ui_loading
 

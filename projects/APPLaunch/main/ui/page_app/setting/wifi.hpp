@@ -1,0 +1,119 @@
+#pragma once
+
+#include "menu_types.hpp"
+#include "../../model/setup_wifi_model.hpp"
+
+#include "cp0_lvgl_app.h"
+#include <lvgl.h>
+
+#include <cstdint>
+#include <memory>
+#include <string>
+#include <thread>
+#include <vector>
+
+class UISetupPage;
+
+namespace setting {
+
+class WiFiListView
+{
+public:
+    bool mount(UISetupPage &page);
+    bool render(UISetupPage &page, const SetupWifiListSnapshot &snapshot);
+    void unmount();
+    bool mounted() const { return root_ != nullptr; }
+
+private:
+    struct RowObjects {
+        lv_obj_t *background = nullptr;
+        lv_obj_t *ssid = nullptr;
+        lv_obj_t *security = nullptr;
+        lv_obj_t *signal = nullptr;
+        std::string ssid_text;
+        std::string security_text;
+        std::string signal_text;
+        uint32_t color = 0;
+        bool selected = false;
+        bool visible = false;
+    };
+
+    static void root_delete_cb(lv_event_t *event) noexcept;
+    void reset_objects();
+
+    lv_obj_t *root_ = nullptr;
+    lv_obj_t *title_ = nullptr;
+    lv_obj_t *empty_ = nullptr;
+    lv_obj_t *hint_ = nullptr;
+    std::string title_text_;
+    std::string empty_text_;
+    std::string hint_text_;
+    RowObjects rows_[SetupWifiListViewModel::VISIBLE_ROWS]{};
+};
+
+class WiFiPasswordView
+{
+public:
+    bool show(UISetupPage &page, const std::string &ssid);
+    void update_password(const std::string &display);
+    void set_hint(const char *text, uint32_t color = 0x555555);
+    void unmount();
+
+private:
+    static void root_delete_cb(lv_event_t *event) noexcept;
+    void reset_objects();
+
+    lv_obj_t *root_ = nullptr;
+    lv_obj_t *input_ = nullptr;
+    lv_obj_t *hint_ = nullptr;
+};
+
+class WiFi
+{
+public:
+    ~WiFi();
+    void append(UISetupPage &page, std::vector<MenuItem> &menu);
+    void enter_scan(UISetupPage &page);
+    bool build_list(UISetupPage &page);
+    void handle_list_key(UISetupPage &page, uint32_t key);
+    void refresh_radio(UISetupPage &page);
+    void toggle_enable(UISetupPage &page);
+    void try_connect(UISetupPage &page, int index);
+    bool show_connecting(UISetupPage &page, const char *ssid);
+    bool show_error(UISetupPage &page, const char *message);
+    bool show_forget_confirmation(UISetupPage &page, const std::string &ssid);
+    void forget_selected(UISetupPage &page);
+    void handle_forget_key(UISetupPage &page, uint32_t key);
+    void handle_pw_key(UISetupPage &page, uint32_t key);
+    void shutdown();
+
+private:
+    struct ScanState;
+    struct ScanResult;
+    void start_scan(UISetupPage &page);
+    void stop_scan();
+    void request_scan();
+    void refresh_list_status();
+    void apply_scan_result(UISetupPage &page, const cp0_wifi_ap_t *aps, int count);
+    static void scan_result_cb(void *user) noexcept;
+    void clear_password_view();
+    void start_connection_failure_feedback(UISetupPage &page);
+    void stop_connection_failure_feedback();
+    static void connection_feedback_timer_cb(lv_timer_t *timer) noexcept;
+    static void feedback_screen_delete_cb(lv_event_t *event) noexcept;
+
+    SetupWifiListViewModel list_view_model_;
+    WiFiListView list_view_;
+    WiFiPasswordView password_view_;
+    SetupWifiPasswordModel password_model_;
+    SetupWifiFeedbackModel feedback_model_;
+    SetupWifiFeedbackModel::Token feedback_token_ = 0;
+    lv_timer_t *feedback_timer_ = nullptr;
+    UISetupPage *feedback_page_ = nullptr;
+    std::string forget_ssid_;
+    bool forget_active_ = false;
+    std::shared_ptr<ScanState> scan_state_;
+    std::vector<std::thread> scan_threads_;
+};
+
+} // namespace setting
