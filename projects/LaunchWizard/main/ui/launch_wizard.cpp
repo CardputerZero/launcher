@@ -9,7 +9,7 @@
 #ifdef __linux__
 #include <linux/input.h>
 #else
-#include "compat/input_keys.h"
+#include "input_keys.h"
 #endif
 
 #include <ctype.h>

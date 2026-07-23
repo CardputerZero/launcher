@@ -36,10 +36,10 @@ public:
         LvglAnimation *self = new LvglAnimation(time, type);
         self->callback_ = std::move(callback);
         self->finished_callback_ = std::move(finished);
-        self->launch(obj, obj, start_val, end_val, false);
+        if (!self->launch(obj, obj, start_val, end_val, false)) delete self;
     }
 
-    static void start_raw(int time,
+    static bool start_raw(int time,
                           raw_callback_t callback,
                           finished_callback_t finished = nullptr,
                           Type type = overshoot)
@@ -47,7 +47,11 @@ public:
         LvglAnimation *self = new LvglAnimation(time, type);
         self->raw_callback_ = std::move(callback);
         self->finished_callback_ = std::move(finished);
-        self->launch(nullptr, self, 0, LV_BEZIER_VAL_MAX, true);
+        if (!self->launch(nullptr, self, 0, LV_BEZIER_VAL_MAX, true)) {
+            delete self;
+            return false;
+        }
+        return true;
     }
 
     int32_t Animation_map(int32_t start, int32_t end)
@@ -85,7 +89,7 @@ private:
     {
     }
 
-    void launch(void *obj, void *var, int32_t start_val, int32_t end_val, bool raw)
+    bool launch(void *obj, void *var, int32_t start_val, int32_t end_val, bool raw)
     {
         (void)obj;
         raw_ = raw;
@@ -106,7 +110,7 @@ private:
             lv_anim_set_path_cb(&anim, path_cb_);
         }
 
-        lv_anim_start(&anim);
+        return lv_anim_start(&anim) != nullptr;
     }
 
     static LvglAnimation *from_anim(lv_anim_t *anim)
@@ -150,36 +154,48 @@ private:
         }
     }
 
-    static void exec_cb(lv_anim_t *anim, int32_t value)
+    static void exec_cb(lv_anim_t *anim, int32_t value) noexcept
     {
-        LvglAnimation *self = from_anim(anim);
-        if (self && self->callback_) {
-            self->callback_(anim->var, value);
+        try {
+            if (!anim) return;
+            LvglAnimation *self = from_anim(anim);
+            if (self && self->callback_) {
+                self->callback_(anim->var, value);
+            }
+        } catch (...) {
         }
     }
 
-    static void exec_cb_raw(lv_anim_t *anim, int32_t value)
+    static void exec_cb_raw(lv_anim_t *anim, int32_t value) noexcept
     {
+        try {
+            if (!anim) return;
+            LvglAnimation *self = from_anim(anim);
+            if (!self) {
+                return;
+            }
+
+            self->current_progress_ = value;
+            if (self->raw_callback_) {
+                self->raw_callback_(self);
+            }
+        } catch (...) {
+        }
+    }
+
+    static void deleted_cb(lv_anim_t *anim) noexcept
+    {
+        if (!anim) return;
         LvglAnimation *self = from_anim(anim);
         if (!self) {
             return;
         }
 
-        self->current_progress_ = value;
-        if (self->raw_callback_) {
-            self->raw_callback_(self);
-        }
-    }
-
-    static void deleted_cb(lv_anim_t *anim)
-    {
-        LvglAnimation *self = from_anim(anim);
-        if (!self) {
-            return;
-        }
-
-        if (self->finished_callback_) {
-            self->finished_callback_(self);
+        try {
+            if (self->finished_callback_) {
+                self->finished_callback_(self);
+            }
+        } catch (...) {
         }
 
         delete self;

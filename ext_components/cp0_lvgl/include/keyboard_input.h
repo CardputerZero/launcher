@@ -1,11 +1,12 @@
-#ifndef __MAIN__H__
-#define __MAIN__H__
+#ifndef CP0_LVGL_KEYBOARD_INPUT_H
+#define CP0_LVGL_KEYBOARD_INPUT_H
 
-#include <sys/queue.h>
 #include <pthread.h>
+#include <stdint.h>
+#include <sys/queue.h>
 #ifdef __cplusplus
 extern "C" {
-#endif
+#endif /* CP0_LVGL_KEYBOARD_INPUT_H */
 
 // modifier bitmask
 #define KBD_MOD_SHIFT  (1u << 0)
@@ -32,6 +33,8 @@ struct key_item {
     STAILQ_ENTRY(key_item) entries;
 };
 
+typedef void (*cp0_keyboard_key_handler_t)(const struct key_item *item);
+
 STAILQ_HEAD(keyboard_queue_t, key_item);
 extern struct keyboard_queue_t keyboard_queue;
 extern pthread_mutex_t keyboard_mutex;
@@ -42,6 +45,7 @@ extern volatile uint32_t LV_EVENT_KEYBOARD;
 void *keyboard_read_thread(void *argv);
 int cp0_keyboard_inject(uint32_t key_code, int key_state, uint32_t mods);
 int cp0_keyboard_inject_text(const char *utf8);
+void cp0_keyboard_set_global_key_handler(cp0_keyboard_key_handler_t handler);
 const char *kbd_state_name(int state);
 void kbd_dump_keymap_table(void);
 #ifdef __cplusplus

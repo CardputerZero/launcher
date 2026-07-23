@@ -14,7 +14,6 @@
 
 void LauncherUiRuntime::create_display()
 {
-    fonts_ = std::make_shared<LauncherFonts>();
 
     dispp_ = lv_disp_get_default();
     theme_ = lv_theme_default_init(dispp_, lv_palette_main(LV_PALETTE_BLUE), lv_palette_main(LV_PALETTE_RED),

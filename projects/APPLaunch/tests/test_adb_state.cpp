@@ -1,5 +1,6 @@
-#include "../main/ui/page_app/setting/adb_state.hpp"
+#include "../main/ui/model/adb_state.hpp"
 #include <cassert>
+#include <limits>
 
 int main()
 {
@@ -12,19 +13,25 @@ int main()
     assert(off.valid && !off.active && !off.enabled);
     assert(!parse_adb_status("unrelated=active\n").valid);
     assert(!parse_adb_status(nullptr).valid);
-    assert(adb_toggle_succeeded(CP0_SUDO_RESULT_SUCCESS, 0));
-    assert(adb_toggle_succeeded(CP0_SUDO_RESULT_EXEC_FAILED, 10));
-    assert(!adb_toggle_succeeded(CP0_SUDO_RESULT_EXEC_FAILED, 1));
-    assert(!adb_toggle_succeeded(CP0_SUDO_RESULT_AUTH_FAILED, 10));
-    assert(adb_reboot_required(CP0_SUDO_RESULT_EXEC_FAILED, 10));
-    assert(!adb_reboot_required(CP0_SUDO_RESULT_SUCCESS, 0));
     assert(adb_state_after_failure(active, false));
-    assert(adb_state_after_failure(pending, false));
+    assert(!adb_state_after_failure(pending, true));
     assert(!adb_state_after_failure(off, true));
     assert(adb_state_after_failure(AdbStatus{}, true));
     assert(!adb_state_after_failure(AdbStatus{}, false));
     AdbStatus paired = parse_adb_status("adbd=inactive\nenabled=disabled\nauthorizations=2\n");
     assert(paired.valid && paired.authorizations == 2);
+    assert(parse_adb_status("adbd=active\nauthorizations=0\n").authorizations == 0);
+    assert(parse_adb_status(
+               ("adbd=active\nauthorizations=" +
+                std::to_string(std::numeric_limits<int>::max()) + "\n").c_str())
+               .authorizations == std::numeric_limits<int>::max());
+    assert(parse_adb_status("adbd=active\nauthorizations=-1\n").authorizations == 0);
+    assert(parse_adb_status("adbd=active\nauthorizations=+2\n").authorizations == 0);
+    assert(parse_adb_status("adbd=active\nauthorizations=2junk\n").authorizations == 0);
+    assert(parse_adb_status("adbd=active\nauthorizations=2147483648\n").authorizations == 0);
+    assert(parse_adb_status("adbd=active\nxauthorizations=9\n").authorizations == 0);
+    assert(parse_adb_status("adbd=active\nauthorizations=bad\nauthorizations=3\n")
+               .authorizations == 3);
     const std::string blob = "QAAAA" + std::string(694, 'A') + "=";
     assert(adb_public_key_valid(blob + " workstation@user"));
     assert(!adb_public_key_valid(blob));
