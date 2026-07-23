@@ -22,41 +22,6 @@ std::size_t preview_start(const std::string &text, std::size_t byte_limit)
 
 } // namespace
 
-AdbPersistenceResult adb_persistence_result(bool set_succeeded,
-                                            bool save_succeeded,
-                                            bool rollback_set_succeeded,
-                                            bool rollback_save_succeeded)
-{
-    if (!set_succeeded) return AdbPersistenceResult::SET_FAILED;
-    if (save_succeeded) return AdbPersistenceResult::SAVED;
-    if (rollback_set_succeeded && rollback_save_succeeded)
-        return AdbPersistenceResult::SAVE_FAILED_ROLLED_BACK;
-    return AdbPersistenceResult::SAVE_FAILED_ROLLBACK_FAILED;
-}
-
-const char *adb_persistence_error_detail(AdbPersistenceResult result)
-{
-    switch (result) {
-    case AdbPersistenceResult::NOT_REQUESTED:
-        return "ADB changed, but preference UI is unavailable";
-    case AdbPersistenceResult::SET_FAILED:
-        return "ADB changed, but preference write failed";
-    case AdbPersistenceResult::SAVE_FAILED_ROLLED_BACK:
-        return "ADB changed, but preference was not saved";
-    case AdbPersistenceResult::SAVE_FAILED_ROLLBACK_FAILED:
-        return "ADB changed; preference state is uncertain";
-    default:
-        return "";
-    }
-}
-
-bool adb_visible_state_after_persistence(AdbPersistenceResult result,
-                                         bool desired,
-                                         bool previous)
-{
-    return result == AdbPersistenceResult::SAVED ? desired : previous;
-}
-
 bool DeveloperOverlayLifecycleModel::open()
 {
     if (active_) return false;

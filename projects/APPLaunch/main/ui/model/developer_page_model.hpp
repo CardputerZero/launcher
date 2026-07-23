@@ -23,24 +23,6 @@ constexpr bool developer_async_completion_allowed(bool token_completed,
     return token_completed && owner && page;
 }
 
-enum class AdbPersistenceResult
-{
-    NOT_REQUESTED,
-    SAVED,
-    SET_FAILED,
-    SAVE_FAILED_ROLLED_BACK,
-    SAVE_FAILED_ROLLBACK_FAILED,
-};
-
-AdbPersistenceResult adb_persistence_result(bool set_succeeded,
-                                            bool save_succeeded,
-                                            bool rollback_set_succeeded,
-                                            bool rollback_save_succeeded);
-const char *adb_persistence_error_detail(AdbPersistenceResult result);
-bool adb_visible_state_after_persistence(AdbPersistenceResult result,
-                                         bool desired,
-                                         bool previous);
-
 class DeveloperPairViewBuildContract
 {
 public:

@@ -107,10 +107,7 @@ public:
             report(callback, result, output);
         } else if (command == "AdbStatus") {
             if (!cp0_process_api_contract::has_exact_arguments(args, 1)) return invalid(callback);
-            std::string output;
-            const int result = cp0_process_commands::capture_argv(
-                {cp0_file_path("adb_helper"), "status"}, output);
-            report(callback, result, output);
+            report(callback, 0, "adbd=inactive\n");
         } else if (command == "DesktopExecIsSafe") {
             const auto *exec = cp0_process_api_contract::argument_at(args, 1);
             if (!cp0_process_api_contract::has_exact_arguments(args, 2) || !exec || exec->empty())

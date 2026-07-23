@@ -67,8 +67,7 @@ private:
     void close_status();
     static void status_overlay_delete_cb(lv_event_t *event) noexcept;
     static void view_object_delete_cb(lv_event_t *event) noexcept;
-    AdbPersistenceResult update_toggle(UISetupPage &page, bool enabled, bool save,
-                                       bool rollback_value = false);
+    void update_toggle(UISetupPage &page, bool enabled);
     void show_result_error(cp0_sudo_result_t result, int exit_code);
     void submit_pairing(UISetupPage &page);
     void run_admin_action(UISetupPage &page,

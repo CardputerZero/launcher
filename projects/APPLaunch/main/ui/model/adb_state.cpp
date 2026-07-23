@@ -95,19 +95,8 @@ std::vector<AdbAuthorization> parse_adb_authorizations(const char *output)
     return result;
 }
 
-bool adb_toggle_succeeded(cp0_sudo_result_t result, int exit_code)
-{
-    return result == CP0_SUDO_RESULT_SUCCESS ||
-           (result == CP0_SUDO_RESULT_EXEC_FAILED && exit_code == 10);
-}
-
-bool adb_reboot_required(cp0_sudo_result_t result, int exit_code)
-{
-    return result == CP0_SUDO_RESULT_EXEC_FAILED && exit_code == 10;
-}
-
 bool adb_state_after_failure(const AdbStatus &status, bool previous)
 {
-    return status.valid ? status.active || status.enabled : previous;
+    return status.valid ? status.active : previous;
 }
 } // namespace setting

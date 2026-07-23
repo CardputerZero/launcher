@@ -5,7 +5,6 @@
 
 using setting::DeveloperPageModel;
 using setting::DeveloperOverlayLifecycleModel;
-using setting::AdbPersistenceResult;
 using setting::DeveloperPairViewBuildContract;
 
 int main()
@@ -29,29 +28,6 @@ int main()
         true, static_cast<int *>(nullptr), &tracked));
     assert(!setting::developer_async_completion_allowed(
         true, &tracked, static_cast<int *>(nullptr)));
-
-    assert(setting::adb_persistence_result(true, true, false, false) ==
-           AdbPersistenceResult::SAVED);
-    assert(setting::adb_persistence_result(false, false, false, false) ==
-           AdbPersistenceResult::SET_FAILED);
-    assert(setting::adb_persistence_result(true, false, true, true) ==
-           AdbPersistenceResult::SAVE_FAILED_ROLLED_BACK);
-    assert(setting::adb_persistence_result(true, false, true, false) ==
-           AdbPersistenceResult::SAVE_FAILED_ROLLBACK_FAILED);
-    assert(setting::adb_persistence_result(true, false, false, false) ==
-           AdbPersistenceResult::SAVE_FAILED_ROLLBACK_FAILED);
-    assert(std::string(setting::adb_persistence_error_detail(
-               AdbPersistenceResult::SAVE_FAILED_ROLLED_BACK)).find("not saved") !=
-           std::string::npos);
-    assert(std::string(setting::adb_persistence_error_detail(
-               AdbPersistenceResult::SAVE_FAILED_ROLLBACK_FAILED)).find("uncertain") !=
-           std::string::npos);
-    assert(setting::adb_visible_state_after_persistence(
-        AdbPersistenceResult::SAVED, true, false));
-    assert(!setting::adb_visible_state_after_persistence(
-        AdbPersistenceResult::SET_FAILED, true, false));
-    assert(setting::adb_visible_state_after_persistence(
-        AdbPersistenceResult::SAVE_FAILED_ROLLED_BACK, false, true));
 
     DeveloperPairViewBuildContract pair_build;
     assert(!pair_build.ready());

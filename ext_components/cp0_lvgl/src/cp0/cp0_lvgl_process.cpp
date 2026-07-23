@@ -106,9 +106,9 @@ public:
         } else if (cmd == "AdbStatus") {
             if (!cp0_process_api_contract::has_exact_arguments(arg, 1)) return invalid(callback);
             std::string output;
-            report(callback, cp0_process_commands::capture_argv(
-                                 {cp0_file_path("adb_helper"), "status"}, output),
-                   output);
+            const int result = cp0_process_commands::capture_argv(
+                {"systemctl", "is-active", "adbd.service"}, output);
+            report(callback, 0, result == 0 ? "adbd=active\n" : "adbd=inactive\n");
         } else if (cmd == "DesktopExecIsSafe") {
             const auto *exec = cp0_process_api_contract::argument_at(arg, 1);
             if (!cp0_process_api_contract::has_exact_arguments(arg, 2) || !exec || exec->empty())
