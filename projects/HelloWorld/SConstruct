@@ -28,6 +28,20 @@ if os.environ.get("CONFIG_DEFAULT_FILE") == None:
     if platform.machine() == 'x86_64':
         os.environ["CONFIG_DEFAULT_FILE"] = "linux_x86_sdl2_config_defaults.mk"
 
+# The SDK only generates Kconfig output when global_config.mk is absent. Invalidate
+# generated configuration when callers switch between SDL and cross defaults.
+selected_config_path = Path(os.environ["CONFIG_DEFAULT_FILE"]).resolve()
+selected_config = str(selected_config_path) + "\n" + selected_config_path.read_text()
+config_selection_path = Path("build") / "config" / "selected-defaults.txt"
+previous_config = config_selection_path.read_text() if config_selection_path.exists() else ""
+if previous_config != selected_config:
+    for generated_name in ("global_config.mk", "global_config.h", "lvgl_config.h"):
+        generated_path = Path("build") / "config" / generated_name
+        if generated_path.exists():
+            generated_path.unlink()
+    config_selection_path.parent.mkdir(parents=True, exist_ok=True)
+    config_selection_path.write_text(selected_config)
+
 if "cross" in os.environ.get("CONFIG_DEFAULT_FILE", ''):
     cross_package_enabled = True
     config_tmp_path = Path("build") / "config" / "config_tmp.mk"
@@ -38,6 +52,10 @@ if "cross" in os.environ.get("CONFIG_DEFAULT_FILE", ''):
     if not config_tmp_path.exists() or config_tmp_path.read_text() != config_tmp_content:
         config_tmp_path.parent.mkdir(parents=True, exist_ok=True)
         config_tmp_path.write_text(config_tmp_content)
+else:
+    config_tmp_path = Path("build") / "config" / "config_tmp.mk"
+    if config_tmp_path.exists():
+        config_tmp_path.unlink()
 
 os.environ["SDK_PATH"] = str(sdk_path)
 os.environ["EXT_COMPONENTS_PATH"] = str(sdk_path.parent / "ext_components")

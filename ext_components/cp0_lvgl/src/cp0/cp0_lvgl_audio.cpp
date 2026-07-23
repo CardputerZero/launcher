@@ -1,14 +1,13 @@
 #include "hal_lvgl_bsp.h"
+#include "../cp0_audio_api_contract.hpp"
+#include "cp0_audio_capture.hpp"
+#include "cp0_audio_mixer_control.hpp"
+#include "cp0_audio_system_sound_player.hpp"
+#include "../cp0_signal_registration.hpp"
+#include "../cp0_audio_runtime_lifecycle.hpp"
 
 #include <algorithm>
-#include <array>
 #include <atomic>
-#include <cerrno>
-#include <cmath>
-#include <cstdio>
-#include <cstdint>
-#include <cstdlib>
-#include <cstring>
 #include <functional>
 #include <iterator>
 #include <list>
@@ -16,6 +15,7 @@
 #include <mutex>
 #include <string>
 #include <utility>
+#include <vector>
 
 #define MINIAUDIO_IMPLEMENTATION
 #include "miniaudio.h"
@@ -24,51 +24,33 @@
 class AudioSystem
 {
 public:
-    static constexpr const char* kCapTmpFile = "/tmp/rec.tmp.wav";
     typedef std::function<void(int, std::string)> callback_t;
     typedef std::list<std::string> arg_t;
 
-    AudioSystem()
-    {
-        init_system_sounds();
-    }
-
+    AudioSystem() = default;
     ~AudioSystem()
     {
-        uninit_system_play();
+        shutdown();
+    }
+
+    void shutdown() noexcept
+    {
+        try { set_status_callback(nullptr); } catch (...) {}
+        try { capture_.set_status_callback(nullptr); } catch (...) {}
+        try { capture_.stop(); } catch (...) {}
+        try { stop_play_device(false); } catch (...) {}
     }
 
 public:
     std::function<void(int, std::string)> _cap_status_callback;
-    std::unique_ptr<ma_device> ma_cp0_cap_device;
-    std::unique_ptr<ma_encoder> ma_cp0_cap_encoder;
-
+    std::mutex callback_mutex_;
     std::unique_ptr<ma_device>  ma_cp0_play_device;
     std::unique_ptr<ma_decoder> ma_cp0_play_decoder;
     std::atomic<bool> play_finished_reported_{false};
 
-    ma_context system_play_context_{};
-    ma_engine system_play_engine_{};
-    std::array<ma_sound, 3> system_sounds_{};
-    std::array<bool, 3> system_sound_loaded_slots_{};
-    bool system_play_inited_ = false;
-    bool system_sounds_loaded_ = false;
-    std::mutex system_play_mutex_;
-    std::array<std::string, 3> system_sound_names_ = {"Ding2.wav", "key_back.wav", "key_back.wav"};
-    bool system_sound_enabled_ = true;
-
-    static constexpr int kRecWaveformSize = 128;
-    std::array<float, kRecWaveformSize> rec_waveform_{};
-    size_t rec_waveform_index_ = 0;
-    std::mutex rec_waveform_mutex_;
-    std::atomic<bool> rec_waveform_enabled_{false};
-
-    static void cap_data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount)
-    {
-        AudioSystem* self = (AudioSystem*)pDevice->pUserData;
-        if (self) self->on_cap_data(pInput, frameCount);
-        (void)pOutput;
-    }
+    Cp0SystemSoundPlayer system_sounds_;
+    Cp0AudioMixerControl mixer_;
+    Cp0AudioCapture capture_;
 
     static void play_data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount)
     {
@@ -85,8 +67,10 @@ public:
             ma_silence_pcm_frames(silence, frameCount - framesRead, pDevice->playback.format, pDevice->playback.channels);
         }
         bool finished = (result == MA_AT_END || framesRead < frameCount);
-        if(finished && !self->play_finished_reported_.exchange(true) && self->_cap_status_callback)
-            self->_cap_status_callback(0, "play over\n");
+        if(finished && !self->play_finished_reported_.exchange(true)) {
+            auto callback = self->status_callback();
+            cp0::audio::invoke_callback(callback, 0, "play over\n");
+        }
         (void)pInput;
     }
 
@@ -102,7 +86,7 @@ public:
         ma_cp0_play_decoder = std::make_unique<ma_decoder>();
         result = ma_decoder_init_file(wav.c_str(), NULL, ma_cp0_play_decoder.get());
         if (result != MA_SUCCESS) {
-            if(_cap_status_callback)_cap_status_callback(-2, "Could not load file\n");
+            report_status(-2, "Could not load file\n");
             ma_cp0_play_decoder.reset();
             ma_cp0_play_device.reset();
             return -2;
@@ -117,7 +101,7 @@ public:
 
         if (ma_device_init(NULL, &deviceConfig, ma_cp0_play_device.get()) != MA_SUCCESS) {
             ma_decoder_uninit(ma_cp0_play_decoder.get());
-            if(_cap_status_callback)_cap_status_callback(-3, "Failed to open playback device.\n");
+            report_status(-3, "Failed to open playback device.\n");
             ma_cp0_play_decoder.reset();
             ma_cp0_play_device.reset();
             return -3;
@@ -126,7 +110,7 @@ public:
         if (ma_device_start(ma_cp0_play_device.get()) != MA_SUCCESS) {
             ma_device_uninit(ma_cp0_play_device.get());
             ma_decoder_uninit(ma_cp0_play_decoder.get());
-            if(_cap_status_callback)_cap_status_callback(-4, "Failed to start playback device.\n");
+            report_status(-4, "Failed to start playback device.\n");
             ma_cp0_play_decoder.reset();
             ma_cp0_play_device.reset();
             return -4;
@@ -144,10 +128,31 @@ public:
 
 
 private:
+    callback_t status_callback()
+    {
+        std::lock_guard<std::mutex> lock(callback_mutex_);
+        return _cap_status_callback;
+    }
+
+    void set_status_callback(callback_t callback)
+    {
+        std::lock_guard<std::mutex> lock(callback_mutex_);
+        _cap_status_callback = std::move(callback);
+    }
+
+    void report_status(int code, const std::string &data)
+    {
+        auto callback = status_callback();
+        cp0::audio::invoke_callback(callback, code, data);
+    }
+
     void report(callback_t callback, int code, const std::string& data)
     {
-        if(callback) callback(code, data);
-        else if(_cap_status_callback) _cap_status_callback(code, data);
+        if (!callback) {
+            report_status(code, data);
+            return;
+        }
+        cp0::audio::invoke_callback(callback, code, data);
     }
 
     static std::string first_arg_after_command(const arg_t& arg)
@@ -170,112 +175,6 @@ private:
         return path.empty() ? file : path;
     }
 
-    int init_system_play_locked()
-    {
-        if(system_play_inited_) return 0;
-
-        ma_backend backends[] = {
-            ma_backend_pulseaudio
-        };
-
-        ma_result result = ma_context_init(
-            backends,
-            sizeof(backends) / sizeof(backends[0]),
-            NULL,
-            &system_play_context_
-        );
-        if(result != MA_SUCCESS) return -1;
-
-        ma_engine_config engineConfig = ma_engine_config_init();
-        engineConfig.pContext = &system_play_context_;
-        engineConfig.pPlaybackDeviceID = NULL;
-        engineConfig.channels = 2;
-        engineConfig.sampleRate = 48000;
-
-        result = ma_engine_init(&engineConfig, &system_play_engine_);
-        if(result != MA_SUCCESS)
-        {
-            ma_context_uninit(&system_play_context_);
-            return -2;
-        }
-
-        system_play_inited_ = true;
-        return 0;
-    }
-
-    int load_system_sounds_locked()
-    {
-        if(system_sounds_loaded_) return 0;
-
-        int ret = init_system_play_locked();
-        if(ret != 0) return ret;
-
-        for(size_t i = 0; i < system_sound_names_.size(); ++i)
-        {
-            std::string path = resolve_play_file(system_sound_names_[i], true);
-            if(path.empty()) continue;
-
-            ma_result result = ma_sound_init_from_file(
-                &system_play_engine_,
-                path.c_str(),
-                MA_SOUND_FLAG_DECODE,
-                NULL,
-                NULL,
-                &system_sounds_[i]
-            );
-            if(result != MA_SUCCESS)
-            {
-                printf("load system sound failed: %s\n", path.c_str());
-                continue;
-            }
-            system_sound_loaded_slots_[i] = true;
-        }
-
-        system_sounds_loaded_ = std::any_of(
-            system_sound_loaded_slots_.begin(),
-            system_sound_loaded_slots_.end(),
-            [](bool loaded) { return loaded; }
-        );
-        if(!system_sounds_loaded_) return -3;
-        return 0;
-    }
-
-    void unload_system_sounds_locked()
-    {
-        for(size_t i = 0; i < system_sounds_.size(); ++i)
-        {
-            if(system_sound_loaded_slots_[i])
-            {
-                ma_sound_uninit(&system_sounds_[i]);
-                system_sound_loaded_slots_[i] = false;
-            }
-        }
-        system_sounds_loaded_ = false;
-    }
-
-    int reload_system_sounds_locked()
-    {
-        unload_system_sounds_locked();
-        return load_system_sounds_locked();
-    }
-
-    void uninit_system_play()
-    {
-        std::lock_guard<std::mutex> lock(system_play_mutex_);
-
-        if(system_sounds_loaded_)
-        {
-            unload_system_sounds_locked();
-        }
-
-        if(system_play_inited_)
-        {
-            ma_engine_uninit(&system_play_engine_);
-            ma_context_uninit(&system_play_context_);
-            system_play_inited_ = false;
-        }
-    }
-
     void stop_play_device(bool report_state)
     {
         play_finished_reported_.store(false);
@@ -289,331 +188,74 @@ private:
             ma_decoder_uninit(ma_cp0_play_decoder.get());
             ma_cp0_play_decoder.reset();
         }
-        if(report_state && _cap_status_callback) _cap_status_callback(0, "play stop\n");
+        if(report_state) report_status(0, "play stop\n");
     }
 
-    static int copy_file(const std::string& src_path, const std::string& dst_path)
-    {
-        FILE* src = std::fopen(src_path.c_str(), "rb");
-        if(!src) return -1;
-
-        FILE* dst = std::fopen(dst_path.c_str(), "wb");
-        if(!dst)
-        {
-            std::fclose(src);
-            return -2;
-        }
-
-        char buf[4096];
-        size_t n = 0;
-        int ret = 0;
-        while((n = std::fread(buf, 1, sizeof(buf), src)) > 0)
-        {
-            if(std::fwrite(buf, 1, n, dst) != n)
-            {
-                ret = -3;
-                break;
-            }
-        }
-        if(std::ferror(src)) ret = -4;
-
-        std::fclose(dst);
-        std::fclose(src);
-        return ret;
-    }
-
-    int save_cap_file(const std::string& dst_path)
-    {
-        if(dst_path.empty()) return -1;
-        if(std::rename(kCapTmpFile, dst_path.c_str()) == 0) return 0;
-
-        int saved_errno = errno;
-        int ret = copy_file(kCapTmpFile, dst_path);
-        if(ret == 0)
-        {
-            std::remove(kCapTmpFile);
-            return 0;
-        }
-        errno = saved_errno;
-        return ret;
-    }
-
-    void on_cap_data(const void* input, ma_uint32 frameCount)
-    {
-        if(ma_cp0_cap_encoder)
-        {
-            ma_encoder_write_pcm_frames(ma_cp0_cap_encoder.get(), input, frameCount, NULL);
-        }
-
-        if(!rec_waveform_enabled_.load() || !_cap_status_callback || input == NULL || frameCount == 0)
-        {
-            return;
-        }
-
-        std::string waveform = build_rec_waveform(input, frameCount);
-        if(!waveform.empty())
-        {
-            _cap_status_callback(1, waveform);
-        }
-    }
-
-    std::string build_rec_waveform(const void* input, ma_uint32 frameCount)
-    {
-        const int16_t* samples = static_cast<const int16_t*>(input);
-        ma_uint32 channels = 1;
-        if(ma_cp0_cap_encoder && ma_cp0_cap_encoder.get()->config.channels > 0)
-        {
-            channels = ma_cp0_cap_encoder.get()->config.channels;
-        }
-
-        ma_uint32 sampleCount = frameCount * channels;
-        int16_t peak = 0;
-        double sumSq = 0.0;
-        for(ma_uint32 i = 0; i < sampleCount; i++)
-        {
-            if(std::abs(samples[i]) > std::abs(peak))
-            {
-                peak = samples[i];
-            }
-            double s = static_cast<double>(samples[i]) / 32768.0;
-            sumSq += s * s;
-        }
-
-        float rms = (sampleCount > 0) ? static_cast<float>(std::sqrt(sumSq / sampleCount)) : 0.0f;
-        float db = 20.0f * std::log10(rms + 1e-6f);
-        if(db < -36.0f) db = -36.0f;
-        float dbNorm = (db + 36.0f) / 36.0f;
-        if(peak < 0) dbNorm = -dbNorm;
-
-        std::array<float, kRecWaveformSize> waveform{};
-        {
-            std::lock_guard<std::mutex> lock(rec_waveform_mutex_);
-            rec_waveform_[rec_waveform_index_] = std::max(-1.0f, std::min(1.0f, dbNorm));
-            rec_waveform_index_ = (rec_waveform_index_ + 1) % kRecWaveformSize;
-
-            for(int i = 0; i < kRecWaveformSize; i++)
-            {
-                size_t idx = (rec_waveform_index_ + kRecWaveformSize - kRecWaveformSize + i) % kRecWaveformSize;
-                waveform[i] = rec_waveform_[idx];
-            }
-        }
-
-        std::string out(sizeof(float) * kRecWaveformSize, '\0');
-        std::memcpy(&out[0], waveform.data(), out.size());
-        return out;
-    }
-
-    static bool arg_is_enable(const std::string& arg)
-    {
-        return arg == "1" || arg == "on" || arg == "true" || arg == "enable" || arg == "enabled";
-    }
-
-    static bool arg_is_disable(const std::string& arg)
-    {
-        return arg == "0" || arg == "off" || arg == "false" || arg == "disable" || arg == "disabled";
-    }
-
-    int start_cap_device()
-    {
-        ma_result result;
-        ma_encoder_config encoderConfig;
-        ma_device_config deviceConfig;
-        if(!ma_cp0_cap_encoder)
-        {
-            ma_cp0_cap_encoder = std::make_unique<ma_encoder>();
-            ma_cp0_cap_device = std::make_unique<ma_device>();
-
-            encoderConfig = ma_encoder_config_init(ma_encoding_format_wav, ma_format_s16, 2, 48000);
-            if (ma_encoder_init_file(kCapTmpFile, &encoderConfig, ma_cp0_cap_encoder.get()) != MA_SUCCESS) {
-                if(_cap_status_callback)_cap_status_callback(-1, "Failed to initialize output file.\n");
-                ma_cp0_cap_encoder.reset();
-                ma_cp0_cap_device.reset();
-                return -1;
-            }
-            deviceConfig = ma_device_config_init(ma_device_type_capture);
-            deviceConfig.capture.format   = ma_cp0_cap_encoder.get()->config.format;
-            deviceConfig.capture.channels = ma_cp0_cap_encoder.get()->config.channels;
-            deviceConfig.sampleRate       = ma_cp0_cap_encoder.get()->config.sampleRate;
-            deviceConfig.dataCallback     = cap_data_callback;
-            deviceConfig.pUserData        = this;
-            result = ma_device_init(NULL, &deviceConfig, ma_cp0_cap_device.get());
-            if (result != MA_SUCCESS) {
-                if(_cap_status_callback)_cap_status_callback(-3, "Failed to initialize capture device.\n");
-                ma_encoder_uninit(ma_cp0_cap_encoder.get());
-                ma_cp0_cap_encoder.reset();
-                ma_cp0_cap_device.reset();
-                return -2;
-            }
-            result = ma_device_start(ma_cp0_cap_device.get());
-            if (result != MA_SUCCESS) {
-                ma_device_uninit(ma_cp0_cap_device.get());
-                ma_encoder_uninit(ma_cp0_cap_encoder.get());
-                ma_cp0_cap_encoder.reset();
-                ma_cp0_cap_device.reset();
-                if(_cap_status_callback)_cap_status_callback(-3, "Failed to start device.\n");
-                return -3;
-            }
-        }
-        else
-        {
-            if(_cap_status_callback)_cap_status_callback(-4, "working");
-        }
-        return 0;
-    }
-    void stop_cap_device()
-    {
-        if(ma_cp0_cap_device)
-        {
-            ma_device_uninit(ma_cp0_cap_device.get());
-            if(ma_cp0_cap_encoder) ma_encoder_uninit(ma_cp0_cap_encoder.get());
-            ma_cp0_cap_device.reset();
-            ma_cp0_cap_encoder.reset();
-        }
-        else
-        {
-            if(_cap_status_callback)_cap_status_callback(-5, "stop");
-        }
-    }
 public:
-    int init_system_sounds()
-    {
-        std::lock_guard<std::mutex> lock(system_play_mutex_);
-        return load_system_sounds_locked();
-    }
-
     void system_play(std::string name)
     {
-        if(!system_sound_enabled_) return;
-
-        {
-            std::lock_guard<std::mutex> lock(system_play_mutex_);
-            if(!system_sounds_loaded_ && load_system_sounds_locked() != 0) return;
-
-            for(size_t i = 0; i < system_sound_names_.size(); ++i)
-            {
-                if(system_sound_names_[i] != name) continue;
-                if(!system_sound_loaded_slots_[i]) return;
-
-                ma_sound* sound = &system_sounds_[i];
-                if(ma_sound_is_playing(sound)) return;
-                ma_sound_seek_to_pcm_frame(sound, 0);
-                ma_sound_start(sound);
-                return;
-            }
+        if(system_sounds_.contains(name)) {
+            system_sounds_.play_named(name);
+            return;
         }
-
         std::string file = resolve_play_file(name, true);
-        if(!file.empty()) play(file);
-    }
-
-    bool system_play_index(size_t index)
-    {
-        if(!system_sound_enabled_) return false;
-
-        std::lock_guard<std::mutex> lock(system_play_mutex_);
-        if(!system_sounds_loaded_ && load_system_sounds_locked() != 0)
-        {
-            return false;
-        }
-        if(index >= system_sounds_.size() || !system_sound_loaded_slots_[index])
-        {
-            return false;
-        }
-
-        ma_sound* sound = &system_sounds_[index];
-        if(ma_sound_is_playing(sound)) return true;
-        if(ma_sound_seek_to_pcm_frame(sound, 0) != MA_SUCCESS) return false;
-        return ma_sound_start(sound) == MA_SUCCESS;
+        if(!file.empty() && system_sounds_.enabled()) play(file);
     }
 
     void SetSystemSoundNames(arg_t arg, callback_t callback)
     {
-        {
-            std::lock_guard<std::mutex> lock(system_play_mutex_);
-            auto it = arg.begin();
-            if(it != arg.end()) ++it;
-            for(size_t i = 0; i < system_sound_names_.size() && it != arg.end(); ++i, ++it)
-            {
-                if(!it->empty()) system_sound_names_[i] = *it;
-            }
-
-            int ret = reload_system_sounds_locked();
-            if(ret != 0)
-            {
-                report(callback, ret, "system sound reload failed\n");
-                return;
-            }
-        }
-        report(callback, 0, "ok");
+        std::vector<std::string> names;
+        auto it = arg.begin();
+        if(it != arg.end()) ++it;
+        for(; it != arg.end(); ++it) names.push_back(*it);
+        int ret = system_sounds_.reload(names);
+        report(callback, ret, ret == 0 ? "ok" : "system sound reload failed\n");
     }
 
-    void SystemSoundPlay(arg_t arg, callback_t callback)
+    void SystemSoundPlay(int index, callback_t callback)
     {
-        int index = std::atoi(first_arg_after_command(arg).c_str());
-        if(index < 0 || index >= static_cast<int>(system_sound_names_.size()))
+        if(index < 0 || index >= static_cast<int>(system_sounds_.sound_count()))
         {
             report(callback, -1, "invalid system sound index\n");
             return;
         }
-        if(!system_sound_enabled_)
+        if(!system_sounds_.enabled())
         {
             report(callback, 0, "system sound disabled\n");
             return;
         }
-        bool played = system_play_index(static_cast<size_t>(index));
+        bool played = system_sounds_.play_index(static_cast<size_t>(index));
         report(callback, played ? 0 : -2, played ? "system sound play\n" : "system sound play failed\n");
     }
 
-    void SystemSoundEnable(arg_t arg, callback_t callback)
+    void SystemSoundEnable(bool enabled, callback_t callback)
     {
-        std::string value = first_arg_after_command(arg);
-        if(arg_is_disable(value))
-            system_sound_enabled_ = false;
-        else if(value.empty() || arg_is_enable(value))
-            system_sound_enabled_ = true;
-        else
-            system_sound_enabled_ = std::atoi(value.c_str()) != 0;
-        report(callback, 0, system_sound_enabled_ ? "1" : "0");
+        system_sounds_.set_enabled(enabled);
+        report(callback, 0, system_sounds_.enabled() ? "1" : "0");
     }
 
     void cap(bool enable)
     {
         if(enable)
         {
-            start_cap_device();
+            capture_.start();
         }else{
-            stop_cap_device();
+            capture_.stop();
         }
     }
     void setup(std::list<std::string> arg, std::function<void(int, std::string)> callback)
     {
-        if(arg.empty()) return;
-        auto arg1 = arg.begin();
-        if(*arg1 == "set_callback")
-        {
-            _cap_status_callback = callback;
+        cp0::audio::SetupRequest request;
+        if (!cp0::audio::parse_setup_request(arg, request)) {
+            report(callback, -1, cp0::audio::invalid_setup_request_message());
+            return;
         }
-        else if(*arg1 == "set_waveform" || *arg1 == "waveform")
-        {
-            auto arg2 = std::next(arg1);
-            if(arg2 != arg.end())
-            {
-                if(arg_is_enable(*arg2))
-                {
-                    rec_waveform_enabled_.store(true);
-                }
-                else if(arg_is_disable(*arg2))
-                {
-                    rec_waveform_enabled_.store(false);
-                }
-            }
-            else
-            {
-                rec_waveform_enabled_.store(true);
-            }
-        }
-        else if(*arg1 == "stop_play")
-        {
+        if(request.command == cp0::audio::SetupCommand::SetCallback) {
+            set_status_callback(callback);
+            capture_.set_status_callback(callback);
+        } else if(request.command == cp0::audio::SetupCommand::SetWaveform) {
+            capture_.set_waveform_enabled(request.waveform_enabled);
+        } else {
             stop_play_device(false);
         }
     }
@@ -677,38 +319,38 @@ public:
     void Cap(arg_t arg, callback_t callback)
     {
         (void)arg;
-        int ret = start_cap_device();
+        int ret = capture_.start();
         report(callback, ret, ret == 0 ? "cap start\n" : "cap failed\n");
     }
 
     void CapPause(arg_t arg, callback_t callback)
     {
         (void)arg;
-        if(!ma_cp0_cap_device)
+        if(!capture_.active())
         {
             report(callback, -1, "cap not started\n");
             return;
         }
-        ma_result ret = ma_device_stop(ma_cp0_cap_device.get());
-        report(callback, ret == MA_SUCCESS ? 0 : -2, ret == MA_SUCCESS ? "cap pause\n" : "cap pause failed\n");
+        int ret = capture_.pause();
+        report(callback, ret, ret == 0 ? "cap pause\n" : "cap pause failed\n");
     }
 
     void CapContinue(arg_t arg, callback_t callback)
     {
         (void)arg;
-        if(!ma_cp0_cap_device)
+        if(!capture_.active())
         {
             report(callback, -1, "cap not started\n");
             return;
         }
-        ma_result ret = ma_device_start(ma_cp0_cap_device.get());
-        report(callback, ret == MA_SUCCESS ? 0 : -2, ret == MA_SUCCESS ? "cap continue\n" : "cap continue failed\n");
+        int ret = capture_.resume();
+        report(callback, ret, ret == 0 ? "cap continue\n" : "cap continue failed\n");
     }
 
     void CapEnd(arg_t arg, callback_t callback)
     {
         (void)arg;
-        stop_cap_device();
+        capture_.stop();
         report(callback, 0, "cap stop\n");
     }
 
@@ -720,53 +362,49 @@ public:
             report(callback, -1, "CapFileSave need file\n");
             return;
         }
-        if(ma_cp0_cap_device)
-        {
-            stop_cap_device();
-        }
-        int ret = save_cap_file(file);
+        int ret = capture_.save(file);
         report(callback, ret, ret == 0 ? "cap file saved\n" : "cap file save failed\n");
     }
 
     void SetCallback(arg_t arg, callback_t callback)
     {
         (void)arg;
-        _cap_status_callback = callback;
+        set_status_callback(callback);
+        capture_.set_status_callback(callback);
     }
 
     void VolumeRead(arg_t arg, callback_t callback)
     {
         (void)arg;
-        int val = read_system_volume();
+        int val = mixer_.read_volume();
         report(callback, val >= 0 ? 0 : -1, std::to_string(val));
     }
 
-    void VolumeWrite(arg_t arg, callback_t callback)
+    void VolumeWrite(int val, callback_t callback)
     {
-        int val = parse_volume_arg(arg);
-        int ret = write_system_volume(val);
+        int ret = mixer_.write_volume(val);
         report(callback, ret >= 0 ? 0 : -1, std::to_string(ret));
     }
 
     void MuteRead(arg_t arg, callback_t callback)
     {
         (void)arg;
-        int val = read_system_mute();
+        int val = mixer_.read_mute();
         report(callback, val >= 0 ? 0 : -1, std::to_string(val));
     }
 
     void MuteToggle(arg_t arg, callback_t callback)
     {
         (void)arg;
-        int val = toggle_system_mute();
+        int val = mixer_.toggle_mute();
         report(callback, val >= 0 ? 0 : -1, std::to_string(val));
     }
 
     void api_call(arg_t arg, callback_t callback)
     {
-        if(arg.empty())
-        {
-            report(callback, -1, "empty audio api\n");
+        cp0::audio::ApiRequest request;
+        if(!cp0::audio::parse_api_request(arg, request)) {
+            report(callback, -1, cp0::audio::invalid_api_request_message());
             return;
         }
 #define map_fun(name) {#name, std::bind(&AudioSystem::name, this, std::placeholders::_1, std::placeholders::_2)}
@@ -784,15 +422,25 @@ public:
             map_fun(CapFileSave),
             map_fun(SetCallback),
             map_fun(VolumeRead),
-            map_fun(VolumeWrite),
             map_fun(MuteRead),
             map_fun(MuteToggle),
             map_fun(SetSystemSoundNames),
-            map_fun(SystemSoundPlay),
-            map_fun(SystemSoundEnable)
         };
 
 #undef map_fun
+
+        if(request.command == cp0::audio::ApiCommand::VolumeWrite) {
+            VolumeWrite(request.value, callback);
+            return;
+        }
+        if(request.command == cp0::audio::ApiCommand::SystemSoundPlay) {
+            SystemSoundPlay(request.value, callback);
+            return;
+        }
+        if(request.command == cp0::audio::ApiCommand::SystemSoundEnable) {
+            SystemSoundEnable(request.enabled, callback);
+            return;
+        }
 
         for (const auto& it : cmd_map)
         {
@@ -805,86 +453,79 @@ public:
         report(callback, -1, "unknown audio api\n");
     }
 
-    static int read_system_volume()
-    {
-        FILE *p = popen("pactl get-sink-volume @DEFAULT_SINK@ 2>/dev/null", "r");
-        if (!p) return -1;
-        char buf[256];
-        int val = -1;
-        while (fgets(buf, sizeof(buf), p)) {
-            char *pct = strchr(buf, '%');
-            if (pct) {
-                char *start = pct;
-                while (start > buf && start[-1] >= '0' && start[-1] <= '9') {
-                    --start;
-                }
-                val = clamp_percent(atoi(start));
-                break;
-            }
-        }
-        pclose(p);
-        return val;
-    }
-
-    static int write_system_volume(int val)
-    {
-        val = clamp_percent(val);
-
-        char cmd[128];
-        snprintf(cmd, sizeof(cmd), "pactl set-sink-volume @DEFAULT_SINK@ %d%%", val);
-        return system(cmd) == 0 ? val : -1;
-    }
-
-    static int read_system_mute()
-    {
-        FILE *p = popen("pactl get-sink-mute @DEFAULT_SINK@ 2>/dev/null", "r");
-        if (!p) return -1;
-        char buf[128] = {};
-        int muted = -1;
-        while (fgets(buf, sizeof(buf), p)) {
-            if (strstr(buf, "yes")) { muted = 1; break; }
-            if (strstr(buf, "no")) { muted = 0; break; }
-        }
-        pclose(p);
-        return muted;
-    }
-
-    static int toggle_system_mute()
-    {
-        if (system("pactl set-sink-mute @DEFAULT_SINK@ toggle >/dev/null 2>&1") != 0)
-            return -1;
-        return read_system_mute();
-    }
-
-    static int parse_volume_arg(const arg_t& arg)
-    {
-        std::string value = first_arg_after_command(arg);
-        if (value.empty()) return 0;
-        return clamp_percent(std::atoi(value.c_str()));
-    }
-
-    static int clamp_percent(int pct)
-    {
-        return std::max(0, std::min(100, pct));
-    }
 };
+
+namespace {
+
+using AudioRegistrations = cp0::SignalRegistrationBundle<
+    decltype(cp0_signal_audio_play), decltype(cp0_signal_audio_cap),
+    decltype(cp0_signal_audio_setup), decltype(cp0_signal_audio_api),
+    decltype(cp0_signal_system_play)>;
+
+std::mutex g_audio_mutex;
+std::shared_ptr<AudioSystem> g_audio;
+AudioRegistrations g_audio_registrations;
+cp0::audio::RuntimeLifecycle g_audio_lifecycle;
+
+} // namespace
 
 extern "C" void init_audio(void)
 {
-    std::shared_ptr<AudioSystem> audio = std::make_shared<AudioSystem>();
-    cp0_signal_audio_play.append([audio](std::string wav)
-                                 { audio->play(wav); });
+    std::lock_guard<std::mutex> lock(g_audio_mutex);
+    if (!g_audio_lifecycle.begin_init()) return;
+    try {
+    auto active_audio = std::make_shared<AudioSystem>();
+    if (!g_audio_registrations.replace(
+        cp0::bind_signal(cp0_signal_audio_play,
+                         [active_audio](std::string wav) { active_audio->play(std::move(wav)); }),
+        cp0::bind_signal(cp0_signal_audio_cap,
+                         [active_audio](bool enable) { active_audio->cap(enable); }),
+        cp0::bind_signal(cp0_signal_audio_setup,
+                         [active_audio](std::list<std::string> arg,
+                                 std::function<void(int, std::string)> callback) {
+                             try {
+                                 active_audio->setup(std::move(arg), callback);
+                             } catch (...) {
+                                 cp0::audio::invoke_callback(
+                                     callback, -1, "audio backend failure\n");
+                             }
+                         }),
+        cp0::bind_signal(cp0_signal_audio_api,
+                         [active_audio](std::list<std::string> arg,
+                                 std::function<void(int, std::string)> callback) {
+                             try {
+                                 active_audio->api_call(std::move(arg), callback);
+                             } catch (...) {
+                                 cp0::audio::invoke_callback(
+                                     callback, -1, "audio backend failure\n");
+                             }
+                         }),
+        cp0::bind_signal(cp0_signal_system_play,
+                         [active_audio](std::string name) {
+                             active_audio->system_play(std::move(name));
+                         }))) {
+        g_audio_lifecycle.rollback_init();
+        return;
+    }
+    g_audio = std::move(active_audio);
+    g_audio_lifecycle.commit_init();
+    } catch (...) {
+        g_audio_registrations.reset();
+        g_audio.reset();
+        g_audio_lifecycle.rollback_init();
+    }
+}
 
-    cp0_signal_audio_cap.append([audio](bool enable)
-                                { audio->cap(enable); });
-
-    cp0_signal_audio_setup.append([audio](std::list<std::string> arg, std::function<void(int, std::string)> callback)
-                                  { audio->setup(arg, callback); });
-
-    cp0_signal_audio_api.append([audio](std::list<std::string> arg, std::function<void(int, std::string)> callback)
-                                  { audio->api_call(arg, callback); });
-
-    cp0_signal_system_play.append([audio](std::string name)
-                                  { audio->system_play(name); });
-
+extern "C" void deinit_audio(void) noexcept
+{
+    std::shared_ptr<AudioSystem> audio;
+    try {
+        std::lock_guard<std::mutex> lock(g_audio_mutex);
+        if (!g_audio_lifecycle.begin_shutdown()) return;
+        g_audio_registrations.reset();
+        audio = std::move(g_audio);
+    } catch (...) {
+        return;
+    }
+    if (audio) audio->shutdown();
 }

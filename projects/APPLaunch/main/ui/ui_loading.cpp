@@ -31,6 +31,7 @@
 #include "ui_loading.h"
 #include "ui.h"
 #include "lvgl/lvgl.h"
+#include "model/global_overlay_model.hpp"
 
 #define LOADING_BG_COLOR    0x1F3A5F
 #define LOADING_BG_OPA      LV_OPA_80
@@ -42,15 +43,59 @@
 static lv_obj_t *s_loading_obj     = NULL;
 static lv_obj_t *s_loading_spinner = NULL;
 static lv_obj_t *s_loading_label   = NULL;
+static GlobalOverlayModel s_loading_state;
 
-static void ensure_loading_created(void)
+static void loading_deleted_cb(lv_event_t *event) noexcept
 {
-    if (s_loading_obj != NULL) return;
+    try {
+        if (lv_event_get_code(event) != LV_EVENT_DELETE ||
+            lv_event_get_target(event) != lv_event_get_current_target(event) ||
+            lv_event_get_target(event) != s_loading_obj)
+            return;
+        s_loading_obj = NULL;
+        s_loading_spinner = NULL;
+        s_loading_label = NULL;
+        s_loading_state.object_deleted();
+    } catch (...) {
+        s_loading_obj = NULL;
+        s_loading_spinner = NULL;
+        s_loading_label = NULL;
+        s_loading_state.object_deleted();
+    }
+}
+
+static void loading_child_deleted_cb(lv_event_t *event) noexcept
+{
+    try {
+        if (lv_event_get_code(event) != LV_EVENT_DELETE ||
+            lv_event_get_target(event) != lv_event_get_current_target(event)) return;
+        lv_obj_t *deleted = static_cast<lv_obj_t *>(lv_event_get_target(event));
+        if (deleted != s_loading_spinner && deleted != s_loading_label) return;
+        if (deleted == s_loading_spinner) s_loading_spinner = NULL;
+        if (deleted == s_loading_label) s_loading_label = NULL;
+        if (s_loading_obj != NULL)
+            lv_obj_add_flag(s_loading_obj, LV_OBJ_FLAG_HIDDEN);
+        s_loading_state.object_deleted();
+    } catch (...) {
+        s_loading_spinner = NULL;
+        s_loading_label = NULL;
+        s_loading_state.object_deleted();
+    }
+}
+
+static void ensure_loading_created(void) noexcept
+{
+    try {
+    if (s_loading_obj != NULL && s_loading_spinner != NULL &&
+        s_loading_label != NULL) return;
+    if (s_loading_obj != NULL) lv_obj_delete(s_loading_obj);
 
     lv_obj_t *parent = lv_layer_top();
     if (parent == NULL) return;
 
     s_loading_obj = lv_obj_create(parent);
+    if (s_loading_obj == NULL) return;
+    lv_obj_add_event_cb(s_loading_obj, loading_deleted_cb, LV_EVENT_DELETE, NULL);
     lv_obj_remove_style_all(s_loading_obj);
     lv_obj_set_size(s_loading_obj, LOADING_WIDTH, LOADING_HEIGHT);
     lv_obj_center(s_loading_obj);
@@ -77,6 +122,12 @@ static void ensure_loading_created(void)
 
     /* Spinner — 1s arc, 60 degrees long. */
     s_loading_spinner = lv_spinner_create(s_loading_obj);
+    if (s_loading_spinner == NULL) {
+        lv_obj_delete(s_loading_obj);
+        return;
+    }
+    lv_obj_add_event_cb(
+        s_loading_spinner, loading_child_deleted_cb, LV_EVENT_DELETE, NULL);
     lv_obj_set_size(s_loading_spinner, LOADING_SPINNER_SZ, LOADING_SPINNER_SZ);
     lv_spinner_set_anim_params(s_loading_spinner, 1000, 60);
     lv_obj_set_style_arc_width(s_loading_spinner, 3, LV_PART_MAIN);
@@ -88,6 +139,12 @@ static void ensure_loading_created(void)
                                LV_PART_INDICATOR);
 
     s_loading_label = lv_label_create(s_loading_obj);
+    if (s_loading_label == NULL) {
+        lv_obj_delete(s_loading_obj);
+        return;
+    }
+    lv_obj_add_event_cb(
+        s_loading_label, loading_child_deleted_cb, LV_EVENT_DELETE, NULL);
     lv_obj_set_style_text_color(s_loading_label,
                                 lv_color_hex(LOADING_TEXT_COLOR), 0);
     /* Use the project's 14pt font with montserrat fallback — matches
@@ -97,13 +154,24 @@ static void ensure_loading_created(void)
     lv_label_set_text(s_loading_label, "");
 
     lv_obj_add_flag(s_loading_obj, LV_OBJ_FLAG_HIDDEN);
+    s_loading_state.mark_created();
+    } catch (...) {
+        if (s_loading_obj != NULL)
+            lv_obj_delete(s_loading_obj);
+        s_loading_obj = NULL;
+        s_loading_spinner = NULL;
+        s_loading_label = NULL;
+        s_loading_state.object_deleted();
+    }
 }
 
 namespace ui_loading {
 
 void show(const char *label)
 {
-    ensure_loading_created();
+    try {
+    if (s_loading_state.request_show())
+        ensure_loading_created();
     if (s_loading_obj == NULL || s_loading_label == NULL) return;
 
     lv_label_set_text(s_loading_label,
@@ -112,12 +180,29 @@ void show(const char *label)
      * children (e.g. the ui_global_hint toast). */
     lv_obj_move_foreground(s_loading_obj);
     lv_obj_clear_flag(s_loading_obj, LV_OBJ_FLAG_HIDDEN);
+    } catch (...) {
+        if (s_loading_obj != NULL)
+            lv_obj_add_flag(s_loading_obj, LV_OBJ_FLAG_HIDDEN);
+        s_loading_state.hide();
+    }
 }
 
 void hide()
 {
+    s_loading_state.hide();
     if (s_loading_obj == NULL) return;
     lv_obj_add_flag(s_loading_obj, LV_OBJ_FLAG_HIDDEN);
+}
+
+void shutdown()
+{
+    s_loading_state.hide();
+    if (s_loading_obj != NULL)
+        lv_obj_delete(s_loading_obj);
+    s_loading_obj = NULL;
+    s_loading_spinner = NULL;
+    s_loading_label = NULL;
+    s_loading_state.object_deleted();
 }
 
 } // namespace ui_loading

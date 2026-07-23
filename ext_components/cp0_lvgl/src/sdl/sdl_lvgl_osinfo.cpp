@@ -1,6 +1,11 @@
 #include "cp0_lvgl_app.h"
 #include "hal_lvgl_bsp.h"
 #include "../cp0_app_internal_utils.h"
+#include "../cp0_callback_contract.hpp"
+#include "../cp0_osinfo_codec.hpp"
+#include "../cp0_osinfo_contract.hpp"
+#include "../cp0_signal_registration.hpp"
+#include "../cp0_sync_signal.hpp"
 
 #include <arpa/inet.h>
 #include <cerrno>
@@ -11,7 +16,6 @@
 #include <fstream>
 #include <functional>
 #include <ifaddrs.h>
-#include <iterator>
 #include <list>
 #include <memory>
 #include <random>
@@ -64,73 +68,45 @@ public:
     using callback_t = std::function<void(int, std::string)>;
     using arg_t = std::list<std::string>;
 
+    SdlOsInfoSystem()
+    {
+        operations_.read_eth_info = [](bool, cp0_eth_info_t *info) {
+            return network_default_info_read(info);
+        };
+        operations_.list_networks = [](cp0_netif_info_t *entries, int capacity, int *count) {
+            return cp0_network_list(entries, capacity, count);
+        };
+        operations_.read_account_info = account_info_read;
+        operations_.set_time = [](const std::string &timestamp) { return time_set(timestamp.c_str()); };
+        operations_.read_local_time = read_local_time;
+        operations_.random_u32 = random_u32;
+        operations_.get_ntp = [] { return 0; };
+        operations_.set_ntp = [](bool) { return 0; };
+        operations_.apt_update_background = apt_update_background;
+        operations_.update_launcher_background = update_launcher_background;
+    }
+
     void api_call(arg_t arg, callback_t callback)
     {
-        const std::string cmd = nth_arg(arg, 0);
-        if (cmd == "NetworkDefaultInfoRead" || cmd == "EthInfoRead") {
-            cp0_eth_info_t info{};
-            int ret = network_default_info_read(&info);
-            report(callback, ret, encode_eth_info(info));
-        } else if (cmd == "NetworkList") {
-            cp0_netif_info_t entries[64]{};
-            int count = 0;
-            int ret = cp0_network_list(entries, 64, &count);
-            std::ostringstream out;
-            for (int i = 0; ret == 0 && i < count; ++i)
-                out << entries[i].iface << '\t' << entries[i].ipv4 << '\t'
-                    << entries[i].netmask << '\t' << entries[i].is_up << '\n';
-            report(callback, ret, out.str());
-        } else if (cmd == "AccountInfoRead") {
-            cp0_account_info_t info{};
-            int ret = account_info_read(&info);
-            report(callback, ret, encode_account_info(info));
-        } else if (cmd == "TimeSet") {
-            report(callback, time_set(nth_arg(arg, 1).c_str()), "");
-        } else if (cmd == "LocalTime") {
-            std::time_t now = std::time(nullptr);
-            struct tm value{};
-#ifdef _WIN32
-            if (localtime_s(&value, &now) != 0) {
-                report(callback, -1, "");
-                return;
-            }
-#else
-            if (!localtime_r(&now, &value)) {
-                report(callback, errno ? -errno : -1, "");
-                return;
-            }
-#endif
-            std::ostringstream out;
-            out << value.tm_year + 1900 << ',' << value.tm_mon + 1 << ',' << value.tm_mday << ','
-                << value.tm_hour << ',' << value.tm_min << ',' << value.tm_sec;
-            report(callback, 0, out.str());
-        } else if (cmd == "RandomU32") {
-            report(callback, 0, std::to_string(random_u32()));
-        } else if (cmd == "NtpGet") {
-            report(callback, 0, ""); // emulator: NTP considered off so manual set is allowed
-        } else if (cmd == "NtpSet") {
-            report(callback, 0, ""); // emulator: no-op
-        } else if (cmd == "AptUpdateBackground") {
-            report(callback, apt_update_background(), "");
-        } else if (cmd == "UpdateLauncherBackground") {
-            report(callback, update_launcher_background(), "");
-        } else {
-            report(callback, -1, "unknown osinfo api command");
-        }
+        const cp0::osinfo::Result result = cp0::osinfo::dispatch(arg, operations_);
+        cp0::callback::invoke(callback, result.code, result.payload);
     }
 
     static int api_simple(const arg_t &arg, std::string *out = nullptr)
     {
         int result = -1;
-        cp0_signal_osinfo_api(arg, [&](int code, std::string data) {
+        if (out) out->clear();
+        cp0::signal::invoke_noexcept([&] { cp0_signal_osinfo_api(arg, [&](int code, std::string data) {
             result = code;
             if (out)
                 *out = std::move(data);
-        });
+        }); });
         return result;
     }
 
 private:
+    cp0::osinfo::Operations operations_;
+
     static uint32_t random_u32() noexcept
     {
         try {
@@ -143,28 +119,16 @@ private:
         }
     }
 
-    static void report(callback_t callback, int code, const std::string &data)
+    static int read_local_time(std::tm *value)
     {
-        if (callback)
-            callback(code, data);
-    }
-
-    static std::string nth_arg(const arg_t &arg, size_t index)
-    {
-        auto it = arg.begin();
-        for (size_t i = 0; i < index && it != arg.end(); ++i)
-            ++it;
-        return it == arg.end() ? std::string() : *it;
-    }
-
-    static void clear_net_info(cp0_eth_info_t *info)
-    {
-        if (!info)
-            return;
-        std::memset(info, 0, sizeof(*info));
-        cp0_copy_cstr(info->ipv4, sizeof(info->ipv4), "N/A");
-        cp0_copy_cstr(info->gateway, sizeof(info->gateway), "N/A");
-        cp0_copy_cstr(info->mac, sizeof(info->mac), "N/A");
+        if (!value)
+            return -1;
+        const std::time_t now = std::time(nullptr);
+#ifdef _WIN32
+        return localtime_s(value, &now) == 0 ? 0 : -1;
+#else
+        return localtime_r(&now, value) ? 0 : (errno ? -errno : -1);
+#endif
     }
 
     static std::string default_iface_from_route()
@@ -218,7 +182,7 @@ private:
 
     static int network_default_info_read(cp0_eth_info_t *info)
     {
-        clear_net_info(info);
+        cp0::osinfo::clear_eth_info(info);
         if (!info)
             return -1;
 
@@ -286,39 +250,6 @@ private:
         return 0;
     }
 
-    static std::string encode_eth_info(const cp0_eth_info_t &info)
-    {
-        return std::string(info.ipv4) + "\n" + info.gateway + "\n" + info.mac;
-    }
-
-    static void decode_eth_info(const std::string &data, cp0_eth_info_t *info)
-    {
-        clear_net_info(info);
-        if (!info)
-            return;
-        std::istringstream lines(data);
-        std::string line;
-        if (std::getline(lines, line)) cp0_copy_string(info->ipv4, sizeof(info->ipv4), line);
-        if (std::getline(lines, line)) cp0_copy_string(info->gateway, sizeof(info->gateway), line);
-        if (std::getline(lines, line)) cp0_copy_string(info->mac, sizeof(info->mac), line);
-    }
-
-    static std::string encode_account_info(const cp0_account_info_t &info)
-    {
-        return std::string(info.user) + "\n" + info.hostname;
-    }
-
-    static void decode_account_info(const std::string &data, cp0_account_info_t *info)
-    {
-        if (!info)
-            return;
-        std::memset(info, 0, sizeof(*info));
-        std::istringstream lines(data);
-        std::string line;
-        if (std::getline(lines, line)) cp0_copy_string(info->user, sizeof(info->user), line);
-        if (std::getline(lines, line)) cp0_copy_string(info->hostname, sizeof(info->hostname), line);
-    }
-
 public:
     static int api_eth_info(const char *command, cp0_eth_info_t *info)
     {
@@ -326,8 +257,8 @@ public:
             return -1;
         std::string data;
         int ret = api_simple({command}, &data);
-        if (ret == 0)
-            decode_eth_info(data, info);
+        if (ret == 0 && !cp0::osinfo::decode_eth_info_strict(data, info))
+            ret = -1;
         return ret;
     }
 
@@ -337,8 +268,8 @@ public:
             return -1;
         std::string data;
         int ret = api_simple({"AccountInfoRead"}, &data);
-        if (ret == 0)
-            decode_account_info(data, info);
+        if (ret == 0 && !cp0::osinfo::decode_account_info_strict(data, info))
+            ret = -1;
         return ret;
     }
 };
@@ -352,8 +283,9 @@ extern "C" time_t cp0_sdl_time_now(void)
 
 extern "C" void init_osinfo(void)
 {
+    static cp0::SignalRegistration<decltype(cp0_signal_osinfo_api)> registration;
     auto osinfo = std::make_shared<SdlOsInfoSystem>();
-    cp0_signal_osinfo_api.append([osinfo](std::list<std::string> arg, std::function<void(int, std::string)> callback) {
+    registration.replace(cp0_signal_osinfo_api, [osinfo](std::list<std::string> arg, std::function<void(int, std::string)> callback) {
         osinfo->api_call(std::move(arg), std::move(callback));
     });
 }

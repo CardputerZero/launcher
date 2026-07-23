@@ -3,7 +3,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
-#include <ctype.h>
 #include <fcntl.h>
 #include <unistd.h>
 #ifdef __linux__
@@ -12,6 +11,7 @@
 #endif
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdatomic.h>
 #ifdef __linux__
 #include <sys/ioctl.h>
 #include <sys/timerfd.h>
@@ -20,9 +20,14 @@
 #include <xkbcommon/xkbcommon.h>
 #include <xkbcommon/xkbcommon-compose.h>
 #else
-#include "compat/input_keys.h"
+#include "input_keys.h"
 #endif
 #include "cp0_lvgl_app.h"
+#include "cp0_keyboard_keymap.h"
+#include "cp0_keyboard_lvgl_input.h"
+#include "../cp0_keyboard_thread_lifecycle.h"
+#include "../cp0_keyboard_queue.h"
+#include "../cp0_keyboard_text.h"
 #include "keyboard_input.h"
 #include "lvgl/lvgl.h"
 #include "../../../../SDK/components/utilities/include/sample_log.h"
@@ -40,6 +45,10 @@ volatile int LVGL_RUN_FLAGE = 1;
 volatile uint32_t LV_EVENT_KEYBOARD;
 
 static volatile int keyboard_paused_flag = 0;
+static atomic_bool keyboard_shutdown_requested = false;
+static pthread_t keyboard_read_thread_id;
+static cp0_keyboard_thread_lifecycle_t keyboard_thread_lifecycle = {0};
+static pthread_mutex_t keyboard_thread_mutex = PTHREAD_MUTEX_INITIALIZER;
 #ifdef __linux__
 static struct libinput *g_libinput = NULL;
 void keyboard_pause(void) {
@@ -107,114 +116,10 @@ void kbd_dump_keymap_table(void)
 void kbd_dump_keymap_table(void) {}
 #endif
 
-__attribute__((weak)) void ui_global_hint_on_key(const struct key_item *elm)
-{
-    (void)elm;
-}
-
-__attribute__((weak)) int ui_screensaver_filter_key(const struct key_item *elm)
-{
-    (void)elm;
-    return 0;
-}
-
 static const char *getenv_default(const char *name, const char *dflt)
 {
     const char *value = getenv(name);
     return (value && value[0] != '\0') ? value : dflt;
-}
-
-static int cp0_evdev_process_key(uint16_t code)
-{
-    switch (code) {
-    case KEY_UP:
-        return LV_KEY_UP;
-    case KEY_DOWN:
-        return LV_KEY_DOWN;
-    case KEY_RIGHT:
-        return LV_KEY_RIGHT;
-    case KEY_LEFT:
-        return LV_KEY_LEFT;
-    case KEY_ESC:
-        return LV_KEY_ESC;
-    case KEY_DELETE:
-        return LV_KEY_DEL;
-    case KEY_BACKSPACE:
-        return LV_KEY_BACKSPACE;
-    case KEY_ENTER:
-        return LV_KEY_ENTER;
-    case KEY_NEXT:
-        return LV_KEY_NEXT;
-    case KEY_TAB:
-        return KEY_TAB;
-    case KEY_PREVIOUS:
-        return LV_KEY_PREV;
-    case KEY_HOME:
-        return LV_KEY_HOME;
-    case KEY_END:
-        return LV_KEY_END;
-    default:
-        return code;
-    }
-}
-
-static void cp0_keypad_read_cb(lv_indev_t *indev, lv_indev_data_t *data)
-{
-    (void)indev;
-
-    data->state = LV_INDEV_STATE_RELEASED;
-    data->continue_reading = false;
-
-    pthread_mutex_lock(&keyboard_mutex);
-    if (!STAILQ_EMPTY(&keyboard_queue)) {
-        struct key_item *elm = STAILQ_FIRST(&keyboard_queue);
-        STAILQ_REMOVE_HEAD(&keyboard_queue, entries);
-
-        char utf8_dbg[64] = "";
-        int di = 0;
-        for (int i = 0; i < (int)sizeof(elm->utf8) && elm->utf8[i] && di < 60; i++) {
-            unsigned char c = (unsigned char)elm->utf8[i];
-            if (c >= 0x20 && c < 0x7f)
-                utf8_dbg[di++] = (char)c;
-            else
-                di += snprintf(utf8_dbg + di, 64 - di, "\\x%02x", c);
-        }
-        utf8_dbg[di] = '\0';
-        SLOGD("[INDEV] dequeue code=%u state=%s sym=%s utf8='%s' cp=0x%x active_screen=%p",
-              elm->key_code, kbd_state_name(elm->key_state), elm->sym_name,
-              utf8_dbg, elm->codepoint, (void *)lv_screen_active());
-
-        int swallowed = ui_screensaver_filter_key(elm);
-        if (!swallowed) {
-            lv_obj_t *root = lv_screen_active();
-            if (root)
-                lv_obj_send_event(root, (lv_event_code_t)LV_EVENT_KEYBOARD, elm);
-
-            ui_global_hint_on_key(elm);
-
-            data->key = cp0_evdev_process_key(elm->key_code);
-            if (data->key)
-                data->state = (lv_indev_state_t)elm->key_state;
-        }
-        if (data->key || swallowed) {
-            data->continue_reading = !STAILQ_EMPTY(&keyboard_queue);
-        }
-        free(elm);
-    }
-    pthread_mutex_unlock(&keyboard_mutex);
-}
-
-static void cp0_create_lvgl_input_devices(void)
-{
-    const char *mouse_device = getenv_default("LV_LINUX_MOUSE_DEVICE", NULL);
-    if (mouse_device)
-        lv_evdev_create(LV_INDEV_TYPE_POINTER, mouse_device);
-
-    lv_indev_t *indev = lv_indev_create();
-    if (indev != NULL) {
-        lv_indev_set_type(indev, LV_INDEV_TYPE_KEYPAD);
-        lv_indev_set_read_cb(indev, cp0_keypad_read_cb);
-    }
 }
 
 /* ============================================================
@@ -228,6 +133,7 @@ static void cp0_create_lvgl_input_devices(void)
  *  libinput open/close callbacks
  * ============================================================ */
 static int open_restricted(const char *path, int flags, void *user_data) {
+    (void)user_data;
     int fd = open(path, flags);
     if (fd < 0) {
         fprintf(stderr, "Failed to open %s: %s\n", path, strerror(errno));
@@ -242,218 +148,11 @@ static int open_restricted(const char *path, int flags, void *user_data) {
      */
     return fd;
 }
-static void close_restricted(int fd, void *user_data) { close(fd); }
+static void close_restricted(int fd, void *user_data) { (void)user_data; close(fd); }
 static const struct libinput_interface interface = {
     .open_restricted  = open_restricted,
     .close_restricted = close_restricted,
 };
-
-/* ============================================================
- *  TCA8418 custom keycode mapping table
- * ============================================================ */
-#define TCA8418_KEYMAP_PATH "/usr/share/keymaps/tca8418_keypad_m5stack_keymap.map"
-#define TCA8418_KEYMAP_MAX_ENTRIES 64
-
-struct tca8418_keymap_entry {
-    uint32_t    keycode;
-    const char *sym_name;
-    const char *utf8;
-};
-
-static const struct tca8418_keymap_entry tca8418_default_keymap[] = {
-    { 26, "exclam",        "!"  },
-
-    { 27, "at",            "@"  },
-    { 39, "numbersign",    "#"  },
-    { 40, "dollar",        "$"  },
-    { 41, "percent",       "%"  },
-    { 43, "asciicircum",   "^"  },
-    { 51, "ampersand",     "&"  },
-    { 52, "asterisk",      "*"  },
-    { 53, "parenleft",     "("  },
-    { 54, "parenright",    ")"  },
-
-    { 55, "asciitilde",    "~"  },
-    { 69, "grave",         "`"  },
-    { 70, "underscore",    "_"  },
-    { 71, "minus",         "-"  },
-    { 72, "plus",          "+"  },
-    { 73, "equal",         "="  },
-    { 74, "bracketleft",   "["  },
-    { 75, "bracketright",  "]"  },
-    { 76, "braceleft",     "{"  },
-    { 77, "braceright",    "}"  },
-
-    { 79, "semicolon",     ";"  },
-    { 80, "colon",         ":"  },
-    { 81, "apostrophe",    "'"  },
-    { 82, "quotedbl",      "\"" },
-    { 83, "less",          "<"  },
-    { 85, "greater",       ">"  },
-    { 86, "backslash",     "\\" },
-    { 89, "bar",           "|"  },
-
-    { 90, "comma",         ","  },
-    { 91, "period",        "."  },
-    { 92, "slash",         "/"  },
-    { 93, "question",      "?"  },
-};
-
-struct tca8418_runtime_keymap_entry {
-    uint32_t keycode;
-    char     sym_name[64];
-    char     utf8[16];
-};
-
-static struct tca8418_runtime_keymap_entry tca8418_runtime_keymap[TCA8418_KEYMAP_MAX_ENTRIES];
-static size_t tca8418_runtime_keymap_size = 0;
-static int tca8418_runtime_keymap_loaded = 0;
-
-static const struct tca8418_keymap_entry *
-tca8418_keymap_lookup(uint32_t keycode) {
-    static struct tca8418_keymap_entry mapped;
-
-    if (tca8418_runtime_keymap_loaded) {
-        for (size_t i = 0; i < tca8418_runtime_keymap_size; i++) {
-            if (tca8418_runtime_keymap[i].keycode == keycode) {
-                mapped.keycode = tca8418_runtime_keymap[i].keycode;
-                mapped.sym_name = tca8418_runtime_keymap[i].sym_name;
-                mapped.utf8 = tca8418_runtime_keymap[i].utf8;
-                return &mapped;
-            }
-        }
-        return NULL;
-    }
-
-    for (size_t i = 0; i < sizeof(tca8418_default_keymap) / sizeof(tca8418_default_keymap[0]); i++)
-        if (tca8418_default_keymap[i].keycode == keycode)
-            return &tca8418_default_keymap[i];
-    return NULL;
-}
-
-static char *trim_ascii(char *s)
-{
-    while (isspace((unsigned char)*s))
-        s++;
-
-    char *end = s + strlen(s);
-    while (end > s && isspace((unsigned char)end[-1]))
-        *--end = '\0';
-    return s;
-}
-
-static int tca8418_parse_keymap_line(char *line,
-                                     struct tca8418_runtime_keymap_entry *out)
-{
-    char *comment = strchr(line, '#');
-    if (comment)
-        *comment = '\0';
-
-    char *body = trim_ascii(line);
-    if (body[0] == '\0')
-        return 0;
-
-    uint32_t evdev_keycode = 0;
-    char sym_name[sizeof(out->sym_name)] = {0};
-    if (sscanf(body, "keycode %u = %63s", &evdev_keycode, sym_name) != 2)
-        return 0;
-
-    out->keycode = evdev_keycode;
-    snprintf(out->sym_name, sizeof(out->sym_name), "%s", sym_name);
-
-    xkb_keysym_t sym = xkb_keysym_from_name(out->sym_name, XKB_KEYSYM_NO_FLAGS);
-    if (sym == XKB_KEY_NoSymbol ||
-        xkb_keysym_to_utf8(sym, out->utf8, sizeof(out->utf8)) <= 0) {
-        out->utf8[0] = '\0';
-    }
-    return 1;
-}
-
-static void tca8418_load_runtime_keymap(void)
-{
-    if (access(TCA8418_KEYMAP_PATH, F_OK) != 0)
-        return;
-
-    FILE *fp = fopen(TCA8418_KEYMAP_PATH, "r");
-    if (!fp) {
-        SLOGW("[KBD] failed to open %s: %s; using built-in keymap",
-              TCA8418_KEYMAP_PATH, strerror(errno));
-        return;
-    }
-
-    char line[256];
-    size_t count = 0;
-    while (count < TCA8418_KEYMAP_MAX_ENTRIES && fgets(line, sizeof(line), fp)) {
-        struct tca8418_runtime_keymap_entry entry = {0};
-        if (!tca8418_parse_keymap_line(line, &entry))
-            continue;
-        tca8418_runtime_keymap[count++] = entry;
-    }
-    fclose(fp);
-
-    tca8418_runtime_keymap_size = count;
-    tca8418_runtime_keymap_loaded = 1;
-    SLOGI("[KBD] loaded %zu TCA8418 keymap entries from %s",
-          tca8418_runtime_keymap_size, TCA8418_KEYMAP_PATH);
-}
-
-
-/* ============================================================
- *  Control-key -> terminal control-character mapping table
- *  When xkbcommon does not produce utf8 for function keys, fill in ANSI escape sequences as fallback
- * ============================================================ */
-struct ctrl_key_utf8_entry {
-    uint32_t    keycode;   /* KEY_xxx from linux/input.h */
-    const char *utf8;      /* terminal control character / ANSI escape sequence */
-};
-
-static const struct ctrl_key_utf8_entry ctrl_key_utf8_map[] = {
-    /* ---- single-byte control characters ---- */
-    { KEY_ENTER,     "\r"      },   /* CR  (0x0D) */
-    { KEY_KPENTER,   "\r"      },   /* CR  keypad Enter */
-    { KEY_BACKSPACE, "\x7f"    },   /* DEL (0x7F) */
-    { KEY_TAB,       "\t"      },   /* HT  (0x09) */
-    { KEY_ESC,       "\x1b"    },   /* ESC (0x1B) */
-
-    /* ---- ANSI arrow keys ---- */
-    { KEY_UP,        "\033[A"  },   /* CSI A */
-    { KEY_DOWN,      "\033[B"  },   /* CSI B */
-    { KEY_RIGHT,     "\033[C"  },   /* CSI C */
-    { KEY_LEFT,      "\033[D"  },   /* CSI D */
-
-    /* ---- ANSI editing keys ---- */
-    { KEY_HOME,      "\033[H"  },   /* CSI H  (or "\033[1~") */
-    { KEY_END,       "\033[F"  },   /* CSI F  (or "\033[4~") */
-    { KEY_DELETE,    "\033[3~" },   /* SS3 ~ */
-    { KEY_INSERT,    "\033[2~" },   /* CSI ~ */
-    { KEY_PAGEUP,    "\033[5~" },   /* CSI ~ */
-    { KEY_PAGEDOWN,  "\033[6~" },   /* CSI ~ */
-
-    /* ---- F1-F12 ---- */
-    { KEY_F1,        "\033OP"  },
-    { KEY_F2,        "\033OQ"  },
-    { KEY_F3,        "\033OR"  },
-    { KEY_F4,        "\033OS"  },
-    { KEY_F5,        "\033[15~"},
-    { KEY_F6,        "\033[17~"},
-    { KEY_F7,        "\033[18~"},
-    { KEY_F8,        "\033[19~"},
-    { KEY_F9,        "\033[20~"},
-    { KEY_F10,       "\033[21~"},
-    { KEY_F11,       "\033[23~"},
-    { KEY_F12,       "\033[24~"},
-};
-
-static const char *ctrl_key_utf8_lookup(uint32_t keycode) {
-    for (size_t i = 0; i < sizeof(ctrl_key_utf8_map) / sizeof(ctrl_key_utf8_map[0]); i++)
-        if (ctrl_key_utf8_map[i].keycode == keycode)
-            return ctrl_key_utf8_map[i].utf8;
-    return NULL;
-}
-
-
-
-
 
 /* ============================================================
  *  Keyboard context
@@ -522,41 +221,22 @@ static void update_leds(struct kbd_ctx *kc) {
  *  Enqueue
  * ============================================================ */
 static void enqueue_key(const struct key_item *src) {
-    struct key_item *elm = malloc(sizeof(*elm));
-    if (!elm) return;
-    *elm = *src;
-    elm->flage = 0;  // mark as needing free
+    struct key_item item = *src;
+    item.flage = 0;
 
     /* DEBUG: every raw key event from keyboard thread */
     char utf8_dbg[64] = "";
     int di = 0;
-    for (int i = 0; i < (int)sizeof(elm->utf8) && elm->utf8[i] && di < 60; i++) {
-        unsigned char c = (unsigned char)elm->utf8[i];
+    for (int i = 0; i < (int)sizeof(item.utf8) && item.utf8[i] && di < 60; i++) {
+        unsigned char c = (unsigned char)item.utf8[i];
         if (c >= 0x20 && c < 0x7f) utf8_dbg[di++] = (char)c;
         else di += snprintf(utf8_dbg+di, 64-di, "\\x%02x", c);
     }
     utf8_dbg[di] = '\0';
     SLOGD("[KBD] enqueue code=%u state=%s sym=%s utf8='%s' cp=0x%x mods=0x%x run=%d home_flag=%d",
-          elm->key_code, kbd_state_name(elm->key_state), elm->sym_name,
-          utf8_dbg, elm->codepoint, elm->mods, LVGL_RUN_FLAGE, LVGL_HOME_KEY_FLAG);
-
-    if(elm->key_code == KEY_ESC) {
-        LVGL_HOME_KEY_FLAG = elm->key_state;
-        SLOGI("[KBD] LVGL_HOME_KEY_FLAG := %d", LVGL_HOME_KEY_FLAG);
-    }
-
-    if(LVGL_RUN_FLAGE)
-    {
-        pthread_mutex_lock(&keyboard_mutex);
-        STAILQ_INSERT_TAIL(&keyboard_queue, elm, entries);
-        pthread_mutex_unlock(&keyboard_mutex);
-    }
-    else
-    {
-        SLOGW("[KBD] dropped (LVGL_RUN_FLAGE=0, external app running)");
-        free(elm);
-    }
-
+          item.key_code, kbd_state_name(item.key_state), item.sym_name,
+          utf8_dbg, item.codepoint, item.mods, LVGL_RUN_FLAGE, LVGL_HOME_KEY_FLAG);
+    (void)cp0_keyboard_queue_push(&item);
 }
 
 int cp0_keyboard_inject(uint32_t key_code, int key_state, uint32_t mods)
@@ -569,7 +249,7 @@ int cp0_keyboard_inject(uint32_t key_code, int key_state, uint32_t mods)
     item.key_code = key_code;
     item.key_state = key_state;
     item.mods = mods;
-    const char *ctrl = ctrl_key_utf8_lookup(key_code);
+    const char *ctrl = cp0_keyboard_control_utf8(key_code);
     if (ctrl) snprintf(item.utf8, sizeof(item.utf8), "%s", ctrl);
     snprintf(item.sym_name, sizeof(item.sym_name), "RPC_%u", key_code);
     enqueue_key(&item);
@@ -578,23 +258,19 @@ int cp0_keyboard_inject(uint32_t key_code, int key_state, uint32_t mods)
 
 int cp0_keyboard_inject_text(const char *utf8)
 {
-    if (!utf8)
+    if (!utf8 || cp0_keyboard_utf8_validate(utf8) != 0)
         return -1;
 
-    const unsigned char *cursor = (const unsigned char *)utf8;
+    const char *cursor = utf8;
     while (*cursor) {
-        size_t length = 1;
-        if ((*cursor & 0xe0) == 0xc0) length = 2;
-        else if ((*cursor & 0xf0) == 0xe0) length = 3;
-        else if ((*cursor & 0xf8) == 0xf0) length = 4;
-
-        for (size_t i = 1; i < length; ++i)
-            if (!cursor[i] || (cursor[i] & 0xc0) != 0x80)
-                return -1;
+        size_t length = 0;
+        uint32_t codepoint = 0;
+        if (cp0_keyboard_utf8_decode_one(cursor, &codepoint, &length) != 0) return -1;
 
         struct key_item item = {0};
         item.key_state = KBD_KEY_RELEASED;
         memcpy(item.utf8, cursor, length);
+        item.codepoint = codepoint;
         snprintf(item.sym_name, sizeof(item.sym_name), "RPC_TEXT");
         enqueue_key(&item);
         cursor += length;
@@ -620,33 +296,6 @@ static void repeat_stop(struct kbd_ctx *kc) {
 }
 
 /* Encode a UTF-32 code point as UTF-8 and return the byte count */
-static int utf32_to_utf8(uint32_t cp, char *out, size_t n) {
-    if (n < 1) return 0;
-    if (cp < 0x80) {
-        if (n < 2) return 0;
-        out[0] = (char)cp; out[1] = '\0'; return 1;
-    } else if (cp < 0x800) {
-        if (n < 3) return 0;
-        out[0] = 0xC0 | (cp >> 6);
-        out[1] = 0x80 | (cp & 0x3F);
-        out[2] = '\0'; return 2;
-    } else if (cp < 0x10000) {
-        if (n < 4) return 0;
-        out[0] = 0xE0 | (cp >> 12);
-        out[1] = 0x80 | ((cp >> 6) & 0x3F);
-        out[2] = 0x80 | (cp & 0x3F);
-        out[3] = '\0'; return 3;
-    } else if (cp < 0x110000) {
-        if (n < 5) return 0;
-        out[0] = 0xF0 | (cp >> 18);
-        out[1] = 0x80 | ((cp >> 12) & 0x3F);
-        out[2] = 0x80 | ((cp >> 6)  & 0x3F);
-        out[3] = 0x80 | (cp & 0x3F);
-        out[4] = '\0'; return 4;
-    }
-    out[0] = '\0'; return 0;
-}
-
 /* ============================================================
  *  Core: handle one key event
  * ============================================================ */
@@ -658,7 +307,7 @@ static void process_key(struct kbd_ctx *kc, uint32_t code, int pressed)
     item.key_state = pressed ? KBD_KEY_PRESSED : KBD_KEY_RELEASED;
 
     /* ---------- 1. TCA8418 custom keycodes first ---------- */
-    const struct tca8418_keymap_entry *mapped = tca8418_keymap_lookup(code);
+    const struct cp0_keyboard_keymap_entry *mapped = cp0_keyboard_keymap_lookup(code);
     if (mapped) {
         xkb_keysym_t sym = xkb_keysym_from_name(mapped->sym_name,
                                                 XKB_KEYSYM_NO_FLAGS);
@@ -746,7 +395,7 @@ static void process_key(struct kbd_ctx *kc, uint32_t code, int pressed)
                                item.utf8, sizeof(item.utf8));
         if (item.utf8[0] == '\0' && item.codepoint != 0) {
             /* get_utf8 filters control characters; fall back to manual encoding */
-            utf32_to_utf8(item.codepoint, item.utf8, sizeof(item.utf8));
+            (void)cp0_keyboard_utf32_to_utf8(item.codepoint, item.utf8, sizeof(item.utf8));
         }
         if (item.codepoint == 0)
             item.codepoint = xkb_state_key_get_utf32(kc->state, keycode);
@@ -756,7 +405,7 @@ static void process_key(struct kbd_ctx *kc, uint32_t code, int pressed)
     /* xkbcommon does not produce utf8 for function keys (UP/DOWN/ENTER/BACKSPACE, etc.),
     * manually fill ANSI/VT100 terminal control characters here for upper layers */
     if (item.utf8[0] == '\0') {
-        const char *ctrl = ctrl_key_utf8_lookup(code);
+        const char *ctrl = cp0_keyboard_control_utf8(code);
         if (ctrl) {
             snprintf(item.utf8, sizeof(item.utf8), "%s", ctrl);
         }
@@ -852,8 +501,6 @@ static void kbd_wake_up(struct kbd_ctx *kc) {
  *  Thread main loop
  * ============================================================ */
 void *keyboard_read_thread(void *argv) {
-    STAILQ_INIT(&keyboard_queue);
-
     char *device_path_arg = argv ? (char *)argv : NULL;
     const char *device_path = device_path_arg ? device_path_arg
         : "/dev/input/by-path/platform-3f804000.i2c-event";
@@ -893,7 +540,8 @@ void *keyboard_read_thread(void *argv) {
     SLOGI("Start listening for keyboard input (%s)", device_path);
     libinput_dispatch(kc.li);
 
-    while (1) {
+    while (!atomic_load_explicit(&keyboard_shutdown_requested,
+                                 memory_order_acquire)) {
         if (keyboard_paused_flag) {
             usleep(50000);
             continue;
@@ -937,8 +585,10 @@ void *keyboard_read_thread(void *argv) {
     }
 
 out:
+    g_libinput = NULL;
     if (kc.repeat_fd >= 0) close(kc.repeat_fd);
     free_xkb(&kc);
+    if (kc.dev) libinput_path_remove_device(kc.dev);
     if (kc.li) libinput_unref(kc.li);
     free(device_path_arg);
     return NULL;
@@ -946,9 +596,13 @@ out:
 
 void init_input(void)
 {
-    static int input_initialized = 0;
-    if (input_initialized)
+    pthread_mutex_lock(&keyboard_thread_mutex);
+    if (!cp0_keyboard_thread_can_init(&keyboard_thread_lifecycle)) {
+        pthread_mutex_unlock(&keyboard_thread_mutex);
         return;
+    }
+
+    cp0_keyboard_queue_init();
 
     if (LV_EVENT_KEYBOARD == 0)
         LV_EVENT_KEYBOARD = lv_event_register_id();
@@ -960,22 +614,47 @@ void init_input(void)
     setenv("APPLAUNCH_LINUX_KEYBOARD_DEVICE", keyboard_device, 1);
     setenv("LV_LINUX_KEYBOARD_DEVICE", keyboard_device, 1);
 
-    tca8418_load_runtime_keymap();
+    cp0_keyboard_keymap_load();
 
     char *keyboard_device_arg = strdup(keyboard_device);
     if (keyboard_device_arg == NULL) {
         perror("strdup keyboard_device");
+        pthread_mutex_unlock(&keyboard_thread_mutex);
         return;
     }
 
-    pthread_t keyboard_read_thread_id;
+    atomic_store_explicit(&keyboard_shutdown_requested, false,
+                          memory_order_release);
     if (pthread_create(&keyboard_read_thread_id, NULL, keyboard_read_thread, keyboard_device_arg) != 0) {
         perror("pthread_create keyboard_read_thread");
         free(keyboard_device_arg);
+        pthread_mutex_unlock(&keyboard_thread_mutex);
         return;
     }
 
-    pthread_detach(keyboard_read_thread_id);
-    cp0_create_lvgl_input_devices();
-    input_initialized = 1;
+    cp0_keyboard_thread_mark_started(&keyboard_thread_lifecycle);
+    cp0_keyboard_create_lvgl_input_devices();
+    pthread_mutex_unlock(&keyboard_thread_mutex);
+}
+
+void deinit_input(void)
+{
+    pthread_t thread;
+    int should_join = 0;
+    atomic_store_explicit(&keyboard_shutdown_requested, true,
+                          memory_order_release);
+    pthread_mutex_lock(&keyboard_thread_mutex);
+    should_join = cp0_keyboard_thread_begin_deinit(
+        &keyboard_thread_lifecycle);
+    if (should_join) thread = keyboard_read_thread_id;
+    pthread_mutex_unlock(&keyboard_thread_mutex);
+    if (!should_join) return;
+    const int joined = !pthread_equal(thread, pthread_self()) &&
+                       pthread_join(thread, NULL) == 0;
+    pthread_mutex_lock(&keyboard_thread_mutex);
+    if (joined)
+        cp0_keyboard_thread_finish_deinit(&keyboard_thread_lifecycle);
+    else
+        cp0_keyboard_thread_cancel_deinit(&keyboard_thread_lifecycle);
+    pthread_mutex_unlock(&keyboard_thread_mutex);
 }

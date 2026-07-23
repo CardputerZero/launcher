@@ -10,8 +10,11 @@
 // Project name: zero
 
 #include "ui.h"
-#include "ui_app_page.hpp"
+#include "launcher_ui_app_page.hpp"
 #include "ui_low_battery.h"
+#include "ui_global_hint.h"
+#include "ui_loading.h"
+#include "ui_screensaver.h"
 #include <stdio.h>
 #include <cstdlib>
 #include "lvgl/src/widgets/gif/lv_gif.h"
@@ -32,17 +35,22 @@ namespace launcher_ui {
 
 void init()
 {
+    if (home)
+        return;
+    cp0_keyboard_set_global_key_handler(ui_global_hint::on_key);
     home = std::make_unique<LauncherUiRuntime>();
     home->start();
     launcher_battery_ui::init_warning();
 }
 
-} // namespace launcher_ui
-
-LauncherFonts &launcher_fonts()
+void deinit()
 {
-    if (!home) {
-        std::abort();
-    }
-    return *home->fonts_;
+    cp0_keyboard_set_global_key_handler(nullptr);
+    ui_global_hint::shutdown();
+    launcher_battery_ui::shutdown_warning();
+    ui_loading::shutdown();
+    ui_screensaver_deinit();
+    home.reset();
 }
+
+} // namespace launcher_ui

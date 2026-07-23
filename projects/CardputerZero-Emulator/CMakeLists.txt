@@ -151,19 +151,23 @@ if(NOT EMSCRIPTEN)
 
 option(EMU_SKIP_APPLAUNCH "Skip APPLaunch (Unix-only deps)" OFF)
 
-file(GLOB_RECURSE APPLAUNCH_UI_C   ${APPLAUNCH}/ui/*.c)
-file(GLOB_RECURSE APPLAUNCH_UI_CPP ${APPLAUNCH}/ui/*.cpp)
+file(GLOB_RECURSE APPLAUNCH_UI_C CONFIGURE_DEPENDS ${APPLAUNCH}/ui/*.c)
+file(GLOB_RECURSE APPLAUNCH_UI_CPP CONFIGURE_DEPENDS ${APPLAUNCH}/ui/*.cpp)
 list(FILTER APPLAUNCH_UI_C EXCLUDE REGEX ".*/ui/lvgl/.*")
 list(FILTER APPLAUNCH_UI_CPP EXCLUDE REGEX ".*/ui/lvgl/.*")
-file(GLOB         APPLAUNCH_KBD    ${APPLAUNCH}/hal/keyboard_input.c)
-file(GLOB APPLAUNCH_HAL_SDL_C   ${APPLAUNCH}/hal/sdl/*.c)
-file(GLOB APPLAUNCH_HAL_SDL_CPP ${APPLAUNCH}/hal/sdl/*.cpp)
+file(GLOB APPLAUNCH_KBD CONFIGURE_DEPENDS ${APPLAUNCH}/hal/keyboard_input.c)
+file(GLOB APPLAUNCH_HAL_SDL_C CONFIGURE_DEPENDS ${APPLAUNCH}/hal/sdl/*.c)
+file(GLOB APPLAUNCH_HAL_SDL_CPP CONFIGURE_DEPENDS ${APPLAUNCH}/hal/sdl/*.cpp)
+file(GLOB CP0_LVGL_COMMON_SRCS CONFIGURE_DEPENDS
+    ${CP0_LVGL}/src/*.c
+    ${CP0_LVGL}/src/*.cpp
+)
 file(GLOB CP0_LVGL_SDL_SRCS CONFIGURE_DEPENDS
-    ${CP0_LVGL}/src/commount.c
-    ${CP0_LVGL}/src/commount.cpp
-    ${CP0_LVGL}/src/cp0_process_runner.cpp
-    ${CP0_LVGL}/src/cp0_sudo_async.cpp
-    ${CP0_LVGL}/src/cp0_sudo_coordinator.cpp
+    ${CP0_LVGL_COMMON_SRCS}
+    ${CP0_LVGL}/src/cp0/cp0_camera_viewport.cpp
+    ${CP0_LVGL}/src/cp0/cp0_desktop_exec_policy.cpp
+    ${CP0_LVGL}/src/cp0/cp0_process_commands.cpp
+    ${CP0_LVGL}/src/cp0/cp0_process_lifecycle.cpp
     ${CP0_LVGL}/src/sdl/*.c
     ${CP0_LVGL}/src/sdl/*.cpp
 )
@@ -409,8 +413,9 @@ add_custom_command(TARGET cardputer-zero-emu POST_BUILD
     COMMENT "Copying apps and resources"
 )
 if(TARGET APPLaunch)
-    add_custom_command(TARGET cardputer-zero-emu POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:APPLaunch> $<TARGET_FILE_DIR:cardputer-zero-emu>/apps/
+    add_custom_command(TARGET APPLaunch POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/apps
+        COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:APPLaunch> ${CMAKE_CURRENT_BINARY_DIR}/apps/
         COMMENT "Copying APPLaunch"
     )
 endif()

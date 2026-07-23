@@ -11,7 +11,8 @@ Coordinator::Coordinator(size_t pending_limit, size_t terminal_limit)
 bool Coordinator::reserve(std::shared_ptr<Request> request)
 {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (!request || requests_.count(request->id) || terminals_.count(request->id)) return false;
+    if (!accepting_ || !request || requests_.count(request->id) || terminals_.count(request->id))
+        return false;
     request->state = State::RESERVED;
     requests_[request->id] = request;
     reservations_.push_back(request);
@@ -73,7 +74,7 @@ void Coordinator::remember_terminal_locked(uint64_t id)
 std::vector<Action> Coordinator::start_next_locked(int64_t now_ms)
 {
     std::vector<Action> actions;
-    while (!current_ && terminal_completions_pending_ == 0 && !queue_.empty()) {
+    while (accepting_ && !current_ && terminal_completions_pending_ == 0 && !queue_.empty()) {
         auto request = queue_.front();
         queue_.pop_front();
         if (request->cancel_requested.load()) {
@@ -104,11 +105,49 @@ void Coordinator::terminal_locked(const std::shared_ptr<Request> &request,
 std::vector<Action> Coordinator::enqueue(std::shared_ptr<Request> request, int64_t now_ms)
 {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (!request || requests_.count(request->id) || terminals_.count(request->id)) return {};
+    if (!accepting_ || !request || requests_.count(request->id) || terminals_.count(request->id))
+        return {};
     request->state = State::QUEUED;
     requests_[request->id] = request;
     queue_.push_back(request);
     return start_next_locked(now_ms);
+}
+
+std::vector<Action> Coordinator::begin_shutdown(int error, int64_t now_ms)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    (void)now_ms;
+    if (!accepting_) return {};
+    accepting_ = false;
+
+    std::vector<Action> actions;
+    if (current_) {
+        auto request = current_;
+        request->cancel_requested.store(true);
+        if (request->state == State::RUNNING) {
+            if (!request->authentication_complete) {
+                request->authentication_complete = true;
+                actions.push_back({ActionType::DESTROY_PROMPT, request});
+            }
+        } else {
+            actions.push_back({ActionType::DESTROY_PROMPT, request});
+            terminal_locked(request, CP0_SUDO_RESULT_EXEC_FAILED, error);
+        }
+    }
+    while (!queue_.empty()) {
+        auto request = queue_.front();
+        queue_.pop_front();
+        request->cancel_requested.store(true);
+        terminal_locked(request, CP0_SUDO_RESULT_EXEC_FAILED, error);
+    }
+    while (!reservations_.empty()) {
+        auto request = reservations_.front();
+        reservations_.pop_front();
+        reservation_ready_.erase(request->id);
+        request->cancel_requested.store(true);
+        terminal_locked(request, CP0_SUDO_RESULT_EXEC_FAILED, error);
+    }
+    return actions;
 }
 
 std::vector<Action> Coordinator::fail_all(int error, int64_t now_ms)
@@ -189,6 +228,17 @@ std::vector<Action> Coordinator::worker_auth_result(uint64_t id, cp0_sudo_result
     return {};
 }
 
+std::vector<Action> Coordinator::worker_authenticated(uint64_t id)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto it = requests_.find(id);
+    if (it == requests_.end() || it->second->state != State::RUNNING ||
+        it->second->cancel_requested.load() || it->second->authentication_complete)
+        return {};
+    it->second->authentication_complete = true;
+    return {{ActionType::DESTROY_PROMPT, it->second}};
+}
+
 OutputResult Coordinator::worker_output(uint64_t id, std::string data)
 {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -221,7 +271,8 @@ void Coordinator::worker_complete(uint64_t id, cp0_sudo_result_t result, int exi
     auto it = requests_.find(id);
     if (it == requests_.end() || it->second->state != State::RUNNING) return;
     if (it->second->cancel_requested.load()) { result = CP0_SUDO_RESULT_CANCELLED; exit_code = -ECANCELED; }
-    controls_.push_back({ActionType::DESTROY_PROMPT, it->second});
+    if (!it->second->authentication_complete)
+        controls_.push_back({ActionType::DESTROY_PROMPT, it->second});
     terminal_locked(it->second, result, exit_code);
 }
 
@@ -277,6 +328,22 @@ State Coordinator::state(uint64_t id) const
     std::lock_guard<std::mutex> lock(mutex_);
     auto it = requests_.find(id);
     return it == requests_.end() ? State::TERMINAL : it->second->state;
+}
+
+bool Coordinator::accepting() const
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    return accepting_;
+}
+
+bool Coordinator::resume()
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (current_ || !requests_.empty() || !reservations_.empty() || !queue_.empty() ||
+        !controls_.empty() || !callbacks_.empty() || terminal_completions_pending_ != 0)
+        return false;
+    accepting_ = true;
+    return true;
 }
 
 } // namespace cp0_sudo

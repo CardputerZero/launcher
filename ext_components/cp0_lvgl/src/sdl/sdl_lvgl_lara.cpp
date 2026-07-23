@@ -1,11 +1,13 @@
 #include "cp0_lvgl_app.h"
+#include "../cp0_lora_contract.hpp"
+#include "../cp0_callback_contract.hpp"
+#include "../cp0_callback_result.hpp"
+#include "../cp0_signal_registration.hpp"
 #include "hal_lvgl_bsp.h"
 
-#include <cstdlib>
 #include <cstdio>
 #include <cstring>
 #include <functional>
-#include <iterator>
 #include <list>
 #include <memory>
 #include <string>
@@ -14,29 +16,21 @@
 class LoraSystem
 {
 public:
-    void api_call(std::list<std::string> arg, std::function<void(int, std::string)> callback)
+    LoraSystem()
     {
-        if (arg.empty()) {
-            report(callback, -1, "missing lora api command\n");
-            return;
-        }
-
-        const std::string command = arg.front();
-        if (command == "Init") {
+        cp0::lora::Operations operations;
+        operations.initialize = [this] {
             initialized_ = true;
             hw_ready_ = true;
             std::snprintf(diag_, sizeof(diag_), "SDL simulated LoRa ready");
-            report(callback, 0, "");
-            return;
-        }
-        if (command == "Poll" || command == "Info") {
-            cp0_lora_info_t info{};
-            fill_info(&info, command == "Poll");
-            report(callback, 0, std::string(reinterpret_cast<const char *>(&info), sizeof(info)));
-            return;
-        }
-        if (command == "SendText") {
-            std::snprintf(last_tx_, sizeof(last_tx_), "%s", first_arg_after_command(arg).c_str());
+            return true;
+        };
+        operations.poll = [] {};
+        operations.read_info = [this](cp0_lora_info_t *info, bool drain_events) {
+            fill_info(info, drain_events);
+        };
+        operations.send_text = [this](const std::string &payload) {
+            std::snprintf(last_tx_, sizeof(last_tx_), "%s", payload.c_str());
             std::snprintf(last_rx_, sizeof(last_rx_), "SDL echo: %.117s", last_tx_);
             has_sent_message_ = true;
             tx_event_ = true;
@@ -44,31 +38,32 @@ public:
             rssi_ = -42.0f;
             snr_ = 9.5f;
             std::snprintf(diag_, sizeof(diag_), "SDL simulated packet sent");
-            report(callback, 0, "");
-            return;
-        }
-        if (command == "StartReceive") {
+            return true;
+        };
+        operations.start_receive = [this] {
             tx_mode_ = false;
             std::snprintf(diag_, sizeof(diag_), "SDL simulated receive mode");
-            report(callback, 0, "");
-            return;
-        }
-        if (command == "SetTxMode") {
-            tx_mode_ = std::atoi(first_arg_after_command(arg).c_str()) != 0;
+        };
+        operations.set_tx_mode = [this](bool enabled) {
+            tx_mode_ = enabled;
             std::snprintf(diag_, sizeof(diag_), tx_mode_ ? "SDL simulated TX mode" : "SDL simulated RX mode");
-            report(callback, 0, "");
-            return;
-        }
-        if (command == "Shutdown") {
+        };
+        operations.shutdown = [this] {
             initialized_ = false;
             hw_ready_ = false;
             tx_mode_ = false;
             std::snprintf(diag_, sizeof(diag_), "SDL simulated LoRa shutdown");
-            report(callback, 0, "");
-            return;
-        }
+        };
+        service_ = std::make_unique<cp0::lora::Service>(std::move(operations));
+    }
 
-        report(callback, -1, "unknown lora api\n");
+    void api_call(std::list<std::string> arg, std::function<void(int, std::string)> callback)
+    {
+        cp0::CallbackResult completion(std::move(callback));
+        completion.guard(-1, "lora api failure", [&] {
+            const cp0::lora::Result result = service_->call(arg);
+            completion.complete(result.code, result.payload);
+        });
     }
 
 private:
@@ -83,13 +78,7 @@ private:
     char last_rx_[128] = "SDL simulated receive buffer";
     char last_tx_[128] = "Hello from SDL LoRa";
     char diag_[256] = "SDL simulated LoRa idle";
-
-    static std::string first_arg_after_command(const std::list<std::string>& arg)
-    {
-        if (arg.size() < 2)
-            return "";
-        return *std::next(arg.begin());
-    }
+    std::unique_ptr<cp0::lora::Service> service_;
 
     void fill_info(cp0_lora_info_t *info, bool drain_events)
     {
@@ -117,16 +106,40 @@ private:
         }
     }
 
-    static void report(std::function<void(int, std::string)> callback, int code, const std::string& data)
-    {
-        if (callback) callback(code, data);
-    }
 };
+
+namespace {
+
+std::shared_ptr<LoraSystem> &lora_system()
+{
+    static auto lora = std::make_shared<LoraSystem>();
+    return lora;
+}
+
+cp0::SignalRegistration<decltype(cp0_signal_lora_api)> &lora_registration()
+{
+    static cp0::SignalRegistration<decltype(cp0_signal_lora_api)> registration;
+    return registration;
+}
+
+} // namespace
 
 extern "C" void init_lora(void)
 {
-    std::shared_ptr<LoraSystem> lora = std::make_shared<LoraSystem>();
-    cp0_signal_lora_api.append([lora](std::list<std::string> arg, std::function<void(int, std::string)> callback) {
-        lora->api_call(arg, callback);
+    const auto active_lora = lora_system();
+    lora_registration().replace(cp0_signal_lora_api, [active_lora](std::list<std::string> arg, std::function<void(int, std::string)> callback) {
+        active_lora->api_call(arg, callback);
     });
+}
+
+extern "C" void deinit_lora(void) noexcept
+{
+    try {
+        lora_registration().reset();
+    } catch (...) {
+    }
+    try {
+        lora_system()->api_call({"Shutdown"}, nullptr);
+    } catch (...) {
+    }
 }

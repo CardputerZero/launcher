@@ -13,6 +13,7 @@ extern "C" {
 struct key_item;
 
 void ui_screensaver_init(void);
+void ui_screensaver_deinit(void);
 int ui_screensaver_filter_key(const struct key_item *item);
 void ui_screensaver_set_foreground(int foreground);
 

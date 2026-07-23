@@ -144,6 +144,14 @@ int cp0_dir_watch_poll(cp0_watcher_t watcher);
 void cp0_dir_watch_stop(cp0_watcher_t watcher);
 
 int cp0_network_list(cp0_netif_info_t *entries, int max_entries, int *out_count);
+int cp0_wifi_status_read(cp0_wifi_status_t *status);
+int cp0_wifi_scan(cp0_wifi_ap_t *entries, int max_entries);
+int cp0_wifi_connect(const char *ssid, const char *password);
+int cp0_wifi_profile_forget(const char *ssid);
+int cp0_wifi_profile_exists(const char *ssid);
+int cp0_wifi_disconnect_active(void);
+int cp0_wifi_radio_enabled(void);
+int cp0_wifi_radio_set_enabled(int enabled);
 
 int cp0_process_exec_blocking(const char *exec_path, volatile int *home_key_flag, int keep_root);
 cp0_pid_t cp0_process_spawn(const char *exec_path, int keep_root);

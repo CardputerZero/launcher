@@ -1,20 +1,23 @@
 #include "cp0_lvgl_app.h"
 #include "hal_lvgl_bsp.h"
+#include "../cp0_battery_api_contract.hpp"
+#include "../cp0_callback_result.hpp"
+#include "../cp0_battery_codec.hpp"
+#include "../cp0_battery_lifecycle.hpp"
+#include "../cp0_signal_registration.hpp"
 #include "../cp0_battery_testable.hpp"
+#include "../cp0_callback_contract.hpp"
 
 #include <cerrno>
-#include <climits>
-#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <dirent.h>
 #include <fcntl.h>
 #include <functional>
-#include <iterator>
 #include <list>
 #include <memory>
-#include <sstream>
+#include <mutex>
 #include <string>
 #include <utility>
 #include <unistd.h>
@@ -33,21 +36,6 @@
 
 namespace {
 
-    constexpr int kBatteryCurrentMaxMa = 5000;
-
-    static bool is_charging_status(const char *status)
-    {
-        return std::strcmp(status, "Charging") == 0;
-    }
-
-    static int sanitize_battery_current_ma(int current_ma, bool)
-    {
-        if (std::abs(current_ma) > kBatteryCurrentMaxMa) {
-            return INT32_MIN; // sentinel: value out of plausible range
-        }
-        return current_ma;
-    }
-
 class Bq27220System
 {
 public:
@@ -56,16 +44,17 @@ public:
 
     void api_call(arg_t arg, callback_t callback)
     {
-        const std::string cmd = arg.empty() ? "" : arg.front();
-        if (cmd == "Read") {
-            cp0_battery_info_t info = read();
-            report(callback, info.valid ? 0 : -1, encode(info));
-        } else if (cmd == "Calibrate") {
-            const int index = arg.size() >= 2 ? std::atoi(nth_arg(arg, 1).c_str()) : -1;
-            report(callback, calibrate(index), "");
-        } else {
-            report(callback, -1, "unknown bq27220 api command");
-        }
+        cp0::CallbackResult result(std::move(callback));
+        result.guard(-1, "battery api failure", [&] {
+            cp0::battery::ApiReply reply;
+            {
+                std::lock_guard<std::mutex> lock(mutex_);
+                reply = cp0::battery::dispatch_api_request(
+                    arg, [this] { return read(); },
+                    [this](int index) { return calibrate(index); });
+            }
+            result.complete(reply.code, reply.data);
+        });
     }
 
     cp0_battery_info_t read()
@@ -91,23 +80,9 @@ public:
             ok = ok && read_string(path, status, sizeof(status));
 
             if (ok) {
-                const bool is_charging = is_charging_status(status);
-                // power_supply convention: negative = discharging, positive = charging
-                const double current_ma = current_raw / 1000.0;
-                const int rounded_current_ma = sanitize_battery_current_ma(round_to_int(current_ma), is_charging);
-                if (cp0_battery_testable::measurement_is_valid(
-                        static_cast<int>(present), static_cast<int>(capacity),
-                        rounded_current_ma, static_cast<int>(temp_raw)) &&
-                    cp0_battery_testable::power_supply_status_is_known(status)) {
-                    info.soc = static_cast<int>(capacity);
-                    info.voltage_mv = static_cast<int>(voltage_uv / 1000);
-                    info.current_ma = rounded_current_ma;
-                    info.avg_current_ma = rounded_current_ma;
-                    info.temperature_c10 = static_cast<int>(temp_raw);
-                    info.flags = is_charging ? 1 : 0;
-                    info.valid = 1;
-                    return info;
-                }
+                return cp0::battery::from_power_supply(
+                    static_cast<int>(present), static_cast<int>(capacity),
+                    voltage_uv, current_raw, static_cast<int>(temp_raw), status);
             }
         }
 
@@ -142,7 +117,7 @@ public:
         int ret = ioctl(fd, I2C_RDWR, &data);
         int saved_errno = errno;
         close(fd);
-        return ret == 0 ? 0 : -saved_errno;
+        return ret >= 0 ? 0 : -saved_errno;
 #else
         (void)command_index;
         return -1;
@@ -150,65 +125,10 @@ public:
     }
 
 private:
+    std::mutex mutex_;
+
     static constexpr const char *kI2cDev = "/dev/i2c-1";
     static constexpr int kI2cAddr = 0x55;
-
-    static void report(callback_t callback, int code, const std::string &data)
-    {
-        if (callback) {
-            callback(code, data);
-        }
-    }
-
-    static std::string nth_arg(const arg_t &arg, size_t index)
-    {
-        auto it = arg.begin();
-        std::advance(it, static_cast<long>(std::min(index, arg.size())));
-        return it == arg.end() ? std::string() : *it;
-    }
-
-    static int round_to_int(double value)
-    {
-        return static_cast<int>(value >= 0 ? value + 0.5 : value - 0.5);
-    }
-
-    static std::string encode(const cp0_battery_info_t &info)
-    {
-        std::ostringstream os;
-        os << info.voltage_mv << ','
-           << info.current_ma << ','
-           << info.temperature_c10 << ','
-           << info.soc << ','
-           << info.remain_mah << ','
-           << info.full_mah << ','
-           << info.flags << ','
-           << info.avg_current_ma << ','
-           << info.valid;
-        return os.str();
-    }
-
-    static bool decode(const std::string &data, cp0_battery_info_t *info)
-    {
-        if (!info) {
-            return false;
-        }
-        cp0_battery_info_t parsed{};
-        char comma;
-        std::istringstream is(data);
-        if (is >> parsed.voltage_mv >> comma &&
-            is >> parsed.current_ma >> comma &&
-            is >> parsed.temperature_c10 >> comma &&
-            is >> parsed.soc >> comma &&
-            is >> parsed.remain_mah >> comma &&
-            is >> parsed.full_mah >> comma &&
-            is >> parsed.flags >> comma &&
-            is >> parsed.avg_current_ma >> comma &&
-            is >> parsed.valid) {
-            *info = parsed;
-            return true;
-        }
-        return false;
-    }
 
     static int read_long(const char *path, long *value)
     {
@@ -252,9 +172,9 @@ private:
 
     static int has_file(const char *dir, const char *name)
     {
-        char path[320];
-        std::snprintf(path, sizeof(path), "%s/%s", dir, name);
-        return access(path, R_OK) == 0;
+        if (!dir || !name) return 0;
+        const std::string path = std::string(dir) + "/" + name;
+        return access(path.c_str(), R_OK) == 0;
     }
 
     static int find_power_supply(char *out, size_t out_len)
@@ -263,50 +183,45 @@ private:
         DIR *dp = opendir(base);
         if (!dp) return 0;
 
-        char fallback[320] = {0};
+        std::string fallback;
         struct dirent *ent = nullptr;
         while ((ent = readdir(dp)) != nullptr) {
             if (ent->d_name[0] == '.') continue;
 
-            char dir[320];
-            std::snprintf(dir, sizeof(dir), "%s/%s", base, ent->d_name);
+            const std::string dir = std::string(base) + "/" + ent->d_name;
             char type[64] = {0};
-            char type_path[384];
-            std::snprintf(type_path, sizeof(type_path), "%s/type", dir);
-            if (!read_string(type_path, type, sizeof(type)) ||
+            const std::string type_path = dir + "/type";
+            if (!read_string(type_path.c_str(), type, sizeof(type)) ||
                 !cp0_battery_testable::power_supply_type_is_battery(type) ||
-                !has_file(dir, "present") ||
-                !has_file(dir, "capacity") ||
-                !has_file(dir, "voltage_now") ||
-                (!has_file(dir, "current_instant") && !has_file(dir, "current_now")) ||
-                !has_file(dir, "temp") ||
-                !has_file(dir, "status")) {
+                !has_file(dir.c_str(), "present") ||
+                !has_file(dir.c_str(), "capacity") ||
+                !has_file(dir.c_str(), "voltage_now") ||
+                (!has_file(dir.c_str(), "current_instant") && !has_file(dir.c_str(), "current_now")) ||
+                !has_file(dir.c_str(), "temp") ||
+                !has_file(dir.c_str(), "status")) {
                 continue;
             }
 
             if (std::strstr(ent->d_name, "bq27220") || std::strstr(ent->d_name, "bq27")) {
-                std::snprintf(out, out_len, "%s", dir);
+                if (dir.size() >= out_len) {
+                    closedir(dp);
+                    return 0;
+                }
+                std::memcpy(out, dir.c_str(), dir.size() + 1);
                 closedir(dp);
                 return 1;
             }
-            if (fallback[0] == 0) {
-                std::snprintf(fallback, sizeof(fallback), "%s", dir);
-            }
+            if (fallback.empty()) fallback = dir;
         }
 
         closedir(dp);
-        if (fallback[0]) {
-            std::snprintf(out, out_len, "%s", fallback);
+        if (!fallback.empty() && fallback.size() < out_len) {
+            std::memcpy(out, fallback.c_str(), fallback.size() + 1);
             return 1;
         }
         return 0;
     }
 
-public:
-    static bool decode_info(const std::string &data, cp0_battery_info_t *info)
-    {
-        return decode(data, info);
-    }
 };
 
 } // namespace
@@ -316,30 +231,48 @@ extern "C" {
 cp0_battery_info_t cp0_battery_read(void)
 {
     cp0_battery_info_t info{};
-    cp0_signal_bq27220_api({"Read"}, [&](int code, std::string data) {
-        if (code == 0) {
-            Bq27220System::decode_info(data, &info);
-        }
-    });
+    try {
+        cp0_signal_bq27220_api({"Read"}, [&](int code, std::string data) {
+            if (code == 0) cp0::battery::decode_info(data, &info);
+        });
+    } catch (...) {
+        info = {};
+    }
     return info;
 }
 
 int cp0_bq27220_calibrate(int command_index)
 {
     int ret = -1;
-    cp0_signal_bq27220_api({"Calibrate", std::to_string(command_index)}, [&](int code, std::string data) {
-        (void)data;
-        ret = code;
-    });
+    try {
+        cp0_signal_bq27220_api({"Calibrate", std::to_string(command_index)}, [&](int code, std::string data) {
+            (void)data;
+            ret = code;
+        });
+    } catch (...) {
+        ret = -1;
+    }
     return ret;
 }
 
 void init_bq27220(void)
 {
-    std::shared_ptr<Bq27220System> bq27220 = std::make_shared<Bq27220System>();
-    cp0_signal_bq27220_api.append([bq27220](std::list<std::string> arg, std::function<void(int, std::string)> callback) {
-        bq27220->api_call(std::move(arg), std::move(callback));
-    });
+    static cp0::battery::Lifecycle lifecycle;
+    lifecycle.start(
+        [] {
+            auto bq27220 = std::make_shared<Bq27220System>();
+            using Registration = cp0::SignalRegistration<decltype(cp0_signal_bq27220_api)>;
+            auto registration = std::make_shared<Registration>();
+            const bool registered = registration->replace(
+                cp0_signal_bq27220_api,
+                [bq27220](std::list<std::string> arg,
+                          std::function<void(int, std::string)> callback) {
+                    bq27220->api_call(std::move(arg), std::move(callback));
+                });
+            return cp0::battery::LifecycleResource{
+                registered, [registration] { registration->reset(); }};
+        },
+        [] { return cp0::battery::LifecycleResource{true, {}}; });
 }
 
 }
