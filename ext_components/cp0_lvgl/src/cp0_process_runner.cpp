@@ -23,12 +23,13 @@ Result run(std::vector<std::string> argv, const std::string *input, Output outpu
            const std::atomic<bool> *cancel, int timeout_ms, std::size_t capacity,
            std::uint32_t portable_uid, std::uint32_t portable_gid,
            const std::string &user_name,
-           const std::string &home, const std::string &shell)
+           const std::string &home, const std::string &shell,
+           InputConsumed input_consumed)
 {
 #if defined(_WIN32)
     (void)argv; (void)input; (void)output; (void)cancel; (void)timeout_ms;
     (void)capacity; (void)portable_uid; (void)portable_gid; (void)user_name;
-    (void)home; (void)shell;
+    (void)home; (void)shell; (void)input_consumed;
     return {-ENOTSUP, {}};
 #else
     const uid_t uid = static_cast<uid_t>(portable_uid);
@@ -109,6 +110,17 @@ Result run(std::vector<std::string> argv, const std::string *input, Output outpu
         _exit(127);
     }
     close(out[1]);
+    bool input_notified = false;
+    auto finish_input = [&]() {
+        if (input && in[1] >= 0) {
+            close(in[1]);
+            in[1] = -1;
+        }
+        if (input && !input_notified) {
+            input_notified = true;
+            if (input_consumed) input_consumed();
+        }
+    };
     sigset_t set{}, old{}, pending{};
     bool sigpipe_blocked = false, sigpipe_was_pending = false;
     if (input) {
@@ -142,7 +154,7 @@ Result run(std::vector<std::string> argv, const std::string *input, Output outpu
             result.exit_code = cancelled ? -ECANCELED : -ETIMEDOUT;
             terminated = true;
             force_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(6);
-            if (input && in[1] >= 0) { close(in[1]); in[1] = -1; }
+            finish_input();
         }
         if (terminated && !forced) {
             siginfo_t info{};
@@ -179,10 +191,10 @@ Result run(std::vector<std::string> argv, const std::string *input, Output outpu
             ssize_t count = write(in[1], input->data() + input_offset, input->size() - input_offset);
             if (count > 0) input_offset += static_cast<size_t>(count);
             else if (count < 0 && errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK) {
-                close(in[1]); in[1] = -1;
+                finish_input();
             }
         }
-        if (input && in[1] >= 0 && input_offset == input->size()) { close(in[1]); in[1] = -1; }
+        if (input && in[1] >= 0 && input_offset == input->size()) finish_input();
         // Keep the leader unreaped during the grace period. Its PID then cannot
         // be reused as another process group's ID before the forced group kill.
         if (!reaped && (!terminated || forced)) {
@@ -197,7 +209,7 @@ Result run(std::vector<std::string> argv, const std::string *input, Output outpu
         pollfd fds[2]{{out[0], POLLIN, 0}, {input && in[1] >= 0 ? in[1] : -1, POLLOUT, 0}};
         poll(fds, 2, 20);
     }
-    if (input && in[1] >= 0) close(in[1]);
+    finish_input();
     if (sigpipe_blocked) {
         if (!sigpipe_was_pending && sigpending(&pending) == 0 && sigismember(&pending, SIGPIPE)) {
             timespec zero{0, 0}; sigtimedwait(&set, nullptr, &zero);

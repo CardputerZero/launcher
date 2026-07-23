@@ -101,14 +101,21 @@ void RTC::toggle_ntp(UISetupPage &page)
     const auto operation = async_operation_.begin();
     if (!operation)
         return;
-    show_status("Updating NTP", "Please wait...", Modal::BUSY);
-    struct Context { RTC *rtc; UISetupPage *page; AsyncOperationLifecycle::Token operation; };
-    auto ctx = std::shared_ptr<Context>(new (std::nothrow) Context{this, &page, operation});
+    show_status(desired ? "Enabling NTP" : "Disabling NTP", "Please wait...", Modal::BUSY);
+    struct Context {
+        RTC *rtc;
+        UISetupPage *page;
+        AsyncOperationLifecycle::Token operation;
+        bool desired;
+    };
+    auto ctx = std::shared_ptr<Context>(
+        new (std::nothrow) Context{this, &page, operation, desired});
     if (!ctx) {
         async_operation_.abort(operation);
         state_.rollback_ntp(ntp_previous_);
         update_labels(page);
-        show_status("NTP failed", "Out of memory", Modal::ERROR);
+        show_status(desired ? "Enable NTP failed" : "Disable NTP failed",
+                    "Out of memory", Modal::ERROR);
         return;
     }
     uint64_t request_id = 0;
@@ -126,7 +133,8 @@ void RTC::toggle_ntp(UISetupPage &page)
                     SetupPageAccess(*ctx->page).build_sub_view();
                     return;
                 }
-                ctx->rtc->show_result_error(result, exit_code, "NTP update");
+                ctx->rtc->show_result_error(
+                    result, exit_code, ctx->desired ? "Enable NTP" : "Disable NTP");
                 return;
             }
             int actual = -1;
@@ -153,7 +161,8 @@ void RTC::toggle_ntp(UISetupPage &page)
         async_operation_.abort(operation);
         state_.rollback_ntp(ntp_previous_);
         update_labels(page);
-        show_status("NTP failed", "Unable to start request", Modal::ERROR);
+        show_status(desired ? "Enable NTP failed" : "Disable NTP failed",
+                    "Unable to start request", Modal::ERROR);
     }
     else async_operation_.activate(operation, request_id);
 }

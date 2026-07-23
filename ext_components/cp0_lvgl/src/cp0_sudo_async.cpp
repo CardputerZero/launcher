@@ -6,6 +6,7 @@
 #include "cp0_sudo_coordinator.hpp"
 #include "cp0_callback_contract.hpp"
 #include "cp0_sudo_request_factory.hpp"
+#include "cp0_sudo_command.hpp"
 #include "cp0_dispatch_testable.hpp"
 #include "cp0_pointer_lifecycle.hpp"
 #include "cp0_signal_registration.hpp"
@@ -481,18 +482,29 @@ void run_worker(std::shared_ptr<Request> request, std::string password)
     UserIdentity identity;
     if (!resolve_run_user(identity)) exit_code = -EPERM;
     else {
-        std::string password_line = password + "\n";
-        auto validation = cp0_runner::run({"sudo", "-k", "-S", "-p", "", "-v"},
-            &password_line, nullptr, &request->cancel_requested, request->auth_timeout_ms,
+        std::string validation_input = password + "\n";
+        std::string execution_input = std::move(password);
+        execution_input.push_back('\n');
+        secure_clear(password);
+        if (std::system("sudo -k") != 0) {
+            secure_clear(validation_input);
+            secure_clear(execution_input);
+            complete_worker(request, CP0_SUDO_RESULT_EXEC_FAILED, -EPERM);
+            return;
+        }
+        auto validation = cp0_runner::run(cp0_sudo::validation_command(),
+            &validation_input, nullptr, &request->cancel_requested, request->auth_timeout_ms,
             kMaxCapturedOutputBytes,
-            identity.uid, identity.gid, identity.name, identity.home, identity.shell);
-        secure_clear(password_line);
+            identity.uid, identity.gid, identity.name, identity.home, identity.shell,
+            [&validation_input] { secure_clear(validation_input); });
+        secure_clear(validation_input);
         exit_code = validation.exit_code;
         result = exit_code == -ECANCELED ? CP0_SUDO_RESULT_CANCELLED :
                  exit_code == -ETIMEDOUT ? CP0_SUDO_RESULT_TIMED_OUT :
                  authentication_error(validation.output) ? CP0_SUDO_RESULT_AUTH_FAILED :
                  exit_code == 0 ? CP0_SUDO_RESULT_SUCCESS : CP0_SUDO_RESULT_EXEC_FAILED;
         if (result == CP0_SUDO_RESULT_AUTH_FAILED) {
+            secure_clear(execution_input);
             const bool terminal = request->cancel_requested.load() || request->auth_attempts >= 3;
             if (terminal) {
                 if (request->cancel_requested.load()) {
@@ -502,13 +514,12 @@ void run_worker(std::shared_ptr<Request> request, std::string password)
                 invoke_worker_completion(request, result, exit_code);
             }
             auto actions = g_coordinator.worker_auth_result(request->id, result, exit_code, now_ms());
-            secure_clear(password);
             if (!actions.empty() && !post_actions(actions))
                 g_coordinator.requeue_actions(std::move(actions));
             return;
         }
         if (result != CP0_SUDO_RESULT_SUCCESS) {
-            secure_clear(password);
+            secure_clear(execution_input);
             complete_worker(request, result, exit_code);
             return;
         }
@@ -517,21 +528,19 @@ void run_worker(std::shared_ptr<Request> request, std::string password)
         if (!authenticated.empty() && !post_actions(authenticated))
             g_coordinator.requeue_actions(std::move(authenticated));
 
-        std::vector<std::string> command;
-        if (request->use_login_shell)
-            command = {"sudo", "-n", "--", identity.shell, "-c", request->argv.front()};
-        else {
-            command = {"sudo", "-n", "--"};
-            command.insert(command.end(), request->argv.begin(), request->argv.end());
-        }
-        auto execution = cp0_runner::run(std::move(command), nullptr,
+        auto command = cp0_sudo::execution_command(
+            request->argv, request->use_login_shell, identity.shell);
+        auto execution = cp0_runner::run(std::move(command), &execution_input,
             [request](const char *data, size_t size) { stream_output(request, data, size); },
             &request->cancel_requested, request->exec_timeout_ms, kMaxCapturedOutputBytes,
-            identity.uid, identity.gid, identity.name, identity.home, identity.shell);
+            identity.uid, identity.gid, identity.name, identity.home, identity.shell,
+            [&execution_input] { secure_clear(execution_input); });
+        secure_clear(execution_input);
         exit_code = execution.exit_code;
         result = exit_code == -ECANCELED ? CP0_SUDO_RESULT_CANCELLED :
-                 exit_code == -ETIMEDOUT ? CP0_SUDO_RESULT_TIMED_OUT :
-                 exit_code == 0 ? CP0_SUDO_RESULT_SUCCESS : CP0_SUDO_RESULT_EXEC_FAILED;
+             exit_code == -ETIMEDOUT ? CP0_SUDO_RESULT_TIMED_OUT :
+             authentication_error(execution.output) ? CP0_SUDO_RESULT_AUTH_FAILED :
+             exit_code == 0 ? CP0_SUDO_RESULT_SUCCESS : CP0_SUDO_RESULT_EXEC_FAILED;
     }
 #endif
     secure_clear(password);
