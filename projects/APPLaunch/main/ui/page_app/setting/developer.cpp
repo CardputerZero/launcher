@@ -38,6 +38,8 @@ void Developer::append(UISetupPage &p, std::vector<MenuItem> &menu)
     // Pairing and authorization views are retained but intentionally hidden for now.
     m.sub_items = {
         {"ADB", true, false, [controller, page]() { controller->toggle_adb(*page); }},
+        {"ADB guide", false, false,
+         [controller, page]() { controller->enter_usb_guide(*page, true); }},
     };
     m.on_enter = [controller, page]() { controller->refresh_adb_status(*page); };
     menu.push_back(m);
