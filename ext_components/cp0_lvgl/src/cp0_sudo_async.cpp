@@ -860,7 +860,11 @@ extern "C" void init_sudo_signals(void)
         const std::string value = args.size() > 1 ? *std::next(args.begin()) : std::string();
         std::list<std::string> argv;
         if (command == "AdbSet") {
-            argv = {cp0_file_path("adb_helper"), value == "1" ? "enable" : "disable"};
+            if (args.size() != 2 || (value != "0" && value != "1")) {
+                if (started) started(-EINVAL, 0);
+                return;
+            }
+            argv = {"systemctl", value == "1" ? "restart" : "stop", "adbd.service"};
         } else if (command == "AdbAuthorize") {
             if (value.size() < 680 || value.size() > 2048 || value.find('\n') != std::string::npos ||
                 value.find('\r') != std::string::npos) {

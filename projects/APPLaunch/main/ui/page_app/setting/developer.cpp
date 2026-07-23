@@ -35,19 +35,9 @@ void Developer::append(UISetupPage &p, std::vector<MenuItem> &menu)
     Developer *controller = this;
     MenuItem m;
     m.label = "Developer";
-    bool adb_en = SetupPageAccess(p).config_get_int("adb_debug", 0) != 0;
+    // Pairing and authorization views are retained but intentionally hidden for now.
     m.sub_items = {
-        {"ADB", true, adb_en, [controller, page]() { controller->toggle_adb(*page); }},
-        {"Pair host key", false, false,
-         [controller, page]() { controller->enter_pair_view(*page); }},
-        {"Authorizations: 0", false, false, nullptr},
-        {"Manage authorized hosts", false, false,
-         [controller, page]() { controller->enter_revoke_view(*page); }},
-        {"Clear authorizations", false, false, [controller, page]() {
-            SetupPageAccess(*page).confirm("Clear ADB authorizations?", [controller, page]() {
-                controller->clear_authorizations(*page);
-            });
-        }},
+        {"ADB", true, false, [controller, page]() { controller->toggle_adb(*page); }},
     };
     m.on_enter = [controller, page]() { controller->refresh_adb_status(*page); };
     menu.push_back(m);
@@ -57,21 +47,13 @@ void Developer::toggle_adb(UISetupPage &page)
 {
     SetupPageAccess access(page);
     MenuItem *menu = access.find_menu("Developer");
-    if (!menu || menu->sub_items.size() < 3) return;
+    if (!menu || menu->sub_items.empty()) return;
     if (async_operation_.active()) {
         menu->sub_items[0].toggle_state = !menu->sub_items[0].toggle_state;
         return;
     }
     bool want_on = menu->sub_items[0].toggle_state;
     const bool previous = !want_on;
-    if (want_on) {
-        refresh_adb_status(page);
-        if (menu->sub_items[2].label == "Authorizations: 0") {
-            menu->sub_items[0].toggle_state = false;
-            enter_pair_view(page, true);
-            return;
-        }
-    }
     const auto operation = async_operation_.begin();
     if (!operation)
         return;
@@ -87,7 +69,7 @@ void Developer::toggle_adb(UISetupPage &page)
         new (std::nothrow) Context{this, &page, operation, want_on, previous});
     if (!ctx) {
         async_operation_.abort(operation);
-        update_toggle(page, previous, false);
+        update_toggle(page, previous);
         show_status("ADB update failed", "Out of memory", Modal::ERROR);
         return;
     }
@@ -99,24 +81,14 @@ void Developer::toggle_adb(UISetupPage &page)
             cp0_sudo_result_t result = static_cast<cp0_sudo_result_t>(result_code);
             if (!developer_async_completion_allowed(
                     ctx->operation.complete(), ctx->developer, ctx->page)) return;
-            if (adb_toggle_succeeded(result, exit_code)) {
-                const AdbPersistenceResult persistence = ctx->developer->update_toggle(
-                    *ctx->page, ctx->desired, true, ctx->previous);
-                if (persistence != AdbPersistenceResult::SAVED) {
-                    ctx->developer->show_status(
-                        "ADB changed; save failed",
-                        adb_persistence_error_detail(persistence), Modal::ERROR);
-                    return;
-                }
+            if (result == CP0_SUDO_RESULT_SUCCESS) {
+                ctx->developer->update_toggle(*ctx->page, ctx->desired);
                 ctx->developer->close_status();
-                if (adb_reboot_required(result, exit_code))
-                    ctx->developer->enter_usb_guide(*ctx->page, ctx->desired);
-                else
-                    SetupPageAccess(*ctx->page).build_sub_view();
+                SetupPageAccess(*ctx->page).build_sub_view();
                 return;
             }
             if (!ctx->developer->refresh_adb_status(*ctx->page))
-                ctx->developer->update_toggle(*ctx->page, ctx->previous, false);
+                ctx->developer->update_toggle(*ctx->page, ctx->previous);
             if (result == CP0_SUDO_RESULT_CANCELLED) {
                 ctx->developer->close_status();
                 SetupPageAccess(*ctx->page).build_sub_view();
@@ -128,7 +100,7 @@ void Developer::toggle_adb(UISetupPage &page)
         }, [&](int code, uint64_t id) { rc = code; request_id = id; });
     if (rc != 0) {
         async_operation_.abort(operation);
-        update_toggle(page, previous, false);
+        update_toggle(page, previous);
         show_status("ADB update failed", "Unable to start request", Modal::ERROR);
         return;
     }
@@ -138,7 +110,7 @@ void Developer::toggle_adb(UISetupPage &page)
 bool Developer::refresh_adb_status(UISetupPage &page)
 {
     MenuItem *menu = SetupPageAccess(page).find_menu("Developer");
-    if (!menu || menu->sub_items.size() < 3) return false;
+    if (!menu || menu->sub_items.empty()) return false;
     int rc = -1;
     std::string out;
     cp0_signal_process_api({"AdbStatus"},
@@ -146,13 +118,7 @@ bool Developer::refresh_adb_status(UISetupPage &page)
     if (rc != 0) return false;
     AdbStatus status = parse_adb_status(out.c_str());
     if (!status.valid) return false;
-    const bool previous = menu->sub_items[0].toggle_state;
-    update_toggle(page, adb_state_after_failure(status, false), true, previous);
-    char count[32];
-    snprintf(count, sizeof(count), "Authorizations: %d", status.authorizations);
-    menu->sub_items[2].label = count;
-    authorizations_ = parse_adb_authorizations(out.c_str());
-    model_.reconcile_authorization_count(authorizations_.size());
+    update_toggle(page, adb_state_after_failure(status, menu->sub_items[0].toggle_state));
     return true;
 }
 
@@ -220,35 +186,12 @@ void Developer::run_admin_action(UISetupPage &page, std::list<std::string> args,
     async_operation_.activate(operation, request_id);
 }
 
-AdbPersistenceResult Developer::update_toggle(UISetupPage &page, bool enabled, bool save,
-                                               bool rollback_value)
+void Developer::update_toggle(UISetupPage &page, bool enabled)
 {
     SetupPageAccess access(page);
     MenuItem *menu = access.find_menu("Developer");
-    if (!menu || menu->sub_items.empty()) return AdbPersistenceResult::NOT_REQUESTED;
+    if (!menu || menu->sub_items.empty()) return;
     menu->sub_items[0].toggle_state = enabled;
-    if (!save) return AdbPersistenceResult::NOT_REQUESTED;
-
-    const bool set_succeeded = access.config_set_int("adb_debug", enabled ? 1 : 0);
-    if (!set_succeeded) {
-        const AdbPersistenceResult result =
-            adb_persistence_result(false, false, false, false);
-        menu->sub_items[0].toggle_state =
-            adb_visible_state_after_persistence(result, enabled, rollback_value);
-        return result;
-    }
-    const bool save_succeeded = access.config_save();
-    if (save_succeeded)
-        return adb_persistence_result(true, true, false, false);
-
-    const bool rollback_set_succeeded =
-        access.config_set_int("adb_debug", rollback_value ? 1 : 0);
-    const bool rollback_save_succeeded = rollback_set_succeeded && access.config_save();
-    const AdbPersistenceResult result = adb_persistence_result(
-        true, false, rollback_set_succeeded, rollback_save_succeeded);
-    menu->sub_items[0].toggle_state =
-        adb_visible_state_after_persistence(result, enabled, rollback_value);
-    return result;
 }
 
 void Developer::show_result_error(cp0_sudo_result_t result, int exit_code)

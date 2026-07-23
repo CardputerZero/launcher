@@ -19,8 +19,6 @@ struct AdbAuthorization {
 };
 
 AdbStatus parse_adb_status(const char *output);
-bool adb_toggle_succeeded(cp0_sudo_result_t result, int exit_code);
-bool adb_reboot_required(cp0_sudo_result_t result, int exit_code);
 bool adb_state_after_failure(const AdbStatus &status, bool previous);
 bool adb_public_key_valid(const std::string &key);
 std::vector<AdbAuthorization> parse_adb_authorizations(const char *output);
