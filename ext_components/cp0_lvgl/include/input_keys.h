@@ -18,6 +18,7 @@
 #define KEY_8               9
 #define KEY_9               10
 #define KEY_0               11
+#define KEY_MINUS           12
 #define KEY_BACKSPACE       14
 #define KEY_TAB             15
 #define KEY_Q               16
@@ -50,6 +51,7 @@
 #define KEY_B               48
 #define KEY_N               49
 #define KEY_M               50
+#define KEY_DOT             52
 #define KEY_SPACE           57
 #define KEY_LEFTALT         56
 #define KEY_CAPSLOCK        58
