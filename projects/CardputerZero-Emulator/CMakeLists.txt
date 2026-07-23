@@ -147,6 +147,14 @@ endmacro()
 # ===========================================================================
 # Native-only targets (skipped for Emscripten)
 # ===========================================================================
+set(CP0_LVGL_APP_COMMON_SRCS
+    ${CP0_LVGL}/src/commount.c
+    ${CP0_LVGL}/src/commount.cpp
+    ${CP0_LVGL}/src/cp0_font_service.cpp
+    ${CP0_LVGL}/src/cp0_network_api_contract.cpp
+    ${CP0_LVGL}/src/ui_app_page.cpp
+)
+
 if(NOT EMSCRIPTEN)
 
 option(EMU_SKIP_APPLAUNCH "Skip APPLaunch (Unix-only deps)" OFF)
@@ -173,8 +181,7 @@ file(GLOB CP0_LVGL_SDL_SRCS CONFIGURE_DEPENDS
 )
 set(CP0_LVGL_WIN32_SRCS
     src/cp0_web_runtime.cpp
-    ${CP0_LVGL}/src/commount.c
-    ${CP0_LVGL}/src/commount.cpp
+    ${CP0_LVGL_APP_COMMON_SRCS}
     ${CP0_LVGL}/src/win32/cp0_hal_stubs_win32.c
 )
 
@@ -433,8 +440,7 @@ if(EMSCRIPTEN)
     file(GLOB         APPLAUNCH_HAL_SDL_CPP_WEB ${APPLAUNCH}/hal/sdl/*.cpp)
     set(CP0_LVGL_WEB_SRCS
         src/cp0_web_runtime.cpp
-        ${CP0_LVGL}/src/commount.c
-        ${CP0_LVGL}/src/commount.cpp
+        ${CP0_LVGL_APP_COMMON_SRCS}
         ${CP0_LVGL}/src/web/cp0_hal_stubs_web.c
     )
 
