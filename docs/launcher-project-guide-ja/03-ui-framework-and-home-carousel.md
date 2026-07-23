@@ -445,8 +445,6 @@ Release ENTER
   -> audio_play_enter()
   -> launch_selected_app()
 
-Release F12
-  -> Toggle green test background lvping_lock
 ```
 
 コードはまず `fzxc_to_arrow()` によって `F/X/Z/C` を矢印キーへマップします。

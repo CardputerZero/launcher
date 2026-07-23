@@ -113,7 +113,7 @@ Key defaults and options:
 Generated APPLaunch package filename format:
 
 ```text
-applaunch_0.6.0-m5stack1_arm64.deb
+applaunch_0.6.1-m5stack1_arm64.deb
 ```
 
 ## 4. `.deb` Package Directory Structure
@@ -146,7 +146,7 @@ projects/APPLaunch/tools/debian-APPLaunch/
 The final APPLaunch `.deb` file is located at:
 
 ```text
-projects/APPLaunch/tools/applaunch_0.6.0-m5stack1_arm64.deb
+projects/APPLaunch/tools/applaunch_0.6.1-m5stack1_arm64.deb
 ```
 
 ## 5. Packaging Commands
@@ -189,9 +189,9 @@ python3 scripts/debian_packager.py build \
 On success, output similar to the following appears:
 
 ```text
-Creating Debian package applaunch_0.6.0-m5stack1_arm64.deb ...
+Creating Debian package applaunch_0.6.1-m5stack1_arm64.deb ...
 Staged package tree: .../projects/APPLaunch/tools/debian-APPLaunch
-Debian package created: .../projects/APPLaunch/tools/applaunch_0.6.0-m5stack1_arm64.deb
+Debian package created: .../projects/APPLaunch/tools/applaunch_0.6.1-m5stack1_arm64.deb
 Builder: dpkg-deb
 ```
 
@@ -313,7 +313,7 @@ The generated control file contains:
 
 ```text
 Package: applaunch
-Version: 0.6.0
+Version: 0.6.1
 Architecture: arm64
 Maintainer: dianjixz <dianjixz@m5stack.com>
 Original-Maintainer: m5stack <m5stack@m5stack.com>
@@ -425,21 +425,21 @@ Assume the device IP is `192.168.28.177` and the username is `pi`:
 
 ```bash
 cd /home/nihao/w2T/github/launcher/projects/APPLaunch/tools
-scp applaunch_0.6.0-m5stack1_arm64.deb pi@192.168.28.177:/home/pi/
+scp applaunch_0.6.1-m5stack1_arm64.deb pi@192.168.28.177:/home/pi/
 ```
 
 ### 9.2 Install on the Device
 
 ```bash
 ssh pi@192.168.28.177
-sudo dpkg -i /home/pi/applaunch_0.6.0-m5stack1_arm64.deb
+sudo dpkg -i /home/pi/applaunch_0.6.1-m5stack1_arm64.deb
 ```
 
 If the installer reports missing dependencies, fix dependencies first:
 
 ```bash
 sudo apt-get -f install
-sudo dpkg -i /home/pi/applaunch_0.6.0-m5stack1_arm64.deb
+sudo dpkg -i /home/pi/applaunch_0.6.1-m5stack1_arm64.deb
 ```
 
 ### 9.3 Overwrite Installation
@@ -447,14 +447,14 @@ sudo dpkg -i /home/pi/applaunch_0.6.0-m5stack1_arm64.deb
 Install the same package name or a higher version again:
 
 ```bash
-sudo dpkg -i /home/pi/applaunch_0.6.0-m5stack1_arm64.deb
+sudo dpkg -i /home/pi/applaunch_0.6.1-m5stack1_arm64.deb
 ```
 
 If the service is running, `postinst` attempts to enable/start it. To reduce framebuffer or input-device contention during installation, you can stop the service manually first:
 
 ```bash
 systemctl --user stop APPLaunch.service || true
-sudo dpkg -i /home/pi/applaunch_0.6.0-m5stack1_arm64.deb
+sudo dpkg -i /home/pi/applaunch_0.6.1-m5stack1_arm64.deb
 systemctl --user restart APPLaunch.service
 ```
 
@@ -556,13 +556,13 @@ dpkg -L applaunch
 Inspect `.deb` package contents without installing:
 
 ```bash
-dpkg-deb -c applaunch_0.6.0-m5stack1_arm64.deb
+dpkg-deb -c applaunch_0.6.1-m5stack1_arm64.deb
 ```
 
 Inspect `.deb` metadata:
 
 ```bash
-dpkg-deb -I applaunch_0.6.0-m5stack1_arm64.deb
+dpkg-deb -I applaunch_0.6.1-m5stack1_arm64.deb
 ```
 
 ### 12.2 Files and Permissions
@@ -883,8 +883,8 @@ After packaging:
 ```bash
 cd /home/nihao/w2T/github/launcher
 python3 scripts/debian_packager.py
-dpkg-deb -I projects/APPLaunch/tools/applaunch_0.6.0-m5stack1_arm64.deb
-dpkg-deb -c projects/APPLaunch/tools/applaunch_0.6.0-m5stack1_arm64.deb | head -n 50
+dpkg-deb -I projects/APPLaunch/tools/applaunch_0.6.1-m5stack1_arm64.deb
+dpkg-deb -c projects/APPLaunch/tools/applaunch_0.6.1-m5stack1_arm64.deb | head -n 50
 ```
 
 After installation:
@@ -920,8 +920,8 @@ scons -j8
 file dist/M5CardputerZero-APPLaunch
 cd /home/nihao/w2T/github/launcher
 python3 scripts/debian_packager.py
-scp projects/APPLaunch/tools/applaunch_0.6.0-m5stack1_arm64.deb pi@192.168.28.177:/home/pi/
-ssh pi@192.168.28.177 'sudo dpkg -i /home/pi/applaunch_0.6.0-m5stack1_arm64.deb && systemctl --user status APPLaunch.service --no-pager'
+scp projects/APPLaunch/tools/applaunch_0.6.1-m5stack1_arm64.deb pi@192.168.28.177:/home/pi/
+ssh pi@192.168.28.177 'sudo dpkg -i /home/pi/applaunch_0.6.1-m5stack1_arm64.deb && systemctl --user status APPLaunch.service --no-pager'
 ```
 
 For fast replacement during development, use:

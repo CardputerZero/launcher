@@ -36,12 +36,16 @@ launcher/
 │   │       │   └── main.cpp    # 程序入口
 │   │       └── ui/             # UI 代码
 │   │           ├── ui.h / ui.cpp          # UI 初始化
-│   │           ├── launch.cpp / launch.h  # 应用列表与启动逻辑
+│   │           ├── launch.cpp / launch.h  # 页面/进程启动生命周期
 │   │           ├── app_registry.*         # 内置应用开关注册表
+│   │           ├── builtin_app_registry.* # 内置入口定义
+│   │           ├── desktop_app_loader.*   # 动态 .desktop 入口加载
+│   │           ├── app_directory_watcher.* # 动态应用目录监听
 │   │           ├── ui_launch_page.*       # 首页轮播 UI
 │   │           ├── launcher_ui_runtime.*  # LVGL 运行时/首页引导
 │   │           ├── animation/             # 动画效果
-│   │           └── page_app/              # 内置应用页面
+│   │           ├── model/                 # 可测试的 UI 状态与策略
+│   │           └── page_app/              # 内置页面及视图实现
 │   ├── ZClaw/                  # ZeroClaw Webhook 聊天客户端
 │   │   ├── SConstruct          # 项目编译脚本
 │   │   ├── *_config_defaults.mk # 设备、SDL2 与交叉编译配置
@@ -73,7 +77,7 @@ launcher/
 ### APPLaunch 特性
 
 - 应用启动器界面，支持多应用导航（轮播翻页）
-- 内置应用页面：CLI/ST 终端、Game、Setting、Compass、IP Panel、File、SSH、Mesh、Rec、Camera、LoRa、Tank Battle，以及 Python、Store、Math 等命令/外部进程入口
+- 所有构建均注册 Python、Store、CLI/ST 终端、Game、Setting、Math 和 LoRa；Linux 设备构建另外注册 IP Panel、SSH 和 Tank Battle
 - LoRa 通信（基于 RadioLib SX1262）
 - 音频播放（基于 Miniaudio）
 - 电池状态监控与显示
@@ -100,6 +104,8 @@ launcher/
 
 ## 编译程序
 
+如需启用按键注入、framebuffer 截图等本地测试自动化，请参阅 [APPLaunch 本地自动化 RPC](docs/automation-rpc.md)。
+
 项目主要在 Linux 环境下开发，同时兼容跨平台构建。下面是详细编译说明。
 
 ### Linux
@@ -107,7 +113,7 @@ launcher/
 
 ```bash
 sudo apt update
-sudo apt install python3 python3-pip libffi-dev libsdl2-dev
+sudo apt install python3 python3-pip build-essential pkg-config libffi-dev libsdl2-dev libfreetype6-dev
 
 pip3 install parse scons requests tqdm
 pip3 install setuptools-rust paramiko scp
@@ -253,7 +259,7 @@ export CONFIG_DEFAULT_FILE=win_x86_cross_config_defaults.mk
 scons -j8
 ```
 
-交叉编译产物为 `dist/M5CardputerZero-APPLaunch`，用于在 CardputerZero 设备上运行。首次交叉编译可能会下载 SDK sysroot 到 `SDK/github_source/static_lib_v0.0.4`。
+交叉编译产物为 `dist/M5CardputerZero-APPLaunch`，用于在 CardputerZero 设备上运行。首次交叉编译可能会下载 SDK sysroot 到 `SDK/github_source/static_lib_v0.0.6`。
 
 
 
@@ -338,7 +344,7 @@ export LV_LINUX_KEYBOARD_DEVICE=/dev/input/by-path/platform-3f804000.i2c-event
 | 主内容区 | 应用轮播页面（左右翻页导航） |
 | 全局提示 | ESC / Shift / SYM 快捷键提示覆盖层 |
 
-内置应用页面包括：CLI/ST 终端、Game、Setting、Compass、IP Panel、File、SSH、Mesh、Rec、Camera、LoRa 和 Tank Battle。APPLaunch 也可以显示 Python、Store、Math 等命令或外部进程入口。
+APPLaunch 在所有构建中注册 Python、Store、CLI/ST 终端、Game、Setting、Math 和 LoRa；Linux 设备构建另外注册 IP Panel、SSH 和 Tank Battle。Python、Store、Math 是命令或外部进程入口，其余为进程内页面。
 
 
 ## 相关资源

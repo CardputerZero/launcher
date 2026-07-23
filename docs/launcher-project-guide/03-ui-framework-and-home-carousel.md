@@ -445,8 +445,6 @@ Release ENTER
   -> audio_play_enter()
   -> launch_selected_app()
 
-Release F12
-  -> Toggle green test background lvping_lock
 ```
 
 The code first maps `F/X/Z/C` to arrow keys through `fzxc_to_arrow()`:

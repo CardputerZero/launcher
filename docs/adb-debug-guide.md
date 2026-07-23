@@ -16,7 +16,7 @@ ports — no Wi‑Fi required.
 | Transport | USB FunctionFS (`ffs.adb`, bulk endpoints) via the dwc2 USB controller |
 | Daemon | Debian's official `adbd` package (the AOSP source) |
 | Host tool | The standard `adb` (Android platform‑tools) |
-| Gate | **Settings → ADB → Debug** toggle (the equivalent of Android's "USB debugging") |
+| Gate | **Settings → Developer → ADB** toggle (the equivalent of Android's "USB debugging") |
 
 What works: `adb shell`, `adb push`, `adb pull`, `adb forward`, `adb reverse`.
 What does **not** work (this is Debian, not Android): `adb install`, `pm`, `am`,
@@ -29,14 +29,19 @@ serial bridge).
 
 ## 2. Enable it on the device
 
-1. Open **Settings** (the gear app).
-2. Scroll to the **ADB** menu, press **OK/→** to enter.
-3. Toggle **Debug** to **O** (on).
+1. On first use, authorize at least one host public key through an existing SSH
+   connection or a local device terminal, as described in section 4.
+2. Open **Settings** (the gear app).
+3. Scroll to **Developer**, then press **OK/→** to enter.
+4. Toggle **ADB** to **O** (on).
+
+> The host-key pairing views are currently hidden in Settings. Enabling ADB with
+> no authorized host fails; use `cardputer-adb authorize` first.
 
 What happens under the hood when you turn it on:
 
 - installs the `adbd` package if it is missing;
-- embeds the bundled default authorized key into `/adb_keys`;
+- verifies that `/adb_keys` contains at least one authorized host public key;
 - brands the USB device as **CardputerZero** (see §5);
 - makes sure the USB controller is in **peripheral** mode;
 - enables and starts `adbd.service` (so it also comes back automatically after a
@@ -94,20 +99,21 @@ therefore uses a key model that fits a headless‑style Linux device:
 - **The Settings toggle is the security gate.** ADB is OFF by default; nothing
   listens until you explicitly turn it on (exactly like Android's "USB debugging"
   master switch).
-- **A default authorized key is embedded** into `/adb_keys` when you enable ADB,
-  so the official tooling is trusted out of the box.
-- **To trust an additional computer's key**, append it from a shell:
+- **There is no shared default public key.** At least one host must be explicitly
+  authorized before ADB can be enabled.
+- **To trust a computer**, inspect its public key on the host, then authorize it
+  from a local device terminal or an existing SSH connection:
 
   ```bash
   # on your computer: print your public key
   cat ~/.android/adbkey.pub
-  # on the device (e.g. over an existing adb shell or ssh):
+  # on the device (first-time authorization requires a local terminal or existing SSH):
   sudo /usr/share/APPLaunch/adb/cardputer-adb authorize "<paste the pubkey line>"
   ```
 
 > Note: current Debian `adbd` builds log `authentication not required` when no
 > framework auth socket is present, i.e. they accept any host while ADB is on.
-> Treat the **Debug toggle itself** as the trust boundary and turn it off when you
+> Treat the **ADB toggle itself** as the trust boundary and turn it off when you
 > are done.
 
 ---
@@ -134,8 +140,10 @@ variables) and toggle ADB off/on.
 
 ## 6. Disable it
 
-Settings → ADB → toggle **Debug** to **X**. This stops and disables
-`adbd.service` and tears down the USB gadget. No reboot needed.
+Settings → Developer → toggle **ADB** to **X**. This immediately stops and
+disables `adbd.service` and tears down the USB gadget. If the controller is still
+in peripheral mode, the helper exits with code `10`; reboot to restore host/hub
+mode and the onboard USB hub.
 
 ---
 
@@ -145,18 +153,25 @@ The toggle calls a small device‑side script you can also run directly:
 
 ```bash
 sudo /usr/share/APPLaunch/adb/cardputer-adb enable      # start ADB (exit 10 => reboot required)
-sudo /usr/share/APPLaunch/adb/cardputer-adb disable     # stop ADB
-     /usr/share/APPLaunch/adb/cardputer-adb status      # peripheral / adbd / enabled state
+sudo /usr/share/APPLaunch/adb/cardputer-adb disable     # stop ADB (exit 10 => reboot required)
+     /usr/share/APPLaunch/adb/cardputer-adb status      # USB/adbd/enabled and authorization state
 sudo /usr/share/APPLaunch/adb/cardputer-adb authorize <pubkey|file>
+sudo /usr/share/APPLaunch/adb/cardputer-adb revoke <64-character-SHA-256-fingerprint>
+sudo /usr/share/APPLaunch/adb/cardputer-adb clear-authorizations
+sudo /usr/share/APPLaunch/adb/cardputer-adb migrate     # package-upgrade helper: remove legacy shared keys
 ```
+
+Exit codes: `0` means success; `10` means configuration was updated but a reboot
+is required for the USB mode change; `11` means no host has been authorized; and
+`1` means an error. `status` prints `peripheral`, `adbd`, `enabled`,
+`authorizations`, and the fingerprint and label of each authorization.
 
 Files installed:
 
 | Path | Purpose |
 |------|---------|
-| `/usr/share/APPLaunch/adb/cardputer-adb` | enable/disable/status/authorize |
+| `/usr/share/APPLaunch/adb/cardputer-adb` | ADB switching, status, and host authorization management |
 | `/usr/share/APPLaunch/adb/cardputer-adb-gadget` | branded USB gadget (name/serial) |
-| `/usr/share/APPLaunch/adb/adbkey.pub` | default authorized key |
 | `/etc/systemd/system/adbd.service.d/cardputer.conf` | drop‑in that wires the branded gadget into `adbd.service` |
 | `/adb_keys` | authorized keys read by adbd |
 
@@ -166,7 +181,7 @@ Files installed:
 
 | Symptom | Fix |
 |---------|-----|
-| `adb devices` empty | Make sure the Debug toggle is **on**; try `adb kill-server`; use a USB **data** cable directly to the CM0 (not through a hub). |
+| `adb devices` empty | Make sure the ADB toggle is **on**; try `adb kill-server`; use a USB **data** cable directly to the CM0 (not through a hub). |
 | Device shows `unauthorized` | Authorize your host key (see §4). |
 | Toggle asks to reboot every time | The board could not enter peripheral mode; check `config.txt` has `dtoverlay=dwc2,dr_mode=peripheral` under `[all]`. |
 | Conflicts with the old serial bridge | A single USB controller can host only one gadget; enabling ADB automatically stops the legacy PiBridge serial gadget. |

@@ -159,7 +159,7 @@ projects/APPLaunch/main/
 | `Kconfig` | Component configuration entry point |
 | `SConstruct` | Registers the APPLaunch build target and dependencies |
 | `include/` | APPLaunch private headers and compatibility headers |
-| `src/main.cpp` | Process entry point, LVGL initialization, and main loop |
+| `src/main.cpp` | Process entry point; supplies launcher setup/teardown callbacks to the shared `cp0_lvgl_run()` runner |
 | `ui/` | Implementations for all UI pages, the home screen, animations, Loading, and more |
 
 ### 2.4 `main/ui/` UI Directory
@@ -168,48 +168,51 @@ projects/APPLaunch/main/
 main/ui/
 ├── ui.cpp / ui.h
 ├── launch.cpp / launch.h
-├── ui_launch_page.cpp / ui_launch_page.h
-├── ui_app_page.hpp
-├── generated/page_app.h
+├── builtin_app_registry.cpp / .hpp
+├── desktop_app_loader.cpp / .hpp
+├── launcher_ui_runtime.cpp / .h
+├── ui_launch_page.cpp / .h
+├── ui_launch_page_carousel_view.cpp
+├── ui_launch_page_input.cpp
+├── ui_launch_page_startup.cpp
+├── launcher_ui_app_page.hpp
 ├── generate_page_app_includes.py
 ├── ui_loading.*
 ├── ui_global_hint.*
-├── LauncherUiRuntime.*
 ├── animation/
+├── model/
 └── page_app/
 ```
 
 | File/Directory | Role |
 | --- | --- |
 | `ui.c` / `ui.cpp` / `ui.h` | UI initialization, global objects, and the C/C++ bridge |
-| `launch.cpp` | Application manager; implements application list, launch, status bar refresh, and directory watching |
-| `ui_launch_page.cpp` | Home UI creation, carousel slots, key handling, and startup animation |
+| `launch.cpp` | Application manager; owns launch, return-home, list reload, and process foreground handoff |
+| `builtin_app_registry.cpp` | Fixed application descriptors and typed page/command registration |
+| `desktop_app_loader.cpp` | Dynamic `.desktop` discovery and parsing |
+| `launcher_ui_runtime.cpp` | Owns and connects `Launch` and `UILaunchPage` |
+| `ui_launch_page*.cpp` | Split home implementation: lifecycle, carousel view, input, and startup behavior |
 | `ui_loading.cpp` | Loading overlay |
 | `ui_global_hint.cpp` | Global hints |
-| `LauncherUiRuntime.cpp` | LVGL OS/thread-related helpers |
 | `animation/` | Home carousel animation implementation |
-| `components/` | Page base classes, components, and custom pages |
+| `model/` | Testable page and launcher state models |
+| `page_app/` | Internal page implementations |
 
-### 2.5 `components/page_app/` Built-In Page Directory
+### 2.5 `page_app/` Built-In Page Directory
 
 ```text
 main/ui/page_app/
-├── ui_app_camera.hpp
-├── ui_app_compass.hpp
-├── ui_app_st.hpp
-├── ui_app_file.hpp
-├── ui_app_game.hpp
-├── ui_app_lora.hpp
-├── ui_app_mesh.hpp
-├── ui_app_game.hpp
-├── ui_app_rec.hpp
-├── ui_app_setup.hpp
-├── ui_app_ssh.hpp
-├── ui_app_tank_battle.hpp
-└── ui_app_ip_panel.hpp
+├── ui_app_st.*
+├── ui_app_game.*
+├── ui_app_lora.*
+├── ui_app_mesh.*
+├── ui_app_setup.*
+├── ui_app_ssh.*
+├── ui_app_tank_battle.*
+└── ui_app_ip_panel.*
 ```
 
-These pages are usually implemented header-only so they can be automatically included by `generate_page_app_includes.py`.
+Pages use ordinary headers and implementation files. Larger pages split view, input, parser, session, or transport behavior into separate translation units. `generate_page_app_includes.py` produces the page include aggregate during the build.
 
 ## 3. Module Dependencies
 

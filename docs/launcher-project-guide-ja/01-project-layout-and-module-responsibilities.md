@@ -159,7 +159,7 @@ projects/APPLaunch/main/
 | `Kconfig` | コンポーネント設定のエントリポイント |
 | `SConstruct` | APPLaunch のビルドターゲットと依存関係を登録する |
 | `include/` | APPLaunch のプライベートヘッダと互換ヘッダ |
-| `src/main.cpp` | プロセスのエントリポイント、LVGL 初期化、メインループ |
+| `src/main.cpp` | プロセスのエントリポイント。共有 `cp0_lvgl_run()` に APPLaunch の setup/teardown callback を渡す |
 | `ui/` | すべての UI ページ、ホーム画面、アニメーション、Loading などの実装 |
 
 ### 2.4 `main/ui/` UI Directory
@@ -168,13 +168,15 @@ projects/APPLaunch/main/
 main/ui/
 ├── ui.cpp / ui.h
 ├── launch.cpp / launch.h
+├── builtin_app_registry.cpp / builtin_app_registry.hpp
+├── desktop_app_loader.cpp / desktop_app_loader.hpp
 ├── ui_launch_page.cpp / ui_launch_page.h
-├── ui_app_page.hpp
+├── launcher_ui_app_page.hpp
 ├── generated/page_app.h
 ├── generate_page_app_includes.py
 ├── ui_loading.*
 ├── ui_global_hint.*
-├── LauncherUiRuntime.*
+├── launcher_ui_runtime.*
 ├── animation/
 └── page_app/
 ```
@@ -182,34 +184,30 @@ main/ui/
 | File/Directory | Role |
 | --- | --- |
 | `ui.c` / `ui.cpp` / `ui.h` | UI 初期化、グローバルオブジェクト、C/C++ ブリッジ |
-| `launch.cpp` | アプリケーションマネージャ。アプリケーションリスト、起動、ステータスバー更新、ディレクトリ監視を実装する |
+| `launch.cpp` | アプリケーションリスト、起動、ページ lifetime、ホームカルーセルを管理する |
+| `builtin_app_registry.cpp` | 固定エントリの descriptor、表示可否、組み込みページ/外部コマンドの登録 |
+| `desktop_app_loader.cpp` | `.desktop` の読み込み、重複除外、ディレクトリ watcher |
 | `ui_launch_page.cpp` | ホーム UI 作成、カルーセルスロット、キー処理、起動アニメーション |
 | `ui_loading.cpp` | Loading オーバーレイ |
 | `ui_global_hint.cpp` | グローバルヒント |
-| `LauncherUiRuntime.cpp` | LVGL OS/thread 関連ヘルパー |
+| `launcher_ui_runtime.cpp` | テーマ、`Launch` / `UILaunchPage` の所有、ホーム構築 |
 | `animation/` | ホームカルーセルアニメーションの実装 |
 | `components/` | ページ基底クラス、コンポーネント、カスタムページ |
 
-### 2.5 `components/page_app/` Built-In Page Directory
+### 2.5 `page_app/` Built-In Page Directory
 
 ```text
 main/ui/page_app/
-├── ui_app_camera.hpp
-├── ui_app_compass.hpp
-├── ui_app_st.hpp
-├── ui_app_file.hpp
-├── ui_app_game.hpp
-├── ui_app_lora.hpp
-├── ui_app_mesh.hpp
-├── ui_app_game.hpp
-├── ui_app_rec.hpp
-├── ui_app_setup.hpp
-├── ui_app_ssh.hpp
-├── ui_app_tank_battle.hpp
-└── ui_app_ip_panel.hpp
+├── ui_app_st.{hpp,cpp,...}
+├── ui_app_game.{hpp,cpp,...}
+├── ui_app_setup.{hpp,cpp,...}
+├── ui_app_lora.{hpp,cpp,...}
+├── ui_app_ssh.{hpp,cpp,...}
+├── ui_app_tank_battle.{hpp,cpp,...}
+└── ui_app_ip_panel.{hpp,cpp,...}
 ```
 
-これらのページは通常 header-only で実装され、`generate_page_app_includes.py` によって自動的に include されるようにします。
+ページは header と複数の `.cpp` に分割されています。`generate_page_app_includes.py` は header を `generated/page_app.h` へ集約しますが、登録の有無は `builtin_app_registry.cpp` で決まります。
 
 ## 3. Module Dependencies
 
@@ -217,10 +215,10 @@ main/ui/page_app/
 
 ```text
 main.cpp
-  ├── ui/ui.h
-  ├── cp0_lvgl_app.h
-  ├── cp0_lvgl_file.hpp
-  └── hal_lvgl_bsp.h
+└── cp0_lvgl_run(options)
+    ├── lv_init() / cp0_lvgl_init() / LVGL loop
+    ├── setup -> launcher_ui::init() / ui_screensaver_init()
+    └── teardown -> launcher_ui::deinit()
 
 ui_init()
   ├── UILaunchPage
@@ -229,13 +227,10 @@ ui_init()
   └── page_app/*
 
 Launch
-  ├── UILaunchPage::panel()/label()
-  ├── append_page_app<PageT> / page_v<PageT>
-  ├── cp0_file_path()
-  ├── cp0_process_*
-  ├── cp0_dir_watch_*
-  ├── cp0_wifi_*
-  └── cp0_battery_*
+├── builtin_app_registry -> append_page_app<PageT> / external command
+├── desktop_app_loader -> `.desktop` scan / directory watcher
+├── UILaunchPage -> carousel / home screen
+└── cp0_signal_process_api() -> external process
 ```
 
 ## 4. Code Style Characteristics
