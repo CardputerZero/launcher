@@ -168,10 +168,6 @@ UILaunchPage::~UILaunchPage()
     stop_startup_sound_timer();
     release_startup_screen(startup_logo_scr_);
     release_startup_screen(startup_gif_);
-    if (green_bg_) {
-        lv_obj_del(green_bg_);
-        green_bg_ = nullptr;
-    }
     if (active_launch_page == this)
         active_launch_page = nullptr;
     if (::home_input_group == input_group())
@@ -246,10 +242,6 @@ void UILaunchPage::on_owned_obj_deleted(lv_event_t *event) noexcept
             self->startup_gif_ == target, self->startup_gif_done_);
         if (self->startup_logo_scr_ == target) self->startup_logo_scr_ = nullptr;
         if (self->startup_gif_ == target) self->startup_gif_ = nullptr;
-        if (self->green_bg_ == target) {
-            self->green_bg_ = nullptr;
-            self->navigation_.set_diagnostic_overlay_visible(false);
-        }
         bool carousel_object_deleted = self->carousel_container_ == target ||
             self->left_arrow_button_ == target || self->right_arrow_button_ == target;
         for (lv_obj_t *&element : self->carousel_elements_) {

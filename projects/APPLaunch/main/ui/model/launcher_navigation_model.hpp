@@ -46,19 +46,15 @@ public:
     bool begin_navigation(LauncherNavigationDirection direction);
     void finish_navigation();
     bool cancel_navigation();
-    bool toggle_diagnostic_overlay();
-    void set_diagnostic_overlay_visible(bool visible);
 
     size_t selected_page() const;
     bool is_animating() const;
-    bool diagnostic_overlay_visible() const;
     bool keyboard_navigation_enabled() const;
 
 private:
     size_t selected_page_ = INITIAL_PAGE;
     size_t previous_page_ = INITIAL_PAGE;
     bool is_animating_ = false;
-    bool diagnostic_overlay_visible_ = false;
 };
 
 enum class LauncherStartupDelayState

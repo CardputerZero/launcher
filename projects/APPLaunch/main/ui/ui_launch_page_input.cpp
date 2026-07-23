@@ -114,35 +114,6 @@ void UILaunchPage::handle_home_key(lv_event_t *event)
         audio_play_enter();
         launch_selected_app();
     }
-    else if (code == KEY_F12)
-    {
-        if (!navigation_.diagnostic_overlay_visible())
-        {
-            lv_obj_t *overlay = lv_obj_create(lv_scr_act());
-            if (!overlay) return;
-            green_bg_ = overlay;
-            lv_obj_add_event_cb(green_bg_, on_owned_obj_deleted, LV_EVENT_DELETE, this);
-            lv_obj_set_size(green_bg_, 320, 170);
-            lv_obj_align(green_bg_, LV_ALIGN_TOP_LEFT, 0, 0);
-
-            lv_obj_set_style_bg_color(green_bg_, lv_color_hex(0x00FF00), LV_PART_MAIN);
-            lv_obj_set_style_bg_opa(green_bg_, LV_OPA_COVER, LV_PART_MAIN);
-
-            lv_obj_set_style_border_width(green_bg_, 0, LV_PART_MAIN);
-            lv_obj_set_style_radius(green_bg_, 0, LV_PART_MAIN);
-            lv_obj_set_style_shadow_width(green_bg_, 0, LV_PART_MAIN);
-            lv_obj_set_style_pad_all(green_bg_, 0, LV_PART_MAIN);
-            navigation_.set_diagnostic_overlay_visible(true);
-        }
-        else
-        {
-            navigation_.set_diagnostic_overlay_visible(false);
-            if (green_bg_) {
-                lv_obj_del(green_bg_);
-                green_bg_ = nullptr;
-            }
-        }
-    }
 }
 
 void UILaunchPage::on_left_arrow_clicked(lv_event_t *event) noexcept
