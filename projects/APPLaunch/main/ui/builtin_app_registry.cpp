@@ -52,15 +52,15 @@ void append_builtin_app(std::list<app> &apps, const BuiltinAppRegistration &regi
 
 constexpr BuiltinAppRegistration BUILTIN_APPS[] = {
     {{"Python", "python_100.png", "app_Python", false, true}, "python3", true, false, false, nullptr},
-    {{"STORE", "store_100.png", "app_Store", false, true},
+    {{"Store", "store_100.png", "app_Store", false, true},
      "@appstore_exec", false, true, false, nullptr},
     {{"CLI", "cli_100.png", "app_CLI", false, true},
      nullptr, false, true, false, append_page_app<UISTPage>},
-    {{"GAME", "game_100.png", "app_Game", false, true},
+    {{"Snake", "game_100.png", "app_Game", false, true},
      nullptr, false, true, false, append_page_app<UIGamePage>},
-    {{"SETTING", "setting_100.png", "app_Setting", false, true},
+    {{"Settings", "setting_100.png", "app_Setting", false, true},
      nullptr, false, true, false, append_page_app<UISetupPage>},
-    {{"MATH", "math_100.png", "app_Math", true, false},
+    {{"Math", "math_100.png", "app_Math", true, false},
      "@calculator_exec", false, true, false, nullptr},
     {{"LORA", "lora_100.png", "app_LoRa", true, false},
      nullptr, false, true, false, append_page_app<UILoraPage>},
@@ -69,7 +69,7 @@ constexpr BuiltinAppRegistration BUILTIN_APPS[] = {
      nullptr, false, true, false, append_page_app<UIIpPanelPage>},
     {{"SSH", "ssh_100.png", "app_SSH", true, false},
      nullptr, false, true, false, append_page_app<UISSHPage>},
-    {{"TANK", "tank_100.png", "app_Tank", true, false},
+    {{"Tank", "tank_100.png", "app_Tank", true, false},
      nullptr, false, true, false, append_page_app<UITankBattlePage>},
 #endif
 };
