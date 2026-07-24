@@ -26,3 +26,4 @@ projects/lcd_test
 zeromp3
 *.pyc
 docs/rtc/applaunch_rtc_flow.html
+projects/APPLaunch/tests/APPLaunch测试需求文档.md
