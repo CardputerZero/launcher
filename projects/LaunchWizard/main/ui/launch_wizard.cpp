@@ -3,8 +3,10 @@
 #include <stdint.h>
 
 #include "global_config.h"
+#include "cp0_lvgl_app.h"
 #include "keyboard_input.h"
 #include "lvgl/lvgl.h"
+#include "manual_datetime_validation.h"
 
 #ifdef __linux__
 #include <linux/input.h>
@@ -13,6 +15,8 @@
 #endif
 
 #include <ctype.h>
+#include <arpa/inet.h>
+#include <chrono>
 #include <errno.h>
 #include <glob.h>
 #include <grp.h>
@@ -72,6 +76,7 @@ enum class Screen {
     Hostname,
     Account,
     Network,
+    EthernetConfig,
     WifiList,
     WifiPassword,
     ManualTime,
@@ -85,36 +90,54 @@ struct Timezone {
     const char *offset;
 };
 
-// Concise list of common international time zones (IANA names), ordered
-// west-to-east. Country selection was removed (#111/#98); this is the only
-// region step now.
+// The 24 standard hourly time zones, ordered west-to-east. IANA Etc/GMT names
+// intentionally use the opposite sign from their UTC offsets.
 constexpr Timezone kTimezones[] = {
-    {"Pacific/Honolulu", "UTC-10"},
-    {"America/Los_Angeles", "UTC-8"},
-    {"America/Chicago", "UTC-6"},
-    {"America/New_York", "UTC-5"},
-    {"America/Sao_Paulo", "UTC-3"},
-    {"UTC", "UTC+0"},
-    {"Europe/London", "UTC+0"},
-    {"Europe/Paris", "UTC+1"},
-    {"Europe/Moscow", "UTC+3"},
-    {"Asia/Dubai", "UTC+4"},
-    {"Asia/Kolkata", "UTC+5:30"},
-    {"Asia/Bangkok", "UTC+7"},
-    {"Asia/Shanghai", "UTC+8"},
-    {"Asia/Tokyo", "UTC+9"},
-    {"Australia/Sydney", "UTC+10"},
-    {"Pacific/Auckland", "UTC+12"},
+    {"Etc/GMT+12", "UTC-12"},
+    {"Etc/GMT+11", "UTC-11"},
+    {"Etc/GMT+10", "UTC-10"},
+    {"Etc/GMT+9", "UTC-9"},
+    {"Etc/GMT+8", "UTC-8"},
+    {"Etc/GMT+7", "UTC-7"},
+    {"Etc/GMT+6", "UTC-6"},
+    {"Etc/GMT+5", "UTC-5"},
+    {"Etc/GMT+4", "UTC-4"},
+    {"Etc/GMT+3", "UTC-3"},
+    {"Etc/GMT+2", "UTC-2"},
+    {"Etc/GMT+1", "UTC-1"},
+    {"Etc/UTC", "UTC+0"},
+    {"Etc/GMT-1", "UTC+1"},
+    {"Etc/GMT-2", "UTC+2"},
+    {"Etc/GMT-3", "UTC+3"},
+    {"Etc/GMT-4", "UTC+4"},
+    {"Etc/GMT-5", "UTC+5"},
+    {"Etc/GMT-6", "UTC+6"},
+    {"Etc/GMT-7", "UTC+7"},
+    {"Etc/GMT-8", "UTC+8"},
+    {"Etc/GMT-9", "UTC+9"},
+    {"Etc/GMT-10", "UTC+10"},
+    {"Etc/GMT-11", "UTC+11"},
 };
 
 constexpr int kTimezoneCount = static_cast<int>(sizeof(kTimezones) / sizeof(kTimezones[0]));
+static_assert(kTimezoneCount == 24, "LaunchWizard must offer all 24 standard time zones");
 
-// Index of the default timezone (Asia/Shanghai) in kTimezones.
-constexpr int kDefaultTimezoneIndex = 12;
+// Index of the default timezone (UTC+8) in kTimezones.
+constexpr int kDefaultTimezoneIndex = 20;
+constexpr auto kWifiInitialRetryPeriod = std::chrono::seconds(2);
+constexpr auto kWifiScanPeriod = std::chrono::seconds(8);
+constexpr int kWifiInitialRetryCount = 4;
 
 struct WifiNetwork {
     std::string ssid;
     int signal = 0;  // 0..100
+};
+
+struct WifiConnectionStatus {
+    bool available = false;
+    bool connected = false;
+    std::string ssid;
+    std::string ip;
 };
 
 struct CommandResult {
@@ -137,31 +160,56 @@ struct Model {
 
     // Account
     std::string username = "pi";
-    std::string password;
-    std::string confirm;
+    std::string password = "pi";
+    std::string confirm = "pi";
     int account_focus = 0;  // 0 user, 1 pass, 2 confirm
-    std::string form_error;  // inline validation message (e.g. password mismatch)
+    bool account_password_visible = false;
+    bool account_warning_visible = false;
+    std::string form_error;
 
     // Network
     int network_focus = 0;  // 0 wifi, 1 ethernet
     bool network_skipped = false;
     bool use_ethernet = false;
 
+    // Ethernet
+    bool ethernet_dhcp = true;
+    int ethernet_focus = 0;  // 0 mode, 1 address, 2 gateway, 3 DNS
+    std::string ethernet_address = "192.168.1.100/24";
+    std::string ethernet_gateway = "192.168.1.1";
+    std::string ethernet_dns = "8.8.8.8";
+    std::string ethernet_error;
+
     // Wi-Fi
     std::vector<WifiNetwork> wifi_list;
     int wifi_sel = 0;
     std::string wifi_ssid;
     std::string wifi_password;
+    int wifi_focus = 0;  // manual network: 0 SSID, 1 password
+    bool wifi_manual = false;
+    bool wifi_connected = false;
+    bool wifi_connecting = false;
+    bool wifi_connect_ready = false;
+    bool wifi_connect_succeeded = false;
+    bool wifi_password_visible = false;
+    std::string wifi_connect_error;
+    std::string wifi_ip;
+    std::string wifi_status_ssid;
+    std::string wifi_status_ip;
 
     // Wi-Fi async scan state (guarded by mutex where noted).
     bool wifi_scanning = false;
     bool wifi_scan_ready = false;
+    uint64_t wifi_scan_generation = 0;
     std::vector<WifiNetwork> wifi_scan_result;
+    WifiConnectionStatus wifi_scan_status;
 
     // Manual time
     std::string manual_date = "2026-06-16";
     std::string manual_time = "20:30";
     int time_focus = 0;  // 0 date, 1 time
+    bool time_warning_visible = false;
+    std::string time_warning_message;
 
     // SSH
     bool ssh_enabled = true;
@@ -768,12 +816,14 @@ void apply_hostname(const std::string &hostname)
     run_command({"tee", "/etc/hosts.launchwizard"}, &hosts);
 }
 
-void apply_manual_time(const std::string &date, const std::string &time)
+std::string apply_manual_time(const std::string &date, const std::string &time)
 {
     if (date.empty() || time.empty())
-        return;
-    run_command({"timedatectl", "set-ntp", "false"});
-    run_command({"timedatectl", "set-time", date + " " + time + ":00"});
+        return "Date and time are required";
+    CommandResult result = run_command({"date", "-s", date + " " + time + ":00"});
+    if (result.code != 0)
+        return result.output.empty() ? "Failed to set system time" : result.output;
+    return "";
 }
 
 std::string apply_ssh(bool enabled)
@@ -794,24 +844,81 @@ std::string apply_ssh(bool enabled)
     return warning;
 }
 
-std::string apply_wifi(const std::string &ssid, const std::string &password)
+std::string apply_wifi(const std::string &ssid, const std::string &password,
+                       std::string *connected_ip = nullptr)
 {
     if (ssid.empty())
         return "";
-    run_command({"nmcli", "radio", "wifi", "on"});
-    std::vector<std::string> args = {"nmcli", "device", "wifi", "connect", ssid};
-    if (!password.empty()) {
-        args.push_back("password");
-        args.push_back(password);
-    }
-    CommandResult result = run_command(args);
-    if (result.code != 0) {
-        std::string warning = "Wi-Fi connect failed";
-        if (!result.output.empty())
-            warning += ": " + result.output;
-        return warning;
-    }
+#if LAUNCH_WIZARD_DRY_RUN
+    print_command({"cp0_wifi_connect", ssid, password.empty() ? "<saved/open>" : "<password>"},
+                  nullptr);
+    if (connected_ip)
+        *connected_ip = "192.168.1.100";
+#else
+    if (cp0_wifi_radio_set_enabled(1) != 0)
+        return "Wi-Fi radio could not be enabled";
+    if (cp0_wifi_connect(ssid.c_str(), password.empty() ? nullptr : password.c_str()) != 0)
+        return "Wi-Fi connect failed";
+
+    cp0_wifi_status_t status{};
+    if (cp0_wifi_status_read(&status) != 0 || !status.connected || ssid != status.ssid)
+        return "Wi-Fi did not become active";
+    if (connected_ip)
+        *connected_ip = status.ip;
+#endif
     return "";
+}
+
+bool valid_ipv4(const std::string &value)
+{
+    in_addr address{};
+    return inet_pton(AF_INET, value.c_str(), &address) == 1;
+}
+
+bool valid_ipv4_cidr(const std::string &value)
+{
+    const size_t slash = value.find('/');
+    if (slash == std::string::npos || !valid_ipv4(value.substr(0, slash)))
+        return false;
+    const std::string prefix = value.substr(slash + 1);
+    if (prefix.empty() || prefix.find_first_not_of("0123456789") != std::string::npos)
+        return false;
+    const int bits = atoi(prefix.c_str());
+    return bits >= 0 && bits <= 32;
+}
+
+std::string validate_ethernet_config()
+{
+    if (g.ethernet_dhcp)
+        return "";
+    if (!valid_ipv4_cidr(g.ethernet_address))
+        return "Invalid IP/CIDR";
+    if (!valid_ipv4(g.ethernet_gateway))
+        return "Invalid gateway";
+    if (!g.ethernet_dns.empty() && !valid_ipv4(g.ethernet_dns))
+        return "Invalid DNS";
+    return "";
+}
+
+std::string apply_ethernet()
+{
+    run_command({"nmcli", "connection", "delete", "LaunchWizard-eth0"});
+    std::vector<std::string> args = {
+        "nmcli", "connection", "add", "type", "ethernet", "ifname", "eth0",
+        "con-name", "LaunchWizard-eth0", "ipv4.method",
+        g.ethernet_dhcp ? "auto" : "manual",
+    };
+    if (!g.ethernet_dhcp) {
+        args.insert(args.end(), {"ipv4.addresses", g.ethernet_address,
+                                 "ipv4.gateway", g.ethernet_gateway});
+        if (!g.ethernet_dns.empty())
+            args.insert(args.end(), {"ipv4.dns", g.ethernet_dns});
+    }
+    CommandResult add = run_command(args);
+    if (add.code != 0)
+        return add.output.empty() ? "Ethernet configuration failed" : add.output;
+    CommandResult up = run_command({"nmcli", "connection", "up", "LaunchWizard-eth0"});
+    return up.code == 0 ? "" : (up.output.empty() ? "Ethernet activation failed" : up.output);
 }
 
 std::vector<WifiNetwork> scan_wifi()
@@ -822,37 +929,33 @@ std::vector<WifiNetwork> scan_wifi()
     networks.push_back({"CardputerLab", 70});
     networks.push_back({"Home-5G", 45});
 #else
-    run_command({"nmcli", "radio", "wifi", "on"});
-    run_command({"nmcli", "device", "wifi", "rescan"});
-    CommandResult result = run_command(
-        {"nmcli", "-t", "-f", "SSID,SIGNAL", "device", "wifi", "list"});
-    std::string line;
-    for (size_t i = 0; i <= result.output.size(); ++i) {
-        char ch = (i < result.output.size()) ? result.output[i] : '\n';
-        if (ch == '\n') {
-            if (!line.empty()) {
-                size_t sep = line.rfind(':');
-                std::string ssid = sep == std::string::npos ? line : line.substr(0, sep);
-                int signal = 0;
-                if (sep != std::string::npos)
-                    signal = atoi(line.c_str() + sep + 1);
-                bool duplicate = false;
-                for (const WifiNetwork &n : networks) {
-                    if (n.ssid == ssid) {
-                        duplicate = true;
-                        break;
-                    }
-                }
-                if (!ssid.empty() && !duplicate && networks.size() < 16)
-                    networks.push_back({ssid, signal});
-            }
-            line.clear();
-        } else {
-            line.push_back(ch);
-        }
+    if (cp0_wifi_radio_set_enabled(1) != 0)
+        return networks;
+
+    cp0_wifi_ap_t access_points[CP0_WIFI_AP_MAX]{};
+    const int count = cp0_wifi_scan(access_points, CP0_WIFI_AP_MAX);
+    for (int index = 0; index < count && index < CP0_WIFI_AP_MAX; ++index) {
+        const cp0_wifi_ap_t &access_point = access_points[index];
+        if (access_point.ssid[0] != '\0')
+            networks.push_back({access_point.ssid, access_point.signal});
     }
 #endif
     return networks;
+}
+
+WifiConnectionStatus read_wifi_connection_status()
+{
+    WifiConnectionStatus result;
+#if !LAUNCH_WIZARD_DRY_RUN
+    cp0_wifi_status_t status{};
+    if (cp0_wifi_status_read(&status) == 0) {
+        result.available = true;
+        result.connected = status.connected != 0;
+        result.ssid = status.ssid;
+        result.ip = status.ip;
+    }
+#endif
+    return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -867,8 +970,6 @@ std::string apply_all()
     const bool network_skipped = g.network_skipped;
     const std::string wifi_ssid = g.wifi_ssid;
     const std::string wifi_password = g.wifi_password;
-    const std::string manual_date = g.manual_date;
-    const std::string manual_time = g.manual_time;
     const bool ssh_enabled = g.ssh_enabled;
 
 #if !LAUNCH_WIZARD_DRY_RUN
@@ -879,9 +980,11 @@ std::string apply_all()
     apply_timezone(timezone);
     apply_hostname(hostname);
 
-    if (network_skipped) {
-        apply_manual_time(manual_date, manual_time);
-    } else if (!g.use_ethernet && !wifi_ssid.empty()) {
+    if (!network_skipped && g.use_ethernet) {
+        const std::string ethernet_error = apply_ethernet();
+        if (!ethernet_error.empty())
+            return ethernet_error;
+    } else if (!network_skipped && !g.wifi_connected && !wifi_ssid.empty()) {
         std::string wifi_warning = apply_wifi(wifi_ssid, wifi_password);
         if (!wifi_warning.empty()) {
             printf("LaunchWizard: %s\n", wifi_warning.c_str());
@@ -1000,7 +1103,54 @@ lv_obj_t *add_field(lv_obj_t *parent, int x, int y, int w, int h, bool focused,
     return add_rect(parent, x, y, w, h, kColorFieldBg, 1, kColorFieldBorder, 3);
 }
 
-std::string masked(const std::string &s) { return std::string(s.size(), '*'); }
+lv_obj_t *add_text_field(lv_obj_t *parent, int x, int y, int w, int h,
+                         const std::string &value, bool focused, uint32_t accent,
+                         bool password = false, const lv_font_t *font = nullptr)
+{
+    lv_obj_t *field = lv_textarea_create(parent);
+    lv_obj_remove_style_all(field);
+    lv_obj_set_size(field, w, h);
+    lv_obj_align(field, LV_ALIGN_TOP_LEFT, x, y);
+    lv_textarea_set_one_line(field, true);
+    lv_textarea_set_max_length(field, 63);
+    if (password) {
+        lv_textarea_set_password_bullet(field, "*");
+        lv_textarea_set_password_mode(field, true);
+    }
+    lv_textarea_set_text(field, value.c_str());
+    lv_textarea_set_cursor_pos(field, LV_TEXTAREA_CURSOR_LAST);
+
+    lv_obj_set_style_text_font(field, font ? font : font_md(), 0);
+    lv_obj_set_style_text_color(field, lv_color_hex(0xffffff), 0);
+    lv_obj_set_style_text_letter_space(field, 0, 0);
+    lv_obj_set_style_bg_color(
+        field, lv_color_hex(focused ? kColorFieldFocusBg : kColorFieldBg), 0);
+    lv_obj_set_style_bg_opa(field, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(
+        field, lv_color_hex(focused ? accent : kColorFieldBorder), 0);
+    lv_obj_set_style_border_width(field, focused ? 2 : 1, 0);
+    lv_obj_set_style_radius(field, 3, 0);
+    lv_obj_set_style_pad_left(field, 6, 0);
+    lv_obj_set_style_pad_right(field, 6, 0);
+    lv_obj_set_style_pad_top(field, 2, 0);
+    lv_obj_set_style_pad_bottom(field, 2, 0);
+
+    if (focused) {
+        lv_obj_add_state(field, LV_STATE_FOCUSED);
+        lv_obj_set_style_bg_color(field, lv_color_hex(accent), LV_PART_CURSOR);
+        lv_obj_set_style_bg_opa(field, LV_OPA_COVER, LV_PART_CURSOR);
+    }
+    return field;
+}
+
+std::string field_tail(std::string value, bool cursor, size_t max_chars)
+{
+    if (cursor)
+        value.push_back('|');
+    if (value.size() <= max_chars)
+        return value;
+    return value.substr(value.size() - max_chars);
+}
 
 // ===========================================================================
 // Screen renderers
@@ -1059,8 +1209,8 @@ void render_timezone_list()
 {
     std::vector<std::string> left, right;
     for (const Timezone &t : kTimezones) {
-        left.emplace_back(t.name);
-        right.emplace_back(t.offset);
+        left.emplace_back(t.offset);
+        right.emplace_back("");
     }
     render_list("TIMEZONE", kAccentRegion, left, right, g.timezone_sel, "CONFIRM");
 }
@@ -1069,9 +1219,8 @@ void render_hostname()
 {
     add_chrome(kAccentHostname, 36);
     add_label(g.screen_obj, "HOSTNAME", font_sm(), kAccentHostname, 36, 47);
-    add_field(g.screen_obj, 36, 66, 248, 31, true, kAccentHostname);
-    std::string value = g.hostname + "|";
-    add_label(g.screen_obj, value.c_str(), font_lg(), 0xffffff, 44, 73);
+    add_text_field(g.screen_obj, 36, 66, 248, 31, g.hostname, true,
+                   kAccentHostname, false, font_lg());
     add_label(g.screen_obj, "Default: CardputerZero", font_sm(), kColorMuted, 38, 104);
 
     add_key_hint(14, "ESC", 38, "BACK", kAccentHostname);
@@ -1083,32 +1232,34 @@ void render_account()
     add_chrome(kAccentAccount, 48);
 
     add_label(g.screen_obj, "USERNAME", font_xs(), kAccentAccount, 37, 51);
-    add_field(g.screen_obj, 36, 67, 92, 24, g.account_focus == 0, kAccentAccount);
-    std::string user_value = g.username + (g.account_focus == 0 ? "|" : "");
-    add_label(g.screen_obj, user_value.c_str(), font_md(), 0xffffff, 44, 70);
+    add_text_field(g.screen_obj, 36, 67, 92, 24, g.username,
+                   g.account_focus == 0, kAccentAccount);
 
-    // #80: the focused password field is shown in plaintext; once focus moves
-    // away it reverts to masked. Only one field can be focused at a time.
     add_label(g.screen_obj, "PASSWORD", font_xs(), kAccentAccount, 143, 51);
-    add_field(g.screen_obj, 142, 67, 142, 24, g.account_focus == 1, kAccentAccount);
-    std::string pass_value = (g.account_focus == 1 ? g.password + "|" : masked(g.password));
-    add_label(g.screen_obj, pass_value.c_str(), font_md(), 0xffffff, 150, 70);
+    add_text_field(g.screen_obj, 142, 67, 142, 24, g.password,
+                   g.account_focus == 1, kAccentAccount, !g.account_password_visible);
 
     add_label(g.screen_obj, "CONFIRM PASSWORD", font_xs(), kAccentAccount, 143, 98);
-    add_field(g.screen_obj, 142, 110, 142, 24, g.account_focus == 2, kAccentAccount);
-    std::string confirm_value = (g.account_focus == 2 ? g.confirm + "|" : masked(g.confirm));
-    add_label(g.screen_obj, confirm_value.c_str(), font_md(), 0xffffff, 150, 113);
+    add_text_field(g.screen_obj, 142, 110, 142, 24, g.confirm,
+                   g.account_focus == 2, kAccentAccount, !g.account_password_visible);
 
-    // #99: surface an inline error (e.g. password mismatch) instead of the
-    // default hint so the user knows why NEXT/CONFIRM was blocked.
-    if (!g.form_error.empty())
-        add_label(g.screen_obj, g.form_error.c_str(), font_sm(), 0xff5a5a, 36, 113);
-    else
-        add_label(g.screen_obj, "Default: pi / pi", font_sm(), kColorMuted, 36, 113);
+    add_label(g.screen_obj, "Default: pi / pi", font_sm(), kColorMuted, 36, 113);
 
-    add_key_hint(14, "ESC", 38, "BACK", kAccentAccount);
-    add_key_hint(132, "OK", 156, "CONFIRM", kAccentAccount);
+    add_key_hint(8, "ESC", 31, "BACK", kAccentAccount);
+    add_key_hint(72, "ALT", 98, g.account_password_visible ? "HIDE" : "SHOW", kAccentAccount);
+    add_key_hint(145, "OK", 164, "CONFIRM", kAccentAccount);
     add_key_hint(244, "TAB", 268, "NEXT", kAccentAccount);
+
+    if (g.account_warning_visible) {
+        add_rect(g.screen_obj, 0, 0, kScreenWidth, kScreenHeight, 0x000000,
+                 0, 0, 0, LV_OPA_60);
+        lv_obj_t *dialog = add_rect(g.screen_obj, 38, 46, 244, 88, kColorFieldBg,
+                                    2, kAccentAccount, 4);
+        add_label(dialog, "ACCOUNT VALIDATION", font_sm(), kAccentAccount, 14, 11);
+        add_label(dialog, g.form_error.c_str(), font_sm(), 0xffffff, 14, 35);
+        add_label(dialog, "OK", font_xs(), kAccentAccount, 14, 66);
+        add_label(dialog, "CLOSE", font_xs(), 0xffffff, 38, 66);
+    }
 }
 
 void render_pill(lv_obj_t *parent, int x, int y, int w, const char *label,
@@ -1130,6 +1281,35 @@ void render_network()
     add_key_hint(244, "TAB", 268, "SKIP", kAccentNetwork);
 }
 
+void render_ethernet_config()
+{
+    add_chrome(kAccentNetwork, 64);
+    add_label(g.screen_obj, "ETH0 CONFIG", font_sm(), kAccentNetwork, 36, 38);
+    render_pill(g.screen_obj, 36, 55, 70, "DHCP", g.ethernet_dhcp, kAccentNetwork);
+    render_pill(g.screen_obj, 116, 55, 70, "STATIC", !g.ethernet_dhcp, kAccentNetwork);
+
+    if (!g.ethernet_dhcp) {
+        add_label(g.screen_obj, "IP / CIDR", font_xs(), kAccentNetwork, 36, 81);
+        add_text_field(g.screen_obj, 36, 93, 248, 23, g.ethernet_address,
+                       g.ethernet_focus == 1, kAccentNetwork);
+        add_label(g.screen_obj, "GATEWAY", font_xs(), kAccentNetwork, 36, 119);
+        add_text_field(g.screen_obj, 36, 131, 120, 20, g.ethernet_gateway,
+                       g.ethernet_focus == 2, kAccentNetwork, false, font_sm());
+        add_label(g.screen_obj, "DNS", font_xs(), kAccentNetwork, 168, 119);
+        add_text_field(g.screen_obj, 168, 131, 116, 20, g.ethernet_dns,
+                       g.ethernet_focus == 3, kAccentNetwork, false, font_sm());
+    } else {
+        add_label(g.screen_obj, "Obtain address automatically", font_sm(),
+                  kColorMuted, 36, 94);
+    }
+
+    if (!g.ethernet_error.empty())
+        add_label(g.screen_obj, g.ethernet_error.c_str(), font_xs(), 0xff5a5a, 194, 58);
+    add_key_hint(8, "ESC", 31, "BACK", kAccentNetwork);
+    add_key_hint(92, "Z/C", 119, "MODE", kAccentNetwork);
+    add_key_hint(172, "OK", 191, "CONFIRM", kAccentNetwork);
+}
+
 void draw_signal_bars(lv_obj_t *parent, int x, int y, int signal, uint32_t accent)
 {
     // 4 ascending bars; lit count based on signal strength.
@@ -1146,7 +1326,15 @@ void draw_signal_bars(lv_obj_t *parent, int x, int y, int signal, uint32_t accen
 void render_wifi_list()
 {
     add_chrome(kAccentNetwork, 60);
-    add_label(g.screen_obj, "SELECT WI-FI", font_sm(), kAccentNetwork, 36, 40);
+    if (g.wifi_connected) {
+        const std::string connected = "Connected WiFi: " +
+            field_tail(g.wifi_status_ssid, false, 10) + "  " +
+            (g.wifi_status_ip.empty() ? std::string("No IP")
+                                      : field_tail(g.wifi_status_ip, false, 15));
+        add_label(g.screen_obj, connected.c_str(), font_xs(), 0x31d843, 30, 41);
+    } else {
+        add_label(g.screen_obj, "SELECT WI-FI", font_sm(), kAccentNetwork, 36, 40);
+    }
 
     // #94: while the first scan is still running show a loading state with a
     // spinner so the user isn't staring at an empty/"Other network..." list.
@@ -1201,15 +1389,41 @@ void render_wifi_list()
 void render_wifi_password()
 {
     add_chrome(kAccentNetwork, 60);
-    add_label(g.screen_obj, "WI-FI PASSWORD", font_sm(), kAccentNetwork, 36, 47);
-    add_field(g.screen_obj, 36, 66, 248, 31, true, kAccentNetwork);
-    std::string value = masked(g.wifi_password) + "|";
-    add_label(g.screen_obj, value.c_str(), font_lg(), 0xffffff, 44, 73);
-    std::string note = "SSID: " + g.wifi_ssid;
-    add_label(g.screen_obj, note.c_str(), font_sm(), kColorMuted, 38, 104);
+    if (g.wifi_connected) {
+        add_label(g.screen_obj, "WI-FI CONNECTED", font_sm(), 0x31d843, 36, 48);
+        const std::string status = "Connected WiFi: " + field_tail(g.wifi_ssid, false, 24);
+        add_label(g.screen_obj, status.c_str(), font_sm(), 0xffffff, 36, 76);
+        const std::string ip = "IP: " + (g.wifi_ip.empty() ? std::string("Unavailable") : g.wifi_ip);
+        add_label(g.screen_obj, ip.c_str(), font_sm(), kColorMuted, 36, 99);
+        add_key_hint(14, "ESC", 38, "BACK", kAccentNetwork);
+        add_key_hint(208, "OK", 232, "NEXT", kAccentNetwork);
+        return;
+    }
 
-    add_key_hint(14, "ESC", 38, "BACK", kAccentNetwork);
-    add_key_hint(132, "OK", 156, "CONFIRM", kAccentNetwork);
+    if (g.wifi_manual) {
+        add_label(g.screen_obj, "SSID", font_xs(), kAccentNetwork, 36, 43);
+        add_text_field(g.screen_obj, 36, 57, 248, 25, g.wifi_ssid,
+                       g.wifi_focus == 0, kAccentNetwork);
+
+        add_label(g.screen_obj, "PASSWORD", font_xs(), kAccentNetwork, 36, 86);
+        add_text_field(g.screen_obj, 36, 100, 248, 25, g.wifi_password,
+                       g.wifi_focus == 1, kAccentNetwork, !g.wifi_password_visible);
+    } else {
+        add_label(g.screen_obj, "WI-FI PASSWORD", font_sm(), kAccentNetwork, 36, 47);
+        add_text_field(g.screen_obj, 36, 66, 248, 31, g.wifi_password, true,
+                       kAccentNetwork, !g.wifi_password_visible, font_lg());
+        const std::string note = "SSID: " + field_tail(g.wifi_ssid, false, 28);
+        add_label(g.screen_obj, note.c_str(), font_sm(), kColorMuted, 38, 104);
+    }
+
+    if (g.wifi_connecting)
+        add_label(g.screen_obj, "Connecting...", font_sm(), kAccentNetwork, 38, 128);
+    else if (!g.wifi_connect_error.empty())
+        add_label(g.screen_obj, g.wifi_connect_error.c_str(), font_sm(), 0xff5a5a, 38, 128);
+
+    add_key_hint(8, "ESC", 31, "BACK", kAccentNetwork);
+    add_key_hint(72, "ALT", 98, g.wifi_password_visible ? "HIDE" : "SHOW", kAccentNetwork);
+    add_key_hint(145, "OK", 164, "CONNECT", kAccentNetwork);
     add_key_hint(244, "TAB", 268, "NEXT", kAccentNetwork);
 }
 
@@ -1217,20 +1431,29 @@ void render_manual_time()
 {
     add_chrome(kAccentTime, 60);
     add_label(g.screen_obj, "MANUAL TIME", font_sm(), kAccentTime, 36, 41);
-    add_label(g.screen_obj, "Set time manually because", font_sm(), kColorMuted, 36, 57);
-    add_label(g.screen_obj, "there is no network connection.", font_sm(), kColorMuted, 36, 69);
+    add_label(g.screen_obj, "Review date and time before", font_sm(), kColorMuted, 36, 57);
+    add_label(g.screen_obj, "continuing setup.", font_sm(), kColorMuted, 36, 69);
 
-    add_field(g.screen_obj, 36, 89, 126, 26, g.time_focus == 0, kAccentTime);
-    std::string date_value = g.manual_date + (g.time_focus == 0 ? "|" : "");
-    add_label(g.screen_obj, date_value.c_str(), font_md(), 0xffffff, 44, 93);
+    add_text_field(g.screen_obj, 36, 89, 126, 26, g.manual_date,
+                   g.time_focus == 0, kAccentTime);
 
-    add_field(g.screen_obj, 174, 89, 84, 26, g.time_focus == 1, kAccentTime);
-    std::string time_value = g.manual_time + (g.time_focus == 1 ? "|" : "");
-    add_label(g.screen_obj, time_value.c_str(), font_md(), 0xffffff, 182, 93);
+    add_text_field(g.screen_obj, 174, 89, 84, 26, g.manual_time,
+                   g.time_focus == 1, kAccentTime);
 
     add_key_hint(14, "ESC", 38, "BACK", kAccentTime);
     add_key_hint(132, "OK", 156, "CONFIRM", kAccentTime);
     add_key_hint(244, "TAB", 268, "NEXT", kAccentTime);
+
+    if (g.time_warning_visible) {
+        add_rect(g.screen_obj, 0, 0, kScreenWidth, kScreenHeight, 0x000000,
+                 0, 0, 0, LV_OPA_60);
+        lv_obj_t *dialog = add_rect(g.screen_obj, 38, 46, 244, 88, kColorFieldBg,
+                                    2, kAccentTime, 4);
+        add_label(dialog, "INVALID DATE OR TIME", font_sm(), kAccentTime, 14, 11);
+        add_label(dialog, g.time_warning_message.c_str(), font_sm(), 0xffffff, 14, 35);
+        add_label(dialog, "OK", font_xs(), kAccentTime, 14, 66);
+        add_label(dialog, "CLOSE", font_xs(), 0xffffff, 38, 66);
+    }
 }
 
 void render_ssh()
@@ -1278,6 +1501,7 @@ void render()
     case Screen::Hostname: render_hostname(); break;
     case Screen::Account: render_account(); break;
     case Screen::Network: render_network(); break;
+    case Screen::EthernetConfig: render_ethernet_config(); break;
     case Screen::WifiList: render_wifi_list(); break;
     case Screen::WifiPassword: render_wifi_password(); break;
     case Screen::ManualTime: render_manual_time(); break;
@@ -1329,7 +1553,15 @@ std::string *active_text_field()
              : g.account_focus == 1 ? &g.password
                                     : &g.confirm;
     case Screen::WifiPassword:
-        return &g.wifi_password;
+        if (g.wifi_connected)
+            return nullptr;
+        return g.wifi_manual && g.wifi_focus == 0 ? &g.wifi_ssid : &g.wifi_password;
+    case Screen::EthernetConfig:
+        if (g.ethernet_dhcp || g.ethernet_focus == 0)
+            return nullptr;
+        if (g.ethernet_focus == 1)
+            return &g.ethernet_address;
+        return g.ethernet_focus == 2 ? &g.ethernet_gateway : &g.ethernet_dns;
     case Screen::ManualTime:
         return g.time_focus == 0 ? &g.manual_date : &g.manual_time;
     default:
@@ -1339,6 +1571,8 @@ std::string *active_text_field()
 
 void handle_text_char(char ch)
 {
+    if (g.screen == Screen::WifiPassword && (g.wifi_connecting || g.wifi_connected))
+        return;
     std::string *field = active_text_field();
     if (!field)
         return;
@@ -1346,15 +1580,19 @@ void handle_text_char(char ch)
         return;
     field->push_back(ch);
     g.form_error.clear();
+    g.wifi_connect_error.clear();
     render();
 }
 
 void handle_backspace()
 {
+    if (g.screen == Screen::WifiPassword && (g.wifi_connecting || g.wifi_connected))
+        return;
     std::string *field = active_text_field();
     if (field && !field->empty()) {
         field->pop_back();
         g.form_error.clear();
+        g.wifi_connect_error.clear();
         render();
     }
 }
@@ -1365,19 +1603,85 @@ void enter_wifi_list()
     // loading spinner and refreshes as soon as results arrive (poll_worker_cb).
     g.wifi_list.clear();
     g.wifi_sel = 0;
+    uint64_t scan_generation = 0;
     {
         std::lock_guard<std::mutex> lock(g.mutex);
         g.wifi_scan_ready = false;
         g.wifi_scan_result.clear();
+        scan_generation = ++g.wifi_scan_generation;
     }
     g.wifi_scanning = true;
     go(Screen::WifiList);
 
-    std::thread([]() {
-        std::vector<WifiNetwork> networks = scan_wifi();
+    std::thread([scan_generation]() {
+        int scan_count = 0;
+        for (;;) {
+            std::vector<WifiNetwork> networks = scan_wifi();
+            const WifiConnectionStatus connection = read_wifi_connection_status();
+            {
+                std::lock_guard<std::mutex> lock(g.mutex);
+                if (g.wifi_scan_generation != scan_generation)
+                    return;
+                g.wifi_scan_result = networks;
+                g.wifi_scan_status = connection;
+                g.wifi_scan_ready = true;
+            }
+            if (!networks.empty())
+                return;
+
+            ++scan_count;
+            const auto delay = scan_count < kWifiInitialRetryCount
+                ? kWifiInitialRetryPeriod : kWifiScanPeriod;
+            const auto deadline = std::chrono::steady_clock::now() + delay;
+            while (std::chrono::steady_clock::now() < deadline) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(200));
+                std::lock_guard<std::mutex> lock(g.mutex);
+                if (g.wifi_scan_generation != scan_generation)
+                    return;
+            }
+        }
+    }).detach();
+}
+
+void cancel_wifi_scan()
+{
+    std::lock_guard<std::mutex> lock(g.mutex);
+    ++g.wifi_scan_generation;
+    g.wifi_scan_ready = false;
+    g.wifi_scan_result.clear();
+    g.wifi_scanning = false;
+}
+
+void start_wifi_connection()
+{
+    if (g.wifi_connecting)
+        return;
+    if (g.wifi_ssid.empty()) {
+        g.wifi_connect_error = "SSID is required";
+        render();
+        return;
+    }
+
+    const std::string ssid = g.wifi_ssid;
+    const std::string password = g.wifi_password;
+    g.wifi_connecting = true;
+    g.wifi_connected = false;
+    g.wifi_ip.clear();
+    g.wifi_connect_error.clear();
+    render();
+
+    std::thread([ssid, password]() {
+        std::string connected_ip;
+        const std::string error = apply_wifi(ssid, password, &connected_ip);
         std::lock_guard<std::mutex> lock(g.mutex);
-        g.wifi_scan_result = std::move(networks);
-        g.wifi_scan_ready = true;
+        g.wifi_connect_succeeded = error.empty();
+        g.wifi_connect_error = error;
+        g.wifi_ip = error.empty() ? connected_ip : std::string();
+        if (error.empty()) {
+            g.wifi_status_ssid = ssid;
+            g.wifi_status_ip = connected_ip;
+        }
+        g.wifi_connect_ready = true;
     }).detach();
 }
 
@@ -1390,10 +1694,21 @@ void handle_back()
     case Screen::Hostname: go(Screen::TimezoneList); break;
     case Screen::Account: go(Screen::Hostname); break;
     case Screen::Network: go(Screen::Account); break;
-    case Screen::WifiList: go(Screen::Network); break;
-    case Screen::WifiPassword: go(Screen::WifiList); break;
-    case Screen::ManualTime: go(Screen::Network); break;
-    case Screen::Ssh: go(g.network_skipped ? Screen::ManualTime : Screen::Network); break;
+    case Screen::EthernetConfig: go(Screen::Network); break;
+    case Screen::WifiList:
+        cancel_wifi_scan();
+        go(Screen::Network);
+        break;
+    case Screen::WifiPassword:
+        if (!g.wifi_connecting)
+            go(Screen::WifiList);
+        break;
+    case Screen::ManualTime:
+        go(g.network_skipped ? Screen::Network
+                             : (g.use_ethernet ? Screen::EthernetConfig
+                                               : Screen::WifiPassword));
+        break;
+    case Screen::Ssh: go(Screen::ManualTime); break;
     case Screen::Done: go(Screen::Ssh); break;
     case Screen::Applying: break;
     }
@@ -1417,12 +1732,26 @@ void move_focus(int delta)
         g.network_focus = (g.network_focus + delta + 2) % 2;
         render();
         break;
+    case Screen::EthernetConfig:
+        if (!g.ethernet_dhcp) {
+            g.ethernet_focus = (g.ethernet_focus + delta + 4) % 4;
+            g.ethernet_error.clear();
+            render();
+        }
+        break;
     case Screen::WifiList: {
         int n = static_cast<int>(g.wifi_list.size()) + 1;
         g.wifi_sel = (g.wifi_sel + delta + n) % n;
         render();
         break;
     }
+    case Screen::WifiPassword:
+        if (g.wifi_manual && !g.wifi_connecting && !g.wifi_connected) {
+            g.wifi_focus = (g.wifi_focus + delta + 2) % 2;
+            g.wifi_connect_error.clear();
+            render();
+        }
+        break;
     case Screen::ManualTime:
         g.time_focus = (g.time_focus + delta + 2) % 2;
         render();
@@ -1434,6 +1763,55 @@ void move_focus(int delta)
     default:
         break;
     }
+}
+
+void confirm_manual_time()
+{
+    std::string error;
+    if (!launch_wizard::validate_manual_datetime(g.manual_date, g.manual_time, error)) {
+        g.time_warning_message = error;
+        g.time_warning_visible = true;
+        render();
+        return;
+    }
+    const std::string apply_error = apply_manual_time(g.manual_date, g.manual_time);
+    if (!apply_error.empty()) {
+        g.time_warning_message = field_tail(apply_error, false, 32);
+        g.time_warning_visible = true;
+        render();
+        return;
+    }
+    g.time_warning_visible = false;
+    g.time_warning_message.clear();
+    go(Screen::Ssh);
+}
+
+bool validate_account_fields()
+{
+    if (g.username.empty())
+        g.username = "pi";
+    if (g.password.empty() && g.confirm.empty()) {
+        g.password = "pi";
+        g.confirm = "pi";
+    }
+
+    std::string error;
+    if (!validate_username(g.username, error) || !validate_password(g.password, error)) {
+        g.form_error = error;
+        g.account_warning_visible = true;
+        render();
+        return false;
+    }
+    if (g.password != g.confirm) {
+        g.form_error = "Passwords do not match";
+        g.account_warning_visible = true;
+        render();
+        return false;
+    }
+
+    g.form_error.clear();
+    g.account_warning_visible = false;
+    return true;
 }
 
 void handle_enter()
@@ -1453,6 +1831,7 @@ void handle_enter()
             g.hostname = "CardputerZero";
         if (!validate_hostname(g.hostname, error))
             return;
+        g.account_password_visible = false;
         go(Screen::Account);
         break;
     }
@@ -1462,31 +1841,8 @@ void handle_enter()
             g.form_error.clear();
             render();
         } else {
-            std::string error;
-            if (g.username.empty())
-                g.username = "pi";
-            if (g.password.empty() && g.confirm.empty()) {
-                g.password = "pi";
-                g.confirm = "pi";
-            }
-            if (!validate_username(g.username, error)) {
-                g.form_error = error;
-                render();
+            if (!validate_account_fields())
                 return;
-            }
-            if (!validate_password(g.password, error)) {
-                g.form_error = error;
-                render();
-                return;
-            }
-            // #99: block progression and surface a clear message when the two
-            // password entries differ, instead of silently doing nothing.
-            if (g.password != g.confirm) {
-                g.form_error = "Passwords do not match";
-                render();
-                return;
-            }
-            g.form_error.clear();
             go(Screen::Network);
         }
         break;
@@ -1498,23 +1854,54 @@ void handle_enter()
         } else {
             g.use_ethernet = true;
             g.network_skipped = false;
-            go(Screen::Ssh);
+            g.ethernet_focus = 0;
+            g.ethernet_error.clear();
+            go(Screen::EthernetConfig);
+        }
+        break;
+    case Screen::EthernetConfig:
+        if (!g.ethernet_dhcp && g.ethernet_focus < 3) {
+            ++g.ethernet_focus;
+            render();
+        } else {
+            g.ethernet_error = validate_ethernet_config();
+            if (!g.ethernet_error.empty()) {
+                render();
+                return;
+            }
+            go(Screen::ManualTime);
         }
         break;
     case Screen::WifiList:
+        cancel_wifi_scan();
         if (g.wifi_sel < static_cast<int>(g.wifi_list.size())) {
             g.wifi_ssid = g.wifi_list[g.wifi_sel].ssid;
+            g.wifi_manual = false;
+            g.wifi_focus = 1;
         } else {
-            g.wifi_ssid = "";  // Manual entry; SSID can be edited later.
+            g.wifi_ssid.clear();
+            g.wifi_manual = true;
+            g.wifi_focus = 0;
         }
         g.wifi_password.clear();
+        g.wifi_password_visible = false;
+        g.wifi_ip.clear();
+        g.wifi_connect_error.clear();
+        g.wifi_connected = false;
         go(Screen::WifiPassword);
         break;
     case Screen::WifiPassword:
-        go(Screen::Ssh);
+        if (g.wifi_connected) {
+            go(Screen::ManualTime);
+        } else if (g.wifi_manual && g.wifi_focus == 0) {
+            g.wifi_focus = 1;
+            render();
+        } else {
+            start_wifi_connection();
+        }
         break;
     case Screen::ManualTime:
-        go(Screen::Ssh);
+        confirm_manual_time();
         break;
     case Screen::Ssh:
         g.ssh_enabled = g.ssh_focus == 0;
@@ -1533,19 +1920,8 @@ void handle_tab()
 {
     switch (g.screen) {
     case Screen::Account:
-        if (g.username.empty())
-            g.username = "pi";
-        if (g.password.empty() && g.confirm.empty()) {
-            g.password = "pi";
-            g.confirm = "pi";
-        }
-        // #99: mismatched passwords must block skipping ahead too.
-        if (g.password != g.confirm) {
-            g.form_error = "Passwords do not match";
-            render();
+        if (!validate_account_fields())
             return;
-        }
-        g.form_error.clear();
         go(Screen::Network);
         break;
     case Screen::Network:
@@ -1553,11 +1929,19 @@ void handle_tab()
         g.use_ethernet = false;
         go(Screen::ManualTime);
         break;
+    case Screen::EthernetConfig:
+        g.ethernet_error = validate_ethernet_config();
+        if (!g.ethernet_error.empty()) {
+            render();
+            return;
+        }
+        go(Screen::ManualTime);
+        break;
     case Screen::WifiPassword:
-        go(Screen::Ssh);
+        handle_enter();
         break;
     case Screen::ManualTime:
-        go(Screen::Ssh);
+        confirm_manual_time();
         break;
     case Screen::Ssh:
         go(Screen::Done);
@@ -1578,7 +1962,82 @@ void keyboard_event_cb(lv_event_t *event)
     if (g.busy)
         return;
 
-    switch (key->key_code) {
+    if (g.account_warning_visible) {
+        switch (key->key_code) {
+        case KEY_ENTER:
+        case KEY_ESC:
+        case KEY_TAB:
+            g.account_warning_visible = false;
+            g.form_error.clear();
+            render();
+            break;
+        default:
+            break;
+        }
+        return;
+    }
+
+    if (g.time_warning_visible) {
+        switch (key->key_code) {
+        case KEY_ENTER:
+        case KEY_ESC:
+        case KEY_TAB:
+            g.time_warning_visible = false;
+            render();
+            break;
+        default:
+            break;
+        }
+        return;
+    }
+
+    uint32_t key_code = key->key_code;
+    if (g.screen == Screen::Account && key_code == KEY_LEFTALT &&
+        key->key_state == KBD_KEY_PRESSED) {
+        g.account_password_visible = !g.account_password_visible;
+        render();
+        return;
+    }
+    if (g.screen == Screen::WifiPassword && key_code == KEY_LEFTALT &&
+        key->key_state == KBD_KEY_PRESSED && !g.wifi_connecting && !g.wifi_connected) {
+        g.wifi_password_visible = !g.wifi_password_visible;
+        render();
+        return;
+    }
+    if (g.screen == Screen::TimezoneList || g.screen == Screen::WifiList) {
+        switch (key_code) {
+        case KEY_F: key_code = KEY_UP; break;
+        case KEY_X: key_code = KEY_DOWN; break;
+        case KEY_Z: key_code = KEY_LEFT; break;
+        case KEY_C: key_code = KEY_RIGHT; break;
+        default: break;
+        }
+    } else if (g.screen == Screen::Network) {
+        if (key_code == KEY_F)
+            key_code = KEY_UP;
+        else if (key_code == KEY_X)
+            key_code = KEY_DOWN;
+    } else if (g.screen == Screen::EthernetConfig) {
+        if (key_code == KEY_LEFT || key_code == KEY_Z ||
+            key_code == KEY_RIGHT || key_code == KEY_C) {
+            g.ethernet_dhcp = key_code == KEY_LEFT || key_code == KEY_Z;
+            g.ethernet_focus = 0;
+            g.ethernet_error.clear();
+            render();
+            return;
+        }
+        if (key_code == KEY_F)
+            key_code = KEY_UP;
+        else if (key_code == KEY_X)
+            key_code = KEY_DOWN;
+    } else if (g.screen == Screen::Ssh) {
+        if (key_code == KEY_Z)
+            key_code = KEY_LEFT;
+        else if (key_code == KEY_C)
+            key_code = KEY_RIGHT;
+    }
+
+    switch (key_code) {
     case KEY_ESC:
         handle_back();
         return;
@@ -1623,6 +2082,11 @@ void poll_worker_cb(lv_timer_t *timer)
             g.wifi_scan_ready = false;
             g.wifi_list = std::move(g.wifi_scan_result);
             g.wifi_scan_result.clear();
+            if (g.wifi_scan_status.available) {
+                g.wifi_connected = g.wifi_scan_status.connected;
+                g.wifi_status_ssid = g.wifi_scan_status.ssid;
+                g.wifi_status_ip = g.wifi_scan_status.ip;
+            }
             g.wifi_scanning = false;
             wifi_updated = true;
         }
@@ -1631,6 +2095,23 @@ void poll_worker_cb(lv_timer_t *timer)
         if (g.wifi_sel >= static_cast<int>(g.wifi_list.size()) + 1)
             g.wifi_sel = 0;
         render();
+    }
+
+    bool wifi_connect_finished = false;
+    bool wifi_connect_succeeded = false;
+    {
+        std::lock_guard<std::mutex> lock(g.mutex);
+        if (g.wifi_connect_ready) {
+            g.wifi_connect_ready = false;
+            wifi_connect_finished = true;
+            wifi_connect_succeeded = g.wifi_connect_succeeded;
+        }
+    }
+    if (wifi_connect_finished) {
+        g.wifi_connecting = false;
+        g.wifi_connected = wifi_connect_succeeded;
+        if (g.screen == Screen::WifiPassword)
+            render();
     }
 
     bool finished = false;
