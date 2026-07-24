@@ -736,15 +736,8 @@ lv_obj_t *UIAppTopBar::create(lv_obj_t *parent)
         lv_obj_delete(container_);
         return nullptr;
     }
-
-    lv_obj_t *spacer = lv_obj_create(container_);
-    if (!spacer) {
-        lv_obj_delete(container_);
-        return nullptr;
-    }
-    lv_obj_remove_style_all(spacer);
-    lv_obj_set_size(spacer, 0, height_);
-    lv_obj_set_flex_grow(spacer, 1);
+    lv_obj_set_width(title_->obj(), 0);
+    lv_obj_set_flex_grow(title_->obj(), 1);
 
     custom_container_ = lv_obj_create(container_);
     if (!custom_container_) {

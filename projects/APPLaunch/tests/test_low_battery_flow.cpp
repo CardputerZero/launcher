@@ -17,6 +17,8 @@ int main()
     flow.update(true, 0, false, 1000);
     assert(flow.warning() == LowBatteryWarning::ShutdownCountdown);
     assert(flow.seconds_until_shutdown(1000) == 15);
+    flow.update(true, 0, false, 4000);
+    assert(flow.seconds_until_shutdown(4000) == 12);
     assert(!flow.confirm_shutdown(true, false, 15999));
     assert(flow.confirm_shutdown(true, false, 16000));
 
