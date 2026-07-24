@@ -193,22 +193,25 @@ public:
         constexpr const char *kActivationTimeoutSeconds = "20";
         const bool with_password = password && password[0];
         char output[4096] = {};
+        int command_result = -1;
         if (with_password) {
             const char *argv[] = {"nmcli", "--wait", kActivationTimeoutSeconds, "dev", "wifi", "connect",
                                   ssid, "password", password, nullptr};
-            cp0_process_capture_argv(argv, output, sizeof(output));
+            command_result = cp0_process_capture_argv(argv, output, sizeof(output));
         } else {
             const char *argv[] = {"nmcli", "--wait", kActivationTimeoutSeconds, "con", "up", "id", ssid,
                                   nullptr};
-            cp0_process_capture_argv(argv, output, sizeof(output));
+            command_result = cp0_process_capture_argv(argv, output, sizeof(output));
+            if (command_result != 0) {
+                const char *open_argv[] = {"nmcli", "--wait", kActivationTimeoutSeconds, "dev", "wifi",
+                                           "connect", ssid, nullptr};
+                command_result = cp0_process_capture_argv(open_argv, output, sizeof(output));
+            }
         }
 
-        // Success is determined by NetworkManager's explicit activation message
-        // ("... successfully activated ..."), NOT by the nmcli exit code: on a wrong
-        // password nmcli sometimes still exits 0, which would make us treat a failed
-        // attempt as connected and leave the bad-password profile behind.
-        if (std::string(output).find("successfully activated") != std::string::npos) {
-            update_status_cache();
+        update_status_cache();
+        const cp0_wifi_status_t status = get_status();
+        if (command_result == 0 && status.connected && std::string(status.ssid) == ssid) {
             return 0;
         }
 
@@ -219,7 +222,6 @@ public:
             const char *del_argv[] = {"nmcli", "con", "delete", "id", ssid, nullptr};
             cp0_process_run_argv(del_argv, 0);
         }
-        update_status_cache();
         return -1;
     }
 

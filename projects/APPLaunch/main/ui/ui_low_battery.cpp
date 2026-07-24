@@ -11,6 +11,7 @@ namespace {
 constexpr int kScreenWidth = 320;
 constexpr int kScreenHeight = 240;
 constexpr uint32_t kFlashMs = 500;
+constexpr uint32_t kBatteryRefreshMs = 3000;
 
 LowBatteryFlow flow;
 LowBatteryWarning rendered_warning = LowBatteryWarning::None;
@@ -20,6 +21,7 @@ lv_obj_t *countdown_label = nullptr;
 lv_timer_t *warning_timer = nullptr;
 uint32_t flash_tick = 0;
 uint32_t rendered_seconds = 0;
+uint32_t battery_refresh_tick = 0;
 
 void overlay_deleted_cb(lv_event_t *event) noexcept
 {
@@ -183,6 +185,11 @@ void timer_cb(lv_timer_t *timer) noexcept
     try {
     if (timer != warning_timer) return;
     const uint32_t now = lv_tick_get();
+    if (static_cast<uint32_t>(now - battery_refresh_tick) >= kBatteryRefreshMs) {
+        battery_refresh_tick = now;
+        const cp0_battery_info_t info = cp0_battery_read();
+        flow.update(info.valid != 0, info.soc, (info.flags & 1) != 0, now);
+    }
     render(now);
     if (overlay && flow.warning() != LowBatteryWarning::None &&
         lv_tick_elaps(flash_tick) >= kFlashMs) {
@@ -212,6 +219,7 @@ void init_warning()
     if (warning_timer)
         return;
     flow.reset();
+    battery_refresh_tick = lv_tick_get();
     warning_timer = lv_timer_create(timer_cb, 250, nullptr);
     update_warning(cp0_battery_read());
     } catch (...) {
@@ -251,6 +259,7 @@ void shutdown_warning()
     flow.reset();
     rendered_warning = LowBatteryWarning::None;
     rendered_seconds = 0;
+    battery_refresh_tick = 0;
 }
 
 } // namespace launcher_battery_ui
