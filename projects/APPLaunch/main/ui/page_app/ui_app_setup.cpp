@@ -11,7 +11,7 @@
 UISetupPage::UISetupPage()
     : AppPage()
 {
-    set_page_title("SETTING");
+    set_page_title("Settings");
     cache_image_paths();
     menu_init();
     create_ui();
