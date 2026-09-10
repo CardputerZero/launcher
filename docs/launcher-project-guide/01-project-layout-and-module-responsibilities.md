@@ -48,7 +48,11 @@ ext_components/
 ├── cp0_lvgl/
 ├── Miniaudio/
 ├── RadioLib/
-└── Sigslot/
+├── Sigslot/
+├── SmoothUI/
+├── Spdlog/
+├── bluectl/
+└── nmtui/
 ```
 
 | Component | Role |
@@ -57,6 +61,13 @@ ext_components/
 | `Miniaudio` | Dependency for audio playback and recording |
 | `Sigslot` | Signal-slot mechanism |
 | `RadioLib` | LoRa/SX126x wireless communication library component |
+| `SmoothUI`, `Spdlog` | Optional upstream UI and logging wrappers |
+| `bluectl` | C DBus/BlueZ API and test utilities |
+| `nmtui` | NetworkManager/libnm Wi-Fi adapter |
+
+Current cross-module behavior and dependency licenses are recorded in
+[the implementation snapshot](../current-implementation-and-components.md)
+and [the component inventory](../OPEN_SOURCE_COMPONENTS.md).
 
 ### 1.3 `projects/`
 

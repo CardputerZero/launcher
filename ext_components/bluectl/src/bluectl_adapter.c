@@ -1,6 +1,10 @@
 /*
- * bluectl_adapter.c - 适配器操作(power/discoverable/pairable/scan...)
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
  */
+
+
 #include "bluectl_internal.h"
 
 #include <stdio.h>
@@ -21,7 +25,7 @@ static void list_adapters_cb(const char *path, const char *iface,
 		return;
 	if (l->count >= l->max)
 		return;
-	/* fill 内部会 memset, 路径要在 fill 之后再写 */
+
 	bctl_adapter_fill(props, &l->out[l->count]);
 	bctl_strscpy(l->out[l->count].path, path, BLUECTL_PATH_LEN);
 	l->count++;
@@ -164,7 +168,7 @@ int bluectl_start_discovery(const char *adapter)
 		return rv;
 	reply = bctl_call(c, path, IFACE_ADAPTER1, "StartDiscovery", -1);
 	if (!reply) {
-		/* 已在扫描不算错误 */
+
 		if (strstr(c->err_name, "InProgress"))
 			return BLUECTL_OK;
 		return c->err_code;
@@ -185,7 +189,7 @@ int bluectl_stop_discovery(const char *adapter)
 		return rv;
 	reply = bctl_call(c, path, IFACE_ADAPTER1, "StopDiscovery", -1);
 	if (!reply) {
-		/* 本就没在扫描不算错误(不同 bluez 版本错误名不一致) */
+
 		if (strstr(c->err_name, "NotStarted") ||
 		    strstr(c->err, "No discovery started"))
 			return BLUECTL_OK;

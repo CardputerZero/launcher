@@ -1,13 +1,16 @@
 /*
- * bluectl_media.c - org.bluez.MediaPlayer1 媒体控制(AVRCP)
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
  */
+
 #include "bluectl_internal.h"
 
 #include <stdio.h>
 #include <string.h>
 
 struct bctl_find_player {
-	const char *prefix;	/* 限定设备对象路径前缀, NULL = 任意 */
+	const char *prefix;
 	char path[BLUECTL_PATH_LEN];
 	bluectl_media_player_t player;
 	int found;
@@ -26,11 +29,11 @@ static void player_fill(DBusMessageIter *props, bluectl_media_player_t *out)
 		out->position = (unsigned int)bctl_read_num(&it, 0);
 	if (bctl_dict_lookup(props, "Track", &it) &&
 	    dbus_message_iter_get_arg_type(&it) == DBUS_TYPE_ARRAY) {
-		/*
-		 * Track 是变体内容 a{sv}, it 即数组迭代器,
-		 * 直接用它查键(recurse 后会变成首个 dict entry,
-		 * dict_lookup 只认数组迭代器)。
-		 */
+
+
+
+
+
 		DBusMessageIter field;
 
 		if (bctl_dict_lookup(&it, "Title", &field))
@@ -88,13 +91,13 @@ static int resolve_player(struct bluectl_ctx *c, const char *device,
 		return BLUECTL_ERR_INVALID_ARG;
 	}
 	if (device[0] != '/') {
-		/* MAC 地址: 先解析设备对象路径, 再限定其下查找 player */
+
 		rv = bctl_device_path(c, device, dev_path, sizeof(dev_path));
 		if (rv < 0)
 			return rv;
 		prefix = dev_path;
 	}
-	/* device 直接是 player 路径时也走枚举(统一校验 MediaPlayer1 存在) */
+
 	memset(&f, 0, sizeof(f));
 	f.prefix = prefix;
 	if (device[0] == '/')

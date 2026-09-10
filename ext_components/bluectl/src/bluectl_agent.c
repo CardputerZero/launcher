@@ -1,10 +1,10 @@
 /*
- * bluectl_agent.c - org.bluez.Agent1 配对代理实现
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
  *
- * 依赖 bluectl_process() 驱动消息分发: BlueZ 的配对请求
- * (RequestPinCode/RequestConfirmation/...) 会以方法调用形式到达,
- * 由 vtable 转成回调交给应用, 应用再通过 bluectl_agent_reply() 应答。
+ * SPDX-License-Identifier: MIT
  */
+
+
 #include "bluectl_internal.h"
 
 #include <stdio.h>
@@ -12,7 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* bluectl_agent_reply() 可由应用工作线程调用，保护挂起请求链表。 */
+
 static volatile int g_pending_lock;
 
 static void pending_lock(void)
@@ -26,7 +26,7 @@ static void pending_unlock(void)
 	__sync_lock_release(&g_pending_lock);
 }
 
-/* needs_reply=1 的方法集合 */
+
 static int method_needs_reply(const char *method)
 {
 	return !strcmp(method, "RequestPinCode") ||
@@ -88,19 +88,19 @@ static int send_reply(struct bluectl_ctx *c, DBusMessage *msg, int accept,
 		bctl_set_err(c, BLUECTL_ERR_NO_MEM, "send agent reply failed");
 		return BLUECTL_ERR_NO_MEM;
 	}
-	/*
-	 * 这里不能 dbus_connection_flush(): 本函数可能在
-	 * bluectl_process() 的消息分发(handler)上下文中被调用,
-	 * 若另一线程正阻塞在 send_with_reply_and_block(),
-	 * flush 会与 io 路径锁互等造成死锁。
-	 * send 只入队, 出站数据由下一次 bluectl_process() 的
-	 * read_write(DO_WRITING) 写出。
-	 */
+
+
+
+
+
+
+
+
 	dbus_message_unref(reply);
 	return BLUECTL_OK;
 }
 
-/* 向所有挂起请求回 Canceled 并清空(BlueZ 发来 Cancel/Release 或应用主动取消) */
+
 static void agent_cancel_all(struct bluectl_ctx *c, const char *reason)
 {
 	struct bctl_pending_agent *p, *next;
@@ -116,7 +116,7 @@ static void agent_cancel_all(struct bluectl_ctx *c, const char *reason)
 				p->msg, "org.bluez.Error.Canceled", reason);
 
 			if (err) {
-				/* 只入队不 flush(handler 上下文, 见 send_reply 注释) */
+
 				dbus_connection_send(c->conn, err, NULL);
 				dbus_message_unref(err);
 			}
@@ -135,7 +135,7 @@ static DBusHandlerResult handle_agent_call(struct bluectl_ctx *c,
 	DBusMessageIter it;
 	bluectl_agent_request_t req;
 
-	/* RequestConfirmation 需要 passkey, AuthorizeService 需要 uuid */
+
 	if (dbus_message_iter_init(msg, &it) &&
 	    dbus_message_iter_get_arg_type(&it) == DBUS_TYPE_OBJECT_PATH)
 		dbus_message_iter_get_basic(&it, &device_path);
@@ -156,7 +156,7 @@ static DBusHandlerResult handle_agent_call(struct bluectl_ctx *c,
 		goto reply_now;
 	}
 	if (!strcmp(method, "DisplayPinCode")) {
-		/* 纯展示请求: 立即应答并通知应用 */
+
 		req.needs_reply = 0;
 		agent_notify(c, &req);
 		goto reply_now;
@@ -181,7 +181,7 @@ static DBusHandlerResult handle_agent_call(struct bluectl_ctx *c,
 			"unknown agent method");
 
 		if (err) {
-			/* 只入队不 flush(handler 上下文, 见 send_reply 注释) */
+
 			dbus_connection_send(c->conn, err, NULL);
 			dbus_message_unref(err);
 		}
@@ -209,7 +209,7 @@ static DBusHandlerResult handle_agent_call(struct bluectl_ctx *c,
 		}
 	}
 
-	/* 挂起请求, 等待应用 bluectl_agent_reply() */
+
 	{
 		struct bctl_pending_agent *p;
 
@@ -227,7 +227,7 @@ static DBusHandlerResult handle_agent_call(struct bluectl_ctx *c,
 
 		req.needs_reply = 1;
 		if (!c->agent_cb) {
-			/* 无人处理: 直接拒绝, 避免配对挂死 */
+
 			bluectl_agent_reply(req.id, 0, NULL);
 			return DBUS_HANDLER_RESULT_HANDLED;
 		}
@@ -240,7 +240,7 @@ reply_now:
 		DBusMessage *reply = dbus_message_new_method_return(msg);
 
 		if (reply) {
-			/* 只入队不 flush(handler 上下文, 见 send_reply 注释) */
+
 			dbus_connection_send(c->conn, reply, NULL);
 			dbus_message_unref(reply);
 		}
@@ -284,7 +284,7 @@ static const DBusObjectPathVTable agent_vtable = {
 	.message_function = agent_message,
 };
 
-/* ---------------- 公共 API ---------------- */
+
 
 int bluectl_agent_set_callback(bluectl_agent_cb_t cb, void *user_data)
 {
