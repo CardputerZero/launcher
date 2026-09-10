@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "../main/ui/model/screensaver_model.hpp"
 #include "../main/ui/model/screensaver_runtime_contract.hpp"
 

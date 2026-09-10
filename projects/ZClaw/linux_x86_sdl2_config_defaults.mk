@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+# SPDX-License-Identifier: MIT
+
 # CONFIG_TOOLCHAIN_PATH="/opt/homebrew/bin"
 # CONFIG_TOOLCHAIN_PREFIX="aarch64-linux-gnu-"
 

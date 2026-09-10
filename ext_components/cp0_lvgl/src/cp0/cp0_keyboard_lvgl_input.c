@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "cp0_keyboard_lvgl_input.h"
 #include "../cp0_keyboard_queue.h"
 #include "../cp0_keyboard_input_lifecycle.h"

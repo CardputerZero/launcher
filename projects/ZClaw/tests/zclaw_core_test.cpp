@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "zclaw_provider_store.h"
 #include "zclaw_sound_effects.h"
 #include "zclaw_provider_catalog.h"
