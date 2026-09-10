@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "settings_static_info_page.hpp"
 #include "settings_fonts.hpp"
 #include "settings_storage_model.hpp"

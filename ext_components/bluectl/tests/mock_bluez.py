@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
-# mock_bluez.py - 模拟 org.bluez 服务, 用于 bluectl 功能测试
-#
-# 依赖: python3-dbus, python3-gi (GLib 主循环)
-# 环境变量 DBUS_SYSTEM_BUS_ADDRESS 指向 tests/run_func_test.sh 启动的
-# 私有 dbus-daemon; 未设置时回退到系统总线。
+# SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+# SPDX-License-Identifier: MIT
+
 import os
 import sys
 import threading
@@ -230,7 +228,7 @@ class BluezObject(dbus.service.Object):
 
     # ---- Device1 ----
     def _request_confirmation(self, owner, reply_cb, error_cb):
-        """在 GLib 主循环之外发起 agent 调用，避免 Pair handler 自阻塞。"""
+
         try:
             proxy = self._bus.get_object(owner, state["registered_agent"],
                                           introspect=False)
@@ -239,7 +237,7 @@ class BluezObject(dbus.service.Object):
                 dbus.ObjectPath(DEV1_PATH), dbus.UInt32(123456)
             )
             print("mock: agent reply=%r" % (reply,), flush=True)
-            # 回调必须回到 GLib 线程，更新属性并完成原始 Pair 调用。
+
             def complete_pair():
                 state["pair_confirm_reply"] = reply
                 state["dev1_paired"] = True
@@ -272,8 +270,8 @@ class BluezObject(dbus.service.Object):
             raise dbus.exceptions.DBusException(
                 "org.bluez.Error.NotRegistered: no agent owner"
             )
-        # 代理请求必须发给注册方唯一名。后台线程发起同步调用，
-        # 让 GLib 主循环保持运行以分发 C 端的 method return。
+
+
         threading.Thread(target=self._request_confirmation,
                          args=(owner, reply_cb, error_cb), daemon=True).start()
 
@@ -304,7 +302,7 @@ class BluezObject(dbus.service.Object):
     def RegisterAgent(self, path, capability, sender=None):
         state["registered_agent"] = str(path)
         state["agent_capability"] = str(capability)
-        # 记录调用方唯一名, 后续配对请求要发给它而不是 org.bluez(自己)
+
         state["agent_owner"] = sender
 
     @dbus.service.method(IFACE_AGENT_MANAGER, in_signature="o", out_signature="")
@@ -321,12 +319,12 @@ def main():
     threads_init()
     global bus_name_holder
     DBusGMainLoop(set_as_default=True)
-    # 容器内 SystemBus 会触发 AppArmor 只读查询, 直接按地址连接
+
     addr = os.environ.get("DBUS_SYSTEM_BUS_ADDRESS", "")
     bus = dbus.bus.BusConnection(addr) if addr else dbus.SystemBus()
-    # BusName 必须持引用, 否则被 GC 后名字会被释放
+
     bus_name_holder = dbus.service.BusName(BUS_NAME, bus)
-    # dbus-python 对象只响应精确路径, 每个对象路径都要注册一份
+
     BluezObject(bus, "/org/bluez")
     BluezObject(bus, ADAPTER_PATH)
     BluezObject(bus, DEV1_PATH)

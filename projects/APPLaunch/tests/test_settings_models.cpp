@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "../main/ui/settings/settings_about_help_model.hpp"
 #include "../main/ui/settings/settings_boot_action_policy.hpp"
 #include "../main/ui/settings/settings_launcher_model.hpp"

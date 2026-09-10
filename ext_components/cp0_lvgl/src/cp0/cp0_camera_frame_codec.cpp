@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "cp0_camera_frame_codec.hpp"
 
 #if CP0_CAMERA_HAS_LIBCAMERA

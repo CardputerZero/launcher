@@ -11,6 +11,10 @@
 
 UI 界面由 **SquareLine Studio 1.5.0** 生成，支持 SDL2 仿真模式（本机调试）和 Linux Framebuffer 模式（设备运行）两种显示后端。
 
+当前代码实现快照和开源组件许可证清单见
+[`docs/current-implementation-and-components.md`](docs/current-implementation-and-components.md)
+以及 [`docs/OPEN_SOURCE_COMPONENTS.md`](docs/OPEN_SOURCE_COMPONENTS.md)。
+
 ---
 
 ## 项目结构

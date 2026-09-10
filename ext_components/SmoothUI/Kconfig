@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+# SPDX-License-Identifier: MIT
+
 menuconfig SMOOTH_UI_COMPONENT_ENABLED
     bool "Smooth UI Toolkit"
     default n

@@ -1,4 +1,10 @@
-/* repro_om.c - 复现 GetManagedObjects 深层嵌套解析(不随组件发布) */
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
+
 #include <dbus/dbus.h>
 #include <stdio.h>
 #include <string.h>
@@ -53,7 +59,7 @@ int main(void)
 					dbus_message_iter_recurse(&ientry, &props);
 					printf("    props type=%c\n",
 					       dbus_message_iter_get_arg_type(&props));
-					/* 遍历 props 的 dict entry */
+
 					{
 						DBusMessageIter entries;
 

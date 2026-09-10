@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #ifndef LAUNCH_WIZARD_COMMAND_RUNNER_H
 #define LAUNCH_WIZARD_COMMAND_RUNNER_H
 

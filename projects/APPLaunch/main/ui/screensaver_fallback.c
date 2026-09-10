@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 /* Generated from APPLaunch/share/images/screensaver.png with LVGLImage.py. */
 #if defined(LV_LVGL_H_INCLUDE_SIMPLE)
 #include "lvgl.h"

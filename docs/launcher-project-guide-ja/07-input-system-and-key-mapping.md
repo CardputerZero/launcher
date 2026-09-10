@@ -30,11 +30,13 @@ keyboard_queue + keyboard_mutex
 cp0_keypad_read_cb()
         |
         +-- lv_obj_send_event(lv_screen_active(), LV_EVENT_KEYBOARD, key_item)
-        +-- ui_global_hint_on_key(key_item)
+        +-- registered global key handler(key_item)
         +-- data->key = cp0_evdev_process_key(key_code)
 ```
 
-`LV_EVENT_KEYBOARD` は APPLaunch のカスタムイベントであり、LVGL 組み込みのキーイベントではありません。起動時に `main.cpp` で登録されます。
+`LV_EVENT_KEYBOARD` は CP0 の共有カスタムイベントです。デバイス側の
+`cp0_lvgl_keyboard.c` または SDL 側の `sdl_lvgl_keyboard.c` が初期化時に
+登録します。APPLaunch の `main.cpp` は再登録しません。
 
 ```cpp
 if (LV_EVENT_KEYBOARD == 0)
@@ -55,6 +57,8 @@ struct key_item {
     char     sym_name[65];  // XKB keysym name
     char     utf8[16];      // UTF-8 character
     char     flage;
+    uint32_t semantic_key;
+    cp0_keyboard_input_context_t input_context;
     STAILQ_ENTRY(key_item) entries;
 };
 ```
@@ -75,47 +79,24 @@ struct key_item {
 
 ページは物理キー判定に `key_code` を使うことも、テキスト入力の読み取りに `utf8` / `codepoint` を使うこともできます。
 
-## 3. イベントマクロとページ側アクセスパターン
+## 3. イベント参照と所有権
 
-`projects/APPLaunch/main/ui/ui.h` は共通マクロを提供します。
+`main/ui/ui.h` は現在 `launcher_ui::events::keyboard_item`、`keyboard_key`、`keyboard_state`、`is_key_pressed`、`is_key_released` を提供します。旧大文字マクロは現在の API ではありません。`is_key_pressed` は repeat (`state > 0`) も含み、単発の押下は `KBD_KEY_PRESSED` で判定します。
 
-```c
-#define LV_EVENT_KEYBOARD_GET_KEY(e) \
-    ((struct key_item *)lv_event_get_param(e))->key_code
-
-#define LV_EVENT_KEYBOARD_GET_KEY_STATE(e) \
-    ((struct key_item *)lv_event_get_param(e))->key_state
-
-#define IS_KEY_PRESSED(e) \
-    ((lv_event_get_code(e) == LV_EVENT_KEYBOARD) && \
-     (LV_EVENT_KEYBOARD_GET_KEY_STATE(e) > 0))
-
-#define IS_KEY_RELEASED(e) \
-    ((lv_event_get_code(e) == LV_EVENT_KEYBOARD) && \
-     (LV_EVENT_KEYBOARD_GET_KEY_STATE(e) == 0))
-```
-
-典型的なページイベントのバインド:
+フォーカス移動・決定・取消には `LV_EVENT_KEY` と `lv_event_get_key()` を使い、文字入力・物理キー・修飾キー・repeat にはカスタムイベントを使います。keyboard helper の前にイベント型を確認します：
 
 ```cpp
-void event_handler_init()
+static void on_keyboard(lv_event_t *event)
 {
-    lv_obj_add_event_cb(root_screen_, UIIpPanelPage::static_lvgl_handler,
-                        LV_EVENT_ALL, this);
-}
-
-static void static_lvgl_handler(lv_event_t *e)
-{
-    auto *self = static_cast<UIIpPanelPage *>(lv_event_get_user_data(e));
-    if (!self || !IS_KEY_RELEASED(e))
-        return;
-
-    uint32_t key = LV_EVENT_KEYBOARD_GET_KEY(e);
-    self->handle_key(key);
+    if (!event || lv_event_get_code(event) !=
+            static_cast<lv_event_code_t>(LV_EVENT_KEYBOARD)) return;
+    const auto *item = launcher_ui::events::keyboard_item(event);
+    if (!item || item->key_state != KBD_KEY_PRESSED) return;
+    // Copy fields before scheduling any asynchronous work.
 }
 ```
 
-注意: 多くのメニューページは press と repeat による重複トリガーを避けるため、キーリリース時だけ処理します。ゲーム系ページでは、移動や発射を press/repeat で処理することがあります。
+`key_item` は dispatcher が所有し、同期 callback 後に解放します。非同期処理には値をコピーします。カスタム配送の後に native 配送があり、`lv_event_stop_processing()` は後者を抑止しません。文字入力時は context と `cp0_keyboard_set_lvgl_keypad_intercept(1)` の状態を保存・復元し、画面破棄前に callback を解除します。
 
 ## 4. デバイス側入力スレッド
 
@@ -402,8 +383,8 @@ launch_page_->show_home_screen();
 
 新しいページでは次のルールに従ってください。
 
-- リスト/メニューページ: `IS_KEY_RELEASED(e)` で `KEY_UP/DOWN/LEFT/RIGHT/ENTER/ESC` を処理します。
-- ゲームページ: 連続動作は `IS_KEY_PRESSED(e)` で処理し、必要なら repeat も受け付けます。
+- リスト/メニューページ: `launcher_ui::events::is_key_released(e)` で `KEY_UP/DOWN/LEFT/RIGHT/ENTER/ESC` を処理します。
+- ゲームページ: 連続動作は `launcher_ui::events::is_key_pressed(e)` で処理し、必要なら repeat も受け付けます。
 - テキスト入力ページ: `key_item::utf8` を優先します。`keycode_to_char()` は単純な場合だけ使います。
 - 戻るキー: ESC は現在のページまたは現在のポップアップを閉じる必要があります。多階層ビューではまず前の階層に戻り、その後ホームへ戻ります。
 - 方向代替キー: デバイスキーボード対応ページでは `F/X/Z/C` を一貫してサポートしてください。

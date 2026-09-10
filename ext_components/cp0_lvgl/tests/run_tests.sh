@@ -1,4 +1,7 @@
 #!/bin/sh
+# SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+# SPDX-License-Identifier: MIT
+
 set -eu
 build_dir="${TMPDIR:-/tmp}/cp0-lvgl-tests"
 mkdir -p "$build_dir"

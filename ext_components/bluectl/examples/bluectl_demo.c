@@ -1,28 +1,11 @@
 /*
- * bluectl_demo.c - bluectl 交互式命令行演示程序
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
  *
- * 演示 bluectl 库的主要能力: 适配器枚举/电源/扫描、设备枚举/查询/配对/
- * 连接/信任/移除、配对代理 agent(自动应答)、媒体控制(AVRCP)、事件回调。
- *
- * 编译(本机, 开启全部功能, pkg-config dbus-1 方式):
- *   gcc -std=gnu99 -Wall -Wextra -Wno-unused-parameter \
- *       -DCONFIG_BLUECTL_AGENT_ENABLED=1 -DCONFIG_BLUECTL_MEDIA_ENABLED=1 \
- *       -I../src $(pkg-config --cflags dbus-1) \
- *       bluectl_demo.c \
- *       ../src/bluectl_core.c ../src/bluectl_adapter.c \
- *       ../src/bluectl_device.c ../src/bluectl_agent.c ../src/bluectl_media.c \
- *       -o bluectl_demo $(pkg-config --libs dbus-1) -lpthread
- *
- * 运行(需 org.bluez 在线, 可用 tests/mock_bluez.py 模拟):
- *   ./bluectl_demo            # 交互式, 输入 help 查看子命令
- *   echo "devices" | ./bluectl_demo   # 单命令脚本式
- *
- * 说明:
- *   - 操作接口(pair/connect 等)为阻塞式 DBus 调用, 见 bluectl.h;
- *   - 事件与 agent 回调由 bluectl_process() 驱动, 本 demo 用一个
- *     独立线程跑事件泵, 这样 pair/connect 阻塞期间 agent 仍能应答;
- *   - agent 请求自动打印并接受(演示用途, 生产代码应弹窗征求用户意见)。
+ * SPDX-License-Identifier: MIT
  */
+
+
+
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -35,7 +18,7 @@
 
 static volatile int g_run = 1;
 
-/* ---------------- 事件回调 ---------------- */
+
 
 static const char *event_name(int type)
 {
@@ -67,7 +50,7 @@ static void on_event(const bluectl_event_t *ev, void *user)
 	printf("\n");
 }
 
-/* ---------------- agent 回调 ---------------- */
+
 
 #ifdef CONFIG_BLUECTL_AGENT_ENABLED
 static void on_agent(const bluectl_agent_request_t *req, void *user)
@@ -76,11 +59,11 @@ static void on_agent(const bluectl_agent_request_t *req, void *user)
 	printf("[agent] %-24s device=%-18s passkey=%-8s needs_reply=%d\n",
 		   req->method, req->device, req->passkey, req->needs_reply);
 	if (!req->needs_reply)
-		return;	/* 展示型请求(DisplayPasskey 等), 无需应答 */
-	/*
-	 * 自动接受: PIN/Passkey 给 "1234", 其余(确认/授权)直接同意。
-	 * 演示用; 生产代码应在此征求用户意见后再调用 bluectl_agent_reply()。
-	 */
+		return;
+
+
+
+
 	if (!strcmp(req->method, "RequestPinCode") ||
 		!strcmp(req->method, "RequestPasskey"))
 		bluectl_agent_reply(req->id, 1, "1234");
@@ -89,7 +72,7 @@ static void on_agent(const bluectl_agent_request_t *req, void *user)
 }
 #endif /* CONFIG_BLUECTL_AGENT_ENABLED */
 
-/* ---------------- 事件泵线程 ---------------- */
+
 
 static void *pump_thread(void *arg)
 {
@@ -97,7 +80,7 @@ static void *pump_thread(void *arg)
 	while (g_run) {
 		int n = bluectl_process(100);
 
-		if (n < 0) {	/* 连接断开 */
+		if (n < 0) {
 			printf("[pump] DBus 连接断开: %s\n",
 				   bluectl_last_error());
 			break;
@@ -106,7 +89,7 @@ static void *pump_thread(void *arg)
 	return NULL;
 }
 
-/* ---------------- 命令实现 ---------------- */
+
 
 static void usage(void)
 {
@@ -378,7 +361,7 @@ static int cmd_media(const char *mac, const char *cmd)
 }
 #endif /* CONFIG_BLUECTL_MEDIA_ENABLED */
 
-/* ---------------- 主循环 ---------------- */
+
 
 static int run_command(char *line)
 {
@@ -386,7 +369,7 @@ static int run_command(char *line)
 	int argc = 0;
 	char *p = line;
 
-	/* 按空白拆分命令行(最多 4 个参数) */
+
 	while (*p && argc < 4) {
 		while (*p == ' ' || *p == '\t')
 			p++;
@@ -399,7 +382,7 @@ static int run_command(char *line)
 			*p++ = '\0';
 	}
 	if (!argc)
-		return 0;	/* 空行 */
+		return 0;
 
 	if (!strcmp(argv[0], "help") || !strcmp(argv[0], "?")) {
 		usage();
@@ -451,7 +434,7 @@ int main(void)
 	bluectl_agent_set_callback(on_agent, NULL);
 #endif
 
-	/* 事件泵线程: 驱动事件与 agent 回调 */
+
 	if (pthread_create(&pump, NULL, pump_thread, NULL) != 0) {
 		printf("创建事件泵线程失败\n");
 		bluectl_deinit();

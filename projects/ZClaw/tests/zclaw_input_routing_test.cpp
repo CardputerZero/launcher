@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "zclaw_input_model.h"
 #include "zclaw_key_event_adapter.h"
 #include "zclaw_key_router.h"

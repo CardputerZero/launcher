@@ -1,7 +1,9 @@
 /*
- * func_test.c - bluectl 功能测试: 连接 mock org.bluez 服务,
- * 覆盖 adapter/device/agent/media/事件 全链路
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
  */
+
 #include <pthread.h>
 #include <stdio.h>
 #include <string.h>
@@ -71,7 +73,7 @@ int main(void)
 	rv = bluectl_set_event_callback(on_event, NULL);
 	CHECK("set_event_callback", rv == BLUECTL_OK);
 
-	/* ---- 适配器 ---- */
+
 	n = bluectl_get_adapters(ads, 4);
 	CHECK("get_adapters returns 1", n == 1);
 	CHECK("adapter address", n >= 1 && !strcmp(ads[0].address, "00:11:22:33:44:55"));
@@ -106,7 +108,7 @@ int main(void)
 	rv = bluectl_start_discovery(NULL);
 	CHECK("start_discovery idempotent-ish", rv == BLUECTL_OK);
 
-	/* ---- 设备 ---- */
+
 	n = bluectl_get_devices(NULL, devs, 8);
 	CHECK("get_devices returns 2", n == 2);
 	CHECK("devices sorted by path", n >= 2 &&
@@ -143,7 +145,7 @@ int main(void)
 	rv = bluectl_disconnect("AA:BB:CC:DD:EE:FF");
 	CHECK("disconnect", rv == BLUECTL_OK);
 
-	/* ---- agent + 配对 ---- */
+
 	rv = bluectl_agent_set_callback(on_agent, NULL);
 	CHECK("agent_set_callback", rv == BLUECTL_OK);
 	rv = bluectl_agent_register(NULL);
@@ -152,19 +154,19 @@ int main(void)
 	CHECK("agent_request_default", rv == BLUECTL_OK);
 
 	pthread_create(&pump, NULL, pump_thread, NULL);
-	usleep(200000);	/* 让事件泵启动, 等 mock 的 InterfacesAdded(300ms 后再等一轮) */
+	usleep(200000);
 
 	rv = bluectl_pair("AA:BB:CC:DD:EE:FF");
 	if (rv != BLUECTL_OK)
 		printf("  pair err: %s\n", bluectl_last_error());
 	CHECK("pair with agent confirmation", rv == BLUECTL_OK);
-	usleep(200000);	/* 等配对后的 Paired 属性变化事件 */
+	usleep(200000);
 	CHECK("agent RequestConfirmation seen", g_agent_reqs >= 1);
 
 	rv = bluectl_get_device("AA:BB:CC:DD:EE:FF", &dev);
 	CHECK("paired persisted", rv == BLUECTL_OK && dev.paired == 1);
 
-	/* ---- 媒体 ---- */
+
 #ifdef CONFIG_BLUECTL_MEDIA_ENABLED
 	{
 		bluectl_media_player_t mp;
@@ -185,7 +187,7 @@ int main(void)
 	}
 #endif
 
-	/* ---- 移除/停止 ---- */
+
 	rv = bluectl_remove_device(NULL, "AA:BB:CC:DD:EE:FF");
 	CHECK("remove_device", rv == BLUECTL_OK);
 	rv = bluectl_stop_discovery(NULL);
@@ -195,7 +197,7 @@ int main(void)
 	rv = bluectl_stop_discovery(NULL);
 	CHECK("stop_discovery when stopped -> OK", rv == BLUECTL_OK);
 
-	usleep(300000);	/* 收尾事件 */
+	usleep(300000);
 	g_run = 0;
 	pthread_join(pump, NULL);
 	CHECK("events received", g_events >= 4);

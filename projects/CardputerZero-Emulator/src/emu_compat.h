@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #pragma once
 #ifndef LV_COLOR_16_SWAP
 #define LV_COLOR_16_SWAP 0
