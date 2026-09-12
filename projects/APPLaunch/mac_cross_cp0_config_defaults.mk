@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+# SPDX-License-Identifier: MIT
+
 
 #brew tap messense/macos-cross-toolchains
 #brew install aarch64-unknown-linux-gnu
@@ -19,6 +22,9 @@ CONFIG_V9_5_LV_USE_CLIB_STRING=y
 CONFIG_V9_5_LV_USE_CLIB_SPRINTF=y
 
 # CONFIG_V9_5_LV_USE_LINUX_FBDEV=y
+# CONFIG_V9_5_LV_LINUX_FBDEV_RENDER_MODE_FULL is not set
+CONFIG_V9_5_LV_LINUX_FBDEV_CUSTOM_BUFFER=y
+CONFIG_V9_5_LV_LINUX_FBDEV_BUFFER_SIZE=170
 
 CONFIG_V9_5_LV_USE_DEMO_MUSIC=y
 

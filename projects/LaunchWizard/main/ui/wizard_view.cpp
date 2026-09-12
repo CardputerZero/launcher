@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "application.h"
 
 #include <stdint.h>
@@ -8,6 +14,7 @@
 #include "manual_datetime_validation.h"
 #include "wizard_model.h"
 #include "wizard_input_context.hpp"
+#include "wizard_fonts.h"
 #include "wizard_service.h"
 #include "cp0_lvgl_app_runner.hpp"
 #include "cp0_bounded_task_registry.hpp"
@@ -88,14 +95,15 @@ struct UiRuntime {
 
 launch_wizard::WizardModel g;
 UiRuntime ui;
+launch_wizard::WizardFonts fonts;
 
 const Timezone &current_timezone() { return g.current_timezone(); }
 
-const lv_font_t *font_xs() { return &lv_font_montserrat_10; }
-const lv_font_t *font_sm() { return &lv_font_montserrat_12; }
-const lv_font_t *font_md() { return &lv_font_montserrat_14; }
-const lv_font_t *font_lg() { return &lv_font_montserrat_16; }
-const lv_font_t *font_xl() { return &lv_font_montserrat_22; }
+const lv_font_t *font_xs() { return fonts.xs(); }
+const lv_font_t *font_sm() { return fonts.sm(); }
+const lv_font_t *font_md() { return fonts.md(); }
+const lv_font_t *font_lg() { return fonts.lg(); }
+const lv_font_t *font_xl() { return fonts.xl(); }
 
 lv_obj_t *add_label(lv_obj_t *parent, const char *text, const lv_font_t *font,
                     uint32_t color, int x, int y)
@@ -135,7 +143,8 @@ void add_chrome(uint32_t accent, int progress_fill, bool show_progress = true)
     // SETUP mode tag. (Figma shows a parallelogram, but the device's software
     // renderer does not draw skew-transformed rects, so use a rounded rect.)
     lv_obj_t *tag = add_rect(p, 12, 6, 82, 18, accent, 0, 0, 3);
-    add_label(tag, "SETUP", font_xs(), 0xffffff, 16, 4);
+    lv_obj_t *setup_label = add_label(tag, "SETUP", font_xs(), 0xffffff, 0, 0);
+    lv_obj_align(setup_label, LV_ALIGN_CENTER, 0, 0);
 
     add_label(p, "CardputerZero", font_sm(), kColorBrand, 120, 7);
     add_rect(p, 8, 33, 304, 1, kColorDivider, 0, 0, 0);
@@ -194,7 +203,7 @@ lv_obj_t *add_text_field(lv_obj_t *parent, int x, int y, int w, int h,
 
     lv_obj_set_style_text_font(field, font ? font : font_md(), 0);
     lv_obj_set_style_text_color(field, lv_color_hex(0xffffff), 0);
-    lv_obj_set_style_text_letter_space(field, 0, 0);
+    lv_obj_set_style_text_letter_space(field, 1, LV_PART_MAIN);
     lv_obj_set_style_bg_color(
         field, lv_color_hex(focused ? kColorFieldFocusBg : kColorFieldBg), 0);
     lv_obj_set_style_bg_opa(field, LV_OPA_COVER, 0);
@@ -209,8 +218,12 @@ lv_obj_t *add_text_field(lv_obj_t *parent, int x, int y, int w, int h,
 
     if (focused) {
         lv_obj_add_state(field, LV_STATE_FOCUSED);
-        lv_obj_set_style_bg_color(field, lv_color_hex(accent), LV_PART_CURSOR);
-        lv_obj_set_style_bg_opa(field, LV_OPA_COVER, LV_PART_CURSOR);
+        lv_obj_set_style_bg_opa(field, LV_OPA_TRANSP, LV_PART_CURSOR);
+        lv_obj_set_style_border_color(field, lv_color_hex(accent), LV_PART_CURSOR);
+        lv_obj_set_style_border_width(field, 1, LV_PART_CURSOR);
+        lv_obj_set_style_border_side(field, LV_BORDER_SIDE_LEFT, LV_PART_CURSOR);
+        lv_obj_set_style_pad_left(field, -1, LV_PART_CURSOR);
+        lv_obj_set_style_anim_duration(field, 400, LV_PART_CURSOR);
     }
     return field;
 }
@@ -400,10 +413,10 @@ void render_wifi_list()
         add_label(ui.screen_obj, "SELECT WI-FI", font_sm(), kAccentNetwork, 36, 40);
     }
 
-    // #94: while the first scan is still running show a loading state with a
-    // spinner so the user isn't staring at an empty network list.
-    if (g.wifi_scanning && g.wifi_list.empty() && !g.wifi_scan_retrying &&
-        g.wifi_scan_error.empty()) {
+    // Keep the loading state until a scan returns at least one network. The
+    // scan worker retries indefinitely, so transient radio/service failures
+    // must not turn the first-entry screen into a dead-end empty state.
+    if (g.wifi_scanning && g.wifi_list.empty()) {
         lv_obj_t *spinner = lv_spinner_create(ui.screen_obj);
         lv_obj_set_size(spinner, 28, 28);
         lv_spinner_set_anim_params(spinner, 1000, 60);
@@ -412,7 +425,10 @@ void render_wifi_list()
         lv_obj_set_style_arc_color(spinner, lv_color_hex(kAccentNetwork), LV_PART_INDICATOR);
         lv_obj_set_style_arc_width(spinner, 4, LV_PART_MAIN);
         lv_obj_set_style_arc_width(spinner, 4, LV_PART_INDICATOR);
-        add_label(ui.screen_obj, "Scanning for networks...", font_sm(), kColorMuted, 80, 86);
+        add_label(ui.screen_obj,
+                  g.wifi_scan_retrying ? "No networks yet. Retrying..."
+                                       : "Scanning for networks...",
+                  font_sm(), kColorMuted, 80, 86);
         add_key_hint(14, "ESC", 38, "BACK", kAccentNetwork);
         add_key_hint(112, "ALT", 136, "ADD HIDDEN WI-FI", kAccentNetwork);
         return;
@@ -787,8 +803,8 @@ void move_text_cursor(int delta)
 
 void enter_wifi_list()
 {
-    // #94: scan asynchronously so the list screen appears immediately with a
-    // loading spinner and refreshes as soon as results arrive (poll_worker_cb).
+    // Scan asynchronously; the Wi-Fi screen remains on its loading spinner
+    // until poll_worker_cb receives a non-empty result.
     g.wifi_list.clear();
     g.wifi_sel = 0;
     uint64_t scan_generation = 0;
@@ -806,17 +822,15 @@ void enter_wifi_list()
     go(Screen::WifiList);
 
     if (!ui.wifi_scan_tasks.start([scan_generation]() {
-        launch_wizard::WifiScanRetryPolicy retry_policy;
-        for (int scan_count = 0;
-             scan_count < launch_wizard::kWifiMaxAutomaticScans; ++scan_count) {
+        // A Wi-Fi list is only usable once at least one access point has been
+        // returned. Keep retrying forever so entering Wi-Fi cannot converge to
+        // an empty/error screen while the radio or service is still coming up.
+        for (;;) {
             launch_wizard::WifiScanResult scan =
                 launch_wizard::WizardService::scan_wifi();
             const WifiConnectionStatus connection =
                 launch_wizard::WizardService::read_wifi_status();
-            const launch_wizard::WifiScanDecision decision =
-                retry_policy.observe(scan.error, scan.networks.size());
-            const bool final_empty =
-                decision == launch_wizard::WifiScanDecision::Empty;
+            const bool has_networks = !scan.networks.empty();
             {
                 std::lock_guard<std::mutex> lock(g.mutex);
                 if (g.wifi_scan_generation != scan_generation)
@@ -824,15 +838,15 @@ void enter_wifi_list()
                 g.wifi_scan_result = scan.networks;
                 g.wifi_scan_result_error = scan.error;
                 g.wifi_scan_status = connection;
-                g.wifi_scan_final_empty = final_empty;
+                g.wifi_scan_final_empty = false;
+                g.wifi_scan_retrying = !has_networks;
+                g.wifi_scanning = !has_networks;
                 g.wifi_scan_ready = true;
             }
             cp0_lvgl_wake();
-            if (decision != launch_wizard::WifiScanDecision::Retry)
+            if (has_networks)
                 return;
 
-            if (final_empty)
-                return;
             const auto deadline = std::chrono::steady_clock::now() +
                                   kWifiInitialRetryPeriod;
             while (std::chrono::steady_clock::now() < deadline) {
@@ -844,6 +858,7 @@ void enter_wifi_list()
         }
     })) {
         g.wifi_scanning = false;
+        g.wifi_scan_retrying = false;
         g.wifi_scan_error = "Unable to start Wi-Fi scan. Press R.";
         render();
     }
@@ -856,6 +871,7 @@ void cancel_wifi_scan()
     g.wifi_scan_ready = false;
     g.wifi_scan_result.clear();
     g.wifi_scanning = false;
+    g.wifi_scan_retrying = false;
 }
 
 void enter_hidden_wifi()
@@ -1108,22 +1124,25 @@ void handle_enter()
             go(Screen::Ssh);
         }
         break;
-    case Screen::WifiList:
+    case Screen::WifiList: {
         if (g.wifi_list.empty())
             break;
         cancel_wifi_scan();
         g.wifi_ssid = g.wifi_list[g.wifi_sel].ssid;
+        const bool already_connected =
+            g.wifi_status_connected && g.wifi_status_ssid == g.wifi_ssid;
         g.wifi_security = g.wifi_list[g.wifi_sel].security;
         g.wifi_manual = false;
         g.wifi_hidden = false;
         g.wifi_focus = 1;
         g.wifi_password.clear();
         g.wifi_password_visible = false;
-        g.wifi_ip.clear();
+        g.wifi_ip = already_connected ? g.wifi_status_ip : std::string();
         g.wifi_connect_error.clear();
-        g.wifi_connected = false;
+        g.wifi_connected = already_connected;
         go(Screen::WifiPassword);
         break;
+    }
     case Screen::WifiPassword:
         if (g.wifi_connected) {
             go(Screen::Ssh);
@@ -1378,14 +1397,18 @@ void poll_worker_cb(lv_timer_t *timer)
                 g.wifi_status_ssid = g.wifi_scan_status.ssid;
                 g.wifi_status_ip = g.wifi_scan_status.ip;
             }
-            g.wifi_scan_retrying = scan_error == 0 && g.wifi_list.empty() &&
-                                   !g.wifi_scan_final_empty;
-            g.wifi_scanning = g.wifi_scan_retrying;
-            switch (scan_error) {
-            case 0: g.wifi_scan_error.clear(); break;
-            case CP0_WIFI_ERROR_RADIO_OFF: g.wifi_scan_error = "Could not enable Wi-Fi radio. Press R."; break;
-            case CP0_WIFI_ERROR_TIMEOUT: g.wifi_scan_error = "Wi-Fi scan timed out. Press R."; break;
-            default: g.wifi_scan_error = "Network service unavailable. Press R."; break;
+            if (g.wifi_scan_retrying) {
+                // A transient service/radio error is reported by the worker
+                // while it retries; keep the retry state visible instead of
+                // turning the intermediate result into a terminal error.
+                g.wifi_scan_error.clear();
+            } else {
+                switch (scan_error) {
+                case 0: g.wifi_scan_error.clear(); break;
+                case CP0_WIFI_ERROR_RADIO_OFF: g.wifi_scan_error = "Could not enable Wi-Fi radio. Press R."; break;
+                case CP0_WIFI_ERROR_TIMEOUT: g.wifi_scan_error = "Wi-Fi scan timed out. Press R."; break;
+                default: g.wifi_scan_error = "Network service unavailable. Press R."; break;
+                }
             }
             wifi_updated = true;
         }
@@ -1475,6 +1498,11 @@ int launch_wizard_finish_configured_system(void)
     return launch_wizard::WizardService::finish_configured_system();
 }
 
+void launch_wizard_run_keyboard_guide(void)
+{
+    launch_wizard::WizardService::run_keyboard_guide();
+}
+
 void launch_wizard_register_event(void)
 {
     if (LV_EVENT_KEYBOARD == 0) LV_EVENT_KEYBOARD = lv_event_register_id();
@@ -1483,6 +1511,7 @@ void launch_wizard_register_event(void)
 bool launch_wizard_ui_setup(void)
 {
     cp0_keyboard_set_lvgl_keypad_intercept(0);
+    fonts.init();
     ui.input_context_scope = std::make_unique<Cp0KeyboardInputContextScope>(
         launch_wizard::wizard_input_context(g));
     ui.cancel.store(false);
@@ -1533,4 +1562,5 @@ void launch_wizard_ui_teardown(void)
     ui.config_status_label = nullptr;
     ui.page.reset();
     ui.input_context_scope.reset();
+    fonts.release();
 }

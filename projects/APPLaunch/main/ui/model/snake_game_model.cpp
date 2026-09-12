@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "snake_game_model.hpp"
 
 #include <algorithm>
@@ -39,13 +45,15 @@ bool SnakeGameModel::tick()
     case Direction::RIGHT: ++head.x; break;
     }
 
+    const bool growing = head == food_;
+    const bool hits_snake = occupied(head) && (growing || !(head == snake_.back()));
     if (head.x < 0 || head.x >= GRID_COLS || head.y < 0 || head.y >= GRID_ROWS ||
-        occupied(head)) {
+        hits_snake) {
         return false;
     }
 
     snake_.push_front(head);
-    if (head == food_) {
+    if (growing) {
         score_ += 10;
         spawn_food();
     } else {

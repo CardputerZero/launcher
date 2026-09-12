@@ -91,7 +91,6 @@ Core rules:
 | `lock_file` | `/tmp/M5CardputerZero-APPLaunch_fcntl.lock` |
 | `keyboard_device` | `/dev/input/by-path/platform-3f804000.i2c-event` |
 | `keyboard_map` | `/usr/share/keymaps/tca8418_keypad_m5stack_keymap.map` |
-| `store_sync_cmd` | `python /usr/share/APPLaunch/bin/store_cache_sync.py` |
 | `*.png` / `*.gif` / `*.jpg` / `*.jpeg` / `*.svg` | `share/images/<file>` |
 | `*.wav` / `*.mp3` / `*.ogg` | `/usr/share/APPLaunch/share/audio/<file>` |
 | `*.ttf` / `*.otf` | `/usr/share/APPLaunch/share/font/<file>` |
@@ -237,6 +236,19 @@ Loading rules:
 - `TryExec` is currently not used by `applications_load()`.
 - The `applications/` directory is watched. It is polled every 3 seconds, and changes clear dynamic apps and rescan the directory.
 
+Dynamic desktop applications also carry a runtime origin. Product packages
+are recognized by a trusted desktop filename and a label in the product's
+built-in app set, even when their `.desktop` file is delivered by a separate
+app repository. The manifest at
+`/usr/share/APPLaunch/preinstalled-desktop-apps.tsv` remains available for
+release-owned entries such as ZClaw whose package identity is not part of the
+static app set. Other desktop entries are treated as Store-installed or
+user-installed. The Settings `Launcher` menu includes built-in and
+release-preinstalled configurable applications, but does not expose
+Store-installed entries or the protected Settings, Store, and CLI applications.
+All dynamic entries remain visible on the home launcher; only product-owned
+entries receive a Settings toggle.
+
 ## 6. Configuration API and Persistence Paths
 
 The current configuration service is called through `cp0_signal_config_api`. It supports the `Init`, `Save`, `GetInt`, `SetInt`, `GetStr`, and `SetStr` commands. The service is implemented in `ext_components/cp0_lvgl/src/cp0_config_service.cpp`; the device and SDL backends register the signal in `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_config.cpp` and `ext_components/cp0_lvgl/src/sdl/sdl_lvgl_config.cpp`.
@@ -287,7 +299,7 @@ The `Launcher` menu in `UISetupPage` saves `app_<Name>`:
 | `app_SSH` | `1` | SSH built-in page | Configurable; registered only in Linux non-SDL builds |
 | `app_Tank` | `1` | TANK built-in page | Configurable; registered only in Linux non-SDL builds |
 
-These entries come from `BUILTIN_APPS[]` in `projects/APPLaunch/main/ui/builtin_app_registry.cpp`. Entries with `configurable=false` or `always_on=true` are always enabled; other entries default to enabled when their key is absent.
+These entries come from `BUILTIN_APPS[]` in `projects/APPLaunch/main/ui/builtin_app_registry.cpp`. Release-preinstalled desktop entries use a stable `app_desktop_*` key derived from the desktop filename. Entries with `configurable=false` or `always_on=true` are always enabled; other entries default to enabled when their key is absent.
 
 ### 7.2 System and Page Configuration
 

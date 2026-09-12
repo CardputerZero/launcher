@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "../src/cp0/cp0_process_commands.hpp"
 #include "cp0_bounded_task_registry.hpp"
 

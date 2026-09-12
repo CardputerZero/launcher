@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "../src/sdl/sdl_external_app_runner.hpp"
 #include "cp0_esc_state.h"
 

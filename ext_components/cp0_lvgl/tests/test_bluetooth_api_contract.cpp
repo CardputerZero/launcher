@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "cp0_bluetooth_api_contract.hpp"
 
 #include <cassert>
@@ -40,6 +46,7 @@ int main()
 
     const char *address = "AA:bb:01:23:45:67";
     assert(cp0::bluetooth::parse_request({"BtPair", address}, request));
+    assert(cp0::bluetooth::parse_request({"BtCancelPairing", address}, request));
     assert(cp0::bluetooth::parse_request({"BtConnect", address}, request));
     assert(cp0::bluetooth::parse_request({"BtDisconnect", address}, request));
     assert(cp0::bluetooth::parse_request({"BtRemove", address}, request));

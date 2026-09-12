@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "cp0_lora_backend.hpp"
 
 #include "cp0_lvgl_app.h"
@@ -57,6 +63,16 @@ extern "C" void init_lora(void)
                 completion.complete(result.code, result.payload);
             });
         });
+}
+
+extern "C" void cp0_lora_request_stop(void)
+{
+    cp0_lora_backend::request_stop();
+}
+
+extern "C" void cp0_lora_clear_stop(void)
+{
+    cp0_lora_backend::clear_stop();
 }
 
 extern "C" void deinit_lora(void) noexcept

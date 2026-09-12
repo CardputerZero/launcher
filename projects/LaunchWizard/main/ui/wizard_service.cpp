@@ -1,7 +1,14 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "wizard_service.h"
 #include "account_migration.h"
 #include "apply_checkpoint.h"
 #include "command_runner.h"
+#include "first_boot_policy.h"
 #include "service_handoff.h"
 
 #include "global_config.h"
@@ -15,11 +22,16 @@
 #include <fcntl.h>
 #include <pwd.h>
 #include <shadow.h>
+#include <signal.h>
+#include <spawn.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
+
+extern char **environ;
 
 #include <chrono>
 #include <fstream>
@@ -35,10 +47,18 @@
 #endif
 #endif
 
+#if !LAUNCH_WIZARD_DRY_RUN
+#include <crypt.h>
+#endif
+
 namespace launch_wizard {
 
 constexpr uid_t kDefaultUserUid = 1000;
 constexpr const char *kFirstBootWizardUser = "rpi-first-boot-wizard";
+// Factory account baked into every image by pi-gen (build.yml FIRST_USER_NAME /
+// FIRST_USER_PASS). Keep in sync with the pi-gen workflow configuration.
+constexpr const char *kFactoryDefaultUser = "pi";
+constexpr const char *kFactoryDefaultPassword = "raspberry";
 #if LAUNCH_WIZARD_DRY_RUN
 constexpr const char *kAccountJournalDir = "/tmp/LaunchWizard-dry-run";
 constexpr const char *kAccountJournalPath =
@@ -48,6 +68,27 @@ constexpr const char *kAccountJournalDir = "/var/lib/LaunchWizard";
 constexpr const char *kAccountJournalPath =
     "/var/lib/LaunchWizard/account-migration.state";
 #endif
+
+// Dropped by APPLaunch's "Run Setup Wizard" settings entry (re-run on demand).
+constexpr const char *kRearmOobeMarker = "/var/lib/applaunch/run-oobe";
+// Baked into every factory image by pi-gen; removed once first boot finishes.
+constexpr const char *kFactoryOobeMarker = "/var/lib/LaunchWizard/run-oobe";
+// One-shot keyboard tutorial marker baked into the image by pi-gen.
+constexpr const char *kKeyboardGuideMarker =
+    "/var/lib/LaunchWizard/run-keyboard-guide";
+constexpr const char *kKeyboardGuideBinary =
+    "/usr/share/APPLaunch/bin/M5CardputerZero-Keyboard-Guide";
+
+void remove_oobe_markers(std::string *first_error = nullptr)
+{
+    static const char *marker_paths[] = {kRearmOobeMarker, kFactoryOobeMarker};
+    for (const char *path : marker_paths) {
+        if (remove(path) != 0 && errno != ENOENT && first_error &&
+            first_error->empty())
+            *first_error = std::string("Failed to remove OOBE marker: ") +
+                           strerror(errno);
+    }
+}
 
 void print_command(const std::vector<std::string> &args, const std::string *stdin_text)
 {
@@ -190,6 +231,50 @@ bool command_ok(const std::vector<std::string> &args, std::string &error)
     return false;
 }
 
+bool uid_has_processes(uid_t uid, bool &has_processes, std::string &error)
+{
+    CommandResult result = run_command(
+        {"pgrep", "-u", std::to_string(static_cast<unsigned int>(uid))});
+    if (result.code == 0) {
+        has_processes = true;
+        return true;
+    }
+    if (result.code == 1) {
+        has_processes = false;
+        return true;
+    }
+    error = result.output.empty() ? "Failed to inspect user processes"
+                                  : result.output;
+    return false;
+}
+
+bool stop_user_sessions_for_rename(uid_t uid, std::string &error)
+{
+    // pi-gen autologs UID 1000 into tty1 while LaunchWizard runs as root.
+    // Stopping only user@1000.service leaves that login shell alive, and
+    // usermod correctly refuses to rename a user that still owns processes.
+    if (!command_ok({"systemctl", "stop", "getty@tty1.service"}, error))
+        return false;
+
+    CommandResult terminated = run_command(
+        {"loginctl", "terminate-user",
+         std::to_string(static_cast<unsigned int>(uid))});
+
+    for (int attempt = 0; attempt < 50; ++attempt) {
+        bool has_processes = false;
+        if (!uid_has_processes(uid, has_processes, error))
+            return false;
+        if (!has_processes)
+            return true;
+        usleep(100 * 1000);
+    }
+
+    error = terminated.output.empty()
+        ? "UID 1000 still owns processes after terminating login sessions"
+        : "Failed to terminate UID 1000 login sessions: " + terminated.output;
+    return false;
+}
+
 // ---------------------------------------------------------------------------
 // Validation helpers (preserved).
 // ---------------------------------------------------------------------------
@@ -252,6 +337,45 @@ bool first_user_has_password()
     if (!sp || !sp->sp_pwdp)
         return false;
     return sp->sp_pwdp[0] == '$';
+#endif
+}
+
+// True while the UID 1000 user is still named after the pi-gen factory
+// default. userconf/Imager renames the user in passwd, so a different name
+// alone proves the device was provisioned.
+bool first_user_has_factory_name()
+{
+#if LAUNCH_WIZARD_DRY_RUN
+    return true;
+#else
+    struct passwd *pw = getpwuid(kDefaultUserUid);
+    return pw && pw->pw_name && strcmp(pw->pw_name, kFactoryDefaultUser) == 0;
+#endif
+}
+
+// True while the UID 1000 account still carries the factory credentials that
+// pi-gen bakes into the image (FIRST_USER_NAME=pi / FIRST_USER_PASS=raspberry).
+// Verification follows crypt(5): hash the candidate with the stored hash as
+// the setting string; a byte-identical result means the password matches. Any
+// crypt failure yields NULL or a "*" failure token that never compares equal,
+// so errors safely count as "not factory".
+bool first_user_has_factory_credentials()
+{
+#if LAUNCH_WIZARD_DRY_RUN
+    return false;
+#else
+    struct passwd *pw = getpwuid(kDefaultUserUid);
+    if (!pw || !pw->pw_name || strcmp(pw->pw_name, kFactoryDefaultUser) != 0)
+        return false;
+    struct spwd *sp = getspnam(pw->pw_name);
+    if (!sp || !sp->sp_pwdp || sp->sp_pwdp[0] != '$')
+        return false;
+    // struct crypt_data is ~32 KiB; keep it off the stack. should_run() is
+    // called once from the single-threaded startup path.
+    static struct crypt_data data;
+    memset(&data, 0, sizeof(data));
+    const char *hash = crypt_r(kFactoryDefaultPassword, sp->sp_pwdp, &data);
+    return hash && hash[0] == '$' && strcmp(hash, sp->sp_pwdp) == 0;
 #endif
 }
 
@@ -505,6 +629,10 @@ uid_t configure_account(const std::string &new_user, const std::string &password
             "/etc/sudoers.d/010_pi-nopasswd", old_user, ' ');
     }
 
+    if (record.source_user != record.target_user &&
+        !stop_user_sessions_for_rename(kDefaultUserUid, error))
+        return 0;
+
     bool password_applied = false;
     AccountMigrationOps ops;
     ops.save = save_account_record;
@@ -646,8 +774,7 @@ std::string configure_desktop_startup(const std::string &user)
         return warning;
     }
     if (!command_ok({"chmod", "0644",
-                     "/etc/lightdm/lightdm.conf.d/50-launchwizard-autologin.conf"}, warning) ||
-        !command_ok({"systemctl", "disable", "lightdm.service"}, warning))
+                     "/etc/lightdm/lightdm.conf.d/50-launchwizard-autologin.conf"}, warning))
         return warning;
 
     return warning;
@@ -736,6 +863,17 @@ std::string WizardService::connect_wifi(const std::string &ssid, const std::stri
     if (connected_ip)
         *connected_ip = "192.168.1.100";
 #else
+    // Raspberry Pi Imager can provision and activate this profile before the
+    // first-boot wizard starts. Treat selecting that same SSID as success;
+    // asking NetworkManager to activate it again can return a transient error
+    // even though the device is already online.
+    cp0_wifi_status_t current{};
+    if (cp0_wifi_status_read(&current) == 0 && current.connected &&
+        std::string(current.ssid) == ssid) {
+        if (connected_ip)
+            *connected_ip = current.ip;
+        return "";
+    }
     if (cp0_wifi_radio_set_enabled(1) != 0)
         return "Wi-Fi radio could not be enabled";
     if (hidden) {
@@ -911,43 +1049,36 @@ std::string WizardService::apply(
         }),
         // The account migration has its own sub-step journal. The outer
         // checkpoint advances only after that migration is fully complete.
-        best_effort("Configuring user account...", [username, password] {
+        {"Configuring user account...", [username, password] {
             std::string error;
             return configure_account(username, password, error) == 0 ? error : std::string{};
-        }),
-        best_effort("Configuring desktop login...", [username] {
+        }},
+        {"Configuring desktop login...", [username] {
             return configure_desktop_startup(username);
-        }),
-        best_effort("Enabling APPLaunch service...", [username] {
-            const struct passwd *account = getpwnam(username.c_str());
-            if (!account || account->pw_uid == 0)
-                return std::string("Configured user account is unavailable");
-            return enable_applaunch_service(username, account->pw_uid);
-        }),
-        best_effort("Finalizing configuration...", [] {
-            std::string first_error;
-            CommandResult disabled = run_command(
-                {"systemctl", "disable", "LaunchWizard.service"});
+        }},
+        {"Enabling APPLaunch service...", [username] {
+            return enable_applaunch_service(username, kDefaultUserUid);
+        }},
+        {"Finalizing configuration...", [] {
+            CommandResult disabled =
+                run_command({"systemctl", "disable", "LaunchWizard.service"});
             if (disabled.code != 0)
-                first_error = disabled.output.empty()
+                return disabled.output.empty()
                     ? std::string("Failed to disable LaunchWizard.service")
                     : disabled.output;
-            static const char *marker_paths[] = {
-                "/var/lib/applaunch/run-oobe",
-                "/var/lib/LaunchWizard/run-oobe",
-            };
-            for (const char *path : marker_paths) {
-                if (remove(path) != 0 && errno != ENOENT && first_error.empty())
-                    first_error = std::string("Failed to remove OOBE marker: ") +
-                                  strerror(errno);
-            }
+
+            std::string error;
+            remove_oobe_markers(&error);
+            if (!error.empty())
+                return error;
+
 #if !LAUNCH_WIZARD_DRY_RUN
             sync();
             sync();
             sync();
 #endif
-            return first_error;
-        }),
+            return std::string{};
+        }},
     };
 
     const ApplyCheckpointStore checkpoint(default_apply_checkpoint_path());
@@ -977,20 +1108,150 @@ bool launch_wizard::WizardService::should_run()
     // In the SDL emulator always show the OOBE so it can be developed/previewed.
     return true;
 #else
-    // Explicit re-arm marker. APPLaunch's "Run Setup Wizard" settings entry
-    // drops this file and reboots, letting an already-configured device replay
-    // the OOBE on demand. apply_all() clears it on completion, so the wizard
-    // still runs exactly once.
-    static const char *kRearmPaths[] = {
-        "/var/lib/applaunch/run-oobe",
-        "/var/lib/LaunchWizard/run-oobe",
-    };
-    for (const char *path : kRearmPaths) {
-        if (access(path, F_OK) == 0)
-            return true;
+    FirstBootState state;
+    // APPLaunch's "Run Setup Wizard" settings entry drops this file and
+    // reboots, letting an already-configured device replay the OOBE on demand.
+    // apply_all() clears it on completion, so the wizard still runs exactly
+    // once.
+    state.rearm_marker = access(kRearmOobeMarker, F_OK) == 0;
+    // pi-gen bakes the factory marker into every image. It must only trigger
+    // the OOBE while the account is exactly in factory state: still named
+    // "pi", with no password or the baked "raspberry" default. A renamed user
+    // or a user-chosen password means Raspberry Pi Imager provisioned the
+    // device, so first boot skips straight to the launcher
+    // (finish_configured_system() then removes the marker).
+    state.factory_marker = access(kFactoryOobeMarker, F_OK) == 0;
+    state.factory_username = first_user_has_factory_name();
+    state.user_has_password = first_user_has_password();
+    state.factory_credentials = first_user_has_factory_credentials();
+    state.legacy_piwiz_active =
+        lightdm_autologin_user() == kFirstBootWizardUser && piwiz_autostart_enabled();
+    return should_run_wizard(state);
+#endif
+}
+
+void launch_wizard::WizardService::run_keyboard_guide()
+{
+#if LAUNCH_WIZARD_DRY_RUN
+    // The guide is a separate on-device binary; nothing to preview in SDL.
+    return;
+#else
+    const bool marker_present = access(kKeyboardGuideMarker, F_OK) == 0;
+    const bool binary_present = access(kKeyboardGuideBinary, X_OK) == 0;
+    if (!should_run_keyboard_guide(marker_present, binary_present)) {
+        if (marker_present)
+            fprintf(stderr,
+                    "LaunchWizard: keyboard guide binary missing; keeping marker\n");
+        return;
     }
 
-    return lightdm_autologin_user() == kFirstBootWizardUser && piwiz_autostart_enabled();
+    // The guide's key sounds use miniaudio's PulseAudio backend, which needs
+    // the UID 1000 user's pipewire-pulse socket. Spawned as root (the wizard's
+    // own identity) it has no XDG_RUNTIME_DIR, initialises no backend and runs
+    // silently (bug #262). Drop to the first user with runuser and point it at
+    // the user's session runtime dir; the user is in the video/input groups,
+    // exactly like APPLaunch, so rendering and input keep working.
+    std::vector<std::string> args;
+    struct passwd *pw = getpwuid(kDefaultUserUid);
+    if (pw && pw->pw_name) {
+        const std::string username = pw->pw_name;
+        const std::string runtime_dir =
+            "/run/user/" + std::to_string(kDefaultUserUid);
+        const std::string pulse_socket = runtime_dir + "/pulse/native";
+        // A factory image ships without linger (pi-gen strips it; the wizard
+        // only enables it after the OOBE), so on true first boot no user
+        // session exists and pipewire-pulse would never come up. Start the
+        // session explicitly; when linger already started it this is a no-op
+        // join.
+        const CommandResult session_start =
+            run_command({"systemctl", "start", "--no-block",
+                         "user@" + std::to_string(kDefaultUserUid) + ".service"});
+        if (session_start.code != 0)
+            fprintf(stderr,
+                    "LaunchWizard: failed to request user session startup: %s\n",
+                    session_start.output.empty() ? "unknown error"
+                                                 : session_start.output.c_str());
+        // Bound the blank-screen delay while still giving pipewire-pulse time
+        // to create its socket. On timeout the guide still runs without sound.
+        for (int attempt = 0;
+             attempt < 15 && access(pulse_socket.c_str(), F_OK) != 0; ++attempt)
+            usleep(200 * 1000);
+        if (access(pulse_socket.c_str(), F_OK) != 0)
+            fprintf(stderr,
+                    "LaunchWizard: %s not ready; keyboard guide may be silent\n",
+                    pulse_socket.c_str());
+        args = {"/usr/sbin/runuser", "-u", username, "--", "/usr/bin/env",
+                "-u", "PULSE_SERVER", "-u", "PULSE_RUNTIME_PATH",
+                "XDG_RUNTIME_DIR=" + runtime_dir, kKeyboardGuideBinary};
+    } else {
+        fprintf(stderr,
+                "LaunchWizard: UID 1000 user missing; running guide as root\n");
+        args = {kKeyboardGuideBinary};
+    }
+
+    printf("LaunchWizard: starting keyboard guide\n");
+    fflush(stdout);
+
+    // The guide is interactive and can stay open for minutes. Intentionally
+    // not run_command(): that captures stdout/stderr into a bounded buffer
+    // (hiding the guide's logs from journald), busy-polls at 20ms, and is
+    // built around a timeout. posix_spawn + blocking waitpid inherits our
+    // stdio, costs nothing while waiting, and reports exec errors directly.
+    std::vector<char *> argv;
+    argv.reserve(args.size() + 1);
+    for (std::string &arg : args)
+        argv.push_back(arg.data());
+    argv.push_back(nullptr);
+    posix_spawnattr_t attr;
+    posix_spawnattr_init(&attr);
+    // Give the guide default signal dispositions regardless of what the
+    // wizard's runtime may have changed (e.g. an ignored SIGPIPE).
+    sigset_t default_signals;
+    sigfillset(&default_signals);
+    posix_spawnattr_setsigdefault(&attr, &default_signals);
+    posix_spawnattr_setflags(&attr, POSIX_SPAWN_SETSIGDEF);
+
+    pid_t pid = -1;
+    const int spawn_error =
+        posix_spawn(&pid, argv[0], nullptr, &attr, argv.data(), environ);
+    posix_spawnattr_destroy(&attr);
+    if (spawn_error != 0) {
+        fprintf(stderr, "LaunchWizard: failed to start keyboard guide: %s\n",
+                strerror(spawn_error));
+        return;
+    }
+
+    int status = 0;
+    pid_t wait_result;
+    do {
+        wait_result = waitpid(pid, &status, 0);
+    } while (wait_result < 0 && errno == EINTR);
+    if (wait_result < 0) {
+        fprintf(stderr, "LaunchWizard: wait for keyboard guide failed: %s\n",
+                strerror(errno));
+        return;
+    }
+    if (WIFSIGNALED(status))
+        fprintf(stderr, "LaunchWizard: keyboard guide killed by signal %d\n",
+                WTERMSIG(status));
+    else if (WIFEXITED(status) && WEXITSTATUS(status) != 0)
+        fprintf(stderr, "LaunchWizard: keyboard guide exited with %d\n",
+                WEXITSTATUS(status));
+
+    // Consume the one-shot marker only after the guide has exited normally.
+    // If shutdown, a power cycle, or a failed launch interrupts the guide,
+    // keeping the marker forces the tutorial to be shown on the next boot
+    // instead of silently falling through to the OOBE.
+    const bool exited_normally = WIFEXITED(status);
+    const int exit_code = exited_normally ? WEXITSTATUS(status) : -1;
+    if (!should_consume_keyboard_guide_marker(exited_normally, exit_code))
+        return;
+    if (remove(kKeyboardGuideMarker) != 0 && errno != ENOENT) {
+        fprintf(stderr, "LaunchWizard: failed to consume keyboard guide marker: %s\n",
+                strerror(errno));
+        return;
+    }
+    sync();
 #endif
 }
 
@@ -1018,6 +1279,13 @@ int launch_wizard::WizardService::finish_configured_system()
         fprintf(stderr, "LaunchWizard: %s\n", service_warning.c_str());
         return 1;
     }
+
+    // The device counts as configured (Imager provisioning or a finished
+    // OOBE), so drop any leftover factory marker to keep future boots clean.
+    remove_oobe_markers();
+#if !LAUNCH_WIZARD_DRY_RUN
+    sync();
+#endif
 
     printf("LaunchWizard: started APPLaunch for %s and disabled LaunchWizard.service\n",
            user.c_str());

@@ -1,4 +1,12 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #pragma once
+
+#include "cp0_enum_cast.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -14,8 +22,22 @@ struct ScreensaverFrame
 class ScreensaverModel
 {
 public:
-    static constexpr int BLOCK_SIZE = 40;
-    static constexpr size_t COLOR_COUNT = 8;
+    enum class BlockMetric : int {
+        Size = 50,
+    };
+    enum class ColorMetric : std::size_t {
+        Count = 8,
+    };
+
+    static constexpr int block_size()
+    {
+        return CP0_ENUM_CAST_INT(BlockMetric::Size);
+    }
+
+    static constexpr std::size_t color_count()
+    {
+        return CP0_ENUM_CAST_SIZE_T(ColorMetric::Count);
+    }
 
     void reset(uint32_t now);
     void set_foreground(bool foreground, uint32_t now);

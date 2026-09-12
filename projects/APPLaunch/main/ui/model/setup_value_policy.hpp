@@ -1,8 +1,33 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #pragma once
 
 #include <string_view>
 
 namespace setup_values {
+
+inline constexpr char kBrightnessConfigKey[] = "brightness";
+inline constexpr int kBrightnessMaxPercent = 100;
+inline constexpr int kBrightnessMinPercent = 10;
+inline constexpr int kBrightnessStepPercent = 10;
+inline constexpr int kBrightnessStepCount =
+    (kBrightnessMaxPercent - kBrightnessMinPercent) / kBrightnessStepPercent + 1;
+
+enum class VolumeMetric : int {
+    MinPercent = 0,
+    MaxPercent = 100,
+    StepPercent = 10,
+    OptionCount = (MaxPercent - MinPercent) / StepPercent + 1,
+};
+
+constexpr int volume_metric(VolumeMetric metric)
+{
+    return static_cast<int>(metric);
+}
 
 struct CameraResolution {
     int width;
@@ -11,11 +36,18 @@ struct CameraResolution {
 
 int brightness_index(int value, int maximum);
 int brightness_value(int index, int maximum);
+int brightness_step_percent(int index);
+int brightness_step_index(int percent);
+int brightness_step_value(int index, int maximum);
+int brightness_step_index_from_raw(int value, int maximum);
+int brightness_step_percent_from_raw(int value, int maximum);
+int brightness_step_percent_after(int current_percent, int direction);
 bool parse_nonnegative_int(std::string_view text, int &value);
 
 int dark_time_index(int seconds);
 int dark_time_seconds(int index);
 
+int round_volume_percent(int percent);
 int volume_index(int percent);
 int volume_percent(int index);
 bool volume_value_valid(int percent);

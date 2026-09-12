@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #pragma once
 // Shared cross-platform KEY_* constants for cp0_lvgl and its applications.
 // On Linux: use the real header. On macOS/Windows: define ourselves.
@@ -76,6 +82,7 @@
 #define KEY_F10             68
 #define KEY_F11             87
 #define KEY_F12             88
+#define KEY_HELP            138
 #define KEY_KPENTER         96
 #define KEY_RIGHTCTRL       97
 #define KEY_SYSRQ           99

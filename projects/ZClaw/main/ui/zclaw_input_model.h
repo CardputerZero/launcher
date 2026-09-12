@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #pragma once
 
 #include <string>
@@ -7,7 +13,9 @@ namespace zclaw {
 enum class InputMode {
     Chat,
     SetupEdit,
+    SetupUriEdit,
     ProviderEdit,
+    ProviderUriEdit,
     PairingCode,
 };
 
@@ -25,6 +33,7 @@ struct InputSubmission {
 };
 
 bool input_is_single_line(InputMode mode);
+bool input_saves_on_close(InputMode mode);
 InputSubmission input_submission(InputMode mode, std::string value);
 
 }  // namespace zclaw

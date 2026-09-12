@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "cp0_lvgl_app.h"
 #include "hal_lvgl_bsp.h"
 #include "../cp0_app_internal_utils.h"
@@ -91,6 +97,14 @@ public:
     void api_call(arg_t arg, callback_t callback)
     {
         const std::string command = arg.empty() ? std::string() : arg.front();
+        if (command == "UpdateLauncherCheckStart") {
+            const std::string id = jobs_.start([] {
+                return cp0::update::Result{0,
+                    "up-to-date|version=0.0.0-dev|commit=0000000"};
+            });
+            cp0::callback::invoke(callback, 0, id);
+            return;
+        }
         if (command == "AptUpdateStart" || command == "UpdateLauncherStart") {
             const std::string id = jobs_.start([] {
                 return cp0::update::Result{-ENOTSUP, "unsupported"};

@@ -1,8 +1,15 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #define APP_PAGE_IMPLEMENTATION_UNIT
 #include "ui_app_ssh.hpp"
 
 #include "input_keys.h"
 #include "../keyboard_text_input.hpp"
+#include "../model/ssh_shortcut_action.hpp"
 #include "sample_log.h"
 #include "ui_app_st.hpp"
 
@@ -36,6 +43,8 @@ void UISSHPage::do_connect()
         set_status(validation.message, true);
         return;
     }
+    if (!persist_profile())
+        SLOGW("[SSH] Unable to persist profile before connecting");
     const auto arguments = model_.arguments();
     SLOGI("[SSH] Launching structured ssh request");
 
@@ -129,13 +138,8 @@ void UISSHPage::load_profile()
         status_message_ = "Saved SSH profile is invalid";
 }
 
-void UISSHPage::save_profile()
+bool UISSHPage::persist_profile()
 {
-    const auto validation = model_.validate();
-    if (validation.error != SshConnectionModel::Error::NONE) {
-        set_status(validation.message, true);
-        return;
-    }
     bool ok = false;
     cp0_signal_config_api(
         {"SetManyAndSave",
@@ -143,6 +147,17 @@ void UISSHPage::save_profile()
          "ssh_port", model_.value(1),
          "ssh_user", model_.value(2)},
         [&](int code, std::string) { ok = code == 0; });
+    return ok;
+}
+
+void UISSHPage::save_profile()
+{
+    const auto validation = model_.validate();
+    if (validation.error != SshConnectionModel::Error::NONE) {
+        set_status(validation.message, true);
+        return;
+    }
+    const bool ok = persist_profile();
     set_status(ok ? "Profile saved" : "Unable to save profile", !ok);
 }
 
@@ -196,19 +211,36 @@ void UISSHPage::event_handler(lv_event_t *event)
             terminal_page_->navigate_home = nullptr;
         return;
     }
-    if (view_state_ != ViewState::INPUT || !launcher_ui::events::is_key_released(event)) return;
-    const uint32_t key = launcher_ui::events::keyboard_key(event);
-    switch (key) {
-    case KEY_UP: {
+    if (lv_event_get_code(event) != static_cast<lv_event_code_t>(LV_EVENT_KEYBOARD)) return;
+    const struct key_item *item = launcher_ui::events::keyboard_item(event);
+    if (!launcher_ui::events::is_key_released(event)) return;
+
+    if (view_state_ == ViewState::HELP) {
+        if (launcher_ui::events::keyboard_key(event) == KEY_ESC) close_help();
+        return;
+    }
+    if (view_state_ != ViewState::INPUT) return;
+
+    switch (ssh_shortcut_action(item)) {
+    case SshShortcutAction::PREVIOUS_FIELD: {
         SshConnectionModel previous = model_;
         if (model_.select_previous()) rebuild_or_restore(std::move(previous));
-        break;
+        return;
     }
-    case KEY_DOWN: {
+    case SshShortcutAction::NEXT_FIELD: {
         SshConnectionModel previous = model_;
         if (model_.select_next()) rebuild_or_restore(std::move(previous));
+        return;
+    }
+    case SshShortcutAction::SHOW_HELP:
+        show_help();
+        return;
+    case SshShortcutAction::NONE:
         break;
     }
+
+    const uint32_t key = launcher_ui::events::keyboard_key(event);
+    switch (key) {
     case KEY_ENTER:
         do_connect();
         break;
@@ -225,7 +257,6 @@ void UISSHPage::event_handler(lv_event_t *event)
     }
     default: {
         SshConnectionModel previous = model_;
-        const struct key_item *item = launcher_ui::events::keyboard_item(event);
         if (model_.append(launcher_ui::text_input::key_text(key, item)))
             rebuild_or_restore(std::move(previous));
         break;
@@ -245,8 +276,11 @@ void UISSHPage::static_owned_obj_delete_cb(lv_event_t *event) noexcept
         if (deleted == self->background_) {
             self->background_ = nullptr;
             self->form_container_ = nullptr;
+            self->help_container_ = nullptr;
         } else if (deleted == self->form_container_) {
             self->form_container_ = nullptr;
+        } else if (deleted == self->help_container_) {
+            self->help_container_ = nullptr;
         }
     } catch (...) {
     }
@@ -254,6 +288,9 @@ void UISSHPage::static_owned_obj_delete_cb(lv_event_t *event) noexcept
 
 void UISSHPage::detach_delete_callbacks()
 {
+    if (help_container_)
+        lv_obj_remove_event_cb_with_user_data(
+            help_container_, static_owned_obj_delete_cb, this);
     if (form_container_)
         lv_obj_remove_event_cb_with_user_data(
             form_container_, static_owned_obj_delete_cb, this);
@@ -261,5 +298,6 @@ void UISSHPage::detach_delete_callbacks()
         lv_obj_remove_event_cb_with_user_data(
             background_, static_owned_obj_delete_cb, this);
     form_container_ = nullptr;
+    help_container_ = nullptr;
     background_ = nullptr;
 }

@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "tank_battle_model.hpp"
 
 #include <algorithm>
@@ -54,7 +60,7 @@ bool TankBattleModel::player_fire()
     const int x = player_.x + dx;
     const int y = player_.y + dy;
     if (!inside(x, y)) return false;
-    spawn_bullet(x, y, player_.direction, true);
+    if (!spawn_bullet(x, y, player_.direction, true)) return false;
     player_.fire_cooldown = 4;
     return true;
 }
@@ -105,13 +111,14 @@ void TankBattleModel::direction_step(TankDirection direction, int &dx, int &dy)
     }
 }
 
-void TankBattleModel::spawn_bullet(int x, int y, TankDirection direction, bool from_player)
+bool TankBattleModel::spawn_bullet(int x, int y, TankDirection direction, bool from_player)
 {
     for (auto &bullet : bullets_) {
         if (bullet.alive) continue;
         bullet = {x, y, direction, from_player, true};
-        return;
+        return true;
     }
+    return false;
 }
 
 void TankBattleModel::enemy_fire(TankBattleTank &enemy)
@@ -123,7 +130,7 @@ void TankBattleModel::enemy_fire(TankBattleTank &enemy)
     const int x = enemy.x + dx;
     const int y = enemy.y + dy;
     if (!inside(x, y)) return;
-    spawn_bullet(x, y, enemy.direction, false);
+    if (!spawn_bullet(x, y, enemy.direction, false)) return;
     enemy.fire_cooldown = 8 + static_cast<int>(random_() % 8);
 }
 

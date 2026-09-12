@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "hal_lvgl_bsp.h"
 #include "lvgl/lvgl.h"
 #include "lvgl/src/drivers/sdl/lv_sdl_window.h"

@@ -174,7 +174,11 @@ jobs:
       run: |
         mkdir -p projects/APPLaunch/dist/bin
         cp projects/AppStore/dist/M5CardputerZero-AppStore projects/APPLaunch/dist/bin/
-        cp projects/Calculator/dist/M5CardputerZero-Calculator projects/APPLaunch/dist/bin/
+        calculator_bin=projects/Calculator/dist/M5CardputerZero-Calculator
+        if [ ! -f "$calculator_bin" ]; then
+            calculator_bin=projects/Calculator/dist/Calculator
+        fi
+        cp "$calculator_bin" projects/APPLaunch/dist/bin/M5CardputerZero-Calculator
         cp projects/ZClaw/dist/ZClaw projects/APPLaunch/dist/bin/
         mkdir -p projects/APPLaunch/dist/APPLaunch
         cp -a projects/AppStore/dist/APPLaunch/. projects/APPLaunch/dist/APPLaunch/
@@ -192,7 +196,7 @@ jobs:
           OUTPUT_DIR="$GITHUB_WORKSPACE/projects/APPLaunch/tools" \
           APPLAUNCH_CHANNEL=prerelease \
           scripts/build_cardputerzero_release_local.sh \
-            "${{ steps.version.outputs.version }}" 1
+            "${{ steps.version.outputs.version }}" m5stack1
 
     - name: Collect artifacts
       run: |
@@ -204,6 +208,13 @@ jobs:
         cp "${package}" artifacts/applaunch_arm64.deb
         (cd artifacts && sha256sum applaunch_arm64.deb > applaunch_arm64.deb.sha256)
         printf '1\n' > artifacts/applaunch_arm64.deb.update-abi
+        package_version="$(dpkg-deb -f artifacts/applaunch_arm64.deb Version)"
+        {
+          printf 'format=1\n'
+          printf 'version=%s\n' "${{ steps.version.outputs.version }}"
+          printf 'package_version=%s\n' "${package_version}"
+          printf 'commit=%s\n' "${GITHUB_SHA:0:12}"
+        } > artifacts/applaunch_arm64.deb.update-info
 
     - uses: actions/upload-artifact@v4
       with:
@@ -271,6 +282,7 @@ jobs:
           artifacts/*.deb
           artifacts/*.sha256
           artifacts/*.update-abi
+          artifacts/*.update-info
           artifacts/M5CardputerZero-APPLaunch
 
     - name: Publish launcher update channel
@@ -284,3 +296,4 @@ jobs:
           artifacts/applaunch_arm64.deb
           artifacts/applaunch_arm64.deb.sha256
           artifacts/applaunch_arm64.deb.update-abi
+          artifacts/applaunch_arm64.deb.update-info

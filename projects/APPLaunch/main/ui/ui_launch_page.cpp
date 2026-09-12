@@ -31,11 +31,9 @@ UILaunchPage *active_launch_page = nullptr;
 lv_group_t *home_input_group = nullptr;
 using launcher_carousel_layout::Slot;
 using launcher_carousel_layout::kSlots;
-static_assert(UILaunchPage::kPageDot0 == launcher_carousel_layout::kElementCount);
+static_assert(UILaunchPage::kPageSlider == launcher_carousel_layout::kElementCount);
 static_assert(UILaunchPage::kLauncherCarouselElementCount ==
-              launcher_carousel_layout::kElementCount + launcher_carousel_layout::kPanelCount);
-static_assert(LauncherNavigationModel::PAGE_COUNT ==
-              UILaunchPage::kPageDot4 - UILaunchPage::kPageDot0 + 1);
+              launcher_carousel_layout::kElementCount + 1);
 
 
 // ============================================================
@@ -49,6 +47,17 @@ static void snap_panel_to_slot(lv_obj_t *panel, int slot)
     lv_obj_set_y(panel, layout.y);
     lv_obj_set_width(panel, layout.width);
     lv_obj_set_height(panel, layout.height);
+
+    const lv_coord_t radius = slot == UILaunchPage::kCardCenter ?
+        launcher_carousel_layout::kCenterCardRadius :
+        launcher_carousel_layout::kSideCardRadius;
+    const auto selector = LV_PART_MAIN | LV_STATE_DEFAULT;
+    lv_obj_set_style_radius(panel, radius, selector);
+    if (lv_obj_t *clip = lv_obj_get_child(panel, 0)) {
+        const lv_coord_t border = lv_obj_get_style_border_width(panel, LV_PART_MAIN);
+        lv_obj_set_style_radius(
+            clip, std::max<lv_coord_t>(0, radius - border), selector);
+    }
 
     if (layout.hidden)
     {
@@ -134,6 +143,7 @@ UILaunchPage::UILaunchPage(Launch *launch)
 
 UILaunchPage::~UILaunchPage()
 {
+    startup_sound_state_->alive.store(false);
     *carousel_alive_ = false;
     navigation_.cancel_navigation();
     if (carousel_container_) {
@@ -221,6 +231,7 @@ void UILaunchPage::on_root_deleted(lv_event_t *event) noexcept
             return;
         self->stop_startup_delay();
         self->stop_startup_sound_timer();
+        self->startup_sound_state_->alive.store(false);
         *self->carousel_alive_ = false;
         self->carousel_elements_.fill(nullptr);
         self->carousel_container_ = nullptr;
@@ -277,7 +288,7 @@ void UILaunchPage::fill_right_entering_slot(lv_obj_t *panel, lv_obj_t *label)
 
     launch_->select_next_app();
     if (const app *item = launch_->carousel_slot_app(kCardFarRight))
-        update_carousel_item(panel, label, item->Name.c_str(), item->Icon.c_str());
+        update_carousel_item(panel, label, item->Name.c_str(), item->Icon);
 }
 
 void UILaunchPage::fill_left_entering_slot(lv_obj_t *panel, lv_obj_t *label)
@@ -287,7 +298,7 @@ void UILaunchPage::fill_left_entering_slot(lv_obj_t *panel, lv_obj_t *label)
 
     launch_->select_previous_app();
     if (const app *item = launch_->carousel_slot_app(kCardFarLeft))
-        update_carousel_item(panel, label, item->Name.c_str(), item->Icon.c_str());
+        update_carousel_item(panel, label, item->Name.c_str(), item->Icon);
 }
 
 void UILaunchPage::refresh_carousel()
@@ -295,10 +306,27 @@ void UILaunchPage::refresh_carousel()
     if (!launch_)
         return;
 
+    set_page_slider_position(launch_->current_app_index());
+
     for (size_t slot = 0; slot < launcher_carousel_layout::kPanelCount; ++slot) {
         if (const app *item = launch_->carousel_slot_app(slot))
-            update_carousel_slot(slot, item->Name.c_str(), item->Icon.c_str());
+            update_carousel_slot(slot, item->Name.c_str(), item->Icon);
+        else
+            update_carousel_slot(slot, "", {});
     }
+}
+
+void UILaunchPage::reload_home_icons(const std::vector<std::string> &icon_paths)
+{
+    HomeIconBufferPool replacement;
+    replacement.rebuild(icon_paths);
+    home_icon_pool_.swap(replacement);
+
+    // Keep the old pool alive until every image widget no longer references it.
+    for (size_t slot = 0; slot < launcher_carousel_layout::kPanelCount; ++slot)
+        set_panel_icon(panel(slot), {});
+    set_page_slider_range(icon_paths.size(), launch_ ? launch_->current_app_index() : 0);
+    refresh_carousel();
 }
 
 void UILaunchPage::launch_selected_app()
@@ -349,6 +377,7 @@ void UILaunchPage::cancel_switch_animation()
         else
             launch_->select_next_app();
     }
+    set_page_slider_position(launch_ ? launch_->current_app_index() : 0);
 }
 
 void UILaunchPage::switch_right()
@@ -356,7 +385,6 @@ void UILaunchPage::switch_right()
     if (std::any_of(carousel_elements_.begin(), carousel_elements_.begin() +
                     launcher_carousel_layout::kElementCount,
                     [](lv_obj_t *element) { return element == nullptr; })) return;
-    const size_t previous_page = navigation_.selected_page();
     if (!navigation_.begin_navigation(LauncherNavigationDirection::PREVIOUS))
         return;
     active_navigation_moves_next_ = false;
@@ -389,8 +417,7 @@ void UILaunchPage::switch_right()
 
     rotate_carousel_right(5, 9);
 
-    set_page_dot_selected(kPageDot0 + previous_page, false);
-    set_page_dot_selected(kPageDot0 + navigation_.selected_page(), true);
+    set_page_slider_position(launch_ ? launch_->current_app_index() : 0);
 }
 
 void UILaunchPage::switch_left()
@@ -398,7 +425,6 @@ void UILaunchPage::switch_left()
     if (std::any_of(carousel_elements_.begin(), carousel_elements_.begin() +
                     launcher_carousel_layout::kElementCount,
                     [](lv_obj_t *element) { return element == nullptr; })) return;
-    const size_t previous_page = navigation_.selected_page();
     if (!navigation_.begin_navigation(LauncherNavigationDirection::NEXT))
         return;
     active_navigation_moves_next_ = true;
@@ -431,6 +457,5 @@ void UILaunchPage::switch_left()
 
     rotate_carousel_left(5, 9);
 
-    set_page_dot_selected(kPageDot0 + previous_page, false);
-    set_page_dot_selected(kPageDot0 + navigation_.selected_page(), true);
+    set_page_slider_position(launch_ ? launch_->current_app_index() : 0);
 }

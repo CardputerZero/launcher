@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+# SPDX-License-Identifier: MIT
+
 set -euo pipefail
 
 if [ "$#" -gt 2 ]; then
     echo "usage: $0 [debian-version] [revision]" >&2
-    echo "example: $0 0.6.31+local.test1 1" >&2
+    echo "example: $0 0.6.31+local.test1 m5stack1" >&2
     exit 2
 fi
 
@@ -38,7 +41,7 @@ derive_version() {
 }
 
 VERSION=${1:-$(derive_version)}
-REVISION=${2:-1}
+REVISION=${2:-m5stack1}
 JOBS=${JOBS:-$(nproc)}
 OUTPUT_DIR=${OUTPUT_DIR:-"$ROOT/../build-artifacts/launcher-release"}
 SCONS=${SCONS:-scons}
@@ -105,8 +108,12 @@ echo "=== Aggregating release payload ==="
 install -d "$ROOT/projects/APPLaunch/dist/bin"
 install -m 0755 "$ROOT/projects/AppStore/dist/M5CardputerZero-AppStore" \
     "$ROOT/projects/APPLaunch/dist/bin/"
-install -m 0755 "$ROOT/projects/Calculator/dist/M5CardputerZero-Calculator" \
-    "$ROOT/projects/APPLaunch/dist/bin/"
+calculator_bin="$ROOT/projects/Calculator/dist/M5CardputerZero-Calculator"
+if [ ! -f "$calculator_bin" ]; then
+    calculator_bin="$ROOT/projects/Calculator/dist/Calculator"
+fi
+install -m 0755 "$calculator_bin" \
+    "$ROOT/projects/APPLaunch/dist/bin/M5CardputerZero-Calculator"
 install -m 0755 "$ROOT/projects/ZClaw/dist/ZClaw" \
     "$ROOT/projects/APPLaunch/dist/bin/"
 
@@ -115,6 +122,11 @@ cp -a "$ROOT/projects/AppStore/dist/APPLaunch/." \
     "$ROOT/projects/APPLaunch/dist/APPLaunch/"
 cp -a "$ROOT/projects/ZClaw/dist/APPLaunch/." \
     "$ROOT/projects/APPLaunch/dist/APPLaunch/"
+PREINSTALLED_MANIFEST="$ROOT/projects/APPLaunch/dist/APPLaunch/preinstalled-desktop-apps.tsv"
+ZCLAW_DESKTOP="$ROOT/projects/APPLaunch/dist/APPLaunch/applications/zclaw.desktop"
+test -f "$ZCLAW_DESKTOP"
+python3 "$ROOT/projects/APPLaunch/build_support/verify_preinstalled_desktop.py" \
+    "$PREINSTALLED_MANIFEST" "$ZCLAW_DESKTOP" zclaw.desktop
 install -D -m 0755 "$ROOT/projects/LaunchWizard/dist/LaunchWizard" \
     "$ROOT/projects/APPLaunch/dist/APPLaunch/bin/LaunchWizard"
 aarch64-linux-gnu-gcc -std=c11 -Os -s -Wall -Wextra -Werror \
@@ -141,6 +153,7 @@ trap 'rm -f "$CONTENTS"' EXIT
 dpkg-deb -c "$PACKAGE" >"$CONTENTS"
 grep -q './usr/share/APPLaunch/bin/LaunchWizard$' "$CONTENTS"
 grep -q './usr/share/APPLaunch/bin/M5CardputerZero-APPLaunch$' "$CONTENTS"
+grep -q './usr/share/APPLaunch/preinstalled-desktop-apps.tsv$' "$CONTENTS"
 
 echo "=== Release package ==="
 dpkg-deb -f "$PACKAGE" Package Version Architecture
@@ -153,8 +166,18 @@ ln -f "$PACKAGE" "$OUTPUT_DIR/applaunch_arm64.deb"
     sha256sum -c applaunch_arm64.deb.sha256
 )
 printf '1\n' >"$OUTPUT_DIR/applaunch_arm64.deb.update-abi"
+PRODUCT_VERSION=${APPLAUNCH_VERSION:-${VERSION%%+*}}
+PACKAGE_VERSION=$(dpkg-deb -f "$PACKAGE" Version)
+COMMIT=$(git -C "$ROOT" rev-parse --short=12 HEAD)
+{
+    printf 'format=1\n'
+    printf 'version=%s\n' "$PRODUCT_VERSION"
+    printf 'package_version=%s\n' "$PACKAGE_VERSION"
+    printf 'commit=%s\n' "$COMMIT"
+} >"$OUTPUT_DIR/applaunch_arm64.deb.update-info"
 printf '%s\n' "$PACKAGE" >"$OUTPUT_DIR/applaunch-package.path"
 echo "Stable package: $OUTPUT_DIR/applaunch_arm64.deb"
 echo "Checksum: $OUTPUT_DIR/applaunch_arm64.deb.sha256"
 echo "Update ABI: $OUTPUT_DIR/applaunch_arm64.deb.update-abi"
+echo "Update info: $OUTPUT_DIR/applaunch_arm64.deb.update-info"
 echo "Result path: $OUTPUT_DIR/applaunch-package.path"

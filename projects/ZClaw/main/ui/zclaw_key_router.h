@@ -1,5 +1,12 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #pragma once
 
+#include "zclaw_input_model.h"
 #include "zclaw_settings_navigation_model.h"
 #include "zclaw_startup_model.h"
 
@@ -25,6 +32,8 @@ enum class Key {
     Right,
     Up,
     Down,
+    PageUp,
+    PageDown,
     A,
     C,
     F,
@@ -44,6 +53,7 @@ struct KeyEvent {
 struct KeyRouteContext {
     StartupState startup = StartupState::CheckingNetwork;
     bool input_open = false;
+    InputMode input_mode = InputMode::Chat;
     bool approval_pending = false;
     bool setup_retry_pending = false;
     bool setup_in_flight = false;
@@ -83,6 +93,8 @@ enum class KeyActionType {
     SettingsMoveDown,
     ChatScrollUp,
     ChatScrollDown,
+    ChatPageUp,
+    ChatPageDown,
     ChatOpenInput,
 };
 

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+# SPDX-License-Identifier: MIT
+
 config COMPILE_FOR_WEB
     bool 'commpile web msg!'
     default n

@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "../main/ui/model/esc_hold_lifecycle_model.hpp"
 
 #include <cassert>
@@ -35,6 +41,12 @@ int main()
     assert(decision.show_hint && !decision.force_home);
     decision = model.poll(1999, true, true);
     assert(decision.force_home);
+    assert(model.release());
+
+    assert(model.press(3000));
+    decision = model.poll(3600, true, true, false);
+    assert(!decision.show_hint && !decision.force_home && decision.pause_timer &&
+           !model.holding());
 
     int timer = 0;
     int stale_timer = 0;

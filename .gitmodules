@@ -10,7 +10,7 @@
 	url = https://github.com/CardputerZero/Calculator.git
 [submodule "projects/AppStore"]
 	path = projects/AppStore
-	url = https://github.com/CardputerZero/AppStore.git
+	url = https://github.com/CardputerZero/Store.git
 	branch = main
 [submodule "projects/CameraApp/main_CameraApp"]
 	path = projects/CameraApp/main_CameraApp
@@ -18,3 +18,6 @@
 [submodule "projects/FactoryTest/main_FactoryTest"]
 	path = projects/FactoryTest/main_FactoryTest
 	url = https://github.com/CardputerZero/FactoryTest.git
+[submodule "projects/LaunchWizard/main_Keyboard_Guide"]
+	path = projects/LaunchWizard/main_Keyboard_Guide
+	url = https://github.com/CardputerZero/Keyboard-Guide.git

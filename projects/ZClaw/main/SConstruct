@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+# SPDX-License-Identifier: MIT
+
 import os
 import shutil
 from pathlib import Path
@@ -24,26 +27,21 @@ STATIC_FILES = []
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.getcwd(), ".."))
 ZCLAW_STATIC_ROOT = os.path.join(PROJECT_ROOT, "APPLaunch")
-APPLAUNCH_STATIC_ROOT = os.path.abspath(os.path.join(PROJECT_ROOT, "..", "APPLaunch", "APPLaunch"))
-LVGL_DEJAVU_FONT = os.path.abspath(os.path.join(
-    PROJECT_ROOT, "..", "..", "SDK", "github_source", "lvgl", "lvgl", "scripts",
-    "built_in_font", "DejaVuSans.ttf"))
+APPLAUNCH_FONT_ROOT = os.path.abspath(os.path.join(
+    PROJECT_ROOT, "..", "APPLaunch", "APPLaunch", "share", "font"))
+ZCLAW_FONT_FILES = ["JetBrainsMono-Regular.ttf", "JetBrainsMono-OFL.txt"]
 STAGED_STATIC_ROOT = os.path.abspath(os.path.join("build", "static"))
 STAGED_APPLAUNCH = os.path.join(STAGED_STATIC_ROOT, "APPLaunch")
-
 
 def stage_zclaw_static_files():
     if os.path.exists(STAGED_APPLAUNCH):
         shutil.rmtree(STAGED_APPLAUNCH)
     shutil.copytree(ZCLAW_STATIC_ROOT, STAGED_APPLAUNCH)
-    dst_fonts = os.path.join(STAGED_APPLAUNCH, "share", "font")
-    os.makedirs(dst_fonts, exist_ok=True)
-    shutil.copy2(
-        os.path.join(APPLAUNCH_STATIC_ROOT, "share", "font", "AlibabaPuHuiTi-3-55-Regular.ttf"),
-        os.path.join(dst_fonts, "AlibabaPuHuiTi-3-55-Regular.ttf"),
-    )
-    shutil.copy2(LVGL_DEJAVU_FONT, os.path.join(dst_fonts, "DejaVuSans.ttf"))
-
+    staged_font_root = os.path.join(STAGED_APPLAUNCH, "share", "font")
+    os.makedirs(staged_font_root, exist_ok=True)
+    for filename in ZCLAW_FONT_FILES:
+        shutil.copy2(os.path.join(APPLAUNCH_FONT_ROOT, filename),
+                     os.path.join(staged_font_root, filename))
 
 stage_zclaw_static_files()
 STATIC_FILES += [(STAGED_APPLAUNCH, "APPLaunch")]
@@ -51,9 +49,9 @@ STATIC_FILES += [(STAGED_APPLAUNCH, "APPLaunch")]
 lvgl_component = list(filter(lambda x: x['target'] == 'lvgl_component', env['COMPONENTS']))[0]
 toolchain_sysroot = os.environ.get('CONFIG_TOOLCHAIN_SYSROOT', '') or '/'
 
-# Keep ZClaw's text rendering aligned with APPLaunch: its FreeType override
-# adds a 1-bit glyph mode whose A8 output contains only fully transparent or
-# fully opaque pixels.
+# Reuse APPLaunch's FreeType implementation so both applications keep one
+# compatible LVGL font backend. ZClaw uses its normal grayscale bitmap mode;
+# the additional 1-bit mode remains available without changing that output.
 local_lvgl_override_srcs = Glob('../../APPLaunch/main/lvgl/lv_freetype*.c')
 local_lvgl_override_names = set(Path(str(src)).name for src in local_lvgl_override_srcs)
 lvgl_component['SRCS'] = [

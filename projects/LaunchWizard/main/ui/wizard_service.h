@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #ifndef LAUNCH_WIZARD_WIZARD_SERVICE_H
 #define LAUNCH_WIZARD_WIZARD_SERVICE_H
 
@@ -36,6 +42,9 @@ public:
     static std::string reboot();
     static bool should_run();
     static int finish_configured_system();
+    // Consumes pi-gen's one-shot marker and runs the keyboard tutorial before
+    // the OOBE decision. Returns once the guide exits or fails to start.
+    static void run_keyboard_guide();
 };
 
 }  // namespace launch_wizard

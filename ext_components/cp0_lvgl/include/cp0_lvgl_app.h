@@ -1,7 +1,15 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #pragma once
 
 #include <stddef.h>
 #include <stdint.h>
+
+#include "cp0_enum_cast.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -26,7 +34,7 @@ typedef struct {
 
 typedef struct {
     char ssid[CP0_WIFI_SSID_MAX];
-    int signal;
+    int signal; /* Wi-Fi RSSI in dBm; legacy backends may report 0..100 strength */
     char security[32];
     int in_use;
     int saved;
@@ -36,7 +44,7 @@ typedef struct {
     int connected;
     char ssid[CP0_WIFI_SSID_MAX];
     char ip[48];
-    int signal;
+    int signal; /* Wi-Fi RSSI in dBm; legacy backends may report 0..100 strength */
     int ethernet; /* 1 if a wired ethernet device is connected */
 } cp0_wifi_status_t;
 
@@ -97,6 +105,10 @@ typedef struct {
     float rssi;
     float snr;
 } cp0_lora_info_t;
+
+/* Request cancellation of an in-flight LoRa initialization. */
+void cp0_lora_request_stop(void);
+void cp0_lora_clear_stop(void);
 
 typedef void *cp0_watcher_t;
 typedef int cp0_pid_t;
@@ -196,6 +208,7 @@ int cp0_time_set(const char *timestamp);
 int cp0_time_ntp_get(void);
 int cp0_time_ntp_set(int enable);
 int cp0_bq27220_calibrate(int command_index);
+/* Returns the latest background battery snapshot; never performs hardware I/O. */
 cp0_battery_info_t cp0_battery_read(void);
 int cp0_backlight_read(void);
 int cp0_backlight_max(void);

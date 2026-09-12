@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "../src/cp0_update_job.hpp"
 
 #include <cassert>
@@ -19,6 +25,29 @@ int main()
     }
     assert(state == "succeeded:installed");
     assert(!jobs.status(success, state));
+
+    std::atomic<bool> progress_started{false};
+    const std::string progressing = jobs.start(
+        [&](const std::atomic<bool> &) {
+            progress_started.store(true);
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            return cp0::update::Result{0, "installed"};
+        },
+        [&] { return progress_started.load() ? "downloading" : std::string(); });
+    for (int attempt = 0; attempt < 100; ++attempt) {
+        assert(jobs.status(progressing, state));
+        if (state == "downloading") break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    assert(state == "downloading");
+    for (int attempt = 0; attempt < 100; ++attempt) {
+        assert(jobs.status(progressing, state));
+        if (state != "downloading" && state != "running") break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    assert(state == "succeeded:installed");
+    assert(!jobs.status(progressing, state));
+
     for (int attempt = 0; attempt < 100; ++attempt) {
         assert(jobs.status(failure, state));
         if (state != "running") break;
@@ -40,7 +69,7 @@ int main()
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     assert(cancellation_observed.load());
     assert(jobs.status(abandoned, state));
-    assert(state == "failed:cancelled:" + std::to_string(-ECANCELED));
+    assert(state == "cancelled");
     assert(!jobs.status(abandoned, state));
     assert(!jobs.cancel(abandoned));
 

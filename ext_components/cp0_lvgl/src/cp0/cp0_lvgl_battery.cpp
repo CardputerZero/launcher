@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "hal_lvgl_bsp.h"
 #include "lvgl/lvgl.h"
 #include "cp0_lvgl.h"
@@ -61,4 +67,5 @@ extern "C" void init_battery()
 extern "C" void deinit_battery()
 {
     battery_lifecycle().stop();
+    deinit_bq27220();
 }

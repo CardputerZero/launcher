@@ -15,13 +15,15 @@ std::string STKeyEncoder::encode(uint32_t evdev_key, const char *utf8,
                                  bool application_cursor_mode)
 {
     switch (evdev_key) {
-    case KEY_ENTER: return "\r";
+    case KEY_ENTER:
+    case KEY_KPENTER: return "\r";
     case KEY_BACKSPACE: return std::string(1, static_cast<char>(0x7f));
     case KEY_ESC: return "\x1b";
     case KEY_UP: return application_cursor_mode ? "\x1bOA" : "\x1b[A";
     case KEY_DOWN: return application_cursor_mode ? "\x1bOB" : "\x1b[B";
     case KEY_RIGHT: return application_cursor_mode ? "\x1bOC" : "\x1b[C";
     case KEY_LEFT: return application_cursor_mode ? "\x1bOD" : "\x1b[D";
+    case KEY_INSERT: return {};
     default: break;
     }
 
@@ -29,6 +31,19 @@ std::string STKeyEncoder::encode(uint32_t evdev_key, const char *utf8,
     const size_t length = std::strlen(utf8);
     if (length == 0 || length > MAX_TEXT_BYTES) return {};
     return std::string(utf8, length);
+}
+
+bool STKeyEncoder::should_forward_event(uint32_t evdev_key, int key_state)
+{
+    if (key_state != KBD_KEY_PRESSED && key_state != KBD_KEY_REPEATED) return false;
+
+    // UISTPage does not implement the Insert escape sequence.
+    if (evdev_key == KEY_INSERT) return false;
+
+    // Repeating Enter queues an additional shell submission for one physical press.
+    if (evdev_key == KEY_ENTER || evdev_key == KEY_KPENTER)
+        return key_state == KBD_KEY_PRESSED;
+    return true;
 }
 
 int STKeyEncoder::scrollback_direction(uint32_t evdev_key, uint32_t modifiers,

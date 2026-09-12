@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "../main/ui/model/global_hint_policy.hpp"
 
 #include "input_keys.h"
@@ -53,10 +59,8 @@ int main()
            GlobalHintAction::TAKE_SCREENSHOT);
     assert(policy.action_for({KEY_SYSRQ, "Print", false}) == GlobalHintAction::NONE);
 
-    assert(policy.action_for({KEY_LEFTSHIFT, nullptr, true}) ==
-           GlobalHintAction::SHOW_LOCK_HINT);
-    assert(policy.action_for({KEY_RIGHTSHIFT, nullptr, true}) ==
-           GlobalHintAction::SHOW_LOCK_HINT);
+    assert(policy.action_for({KEY_LEFTSHIFT, nullptr, true}) == GlobalHintAction::NONE);
+    assert(policy.action_for({KEY_RIGHTSHIFT, nullptr, true}) == GlobalHintAction::NONE);
     assert(policy.action_for({KEY_COMPOSE, nullptr, true}) ==
            GlobalHintAction::SHOW_LOCK_HINT);
     assert(policy.action_for({999, "Multi_key", true}) == GlobalHintAction::SHOW_LOCK_HINT);
@@ -77,6 +81,9 @@ int main()
     assert(GlobalHintScreenshotPolicy::saved_file_message(
                "/home/test/Pictures/Screenshots/scr_20260727_151000.bmp", "/home/test") ==
            "Saved: scr_20260727_151000.bmp\n~/Pictures/Screenshots");
+    assert(GlobalHintScreenshotPolicy::saved_file_message(
+               "/home/test2/Pictures/Screenshots/capture.bmp", "/home/test") ==
+           "Saved: capture.bmp\n/home/test2/Pictures/Screenshots");
     assert(GlobalHintScreenshotPolicy::saved_file_message("capture.bmp", "/home/test") ==
            "Screenshot saved\ncapture.bmp");
 }

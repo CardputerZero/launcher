@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #ifndef CP0_LVGL_KEYBOARD_INPUT_H
 #define CP0_LVGL_KEYBOARD_INPUT_H
 

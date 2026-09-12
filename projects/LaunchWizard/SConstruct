@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+# SPDX-License-Identifier: MIT
+
 from pathlib import Path
 import os
 import platform
@@ -62,6 +65,19 @@ env = SConscript(
     variant_dir=os.getcwd(),
     duplicate=0,
 )
+
+
+lvgl_component = list(filter(lambda x: x["target"] == "lvgl_component", env["COMPONENTS"]))[0]
+
+if "CONFIG_V9_5_LV_USE_SDL" in os.environ:
+    lvgl_component["REQUIREMENTS"] += ["SDL2"]
+    lvgl_component["INCLUDE"] += ["/usr/include/SDL2"]
+    lvgl_component["DEFINITIONS"] += ["-D_REENTRANT"]
+
+for src in list(lvgl_component["SRCS"]):
+    if "lv_sdl_keyboard.c" in str(src):
+        lvgl_component["SRCS"].remove(src)
+
 
 if cross_package_enabled:
     update = False

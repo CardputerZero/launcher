@@ -1,4 +1,14 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "apply_checkpoint.h"
+
+#if __has_include("global_config.h")
+#include "global_config.h"
+#endif
 
 #include <cerrno>
 #include <cstdio>

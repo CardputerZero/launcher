@@ -1,12 +1,25 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "cp0_lvgl_app.h"
 #include "hal/hal_settings.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cstdio>
 #include <cstring>
 #include <ctime>
 
 extern "C" time_t cp0_sdl_time_now(void);
+
+namespace {
+
+std::atomic_bool simulated_bt_powered{false};
+
+} // namespace
 
 extern "C" int hal_backlight_read(void) { return 75; }
 extern "C" int hal_backlight_max(void) { return 100; }
@@ -82,6 +95,7 @@ extern "C" int hal_wifi_disconnect(void) { return 0; }
 extern "C" hal_bt_status_t hal_bt_get_status(void)
 {
     hal_bt_status_t status{};
+    status.powered = simulated_bt_powered.load(std::memory_order_acquire) ? 1 : 0;
     std::strncpy(status.address, "00:00:00:00:00:00", sizeof(status.address) - 1);
     std::strncpy(status.alias, "CardputerZero", sizeof(status.alias) - 1);
     return status;
@@ -89,7 +103,7 @@ extern "C" hal_bt_status_t hal_bt_get_status(void)
 
 extern "C" int hal_bt_set_power(int on)
 {
-    (void)on;
+    simulated_bt_powered.store(on != 0, std::memory_order_release);
     return 0;
 }
 

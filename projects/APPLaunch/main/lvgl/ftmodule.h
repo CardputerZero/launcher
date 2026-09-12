@@ -1,3 +1,6 @@
+/* SPDX-License-Identifier: FTL
+ * Upstream license: freetype-LICENSE.txt.
+ */
 /*
  * This file registers the FreeType modules compiled into the library.
  *

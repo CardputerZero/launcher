@@ -1,8 +1,11 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "cp0_bluetooth_backend.hpp"
 #include "cp0_bluez_dbus_client.hpp"
-
-#include <chrono>
-#include <thread>
 
 namespace cp0_bluetooth_backend {
 
@@ -42,8 +45,6 @@ int scan(cp0_bt_device_t *out, int max_devices)
         return 0;
     if (start_discovery() != 0)
         return -1;
-    std::this_thread::sleep_for(std::chrono::seconds(4));
-    stop_discovery();
     return list(out, max_devices, false);
 }
 

@@ -1,4 +1,7 @@
 #!/bin/sh
+# SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+# SPDX-License-Identifier: MIT
+
 set -eu
 build_dir="${TMPDIR:-/tmp}/cp0-lvgl-tests"
 mkdir -p "$build_dir"
@@ -30,7 +33,11 @@ trap 'rm -f "$binary" "$init_plan_object" "$esc_state_object"' EXIT HUP INT TERM
 "$binary"
 
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -pthread \
-    -I"$root/src" "$root/tests/test_audio_quiet_period_gate.cpp" -o "$binary"
+    -I"$root/include" -I"$root/src/cp0" \
+    -I"$root/../Miniaudio/include" \
+    -I"$root/../../SDK/github_source/eventpp/include" \
+    "$root/src/cp0/cp0_audio_system_sound_player.cpp" \
+    "$root/tests/test_audio_system_sound_player.cpp" -ldl -lm -o "$binary"
 "$binary"
 
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror \
@@ -63,6 +70,12 @@ trap 'rm -f "$binary" "$init_plan_object" "$esc_state_object"' EXIT HUP INT TERM
     -I"$root/src" \
     "$root/src/cp0_bluetooth_api_contract.cpp" \
     "$root/tests/test_bluetooth_api_contract.cpp" -o "$binary"
+"$binary"
+
+"${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror \
+    -I"$root/src/cp0" \
+    "$root/src/cp0/cp0_bluetooth_error_policy.cpp" \
+    "$root/tests/test_bluetooth_error_policy.cpp" -o "$binary"
 "$binary"
 
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror \
@@ -293,6 +306,11 @@ fi
 "$binary"
 
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -pthread \
+    -I"$root/include" -I"$root/src" \
+    "$root/tests/test_battery_snapshot_cache.cpp" -o "$binary"
+"$binary"
+
+"${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -pthread \
     -I"$root/src" \
     "$root/src/cp0_battery_lifecycle.cpp" \
     "$root/tests/test_battery_lifecycle.cpp" -o "$binary"
@@ -412,6 +430,10 @@ fi
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -pthread \
     -I"$root/include" -I"$root/src" "$root/src/cp0_sudo_coordinator.cpp" \
     "$root/tests/test_sudo_coordinator.cpp" -o "$binary"
+"$binary"
+
+"${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror \
+    -I"$root/src" "$root/tests/test_sudo_prompt_key_policy.cpp" -o "$binary"
 "$binary"
 
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -pthread \

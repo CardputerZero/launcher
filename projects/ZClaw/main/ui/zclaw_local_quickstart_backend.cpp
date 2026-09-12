@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "zclaw_local_quickstart_backend.h"
 
 #include "zclaw_local_setup_backend.h"

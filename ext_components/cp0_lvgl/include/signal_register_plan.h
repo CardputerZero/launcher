@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 def_hal_fun(void(std::string), cp0_signal_audio_play)
 def_hal_fun(void(bool), cp0_signal_audio_cap)
 def_hal_fun(void(std::list<std::string>, std::function<void(int, std::string)>), cp0_signal_audio_setup)
@@ -8,6 +14,9 @@ def_hal_fun(void(std::list<std::string>, std::function<void(int, std::string)>),
 def_hal_fun(void(std::list<std::string>, std::function<void(int, std::string)>), cp0_signal_lora_api)
 def_hal_fun(void(std::list<std::string>, std::function<void(int, std::string)>), cp0_signal_wifi_api)
 def_hal_fun(void(std::list<std::string>, std::function<void(int, std::string)>), cp0_signal_bt_api)
+// Bluetooth Agent requests are emitted by the BlueZ worker thread. Consumers
+// must marshal UI work to their own event loop before showing a prompt.
+def_hal_fun(void(uint64_t, std::string, std::string, std::string, std::function<void(bool, std::string)>), cp0_signal_bt_agent)
 def_hal_fun(void(std::list<std::string>, std::function<void(int, std::string)>), cp0_signal_settings_api)
 def_hal_fun(void(std::list<std::string>, std::function<void(int, std::string)>), cp0_signal_process_api)
 def_hal_fun(void(std::list<std::string>, std::function<void(int, std::string)>), cp0_signal_osinfo_api)

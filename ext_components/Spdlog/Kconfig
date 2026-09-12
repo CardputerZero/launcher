@@ -1,0 +1,8 @@
+# SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+# SPDX-License-Identifier: MIT
+
+menuconfig SPDLOG_COMPONENT_ENABLED
+    bool "Enable spdlog"
+    default n
+    help
+        Enable the spdlog logging library component.

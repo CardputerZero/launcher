@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #pragma once
 
 #include <cstdint>
@@ -50,7 +56,7 @@ private:
     bool inside(int x, int y) const;
     bool has_enemy_at(int x, int y, int skip_index = -1) const;
     static void direction_step(TankDirection direction, int &dx, int &dy);
-    void spawn_bullet(int x, int y, TankDirection direction, bool from_player);
+    bool spawn_bullet(int x, int y, TankDirection direction, bool from_player);
     void enemy_fire(TankBattleTank &enemy);
     void update_enemies();
     void move_bullets();

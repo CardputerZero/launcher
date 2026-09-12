@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "zclaw_chat_view.h"
 
 #include "zclaw_fonts.hpp"
@@ -115,8 +121,16 @@ void ChatView::scroll(int delta)
     const int32_t applied = chat_scroll_delta(top, bottom, delta);
     if (applied == 0)
         return;
-    lv_obj_scroll_by(container_, 0, applied, LV_ANIM_ON);
+    lv_obj_scroll_by(container_, 0, applied, LV_ANIM_OFF);
     update_scrollbar();
+}
+
+void ChatView::scroll_page(int direction)
+{
+    if (!container_ || direction == 0)
+        return;
+    const int32_t page = lv_obj_get_height(container_);
+    scroll(direction > 0 ? page : -page);
 }
 
 void ChatView::scroll_event(lv_event_t *event)

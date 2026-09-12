@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "zclaw_provider_form_model.h"
 #include "zclaw_panel_lifecycle.h"
 #include "zclaw_settings_navigation_model.h"
@@ -123,6 +129,9 @@ int main()
            SettingsActivationAction::ShowAuthorization);
     context.selected_row = 2;
     assert(zclaw::settings_activation(context).action == SettingsActivationAction::ShowProviders);
+    context.selected_row = 5;
+    assert(zclaw::settings_activation(context).action ==
+           SettingsActivationAction::ToggleUiSounds);
 
     context.view = SettingsView::Providers;
     context.provider_count = 3;

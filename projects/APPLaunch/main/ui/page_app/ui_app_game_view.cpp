@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #define APP_PAGE_IMPLEMENTATION_UNIT
 #include "ui_app_game.hpp"
 #include "../model/snake_view_contract.hpp"
@@ -91,7 +97,7 @@ void UIGamePage::create_ui()
     lv_obj_set_style_border_width(game_area_, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_pad_all(game_area_, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_clear_flag(game_area_, LV_OBJ_FLAG_SCROLLABLE);
-    if (!show_overlay("F/X/Z/C: Move\nOK: Start  ESC: Quit")) rollback();
+    if (!show_overlay("Classic Snake game.\n\nF / X / Z / C: move")) rollback();
 }
 
 bool UIGamePage::show_overlay(const char *text)
@@ -119,7 +125,7 @@ void UIGamePage::clear_overlay()
 bool UIGamePage::render_game()
 {
     if (!game_area_) {
-        game_timer_.stop();
+        stop_game_timer();
         state_ = STATE_READY;
         return false;
     }
@@ -203,7 +209,7 @@ void UIGamePage::owned_obj_delete_cb(lv_event_t *event) noexcept
         self->game_area_ = nullptr;
         self->render_layer_ = nullptr;
         self->overlay_lbl_ = nullptr;
-        self->game_timer_.stop();
+        self->stop_game_timer();
         self->state_ = STATE_READY;
     }
     if (self->title_bar_ == deleted) {
@@ -217,7 +223,7 @@ void UIGamePage::owned_obj_delete_cb(lv_event_t *event) noexcept
         self->game_area_ = nullptr;
         self->render_layer_ = nullptr;
         self->overlay_lbl_ = nullptr;
-        self->game_timer_.stop();
+        self->stop_game_timer();
         self->state_ = STATE_READY;
     }
     } catch (...) {

@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "cp0_audio_api_contract.hpp"
 
 #include <cassert>
@@ -33,6 +39,11 @@ void test_path_and_no_argument_commands()
     assert(request.command == ApiCommand::CapEnd);
     assert(cp0::audio::parse_api_request({"MuteToggle"}, request));
     assert(request.command == ApiCommand::MuteToggle);
+    assert(cp0::audio::parse_api_request({"SystemSoundSuspend"}, request));
+    assert(request.command == ApiCommand::SystemSoundSuspend);
+    assert(cp0::audio::parse_api_request({"SystemSoundPrepare"}, request));
+    assert(request.command == ApiCommand::SystemSoundPrepare);
+    assert(!cp0::audio::parse_api_request({"SystemSoundPrepare", "junk"}, request));
 }
 
 void test_numeric_and_boolean_commands()

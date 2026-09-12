@@ -1,18 +1,47 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "cp0_bluetooth_backend.hpp"
+#include "cp0_bluez_dbus_client.hpp"
+#include "cp0_lvgl_log.h"
 #include "../cp0_init_once.hpp"
 #include "../cp0_bluetooth_api_contract.hpp"
 
 #include "hal_lvgl_bsp.h"
 
 #include <algorithm>
+#include <atomic>
+#include <chrono>
+#include <cstdint>
 #include <functional>
+#include <future>
 #include <list>
+#include <memory>
+#include <mutex>
 #include <sstream>
 #include <string>
+#include <thread>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
 namespace {
+
+struct BluetoothBackendSession {
+    std::atomic<bool> running{true};
+    std::atomic<bool> scanning{false};
+    std::mutex mutex;
+    std::future<cp0_bt_status_t> status_future;
+    std::thread scan_thread;
+    std::vector<std::future<void>> futures;
+};
+
+std::mutex g_sessions_mutex;
+std::unordered_map<uint64_t, std::shared_ptr<BluetoothBackendSession>> g_sessions;
+std::atomic<uint64_t> g_next_session_id{1};
 
 std::string encode_status(const cp0_bt_status_t &status)
 {
@@ -51,32 +80,254 @@ cp0::bluetooth::Reply load_devices(int requested_count, Loader loader)
     return {count, encode_devices(devices.data(), count)};
 }
 
+std::shared_ptr<BluetoothBackendSession> find_session(uint64_t session_id)
+{
+    std::lock_guard<std::mutex> lock(g_sessions_mutex);
+    const auto found = g_sessions.find(session_id);
+    return found == g_sessions.end() ? nullptr : found->second;
+}
+
+void start_status_get(uint64_t session_id,
+                      std::shared_ptr<BluetoothBackendSession> session,
+                      const std::function<void(int, std::string)> &callback)
+{
+    std::future<void> future = std::async(std::launch::async, [session, callback]() {
+        const cp0_bt_status_t current = cp0_bluetooth_backend::status();
+        std::lock_guard<std::mutex> lock(session->mutex);
+        if (!session->running) return;
+        report(callback, 0, encode_status(current));
+    });
+    std::lock_guard<std::mutex> lock(session->mutex);
+    if (!session->running) return;
+    session->futures.push_back(std::move(future));
+}
+
+void start_list_get(uint64_t session_id,
+                    std::shared_ptr<BluetoothBackendSession> session,
+                    bool connected_only,
+                    const std::function<void(int, std::string)> &callback)
+{
+    std::future<void> future = std::async(std::launch::async,
+        [session, connected_only, callback]() {
+            const auto reply = load_devices(CP0_BT_DEVICE_MAX,
+                [connected_only](cp0_bt_device_t *out, int count) {
+                    return cp0_bluetooth_backend::list(out, count, connected_only);
+                });
+            std::lock_guard<std::mutex> lock(session->mutex);
+            if (!session->running) return;
+            report(callback, reply.code, reply.data);
+        });
+    std::lock_guard<std::mutex> lock(session->mutex);
+    if (!session->running) return;
+    session->futures.push_back(std::move(future));
+}
+
+void start_scan(uint64_t session_id,
+                std::shared_ptr<BluetoothBackendSession> session,
+                const std::function<void(int, std::string)> &callback)
+{
+    if (session->scanning.exchange(true))
+        return;
+    try {
+        session->scan_thread = std::thread([session, callback]() {
+            while (session->scanning.load()) {
+                const auto reply = load_devices(CP0_BT_DEVICE_MAX,
+                    [](cp0_bt_device_t *out, int count) {
+                        return cp0_bluetooth_backend::scan(out, count);
+                    });
+                {
+                    std::lock_guard<std::mutex> lock(session->mutex);
+                    if (!session->running || !session->scanning.load()) break;
+                    report(callback, reply.code, reply.data);
+                }
+                if (!session->scanning.load())
+                    break;
+                std::this_thread::sleep_for(std::chrono::seconds(3));
+            }
+        });
+    } catch (...) {
+        session->scanning.store(false);
+    }
+}
+
+uint64_t session_init()
+{
+    auto session = std::make_shared<BluetoothBackendSession>();
+    session->running.store(true);
+    session->scanning.store(false);
+    try {
+        session->status_future = std::async(std::launch::async, []() {
+            return cp0_bluetooth_backend::status();
+        });
+    } catch (...) {
+    }
+    const uint64_t session_id = g_next_session_id.fetch_add(1, std::memory_order_relaxed);
+    if (session_id == 0)
+        return 0;
+    std::lock_guard<std::mutex> lock(g_sessions_mutex);
+    g_sessions.emplace(session_id, std::move(session));
+    return session_id;
+}
+
+void session_deinit(uint64_t session_id,
+                    std::shared_ptr<BluetoothBackendSession> session,
+                    const std::function<void(int, std::string)> &callback)
+{
+    {
+        std::lock_guard<std::mutex> lock(session->mutex);
+        session->running.store(false);
+        session->scanning.store(false);
+    }
+    if (session->scan_thread.joinable())
+        session->scan_thread.join();
+    if (session->status_future.valid())
+        session->status_future.wait();
+    std::vector<std::future<void>> pending;
+    {
+        std::lock_guard<std::mutex> lock(session->mutex);
+        pending.swap(session->futures);
+    }
+    for (auto &future : pending)
+        if (future.valid())
+            future.wait();
+    {
+        std::lock_guard<std::mutex> lock(g_sessions_mutex);
+        const auto found = g_sessions.find(session_id);
+        if (found != g_sessions.end() && found->second == session)
+            g_sessions.erase(found);
+    }
+    report(callback, 0, "ok");
+}
+
 void api_call(std::list<std::string> args, std::function<void(int, std::string)> callback)
 {
     using namespace cp0_bluetooth_backend;
+    std::ostringstream raw_request;
+    for (const auto &arg : args)
+        raw_request << '[' << arg << ']';
+    cp0_zmq_logf("bt", "api request=%s", raw_request.str().c_str());
     cp0::bluetooth::Request request;
     if (!cp0::bluetooth::parse_request(args, request)) {
+        cp0_zmq_log("bt", "api request rejected by parser");
         report(callback, -1, "invalid bt api request");
         return;
     }
-    cp0::bluetooth::invoke_backend(callback, [&]() -> cp0::bluetooth::Reply {
-        using cp0::bluetooth::Command;
-        if(request.command == Command::Status) return {0, encode_status(status())};
-        if(request.command == Command::Power) return {set_power(request.value), {}};
-        if(request.command == Command::Alias) return {set_alias(request.text.c_str()), {}};
-        if(request.command == Command::Discoverable) return {set_discoverable(request.value), {}};
-        if(request.command == Command::Scan) return load_devices(request.max_count, scan);
-        if(request.command == Command::DiscoveryStart) return {start_discovery(), {}};
-        if(request.command == Command::DiscoveryStop) return {stop_discovery(), {}};
-        if(request.command == Command::List)
-            return load_devices(request.max_count, [](cp0_bt_device_t *out, int count) { return list(out, count, false); });
-        if(request.command == Command::ConnectedList)
-            return load_devices(request.max_count, [](cp0_bt_device_t *out, int count) { return list(out, count, true); });
-        if(request.command == Command::Pair) return {pair(request.text.c_str()), {}};
-        if(request.command == Command::Connect) return {connect(request.text.c_str()), {}};
-        if(request.command == Command::Disconnect) return {disconnect(request.text.c_str()), {}};
-        return {cp0_bluetooth_backend::remove(request.text.c_str()), {}};
-    });
+    using cp0::bluetooth::Command;
+    if (request.command == Command::SessionInit) {
+        const uint64_t session_id = session_init();
+        report(callback, session_id == 0 ? -1 : 0,
+               session_id == 0 ? "session init failed" : std::to_string(session_id));
+        return;
+    }
+    if (request.command == Command::SessionDeinit) {
+        std::shared_ptr<BluetoothBackendSession> session = find_session(request.session_id);
+        if (!session) {
+            report(callback, -1, "invalid bt session");
+            return;
+        }
+        session_deinit(request.session_id, std::move(session), callback);
+        return;
+    }
+    if (request.command == Command::StatusGet) {
+        std::shared_ptr<BluetoothBackendSession> session = find_session(request.session_id);
+        if (!session) {
+            report(callback, -1, "invalid bt session");
+            return;
+        }
+        start_status_get(request.session_id, std::move(session), callback);
+        return;
+    }
+    if (request.command == Command::ConnectedListInit ||
+        request.command == Command::ConnectedListDeinit) {
+        report(callback, find_session(request.session_id) ? 0 : -1,
+               find_session(request.session_id) ? "ok" : "invalid bt session");
+        return;
+    }
+    if (request.command == Command::ConnectedListGet) {
+        std::shared_ptr<BluetoothBackendSession> session = find_session(request.session_id);
+        if (!session) {
+            report(callback, -1, "invalid bt session");
+            return;
+        }
+        start_list_get(request.session_id, std::move(session), true, callback);
+        return;
+    }
+    if (request.command == Command::ScanOn) {
+        std::shared_ptr<BluetoothBackendSession> session = find_session(request.session_id);
+        if (!session) {
+            report(callback, -1, "invalid bt session");
+            return;
+        }
+        start_scan(request.session_id, std::move(session), callback);
+        return;
+    }
+    if (request.command == Command::ScanOff) {
+        std::shared_ptr<BluetoothBackendSession> session = find_session(request.session_id);
+        if (!session) {
+            report(callback, -1, "invalid bt session");
+            return;
+        }
+        {
+            std::lock_guard<std::mutex> lock(session->mutex);
+            session->scanning.store(false);
+        }
+        if (session->scan_thread.joinable())
+            session->scan_thread.join();
+        report(callback, 0, "ok");
+        return;
+    }
+    if (request.command == Command::Status) {
+        report(callback, 0, encode_status(cp0_bluetooth_backend::status()));
+        return;
+    }
+    if (request.command == Command::List || request.command == Command::ConnectedList) {
+        const bool connected_only = request.command == Command::ConnectedList;
+        const auto reply = load_devices(request.max_count,
+            [connected_only](cp0_bt_device_t *out, int count) {
+                return cp0_bluetooth_backend::list(out, count, connected_only);
+            });
+        report(callback, reply.code, reply.data);
+        return;
+    }
+    if (request.command == Command::Scan) {
+        cp0_bluez_dbus::start_discovery_async([request, callback](int code, const std::string &message) {
+            if (code != 0) {
+                report(callback, code, message);
+                return;
+            }
+            const auto reply = load_devices(request.max_count,
+                [](cp0_bt_device_t *out, int count) {
+                    return cp0_bluetooth_backend::list(out, count, false);
+                });
+            report(callback, reply.code, reply.data);
+        });
+        return;
+    }
+
+    auto completion = [callback](int code, const std::string &message) {
+        cp0_zmq_logf("bt", "api async completion code=%d message=%s", code, message.c_str());
+        report(callback, code, message == "ok" ? std::string() : message);
+    };
+    if (request.command == Command::Power)
+        cp0_bluez_dbus::set_power_async(request.value, std::move(completion));
+    else if (request.command == Command::Alias)
+        cp0_bluez_dbus::set_alias_async(request.text.c_str(), std::move(completion));
+    else if (request.command == Command::Discoverable)
+        cp0_bluez_dbus::set_discoverable_async(request.value, std::move(completion));
+    else if (request.command == Command::DiscoveryStart)
+        cp0_bluez_dbus::start_discovery_async(std::move(completion));
+    else if (request.command == Command::DiscoveryStop)
+        cp0_bluez_dbus::stop_discovery_async(std::move(completion));
+    else if (request.command == Command::Pair)
+        cp0_bluez_dbus::pair_async(request.text.c_str(), std::move(completion));
+    else if (request.command == Command::CancelPairing)
+        cp0_bluez_dbus::cancel_pairing_async(request.text.c_str(), std::move(completion));
+    else if (request.command == Command::Connect)
+        cp0_bluez_dbus::connect_async(request.text.c_str(), std::move(completion));
+    else if (request.command == Command::Disconnect)
+        cp0_bluez_dbus::disconnect_async(request.text.c_str(), std::move(completion));
+    else
+        cp0_bluez_dbus::remove_async(request.text.c_str(), std::move(completion));
 }
 
 } // namespace
@@ -85,6 +336,36 @@ extern "C" void init_bluetooth(void)
 {
     static cp0::InitOnce initialized;
     initialized.run([] {
+        cp0_bluez_dbus::initialize();
+        // Bridge Agent1 authentication requests to the UI signal. The
+        // callback may run on the BlueZ worker thread; UI consumers must
+        // enqueue the prompt on the LVGL thread. Replies are marshalled back
+        // through the worker's agent_reply() entry point.
+        cp0_bluez_dbus::set_agent_listener([](const cp0_bluez_dbus::AgentRequest &request) {
+            // The bridge remains installed for the lifetime of the backend,
+            // while the Settings page subscribes only when visible. Never
+            // leave a BlueZ Agent1 invocation pending when no UI can answer.
+            if (cp0_signal_bt_agent.empty()) {
+                // Existing bonds may still ask the agent to authorize an
+                // audio/profile connection. Allow only those requests for a
+                // device BlueZ already reports as paired; pairing credentials
+                // and confirmation remain UI-gated.
+                const bool authorization = request.method == "RequestAuthorization" ||
+                                            request.method == "AuthorizeService";
+                const bool accepted = authorization && request.paired;
+                cp0_zmq_logf("bt", "agent request without UI method=%s device=%s accepted=%d",
+                             request.method.c_str(), request.device.c_str(), accepted ? 1 : 0);
+                cp0_bluez_dbus::agent_reply(request.id, accepted, {});
+                return;
+            }
+            cp0_signal_bt_agent(request.id,
+                                request.method,
+                                request.device,
+                                request.method == "RequestConfirmation" ? request.passkey : request.uuid,
+                                [id = request.id](bool accepted, std::string text) {
+                                    cp0_bluez_dbus::agent_reply(id, accepted, text);
+                                });
+        });
         return static_cast<bool>(cp0_signal_bt_api.append(
             [](std::list<std::string> args,
                std::function<void(int, std::string)> callback) {

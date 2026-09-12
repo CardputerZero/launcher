@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "ssh_connection_model.hpp"
 #include "../keyboard_text_input.hpp"
 #include "integer_parse_policy.hpp"
@@ -92,7 +98,10 @@ std::list<std::string> SshConnectionModel::arguments() const
     const std::string &host = values_[static_cast<size_t>(Field::HOST)];
     const std::string &port = values_[static_cast<size_t>(Field::PORT)];
     const std::string &user = values_[static_cast<size_t>(Field::USER)];
-    std::list<std::string> arguments = {"-o", "StrictHostKeyChecking=no"};
+    std::list<std::string> arguments = {
+        "-o", "StrictHostKeyChecking=no",
+        "-o", "ConnectTimeout=" + std::to_string(CONNECTION_TIMEOUT_SECONDS),
+    };
     if (!port.empty() && port != "22") {
         arguments.push_back("-p");
         arguments.push_back(port);

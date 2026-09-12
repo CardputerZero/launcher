@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "zclaw_key_router.h"
 
 namespace zclaw {
@@ -54,14 +60,36 @@ KeyAction route_key(const KeyRouteContext &context, const KeyEvent &event)
         return {};
     }
 
-    if (event.phase == KeyPhase::Pressed || event.phase == KeyPhase::Repeated)
-        return context.input_open ? input_edit_action(event) : KeyAction{};
+    if (event.phase == KeyPhase::Pressed || event.phase == KeyPhase::Repeated) {
+        if (context.input_open)
+            return input_edit_action(event);
+
+        // Keyboard repeat events are emitted while a navigation key is held.
+        // Handle them in the chat view so a long press keeps scrolling.
+        if (event.phase == KeyPhase::Repeated && !context.approval_pending &&
+            !context.setup_retry_pending && !context.settings_open) {
+            switch (normalize_navigation_key(event.key)) {
+            case Key::Up:
+                return {KeyActionType::ChatScrollUp, {}};
+            case Key::Down:
+                return {KeyActionType::ChatScrollDown, {}};
+            default:
+                break;
+            }
+        }
+        return {};
+    }
     if (event.phase != KeyPhase::Released)
         return {};
 
     if (context.input_open) {
         if (event.key == Key::Escape)
-            return {KeyActionType::InputClose, {}};
+            return {input_saves_on_close(context.input_mode)
+                        ? KeyActionType::InputSubmit
+                        : KeyActionType::InputClose,
+                    {}};
+        if (event.key == Key::Tab && context.input_mode != InputMode::PairingCode)
+            return {KeyActionType::InputInsertNewline, {}};
         if (event.key == Key::Tab)
             return {KeyActionType::InputToggleSecretVisibility, {}};
         if (event.key == Key::Enter && !event.shift)
@@ -135,6 +163,10 @@ KeyAction route_key(const KeyRouteContext &context, const KeyEvent &event)
         return {KeyActionType::ChatScrollUp, {}};
     case Key::Down:
         return {KeyActionType::ChatScrollDown, {}};
+    case Key::PageUp:
+        return {KeyActionType::ChatPageUp, {}};
+    case Key::PageDown:
+        return {KeyActionType::ChatPageDown, {}};
     case Key::Enter:
         return {KeyActionType::ChatOpenInput, {}};
     default:

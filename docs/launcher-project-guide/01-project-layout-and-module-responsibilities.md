@@ -48,7 +48,11 @@ ext_components/
 ├── cp0_lvgl/
 ├── Miniaudio/
 ├── RadioLib/
-└── Sigslot/
+├── Sigslot/
+├── SmoothUI/
+├── Spdlog/
+├── bluectl/
+└── nmtui/
 ```
 
 | Component | Role |
@@ -57,6 +61,13 @@ ext_components/
 | `Miniaudio` | Dependency for audio playback and recording |
 | `Sigslot` | Signal-slot mechanism |
 | `RadioLib` | LoRa/SX126x wireless communication library component |
+| `SmoothUI`, `Spdlog` | Optional upstream UI and logging wrappers |
+| `bluectl` | C DBus/BlueZ API and test utilities |
+| `nmtui` | NetworkManager/libnm Wi-Fi adapter |
+
+Current cross-module behavior and dependency licenses are recorded in
+[the implementation snapshot](../current-implementation-and-components.md)
+and [the component inventory](../OPEN_SOURCE_COMPONENTS.md).
 
 ### 1.3 `projects/`
 
@@ -79,11 +90,10 @@ projects/
 | `HelloWorld` | Minimal example project for learning the build flow |
 | `UserDemo` | User demo project |
 
-### 1.4 `docs/`, `scripts/`, and Runtime Helpers
+### 1.4 `docs/` and `scripts/`
 
 - `docs/`: developer-facing documentation and standalone packaging docs, including `APPLaunch-App-打包指南.md`.
 - `scripts/`: repository-level helper tools, such as `firmware_manager.py` and `debian_packager.py`.
-- `projects/APPLaunch/APPLaunch/bin/`: APPLaunch runtime helper scripts copied into `/usr/share/APPLaunch/bin/`, including `store_cache_sync.py`.
 
 ## 2. APPLaunch Top-Level Structure
 
@@ -119,8 +129,6 @@ projects/APPLaunch/
 projects/APPLaunch/APPLaunch/
 ├── applications/
 │   └── vim.desktop.temple
-├── bin/
-│   └── store_cache_sync.py
 ├── lib/
 │   └── nihao.so
 └── share/

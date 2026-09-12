@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "launcher_media_model.hpp"
 
 #include <algorithm>
@@ -62,9 +68,14 @@ void LauncherMediaControlsModel::set_volume(int percent)
     volume_ = clamp_percent(percent);
 }
 
+void LauncherMediaControlsModel::set_brightness(int percent)
+{
+    brightness_ = clamp_percent(percent);
+}
+
 void LauncherMediaControlsModel::set_brightness_from_raw(int raw, int maximum)
 {
-    brightness_ = percent_from_raw(raw, maximum);
+    set_brightness(percent_from_raw(raw, maximum));
 }
 
 bool LauncherMediaControlsModel::toggle_mute()

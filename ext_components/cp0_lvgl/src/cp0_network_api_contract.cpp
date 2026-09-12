@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "cp0_network_api_contract.hpp"
 
 #include <charconv>
@@ -149,6 +155,34 @@ const char *invalid_api_request_message()
     return "invalid wifi api request";
 }
 
+std::vector<ConnectionProfile> parse_connection_profiles(const std::string &payload)
+{
+    std::vector<ConnectionProfile> profiles;
+    std::size_t start = 0;
+    while (start < payload.size()) {
+        const std::size_t end = payload.find('\n', start);
+        std::string_view record(payload.data() + start,
+            (end == std::string::npos ? payload.size() : end) - start);
+        if (!record.empty() && record.back() == '\r') record.remove_suffix(1);
+        start = end == std::string::npos ? payload.size() : end + 1;
+        if (record.empty()) continue;
+
+        const std::size_t first_separator = record.find(':');
+        if (first_separator == std::string::npos) continue;
+        const std::size_t second_separator = record.find(':', first_separator + 1);
+        if (second_separator == std::string::npos) continue;
+
+        ConnectionProfile profile;
+        profile.uuid = std::string(record.substr(0, first_separator));
+        profile.type = std::string(record.substr(
+            first_separator + 1, second_separator - first_separator - 1));
+        profile.name = std::string(record.substr(second_separator + 1));
+        if (!profile.uuid.empty() && !profile.type.empty() && !profile.name.empty())
+            profiles.push_back(std::move(profile));
+    }
+    return profiles;
+}
+
 std::string encode_status_payload(const cp0_wifi_status_t &status)
 {
     return std::to_string(status.connected ? 1 : 0) + ':' + escape_field(status.ssid) + ':' +
@@ -164,7 +198,7 @@ bool decode_status_payload(const std::string &payload, cp0_wifi_status_t &status
     int ethernet = 0;
     if (!split_record(payload, fields) || fields.size() != 5 ||
         !parse_integer(fields[0], 0, 1, connected) ||
-        !parse_integer(fields[3], 0, 100, signal) ||
+        !parse_integer(fields[3], -120, 100, signal) ||
         !parse_integer(fields[4], 0, 1, ethernet))
         return false;
 
@@ -211,7 +245,7 @@ int decode_scan_payload(const std::string &payload, cp0_wifi_ap_t *access_points
         int in_use = 0;
         int saved = 0;
         if (!split_record(record, fields) || (fields.size() != 4 && fields.size() != 5) || fields[0].empty() ||
-            !parse_integer(fields[1], 0, 100, signal) ||
+            !parse_integer(fields[1], -120, 100, signal) ||
             !parse_integer(fields[3], 0, 1, in_use) ||
             (fields.size() == 5 && !parse_integer(fields[4], 0, 1, saved)))
             continue;

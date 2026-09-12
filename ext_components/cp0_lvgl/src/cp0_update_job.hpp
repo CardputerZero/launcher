@@ -1,8 +1,15 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #pragma once
 
 #include "../include/cp0_bounded_task_registry.hpp"
 
 #include <atomic>
+#include <cerrno>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -19,11 +26,18 @@ struct Result {
 class Jobs {
 public:
     using Operation = std::function<Result(const std::atomic<bool> &cancel_requested)>;
+    using Progress = std::function<std::string()>;
 
     std::string start(Operation operation)
     {
+        return start(std::move(operation), {});
+    }
+
+    std::string start(Operation operation, Progress progress)
+    {
         const std::string id = std::to_string(next_.fetch_add(1));
         auto job = std::make_shared<Job>();
+        job->progress = std::move(progress);
         {
             std::lock_guard<std::mutex> lock(mutex_);
             jobs_[id] = job;
@@ -68,11 +82,21 @@ public:
             if (found == jobs_.end()) return false;
             job = found->second;
         }
-        if (!job->done.load()) value = "running";
+        if (!job->done.load()) {
+            value = "running";
+            if (job->progress) {
+                try {
+                    const std::string progress = job->progress();
+                    if (!progress.empty()) value = progress;
+                } catch (...) {
+                }
+            }
+        }
         else {
             std::string stage;
             { std::lock_guard<std::mutex> lock(job->mutex); stage = job->stage; }
-            if (job->result.load() == 0) value = "succeeded:" + stage;
+            if (job->result.load() == -ECANCELED) value = "cancelled";
+            else if (job->result.load() == 0) value = "succeeded:" + stage;
             else value = "failed:" + stage + ":" + std::to_string(job->result.load());
             std::lock_guard<std::mutex> lock(mutex_);
             jobs_.erase(id);
@@ -104,6 +128,7 @@ private:
         std::atomic<int> result{-1};
         std::mutex mutex;
         std::string stage = "starting";
+        Progress progress;
     };
     mutable std::mutex mutex_;
     std::unordered_map<std::string, std::shared_ptr<Job>> jobs_;

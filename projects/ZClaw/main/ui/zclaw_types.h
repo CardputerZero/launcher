@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #pragma once
 
 #include <cstddef>
@@ -21,6 +27,7 @@ struct UiConfig {
     std::string webhook_secret;
     std::string bearer_token;
     bool setup_complete = false;
+    bool ui_sounds_enabled = true;
 };
 
 struct ApprovalRequest {

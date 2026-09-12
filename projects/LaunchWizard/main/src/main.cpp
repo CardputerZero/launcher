@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "application.h"
 
 #include <cstdio>
@@ -32,6 +38,11 @@ int main(int argc, char *argv[])
 
     if (force)
         printf("LaunchWizard: test mode, bypassing first-boot detection\n");
+
+    // Consume and show the keyboard tutorial first when pi-gen's one-shot
+    // marker is present, whether the OOBE itself is shown or skipped.
+    if (!force)
+        launch_wizard_run_keyboard_guide();
 
     if (!force && !launch_wizard_should_run()) {
         printf("LaunchWizard: first-boot desktop is not active, starting APPLaunch\n");

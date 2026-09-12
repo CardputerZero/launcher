@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #ifndef LAUNCH_WIZARD_APPLICATION_H
 #define LAUNCH_WIZARD_APPLICATION_H
 
@@ -12,5 +18,9 @@ void launch_wizard_ui_teardown(void);
 // configured (e.g. CardputerZero Lite flashed with Raspberry Pi Imager).
 bool launch_wizard_should_run(void);
 int launch_wizard_finish_configured_system(void);
+
+// Shows the keyboard tutorial before the OOBE decision when pi-gen's one-shot
+// marker is present.
+void launch_wizard_run_keyboard_guide(void);
 
 #endif  // LAUNCH_WIZARD_APPLICATION_H

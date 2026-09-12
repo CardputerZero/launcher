@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "zclaw_input_model.h"
 #include "zclaw_key_event_adapter.h"
 #include "zclaw_key_router.h"
@@ -14,9 +20,17 @@ int main()
     using zclaw::InputMode;
     using zclaw::InputSubmissionAction;
     assert(!zclaw::input_is_single_line(InputMode::Chat));
-    assert(zclaw::input_is_single_line(InputMode::SetupEdit));
-    assert(zclaw::input_is_single_line(InputMode::ProviderEdit));
+    assert(!zclaw::input_is_single_line(InputMode::SetupEdit));
+    assert(!zclaw::input_is_single_line(InputMode::SetupUriEdit));
+    assert(!zclaw::input_is_single_line(InputMode::ProviderEdit));
+    assert(!zclaw::input_is_single_line(InputMode::ProviderUriEdit));
     assert(zclaw::input_is_single_line(InputMode::PairingCode));
+    assert(!zclaw::input_saves_on_close(InputMode::Chat));
+    assert(zclaw::input_saves_on_close(InputMode::SetupEdit));
+    assert(zclaw::input_saves_on_close(InputMode::SetupUriEdit));
+    assert(zclaw::input_saves_on_close(InputMode::ProviderEdit));
+    assert(zclaw::input_saves_on_close(InputMode::ProviderUriEdit));
+    assert(!zclaw::input_saves_on_close(InputMode::PairingCode));
     zclaw::InputSubmission submission =
         zclaw::input_submission(InputMode::Chat, "hello");
     assert(submission.action == InputSubmissionAction::SendChat);
@@ -29,7 +43,11 @@ int main()
            InputSubmissionAction::None);
     assert(zclaw::input_submission(InputMode::SetupEdit, "").action ==
            InputSubmissionAction::ApplySetupEdit);
+    assert(zclaw::input_submission(InputMode::SetupUriEdit, "").action ==
+           InputSubmissionAction::ApplySetupEdit);
     assert(zclaw::input_submission(InputMode::ProviderEdit, "").action ==
+           InputSubmissionAction::ApplyProviderEdit);
+    assert(zclaw::input_submission(InputMode::ProviderUriEdit, "").action ==
            InputSubmissionAction::ApplyProviderEdit);
 
     using zclaw::Key;
@@ -51,6 +69,10 @@ int main()
     assert(!adapted.shift && adapted.text.empty());
     adapted = zclaw::adapt_key_event(KEY_ESC, KBD_KEY_RELEASED, 0, "");
     assert(adapted.key == Key::Escape && adapted.phase == KeyPhase::Released);
+    adapted = zclaw::adapt_key_event(KEY_PAGEUP, KBD_KEY_RELEASED, 0, "");
+    assert(adapted.key == Key::PageUp && adapted.phase == KeyPhase::Released);
+    adapted = zclaw::adapt_key_event(KEY_PAGEDOWN, KBD_KEY_RELEASED, 0, "");
+    assert(adapted.key == Key::PageDown && adapted.phase == KeyPhase::Released);
     adapted = zclaw::adapt_key_event(KEY_RESERVED, 99, KBD_MOD_CTRL, "x");
     assert(adapted.key == Key::Other && adapted.phase == KeyPhase::Unknown);
     assert(!adapted.shift && adapted.text == "x");
@@ -99,7 +121,30 @@ int main()
     assert(routed(context, KeyPhase::Released, Key::Enter).type ==
            KeyActionType::InputSubmit);
     assert(routed(context, KeyPhase::Released, Key::Tab).type ==
+           KeyActionType::InputInsertNewline);
+    context.input_mode = InputMode::SetupEdit;
+    assert(routed(context, KeyPhase::Released, Key::Escape).type ==
+           KeyActionType::InputSubmit);
+    assert(routed(context, KeyPhase::Released, Key::Tab).type ==
+           KeyActionType::InputInsertNewline);
+    context.input_mode = InputMode::SetupUriEdit;
+    assert(routed(context, KeyPhase::Released, Key::Escape).type ==
+           KeyActionType::InputSubmit);
+    context.input_mode = InputMode::ProviderEdit;
+    assert(routed(context, KeyPhase::Released, Key::Escape).type ==
+           KeyActionType::InputSubmit);
+    assert(routed(context, KeyPhase::Released, Key::Tab).type ==
+           KeyActionType::InputInsertNewline);
+    context.input_mode = InputMode::PairingCode;
+    assert(routed(context, KeyPhase::Released, Key::Escape).type ==
+           KeyActionType::InputClose);
+    assert(routed(context, KeyPhase::Released, Key::Tab).type ==
            KeyActionType::InputToggleSecretVisibility);
+    context.input_mode = InputMode::ProviderUriEdit;
+    assert(routed(context, KeyPhase::Released, Key::Tab).type ==
+           KeyActionType::InputInsertNewline);
+    assert(routed(context, KeyPhase::Released, Key::Escape).type ==
+           KeyActionType::InputSubmit);
     assert(routed(context, KeyPhase::Released, Key::Enter, true).type ==
            KeyActionType::None);
     assert(routed(context, KeyPhase::Released, Key::Down).type ==
@@ -167,10 +212,24 @@ int main()
            KeyActionType::None);
     assert(routed(context, KeyPhase::Pressed, Key::Enter).type ==
            KeyActionType::None);
+    assert(routed(context, KeyPhase::Pressed, Key::Up).type ==
+           KeyActionType::None);
+    assert(routed(context, KeyPhase::Repeated, Key::Up).type ==
+           KeyActionType::ChatScrollUp);
+    assert(routed(context, KeyPhase::Repeated, Key::Down).type ==
+           KeyActionType::ChatScrollDown);
+    assert(routed(context, KeyPhase::Repeated, Key::F).type ==
+           KeyActionType::ChatScrollUp);
+    assert(routed(context, KeyPhase::Repeated, Key::X).type ==
+           KeyActionType::ChatScrollDown);
     assert(routed(context, KeyPhase::Released, Key::Up).type ==
            KeyActionType::ChatScrollUp);
     assert(routed(context, KeyPhase::Released, Key::X).type ==
            KeyActionType::ChatScrollDown);
+    assert(routed(context, KeyPhase::Released, Key::PageUp).type ==
+           KeyActionType::ChatPageUp);
+    assert(routed(context, KeyPhase::Released, Key::PageDown).type ==
+           KeyActionType::ChatPageDown);
     assert(routed(context, KeyPhase::Released, Key::Enter).type ==
            KeyActionType::ChatOpenInput);
     assert(routed(context, KeyPhase::Released, Key::Escape).type ==

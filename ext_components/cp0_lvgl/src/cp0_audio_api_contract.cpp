@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "cp0_audio_api_contract.hpp"
 
 #include <charconv>
@@ -46,6 +52,8 @@ bool is_no_argument_command(const std::string &command, ApiCommand &parsed)
     else if (command == "VolumeRead") parsed = ApiCommand::VolumeRead;
     else if (command == "MuteRead") parsed = ApiCommand::MuteRead;
     else if (command == "MuteToggle") parsed = ApiCommand::MuteToggle;
+    else if (command == "SystemSoundSuspend") parsed = ApiCommand::SystemSoundSuspend;
+    else if (command == "SystemSoundPrepare") parsed = ApiCommand::SystemSoundPrepare;
     else return false;
     return true;
 }

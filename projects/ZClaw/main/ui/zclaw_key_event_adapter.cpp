@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "zclaw_key_event_adapter.h"
 
 #include "keyboard_input.h"
@@ -19,6 +25,8 @@ Key adapt_key(std::uint32_t key_code)
     case KEY_RIGHT: return Key::Right;
     case KEY_UP: return Key::Up;
     case KEY_DOWN: return Key::Down;
+    case KEY_PAGEUP: return Key::PageUp;
+    case KEY_PAGEDOWN: return Key::PageDown;
     case KEY_A: return Key::A;
     case KEY_C: return Key::C;
     case KEY_F: return Key::F;

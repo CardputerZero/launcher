@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #pragma once
 
 #include <array>
@@ -12,6 +18,7 @@ public:
     enum class Error { NONE, EMPTY_HOST, INVALID_HOST, INVALID_PORT, INVALID_USER };
     struct Validation { Error error; Field field; const char *message; };
     static constexpr size_t FIELD_COUNT = 3;
+    static constexpr int CONNECTION_TIMEOUT_SECONDS = 20;
 
     SshConnectionModel();
 

@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "cp0_lvgl_app.h"
 #include "hal_lvgl_bsp.h"
 #include "../cp0_app_internal_utils.h"
@@ -160,7 +166,7 @@ public:
         std::exit(0);
 #else
         std::printf("[CP0] reboot\n");
-        const std::vector<std::string> argv = {"sudo", "reboot"};
+        const std::vector<std::string> argv = {"systemctl", "reboot", "-i"};
         cp0_process_commands::run_argv(argv, true);
 #endif
     }

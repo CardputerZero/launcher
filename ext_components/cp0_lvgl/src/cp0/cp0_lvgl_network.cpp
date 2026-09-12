@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "cp0_lvgl_app.h"
 #include "hal_lvgl_bsp.h"
 #include "../cp0_app_internal_utils.h"
@@ -170,13 +176,10 @@ public:
         std::unordered_set<std::string> saved_profiles;
         std::string profiles_output;
         if (cp0_process_commands::capture_argv_with_timeout(
-                {"nmcli", "-t", "--escape", "no", "-f", "NAME", "con", "show"},
+                {"nmcli", "-t", "--escape", "no", "-f", "UUID,TYPE,NAME", "con", "show"},
                 profiles_output, kScanCommandTimeoutMs) == 0) {
-            std::istringstream lines(profiles_output);
-            std::string profile;
-            while (std::getline(lines, profile)) {
-                if (!profile.empty() && profile.back() == '\r') profile.pop_back();
-                if (!profile.empty()) saved_profiles.insert(profile);
+            for (const auto &profile : cp0::network::parse_connection_profiles(profiles_output)) {
+                if (profile.type == "802-11-wireless") saved_profiles.insert(profile.name);
             }
         }
 
@@ -206,6 +209,11 @@ public:
         if (!ssid || !ssid[0])
             return -1;
 
+        update_status_cache();
+        const cp0_wifi_status_t current_status = get_status();
+        if (current_status.connected && std::string(current_status.ssid) == ssid)
+            return 0;
+
         constexpr const char *kActivationTimeoutSeconds = "20";
         const bool with_password = password && password[0];
         std::string output;
@@ -234,7 +242,7 @@ public:
 
         update_status_cache();
         const cp0_wifi_status_t status = get_status();
-        if (command_result == 0 && status.connected && std::string(status.ssid) == ssid) {
+        if (status.connected && std::string(status.ssid) == ssid) {
             return 0;
         }
 
@@ -242,9 +250,7 @@ public:
         // profile with that wrong password (named after the SSID). Delete it so the
         // password is never persisted and the next attempt must re-enter it (#69).
         if (with_password) {
-            std::string ignored;
-            cp0_process_commands::capture_argv_with_timeout(
-                {"nmcli", "con", "delete", "id", ssid}, ignored, 5000);
+            profile_forget(ssid);
         }
         if (command_result == -ETIMEDOUT) return CP0_WIFI_ERROR_TIMEOUT;
         return cp0::wifi::classify_command_failure(output);
@@ -261,9 +267,22 @@ public:
     {
         if (!ssid || !ssid[0])
             return -1;
+        std::string profiles_output;
+        const int list_result = cp0_process_commands::capture_argv_with_timeout(
+            {"nmcli", "-t", "--escape", "no", "-f", "UUID,TYPE,NAME", "con", "show"},
+            profiles_output, 5000);
+        if (list_result != 0) return list_result;
+
+        int deleted = 0;
         std::string output;
-        return cp0_process_commands::capture_argv_with_timeout(
-            {"nmcli", "con", "delete", "id", ssid}, output, 5000);
+        for (const auto &profile : cp0::network::parse_connection_profiles(profiles_output)) {
+            if (profile.type != "802-11-wireless" || profile.name != ssid) continue;
+            const int delete_result = cp0_process_commands::capture_argv_with_timeout(
+                {"nmcli", "con", "delete", "uuid", profile.uuid}, output, 5000);
+            if (delete_result != 0) return delete_result;
+            ++deleted;
+        }
+        return deleted > 0 ? 0 : CP0_WIFI_ERROR_NOT_FOUND;
     }
 
     int profile_exists(const char *ssid)
@@ -272,14 +291,11 @@ public:
             return 0;
         std::string output;
         if (cp0_process_commands::capture_argv_with_timeout(
-                {"nmcli", "-t", "-f", "NAME", "con", "show"}, output, 5000) != 0)
+                {"nmcli", "-t", "--escape", "no", "-f", "UUID,TYPE,NAME", "con", "show"},
+                output, 5000) != 0)
             return 0;
-        std::istringstream lines(output);
-        std::string line;
-        while (std::getline(lines, line)) {
-            if (!line.empty() && line.back() == '\r')
-                line.pop_back();
-            if (line == ssid)
+        for (const auto &profile : cp0::network::parse_connection_profiles(output)) {
+            if (profile.type == "802-11-wireless" && profile.name == ssid)
                 return 1;
         }
         return 0;
@@ -287,12 +303,22 @@ public:
 
     int profile_disconnect_active()
     {
-        const std::string active = active_connection_name();
-        if (active.empty())
-            return -1;
+        // `con show --active` can list Ethernet before Wi-Fi. Disconnect by
+        // the active Wi-Fi device so forgetting a Wi-Fi profile cannot bring
+        // down eth0 as a side effect.
+        std::string device_output;
+        if (cp0_process_commands::capture_argv_with_timeout(
+                {"nmcli", "-t", "-f", "DEVICE,TYPE,STATE,CONNECTION",
+                 "dev", "status"}, device_output, 5000) != 0)
+            return CP0_WIFI_ERROR_SERVICE;
+
+        const std::string wifi_iface = cp0::network::parse_device_status(device_output).wifi_interface;
+        if (wifi_iface.empty())
+            return CP0_WIFI_ERROR_NOT_FOUND;
+
         std::string output;
         return cp0_process_commands::capture_argv_with_timeout(
-            {"nmcli", "con", "down", "id", active}, output, 5000);
+            {"nmcli", "dev", "disconnect", "iface", wifi_iface}, output, 5000);
     }
 
     int radio_enabled()
@@ -343,9 +369,9 @@ private:
     {
         std::string output;
         std::string wifi_iface;
-        // 用 DEVICE,TYPE,STATE,CONNECTION 四列判断：只要 wifi 设备的 STATE 以 "connected"
-        // 开头就算已连接，避免插拔网线后 wlan0 变成 "connected (externally)" 且 CONNECTION
-        // 显示为 "--" 时被误判为未连接（#37）。
+
+
+
         if (cp0_process_commands::capture_argv_with_timeout(
                 {"nmcli", "-t", "-f", "DEVICE,TYPE,STATE,CONNECTION", "dev", "status"},
                 output, 2000) == 0) {

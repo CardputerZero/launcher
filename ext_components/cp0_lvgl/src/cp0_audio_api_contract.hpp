@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #pragma once
 
 #include <list>
@@ -25,6 +31,8 @@ enum class ApiCommand {
     MuteToggle,
     SetSystemSoundNames,
     SystemSoundPlay,
+    SystemSoundSuspend,
+    SystemSoundPrepare,
     SystemSoundEnable,
 };
 

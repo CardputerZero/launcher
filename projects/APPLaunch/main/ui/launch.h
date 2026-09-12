@@ -13,10 +13,13 @@
 #include "esc_ui_watchdog.h"
 #include "model/launcher_navigation_model.hpp"
 
+#include <cstddef>
 #include <functional>
 #include <list>
 #include <memory>
+#include <stdexcept>
 #include <string>
+#include <vector>
 
 class Launch;
 class UILaunchPage;
@@ -55,6 +58,8 @@ public:
     void set_launch_page(std::shared_ptr<UILaunchPage> launch_page);
     void select_next_app();
     void select_previous_app();
+    std::size_t app_count() const;
+    std::size_t current_app_index() const;
     const app *carousel_slot_app(size_t slot) const;
     void launch_app();
 
@@ -63,10 +68,12 @@ private:
 
     void go_back_home();
     bool begin_page_launch();
+    void abort_page_launch() noexcept;
     void launch_Exec_in_terminal(const std::string &exec, bool sysplause = true);
     void launch_Exec(const std::string &exec, bool keep_root = false);
     void applications_load();
     void refresh_home_carousel();
+    void reload_home_icons();
     void applications_reload();
     void rebuild_builtin_apps();
     int normalized_app_index(int index) const;
@@ -96,6 +103,8 @@ app::app(std::string name, std::string icon, page_t<PageT>)
         ui_loading::show("Loading...");
         lv_refr_now(nullptr);
         auto page = std::make_shared<PageT>();
+        if (!page->screen())
+            throw std::runtime_error("application page creation failed");
         owner->app_Page = page;
         page->navigate_home = std::bind(&Launch::go_back_home, owner);
         ui_loading::hide();

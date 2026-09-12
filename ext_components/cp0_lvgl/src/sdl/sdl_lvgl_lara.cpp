@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "cp0_lvgl_app.h"
 #include "../cp0_lora_contract.hpp"
 #include "../cp0_callback_contract.hpp"
@@ -130,6 +136,14 @@ extern "C" void init_lora(void)
     lora_registration().replace(cp0_signal_lora_api, [active_lora](std::list<std::string> arg, std::function<void(int, std::string)> callback) {
         active_lora->api_call(arg, callback);
     });
+}
+
+extern "C" void cp0_lora_request_stop(void)
+{
+}
+
+extern "C" void cp0_lora_clear_stop(void)
+{
 }
 
 extern "C" void deinit_lora(void) noexcept

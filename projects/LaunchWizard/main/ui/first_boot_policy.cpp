@@ -1,0 +1,31 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
+#include "first_boot_policy.h"
+
+namespace launch_wizard {
+
+bool should_run_wizard(const FirstBootState &state)
+{
+    if (state.rearm_marker)
+        return true;
+    if (state.factory_marker)
+        return state.factory_username &&
+               (!state.user_has_password || state.factory_credentials);
+    return state.legacy_piwiz_active;
+}
+
+bool should_run_keyboard_guide(bool marker_present, bool binary_present)
+{
+    return marker_present && binary_present;
+}
+
+bool should_consume_keyboard_guide_marker(bool exited_normally, int exit_code)
+{
+    return exited_normally && exit_code == 0;
+}
+
+}  // namespace launch_wizard

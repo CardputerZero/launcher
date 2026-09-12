@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+# SPDX-License-Identifier: MIT
+
 """
 Analyze the CardputerZero render image (1412.jpg) to find:
 1. LCD screen region (the dark rectangle with colored content)

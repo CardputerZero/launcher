@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "zclaw_ui_action_dispatcher.h"
 
 #include "zclaw_approval_coordinator.h"
@@ -128,6 +134,12 @@ void UiActionDispatcher::execute(const KeyAction &action)
         break;
     case KeyActionType::ChatScrollDown:
         chat_.scroll(-24);
+        break;
+    case KeyActionType::ChatPageUp:
+        chat_.scroll_page(1);
+        break;
+    case KeyActionType::ChatPageDown:
+        chat_.scroll_page(-1);
         break;
     case KeyActionType::ChatOpenInput:
         input_.open_chat(&fonts_);
