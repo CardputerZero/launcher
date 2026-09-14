@@ -53,6 +53,7 @@ __attribute__((weak)) void ui_global_hint_on_key(const struct key_item *elm)
 }
 
 static cp0_keyboard_key_handler_t global_key_handler;
+static cp0_keyboard_key_filter_t key_filter;
 static volatile int lvgl_keypad_intercept;
 static atomic_int keyboard_input_context = KBD_INPUT_CONTEXT_NAVIGATION;
 
@@ -72,6 +73,16 @@ cp0_keyboard_input_context_t cp0_keyboard_get_input_context(void)
 void cp0_keyboard_set_global_key_handler(cp0_keyboard_key_handler_t handler)
 {
     global_key_handler = handler;
+}
+
+void cp0_keyboard_set_key_filter(cp0_keyboard_key_filter_t filter)
+{
+    key_filter = filter;
+}
+
+cp0_keyboard_key_filter_t cp0_keyboard_get_key_filter(void)
+{
+    return key_filter;
 }
 
 void cp0_keyboard_set_lvgl_keypad_intercept(int intercept)
@@ -505,6 +516,8 @@ static void cp0_sdl_keyboard_read(lv_indev_t *indev, lv_indev_data_t *data)
         const int intercept = lvgl_keypad_intercept;
 
         int swallowed = ui_screensaver_filter_key(elm);
+        if (!swallowed && key_filter)
+            swallowed = key_filter(elm);
         if (!swallowed) {
             lv_obj_t *root = lv_screen_active();
             if (root != NULL)

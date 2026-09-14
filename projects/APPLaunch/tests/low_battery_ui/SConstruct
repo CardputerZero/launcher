@@ -1,0 +1,41 @@
+# SPDX-License-Identifier: MIT
+# Run: scons -Q -C projects/APPLaunch/tests/low_battery_ui -j8
+from pathlib import Path
+import os
+
+test_dir = Path(Dir('.').srcnode().abspath)
+root = test_dir.parents[3]
+lvgl = root / 'SDK/github_source/lvgl/lvgl_9_5/lvgl'
+build_dir = Path(os.environ.get('TMPDIR', '/tmp')) / 'applaunch-battery-ui-tests'
+env = Environment(CC='gcc', CXX='g++')
+env.SConsignFile(str(build_dir / '.sconsign'))
+env.Append(CPPPATH=[str(test_dir), str(lvgl.parent), str(lvgl),
+                    str(root / 'ext_components/cp0_lvgl/include'),
+                    str(root / 'projects/APPLaunch/main/include'),
+                    str(root / 'SDK/github_source/eventpp/include'),
+                    str(root / 'SDK/components/utilities/include')])
+env.Append(CPPDEFINES=['LV_CONF_INCLUDE_SIMPLE', 'LV_KCONFIG_IGNORE'])
+env.Append(CXXFLAGS=['-std=c++17'])
+env.Append(LIBS=['m', 'pthread'])
+env.ParseConfig('pkg-config --cflags --libs sdl2')
+objects = [env.Object(str(build_dir / p.relative_to(lvgl)) + '.o', str(p))
+           for p in sorted((lvgl / 'src').rglob('*.c'))
+           if p.name != 'lv_sdl_keyboard.c']
+for name in ['cp0_keyboard_queue', 'cp0_keyboard_text', 'cp0_esc_state']:
+    objects += env.Object(str(build_dir / name) + '.o',
+                          str(root / 'ext_components/cp0_lvgl/src' / (name + '.c')))
+for name in ['model/screensaver_model.cpp', 'screensaver_fallback.c']:
+    objects += env.Object(str(build_dir / name) + '.o',
+                          str(root / 'projects/APPLaunch/main/ui' / name))
+for backend in ['device', 'sdl']:
+    backend_env = env.Clone()
+    if backend == 'sdl':
+        backend_env.Append(CPPDEFINES=['TEST_SDL_BACKEND'])
+    local_objects = [backend_env.Object(str(build_dir / backend / (name + '.o')),
+                                        str(test_dir / name))
+                     for name in ['keyboard_backend.c', 'test_low_battery_ui.cpp']]
+    program = backend_env.Program(str(build_dir / ('test_' + backend)), local_objects + objects)
+    check = backend_env.Alias('check_' + backend, program,
+                              Action(str(build_dir / ('test_' + backend))))
+    AlwaysBuild(check)
+    Default(check)
