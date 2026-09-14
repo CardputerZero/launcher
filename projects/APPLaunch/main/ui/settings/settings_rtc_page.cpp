@@ -6,6 +6,7 @@
 
 #include "settings_rtc_page.hpp"
 #include "settings_fonts.hpp"
+#include "settings_static_info_page.hpp"
 
 #include <array>
 #include <cstddef>
@@ -28,6 +29,7 @@
 #include <system_error>
 #include <tuple>
 #include <utility>
+#include <thread>
 #include <atomic>
 #include <cstdint>
 #include <utility>
@@ -657,6 +659,33 @@ bool current_local_time(RtcValues &values) noexcept
     return RtcStateModel::is_valid(values);
 }
 
+bool parse_time_usec(std::string_view payload, RtcValues &values) noexcept
+{
+    const auto first_digit = payload.find_first_of("0123456789");
+    if (first_digit == std::string_view::npos) return false;
+    std::uint64_t usec = 0;
+    for (std::size_t i = first_digit; i < payload.size() &&
+                                      payload[i] >= '0' && payload[i] <= '9'; ++i) {
+        const unsigned digit = static_cast<unsigned>(payload[i] - '0');
+        if (usec > (UINT64_MAX - digit) / 10) return false;
+        usec = usec * 10 + digit;
+    }
+    const std::time_t seconds = static_cast<std::time_t>(usec / 1000000ULL);
+    std::tm local{};
+#if defined(_WIN32)
+    if (localtime_s(&local, &seconds) != 0) return false;
+#else
+    if (localtime_r(&seconds, &local) == nullptr) return false;
+#endif
+    values = {local.tm_year + 1900,
+              local.tm_mon + 1,
+              local.tm_mday,
+              local.tm_hour,
+              local.tm_min,
+              local.tm_sec};
+    return RtcStateModel::is_valid(values);
+}
+
 void read_time_fallback(const TimeReadCallback &callback) noexcept
 {
     char buffer[64] = {};
@@ -745,30 +774,10 @@ void complete_refresh(const std::shared_ptr<RefreshState> &state, Update update)
 int read_ntp_async(NtpReadCallback callback)
 {
     if (!callback) return api_error_code(ApiError::InvalidArgument);
-
-    auto delivered = std::make_shared<std::atomic_bool>(false);
-    auto delivery = std::make_shared<std::pair<NtpReadCallback, std::shared_ptr<std::atomic_bool>>>(
-        std::move(callback), delivered);
-    auto deliver = [delivery](NtpReadResult result) mutable {
-        if (delivery->second->exchange(true, std::memory_order_acq_rel)) return;
-        invoke_noexcept(delivery->first, std::move(result));
-    };
-
-    try {
-        cp0_signal_osinfo_api(
-            {"NtpGet"},
-            [deliver = std::move(deliver)](int code, std::string payload) mutable {
-                deliver(make_ntp_result(code, std::move(payload)));
-            });
-    } catch (...) {
-        int fallback_status = -1;
-        try {
-            fallback_status = cp0_time_ntp_get();
-        } catch (...) {
-        }
-        deliver(make_ntp_result(fallback_status, {}));
-        return 0;
-    }
+    cp0_signal_timedate_api({"NtpGet"}, [callback = std::move(callback)](int code, std::string) {
+        NtpReadResult result; result.status = code; result.available = code == 0 || code == 1;
+        result.enabled = code == 1; invoke_noexcept(callback, std::move(result));
+    });
     return 0;
 }
 
@@ -782,21 +791,9 @@ int read_local_time_async(TimeReadCallback callback)
         invoke_noexcept(callback, std::move(result));
     };
 
-    auto handle_osinfo = [deliver](int code, std::string payload) mutable {
-        TimeReadResult result = make_time_result(code, std::move(payload));
-        if (result.valid) {
-            deliver(std::move(result));
-            return;
-        }
-        read_time_fallback(deliver);
-    };
-
-    try {
-        cp0_signal_osinfo_api({"LocalTime"}, std::move(handle_osinfo));
-    } catch (...) {
-        read_time_fallback(deliver);
-        return 0;
-    }
+    cp0_signal_timedate_api({"LocalTime"}, [callback = std::move(callback)](int code, std::string payload) {
+        invoke_noexcept(callback, make_time_result(code, std::move(payload)));
+    });
     return 0;
 }
 
@@ -834,7 +831,13 @@ int refresh_async(RefreshCallback callback)
 
 int set_ntp_async(bool enabled, PrivilegedCallback callback, RequestStartedCallback started)
 {
-    return submit_privileged({"NtpSet", enabled ? "1" : "0"}, std::move(callback), std::move(started));
+    if (!callback) return api_error_code(ApiError::InvalidArgument);
+    if (started) started(0, 0);
+    cp0_signal_timedate_api({"NtpSet", enabled ? "1" : "0"}, [callback = std::move(callback)](int code, std::string) {
+            PrivilegedResult result; result.result_code = code; result.kind = classify_privileged_result(code);
+            invoke_noexcept(callback, std::move(result));
+        });
+    return 0;
 }
 
 int set_time_async(std::string timestamp, PrivilegedCallback callback, RequestStartedCallback started)
@@ -842,7 +845,12 @@ int set_time_async(std::string timestamp, PrivilegedCallback callback, RequestSt
     if (!callback) return api_error_code(ApiError::InvalidArgument);
     RtcValues parsed{};
     if (!RtcStateModel::parse_timestamp(timestamp, parsed)) return api_error_code(ApiError::InvalidArgument);
-    return submit_privileged({"TimeSet", std::move(timestamp)}, std::move(callback), std::move(started));
+    if (started) started(0, 0);
+    cp0_signal_timedate_api({"TimeSet", std::move(timestamp)}, [callback = std::move(callback)](int code, std::string) {
+            PrivilegedResult result; result.result_code = code; result.kind = classify_privileged_result(code);
+            invoke_noexcept(callback, std::move(result));
+        });
+    return 0;
 }
 
 int cancel_request(std::uint64_t request_id)
@@ -1421,6 +1429,20 @@ std::unique_ptr<DComponens::LvglComponensBase> settings_rtc_page_factory(
     std::function<void()> back_callback)
 {
     return std::make_unique<LvSettingRtcPage3>(parent, parent_node, std::move(back_callback));
+}
+
+std::unique_ptr<DComponens::LvglComponensBase> settings_rtc_info_page_factory(
+    lv_obj_t *parent,
+    const NodeIter &parent_node,
+    std::function<void()> back_callback)
+{
+    const auto &state = settings_rtc::session().state();
+    settings_t12b::about_help::Content content{
+        "Date & Time",
+        {"Current: " + state.timestamp(),
+         std::string("Network Time: ") + (state.ntp_on() ? "On" : "Off")}};
+    return std::make_unique<LvSettingStaticInfoPage3>(
+        parent, parent_node, std::move(back_callback), std::move(content));
 }
 
 std::unique_ptr<DComponens::LvglComponensBase> settings_rtc_confirm_page_factory(

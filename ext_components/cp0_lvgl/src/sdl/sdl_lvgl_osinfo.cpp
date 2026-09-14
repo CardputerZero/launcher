@@ -324,8 +324,12 @@ extern "C" time_t cp0_sdl_time_now(void)
 extern "C" void init_osinfo(void)
 {
     static cp0::SignalRegistration<decltype(cp0_signal_osinfo_api)> registration;
+    static cp0::SignalRegistration<decltype(cp0_signal_timedate_api)> timedate_registration;
     auto osinfo = std::make_shared<SdlOsInfoSystem>();
     registration.replace(cp0_signal_osinfo_api, [osinfo](std::list<std::string> arg, std::function<void(int, std::string)> callback) {
+        osinfo->api_call(std::move(arg), std::move(callback));
+    });
+    timedate_registration.replace(cp0_signal_timedate_api, [osinfo](std::list<std::string> arg, std::function<void(int, std::string)> callback) {
         osinfo->api_call(std::move(arg), std::move(callback));
     });
 }
