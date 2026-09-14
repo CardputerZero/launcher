@@ -87,6 +87,13 @@ trap 'rm -f "$binary" "$esc_state_object"' EXIT HUP INT TERM
 "$binary"
 
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -pthread \
+    -I"$root/include" -I"$root/../../SDK/github_source/eventpp/include" \
+    "$root/src/cp0/cp0_network_policy.cpp" \
+    "$root/src/cp0_network_api_contract.cpp" \
+    "$root/tests/test_wifi_connection.cpp" -o "$binary"
+"$binary"
+
+"${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -pthread \
     -I"$root/include" \
     "$root/tests/test_bounded_task_registry.cpp" -o "$binary"
 "$binary"

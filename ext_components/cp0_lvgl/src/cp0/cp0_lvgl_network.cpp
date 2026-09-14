@@ -211,8 +211,17 @@ public:
 
         update_status_cache();
         const cp0_wifi_status_t current_status = get_status();
-        if (current_status.connected && std::string(current_status.ssid) == ssid)
-            return 0;
+        if (current_status.connected && std::string(current_status.ssid) == ssid) {
+            // A submitted password must be checked by a fresh activation.
+            const int disconnect_result = disconnect();
+            if (disconnect_result != 0)
+                return disconnect_result;
+            // Remove the active profile so NetworkManager cannot silently
+            // reuse its previous credentials during the next activation.
+            const int forget_result = profile_forget(ssid);
+            if (forget_result != 0 && forget_result != CP0_WIFI_ERROR_NOT_FOUND)
+                return forget_result;
+        }
 
         constexpr const char *kActivationTimeoutSeconds = "20";
         const bool with_password = password && password[0];
@@ -242,7 +251,7 @@ public:
 
         update_status_cache();
         const cp0_wifi_status_t status = get_status();
-        if (status.connected && std::string(status.ssid) == ssid) {
+        if (command_result == 0 && status.connected && std::string(status.ssid) == ssid) {
             return 0;
         }
 
@@ -318,7 +327,7 @@ public:
 
         std::string output;
         return cp0_process_commands::capture_argv_with_timeout(
-            {"nmcli", "dev", "disconnect", "iface", wifi_iface}, output, 5000);
+            {"nmcli", "dev", "disconnect", wifi_iface}, output, 5000);
     }
 
     int radio_enabled()

@@ -68,6 +68,21 @@ static void test_active_wifi_fills_signal_and_missing_ssid()
     assert(status.signal == 52);
 }
 
+static void test_named_profile_does_not_imply_connected()
+{
+    for (const char *state : {"connecting (prepare)", "connecting (configuring)",
+                              "connecting (need authentication)", "connecting (getting IP configuration)",
+                              "disconnecting", "disconnected", "failed", "unavailable"}) {
+        const Status status = cp0::network::parse_device_status(
+            std::string("eth0:ethernet:connected:Wired connection 1\nwlan0:wifi:") +
+            state + ":NewNetwork\n");
+        assert(status.ethernet);
+        assert(!status.connected);
+        assert(status.ssid.empty());
+        assert(status.wifi_interface.empty());
+    }
+}
+
 static void test_simple_command_output_parsers()
 {
     assert(cp0::network::parse_ipv4_address("3: wlan0 inet 192.168.1.42/24 brd 192.168.1.255\n") ==
@@ -83,6 +98,7 @@ int main()
     test_terse_fields_decode_escaped_delimiters();
     test_scan_deduplicates_by_decoded_ssid();
     test_device_status_preserves_network_semantics();
+    test_named_profile_does_not_imply_connected();
     test_active_wifi_fills_signal_and_missing_ssid();
     test_simple_command_output_parsers();
     std::cout << "network policy tests passed\n";
