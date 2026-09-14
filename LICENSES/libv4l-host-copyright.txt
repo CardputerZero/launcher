@@ -1,0 +1,860 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Source: http://linuxtv.org/downloads/v4l-utils/
+Upstream-Name: v4l-utils
+Upstream-Contact:
+ Linux Media Mailing List <linux-media@vger.kernel.org>,
+
+Files: *
+Copyright: The v4l-utils authors
+License: GPL-2
+
+Files: contrib/*
+Copyright: 2006-2012, 2014-2016, 2019, Mauro Carvalho Chehab <mchehab@kernel+samsung.org>
+License: GPL-2
+
+Files: contrib/cobalt-ctl/*
+Copyright: 2013-2019, Cisco Systems, Inc. and/or its affiliates.
+License: GPL-2
+
+Files: contrib/cobalt-ctl/cobalt-ctl.c
+Copyright: 2013-2019, 2024, Cisco Systems, Inc. and/or its affiliates.
+License: GPL-2
+
+Files: contrib/freebsd/*
+Copyright: 1999-2012, the contributors
+License: BSD-3-clause or GPL-2+
+
+Files: contrib/freebsd/include/linux/input-event-codes.h
+Copyright: 2015, Hans de Goede <hdegoede@redhat.com>
+ 1999-2002, Vojtech Pavlik
+License: GPL-2
+
+Files: contrib/freebsd/include/linux/input.h
+Copyright: 1999-2002, Vojtech Pavlik
+License: GPL-2
+
+Files: contrib/freebsd/include/linux/ivtv.h
+Copyright: 2004-2007, Hans Verkuil <hverkuil+cisco@kernel.org>
+ 2003, 2004, Kevin Thayer <nufan_wfk at yahoo dot com>
+License: GPL-2+
+
+Files: contrib/freebsd/include/linux/uinput.h
+Copyright: no-info-found
+License: GPL-2+
+
+Files: contrib/freebsd/include/linux/v4l2-common.h
+Copyright: 2012, Nokia Corporation <multimedia@maemo.org>
+License: BSD-3-clause or GPL-2+
+
+Files: contrib/gconv/*
+Copyright: 93-97, 99, 1991, 1997-2014, Free Software Foundation, Inc.
+License: LGPL-2.1+
+
+Files: contrib/lircd2toml.py
+Copyright: 2016, 2018-2020, Sean Young <sean@mess.org>
+License: GPL-2
+
+Files: contrib/parsers/au0828/*
+Copyright: 2014, Samsung Electronics Co., Ltd.
+ 2014, Mauro Carvalho Chehab <mchehab@kernel+samsung.org>
+License: GPL-2
+
+Files: contrib/parsers/cx25821/*
+Copyright: 2009, Conexant Systems Inc.
+License: GPL-2+
+
+Files: contrib/parsers/em28xx/rewrite_eeprom.pl
+Copyright: 2009, 2010
+License: GPL-2
+
+Files: contrib/parsers/parse-usbsnoop.php
+Copyright: 2009, 2010
+License: GPL-2
+
+Files: contrib/rds-saa6588/*
+Copyright: 1994-2021, Free Software Foundation, Inc.
+License: FSFULLR
+
+Files: contrib/test/*
+Copyright: 2005-2013, Mauro Carvalho Chehab <mchehab@kernel.org>
+License: GPL-2+
+
+Files: contrib/test/mc_nextgen_test.c
+ contrib/test/test-media-unload.pl
+ contrib/test/v4l2gl.c
+ contrib/test/v4l2grab.c
+ contrib/test/vim2m_test_with_gstreamer.sh
+ contrib/test/vim2m_test_with_qvidcap.sh
+Copyright: 2006-2012, 2014-2016, 2019, Mauro Carvalho Chehab <mchehab@kernel+samsung.org>
+License: GPL-2
+
+Files: contrib/test/pixfmt-test.c
+Copyright: 2007, 2008, Michael H. Schimek <mschimek@gmx.at>
+License: GPL-2+
+
+Files: contrib/test/sdlcam.c
+Copyright: 2017, Pavel Machek, LGPL
+License: LGPL
+
+Files: contrib/test/sliced-vbi-detect.c
+ contrib/test/sliced-vbi-test.c
+Copyright: 2004, 2006-2008, 2010-2012, 2015, 2018, 2021, Hans Verkuil <hverkuil+cisco@kernel.org>
+License: GPL-2+
+
+Files: contrib/test/stress-buffer.c
+Copyright: 2009, Douglas Schilling Landgraf <dougsland@redhat.com>
+License: GPL-2
+
+Files: contrib/test/test-media
+ contrib/test/test_display.py
+Copyright: 2013-2019, 2024, Cisco Systems, Inc. and/or its affiliates.
+License: GPL-2
+
+Files: contrib/xc3028-firmware/*
+Copyright: 2007, Michel Ludwig <michel.ludwig@gmail.com>
+License: GPL-2
+
+Files: contrib/xc3028-firmware/firmware-tool.c
+Copyright: 2007, Michel Ludwig <michel.ludwig@gmail.com>
+ 2007, 2008, Mauro Carvalho Chehab <mchehab@kernel+samsung.org>
+License: GPL-2
+
+Files: contrib/xc3028-firmware/xc2028-types.h
+Copyright: 2006-2012, 2014-2016, 2019, Mauro Carvalho Chehab <mchehab@kernel+samsung.org>
+License: GPL-2
+
+Files: debian/*
+Copyright: 2008-2025, Gregor Jasny <gjasny@googlemail.com>
+License: GPL-2+
+
+Files: include/*
+Copyright: 2014-2016, Cisco Systems, Inc. and/or its affiliates.
+License: GPL-2
+
+Files: include/gettext.h
+Copyright: 1995-1998, 2000-2002, 2004-2006, 2009-2011, Free Software Foundation, Inc.
+License: GPL-3+
+
+Files: include/linux/bpf.h
+Copyright: 2011-2014, PLUMgrid, http://plumgrid.com
+License: GPL-2
+
+Files: include/linux/cec-funcs.h
+ include/linux/cec.h
+Copyright: 2014-2016, Cisco Systems, Inc. and/or its affiliates.
+License: BSD-3-clause or GPL-2
+
+Files: include/linux/dvb/*
+Copyright: 2000, Marcus Metzler <marcus@convergence.de>
+License: LGPL-2.1+
+
+Files: include/linux/ivtv.h
+Copyright: 2004-2007, Hans Verkuil <hverkuil+cisco@kernel.org>
+ 2003, 2004, Kevin Thayer <nufan_wfk at yahoo dot com>
+License: GPL-2+
+
+Files: include/linux/media-bus-format.h
+ include/linux/v4l2-mediabus.h
+Copyright: 2009, Guennadi Liakhovetski <g.liakhovetski@gmx.de>
+License: GPL-2
+
+Files: include/linux/media.h
+ include/linux/v4l2-subdev.h
+Copyright: 2010, Nokia Corporation <multimedia@maemo.org>
+License: GPL-2
+
+Files: include/linux/v4l2-common.h
+Copyright: 2012, Nokia Corporation <multimedia@maemo.org>
+License: BSD-3-clause or GPL-2+
+
+Files: include/linux/v4l2-controls.h
+ include/linux/videodev2.h
+Copyright: 1999-2012, the contributors
+License: BSD-3-clause or GPL-2+
+
+Files: include/linux/v4l2-dv-timings.h
+Copyright: 2012-2016, Hans Verkuil <hverkuil@kernel.org>
+License: GPL-2
+
+Files: include/v4l-getsubopt.h
+Copyright: 93-97, 99, 1991, 1997-2014, Free Software Foundation, Inc.
+License: LGPL-2.1+
+
+Files: lib/*
+Copyright: 2012-2014, Andre Roth <neolynx@gmail.com>
+ 2011-2014, Mauro Carvalho Chehab <mchehab@kernel+samsung.org>
+License: LGPL-2.1
+
+Files: lib/include/libdvbv5/countries.h
+Copyright: 2014, Akihiro Tsukada
+ 2006-2009, Winfried Koehler
+License: LGPL-2.1
+
+Files: lib/include/libdvbv5/desc_atsc_service_location.h
+ lib/include/libdvbv5/desc_extension.h
+ lib/include/libdvbv5/desc_isdbt_delivery.h
+ lib/include/libdvbv5/desc_logical_channel.h
+ lib/include/libdvbv5/desc_partial_reception.h
+ lib/include/libdvbv5/desc_registration_id.h
+ lib/include/libdvbv5/desc_t2_delivery.h
+ lib/include/libdvbv5/desc_ts_info.h
+ lib/include/libdvbv5/dvb-demux.h
+ lib/include/libdvbv5/dvb-dev.h
+ lib/include/libdvbv5/dvb-fe.h
+ lib/include/libdvbv5/dvb-file.h
+ lib/include/libdvbv5/dvb-sat.h
+ lib/include/libdvbv5/dvb-scan.h
+ lib/include/libdvbv5/dvb-v5-std.h
+Copyright: 2011-2016, 2020, Mauro Carvalho Chehab <mchehab@kernel+samsung.org>
+License: LGPL-2.1
+
+Files: lib/include/libdvbv5/dvb-frontend.h
+Copyright: 2000, Marcus Metzler <marcus@convergence.de>
+License: LGPL-2.1+
+
+Files: lib/include/libv4l-plugin.h
+Copyright: 2010, Nokia Corporation <multimedia@maemo.org>
+License: LGPL-2.1+
+
+Files: lib/include/libv4l1.h
+ lib/include/libv4l2.h
+ lib/include/libv4lconvert.h
+Copyright: 2008-2011, Hans de Goede <hdegoede@redhat.com>
+License: LGPL-2.1+
+
+Files: lib/include/libv4l2rds.h
+Copyright: 2012, 2016, 2018, Cisco Systems, Inc. and/or its affiliates.
+License: LGPL-2.1
+
+Files: lib/libdvbv5/*
+Copyright: 2011-2016, 2020, Mauro Carvalho Chehab <mchehab@kernel+samsung.org>
+License: LGPL-2.1
+
+Files: lib/libdvbv5/compat-soname.c
+Copyright: 2012-2014, Andre Roth <neolynx@gmail.com>
+License: LGPL-2.1
+
+Files: lib/libdvbv5/countries.c
+Copyright: 2014, Akihiro Tsukada
+License: LGPL-2.1
+
+Files: lib/libdvbv5/crc32.c
+ lib/libdvbv5/dvb-log.c
+ lib/libdvbv5/dvb-scan.c
+Copyright: 2012-2014, Andre Roth <neolynx@gmail.com>
+ 2011-2014, Mauro Carvalho Chehab <mchehab@kernel+samsung.org>
+License: LGPL-2.1
+
+Files: lib/libdvbv5/descriptors/*
+Copyright: 2012-2014, Andre Roth <neolynx@gmail.com>
+ 2011-2014, Mauro Carvalho Chehab <mchehab@kernel+samsung.org>
+License: LGPL-2.1
+
+Files: lib/libdvbv5/descriptors/desc_atsc_service_location.c
+ lib/libdvbv5/descriptors/desc_extension.c
+ lib/libdvbv5/descriptors/desc_isdbt_delivery.c
+ lib/libdvbv5/descriptors/desc_logical_channel.c
+ lib/libdvbv5/descriptors/desc_partial_reception.c
+ lib/libdvbv5/descriptors/desc_registration_id.c
+ lib/libdvbv5/descriptors/desc_t2_delivery.c
+ lib/libdvbv5/descriptors/desc_ts_info.c
+Copyright: 2011-2016, 2020, Mauro Carvalho Chehab <mchehab@kernel+samsung.org>
+License: LGPL-2.1
+
+Files: lib/libdvbv5/dvb-demux.c
+Copyright: 2001, Johannes Stezenbach (js@convergence.de)
+License: LGPL-2.1
+
+Files: lib/libdvbv5/tables/*
+Copyright: 2012-2014, Andre Roth <neolynx@gmail.com>
+License: LGPL-2.1
+
+Files: lib/libdvbv5/tables/header.c
+ lib/libdvbv5/tables/nit.c
+ lib/libdvbv5/tables/pat.c
+ lib/libdvbv5/tables/pmt.c
+ lib/libdvbv5/tables/sdt.c
+ lib/libdvbv5/tables/vct.c
+Copyright: 2012-2014, Andre Roth <neolynx@gmail.com>
+ 2011-2014, Mauro Carvalho Chehab <mchehab@kernel+samsung.org>
+License: LGPL-2.1
+
+Files: lib/libv4l-mplane/*
+Copyright: 2011, 2012, Mauro Carvalho Chehab
+License: LGPL-2.1+
+
+Files: lib/libv4l-mplane/libv4l-mplane.c
+Copyright: 2006, 2011, 2012, Mauro Carvalho Chehab <mchehab@kernel+samsung.org>
+License: LGPL-2.1+
+
+Files: lib/libv4l1/*
+Copyright: 2008-2011, Hans de Goede <hdegoede@redhat.com>
+License: LGPL-2.1+
+
+Files: lib/libv4l1/libv4l1.c
+Copyright: 2008-2010, Hans de Goede <hdegoede@redhat.com>
+ 2003-2009, Bill Dirks <bill@thedirks.org>, et al.
+License: LGPL-2.1+
+
+Files: lib/libv4l2/*
+Copyright: 2008-2011, Hans de Goede <hdegoede@redhat.com>
+License: LGPL-2.1+
+
+Files: lib/libv4l2/log.c
+Copyright: 2008, 2009, Sjoerd Piepenbrink <need4weed@gmail.com>
+ 2008, 2009, Hans de Goede <hdegoede@redhat.com>
+ 2008, 2009, Elmar Kleijn <elmar_kleijn@hotmail.com>
+License: LGPL-2.1+
+
+Files: lib/libv4l2/v4l2-plugin-android.c
+ lib/libv4l2/v4l2-plugin.c
+Copyright: 2010, Nokia Corporation <multimedia@maemo.org>
+License: LGPL-2.1+
+
+Files: lib/libv4l2rds/*
+Copyright: 2012, 2016, 2018, Cisco Systems, Inc. and/or its affiliates.
+License: LGPL-2.1
+
+Files: lib/libv4lconvert/*
+Copyright: 2008-2011, Hans de Goede <hdegoede@redhat.com>
+License: LGPL-2.1+
+
+Files: lib/libv4lconvert/control/*
+Copyright: 2008-2010, Hans de Goede <hdegoede@redhat.com>
+ 2008, 2009, Sjoerd Piepenbrink <need4weed@gmail.com>
+ 2008, 2009, Radjnies Bhansingh <radjnies@gmail.com>
+ 2008, 2009, Elmar Kleijn <elmar_kleijn@hotmail.com>
+License: LGPL-2.1+
+
+Files: lib/libv4lconvert/helper-funcs.h
+Copyright: 2009, Hans de Goede <hdegoede@redhat.com>
+License: BSD-2-clause
+
+Files: lib/libv4lconvert/jidctflt.c
+ lib/libv4lconvert/jpeg_memsrcdest.c
+Copyright: 1994-1998, Thomas G. Lane.
+License: jpeg-group
+
+Files: lib/libv4lconvert/jl2005bcd.c
+Copyright: 2010, Theodore Kilgore <kilgota@auburn.edu>
+ 2010, Hans de Goede <hdegoede@redhat.com>
+License: LGPL-2.1+
+
+Files: lib/libv4lconvert/jpgl.c
+Copyright: 2003, Sylvain Munaut <nw8xx ]at[ 246tNt.com>
+License: LGPL-2.1+
+
+Files: lib/libv4lconvert/libv4lsyscall-priv.h
+Copyright: 2009, Hans Petter Selasky.
+License: BSD-2-clause
+
+Files: lib/libv4lconvert/mr97310a.c
+Copyright: 2004-2009, Theodore Kilgore <kilgota@auburn.edu>
+License: LGPL-2+
+
+Files: lib/libv4lconvert/nv12_16l16.c
+Copyright: 2006, 2009, Hans Verkuil <hverkuil+cisco@kernel.org>
+License: LGPL-2.1+
+
+Files: lib/libv4lconvert/ov511-decomp.c
+ lib/libv4lconvert/ov518-decomp.c
+Copyright: 1999-2003, Mark W. McClelland.
+ 1998-2000, OmniVision Technologies
+License: GPL-2
+
+Files: lib/libv4lconvert/pac207.c
+Copyright: 2003-2005, Michel Xhaard
+License: LGPL-2.1+
+
+Files: lib/libv4lconvert/processing/*
+Copyright: 2008, 2009, Sjoerd Piepenbrink <need4weed@gmail.com>
+ 2008, 2009, Hans de Goede <hdegoede@redhat.com>
+ 2008, 2009, Elmar Kleijn <elmar_kleijn@hotmail.com>
+License: LGPL-2.1+
+
+Files: lib/libv4lconvert/processing/autogain.c
+ lib/libv4lconvert/processing/gamma.c
+Copyright: 2008-2011, Hans de Goede <hdegoede@redhat.com>
+License: LGPL-2.1+
+
+Files: lib/libv4lconvert/rgbyuv.c
+Copyright: 2009, Mauro Carvalho Chehab <mchehab@kernel+samsung.org>
+ 2008, Hans de Goede <hdegoede@redhat.com>
+License: LGPL-2.1+
+
+Files: lib/libv4lconvert/sn9c10x.c
+Copyright: 2005
+License: LGPL-2.1+
+
+Files: lib/libv4lconvert/sn9c2028-decomp.c
+Copyright: 2005, Theodore Kilgore <kilgota@auburn.edu>
+License: LGPL-2.1+
+
+Files: lib/libv4lconvert/sn9c20x.c
+Copyright: 2008, 2009, Algorithm based on Java code writtenJens on microdia google group
+License: LGPL-2.1+
+
+Files: lib/libv4lconvert/spca561-decompress.c
+Copyright: 2005, Andrzej Szombierski [qq@kuku.eu.org]
+License: LGPL-2.1+
+
+Files: lib/libv4lconvert/sq905c.c
+Copyright: 2009, Theodore Kilgore <kilgota@auburn.edu>
+ 2005, and 2007, Theodore Kilgore <kilgota@auburn.edu>
+License: LGPL-2.1+
+
+Files: lib/libv4lconvert/tinyjpeg-internal.h
+ lib/libv4lconvert/tinyjpeg.c
+ lib/libv4lconvert/tinyjpeg.h
+Copyright: 2006, Luc Saillard <luc@saillard.org>
+License: BSD-3-clause
+
+Files: meson.build
+Copyright: no-info-found
+License: LGPL-2.1
+
+Files: utils/*
+Copyright: 2004, 2006-2008, 2010-2012, 2015, 2018, 2021, Hans Verkuil <hverkuil+cisco@kernel.org>
+License: GPL-2+
+
+Files: utils/cec-compliance/*
+Copyright: 2013-2019, 2024, Cisco Systems, Inc. and/or its affiliates.
+License: GPL-2
+
+Files: utils/cec-ctl/*
+Copyright: 2013-2019, 2024, Cisco Systems, Inc. and/or its affiliates.
+License: GPL-2
+
+Files: utils/cec-follower/*
+Copyright: 2014-2016, Cisco Systems, Inc. and/or its affiliates.
+License: BSD-3-clause or GPL-2
+
+Files: utils/common/*
+Copyright: 2012, 2016, 2018, Cisco Systems, Inc. and/or its affiliates.
+License: LGPL-2.1
+
+Files: utils/common/codec-fwht.c
+ utils/common/codec-fwht.h
+Copyright: 2018, Cisco Systems, Inc. and/or its affiliates.
+ 2016, Tom aan de Wiel
+License: LGPL-2.1
+
+Files: utils/common/cv4l-helpers.h
+ utils/common/v4l-helpers.h
+Copyright: 2014-2016, Cisco Systems, Inc. and/or its affiliates.
+License: BSD-3-clause or GPL-2
+
+Files: utils/common/ir-encode.c
+Copyright: 2016, 2018-2020, Sean Young <sean@mess.org>
+License: GPL-2
+
+Files: utils/common/keymap.c
+ utils/common/keymap.h
+Copyright: no-info-found
+License: GPL-2
+
+Files: utils/common/toml.c
+ utils/common/toml.h
+Copyright: 2017-2019, CK Tan
+License: Expat
+
+Files: utils/common/v4l2-tpg-colors.c
+ utils/common/v4l2-tpg-colors.h
+ utils/common/v4l2-tpg-core.c
+ utils/common/v4l2-tpg.h
+Copyright: 2013-2019, 2024, Cisco Systems, Inc. and/or its affiliates.
+License: GPL-2
+
+Files: utils/cx18-ctl/*
+Copyright: 2004, 2006, 2007, Hans Verkuil <hverkuil@xs4all.nl>
+ 2003, 2004, Kevin Thayer <nufan_wfk at yahoo dot com>
+License: GPL-2+
+
+Files: utils/cx18-ctl/cx18-ctl.c
+Copyright: 2004-2007, Hans Verkuil <hverkuil+cisco@kernel.org>
+ 2003, 2004, Kevin Thayer <nufan_wfk at yahoo dot com>
+License: GPL-2+
+
+Files: utils/dvb/*
+Copyright: 2006-2012, 2014-2016, 2019, Mauro Carvalho Chehab <mchehab@kernel+samsung.org>
+License: GPL-2
+
+Files: utils/edid-decode/*
+Copyright: 2018-2024, Cisco Systems, Inc. and/or its affiliates.
+ 2006-2012, Red Hat, Inc.
+License: Expat
+
+Files: utils/edid-decode/parse-eld.cpp
+Copyright: 2024, Linaro Ltd.
+License: Expat
+
+Files: utils/edid-decode/vs/*
+Copyright: 2005-2020, Rich Felker, et al.
+License: Expat
+
+Files: utils/ir-ctl/*
+Copyright: no-info-found
+License: GPL-2
+
+Files: utils/ir-ctl/ir-ctl.c
+Copyright: 2016, 2018-2020, Sean Young <sean@mess.org>
+License: GPL-2
+
+Files: utils/ivtv-ctl/*
+Copyright: 2004, 2006, 2007, Hans Verkuil <hverkuil@xs4all.nl>
+ 2003, 2004, Kevin Thayer <nufan_wfk at yahoo dot com>
+License: GPL-2+
+
+Files: utils/ivtv-ctl/ivtv-ctl.c
+Copyright: 2004-2007, Hans Verkuil <hverkuil+cisco@kernel.org>
+ 2003, 2004, Kevin Thayer <nufan_wfk at yahoo dot com>
+License: GPL-2+
+
+Files: utils/keytable/*
+Copyright: no-info-found
+License: GPL-2
+
+Files: utils/keytable/bpf_protocols/*
+Copyright: 2016, 2018-2020, Sean Young <sean@mess.org>
+License: GPL-2
+
+Files: utils/keytable/keytable.c
+Copyright: 2006-2012, 2014-2016, 2019, Mauro Carvalho Chehab <mchehab@kernel+samsung.org>
+License: GPL-2
+
+Files: utils/libcecutil/*
+Copyright: 2016, 2017, 2019, Cisco Systems, Inc. and/or its affiliates.
+License: BSD-3-clause or LGPL-2.1
+
+Files: utils/libcecutil/cec-gen.pl
+Copyright: no-info-found
+License: BSD-3-clause or GPL-2
+
+Files: utils/libmedia_dev/*
+Copyright: 2006, 2011, 2012, Mauro Carvalho Chehab <mchehab@kernel+samsung.org>
+License: LGPL-2.1+
+
+Files: utils/libv4l2util/*
+Copyright: 2006, 2011, 2012, Mauro Carvalho Chehab <mchehab@kernel+samsung.org>
+License: LGPL-2.1+
+
+Files: utils/libv4l2util/frequencies.c
+Copyright: 2006, Nathan Laredo <laredo@gnu.org>
+ 2006, Hans Verkuil <hverkuil+cisco@kernel.org>
+License: LGPL-2.1+
+
+Files: utils/libv4l2util/libv4l2util.h
+Copyright: 2006, 2009, Hans Verkuil <hverkuil+cisco@kernel.org>
+License: LGPL-2.1+
+
+Files: utils/media-ctl/*
+Copyright: 2010-2014, Ideas on board SPRL
+License: LGPL-2.1+
+
+Files: utils/qv4l2/alsa_stream.c
+Copyright: Jaroslav Kysela <perex@perex.cz>
+ Devin Heitmueller <dheitmueller@kernellabs.com>
+ 2011, Mauro Carvalho Chehab <mchehab@kernel+samsung.org>
+License: GPL-2+
+
+Files: utils/qv4l2/capture-win-gl.cpp
+ utils/qv4l2/capture-win-gl.h
+ utils/qv4l2/tpg-tab.cpp
+Copyright: 2013-2019, 2024, Cisco Systems, Inc. and/or its affiliates.
+License: GPL-2
+
+Files: utils/qv4l2/raw2sliced.cpp
+ utils/qv4l2/raw2sliced.h
+Copyright: 2012, Hans Verkuil <hverkuil+cisco@kernel.org>
+ 2000-2004, Michael H. Schimek <mschimek@gmx.at>
+License: LGPL-2+
+
+Files: utils/qvidcap/*
+Copyright: 2013-2019, 2024, Cisco Systems, Inc. and/or its affiliates.
+License: GPL-2
+
+Files: utils/rds-ctl/*
+Copyright: 2012, 2016, 2018, Cisco Systems, Inc. and/or its affiliates.
+License: LGPL-2.1
+
+Files: utils/v4l2-ctl/*
+Copyright: 2004-2007, Hans Verkuil <hverkuil-cisco@xs4all.nl>
+ 2003, 2004, Kevin Thayer <nufan_wfk at yahoo dot com>
+License: GPL-2+
+
+Files: utils/v4l2-ctl/v4l2-ctl-modes.cpp
+Copyright: 2015, Cisco Systems, Inc. and/or its affiliates. All rights
+License: GPL-2
+
+Files: utils/v4l2-dbg/*
+Copyright: 2006-2012, 2014-2016, 2019, Mauro Carvalho Chehab <mchehab@kernel+samsung.org>
+License: GPL-2
+
+Files: utils/v4l2-dbg/v4l2-dbg.cpp
+Copyright: 2004, 2006-2008, 2010-2012, 2015, 2018, 2021, Hans Verkuil <hverkuil+cisco@kernel.org>
+License: GPL-2+
+
+Files: utils/v4l2-sysfs-path/*
+Copyright: 2011, Red Hat, Inc.
+License: HPND-sell-variant
+
+Files: utils/v4l2-tracer/*
+Copyright: 2022, Collabora Ltd.
+License: GPL-2
+
+License: BSD-2-clause
+ Redistribution and use in source and binary forms, with or without
+ modification, are permitted provided that the following conditions are met:
+ .
+ 1. Redistributions of source code must retain the above copyright notice,
+    this list of conditions and the following disclaimer.
+ .
+ 2. Redistributions in binary form must reproduce the above copyright
+    notice, this list of conditions and the following disclaimer in the
+    documentation and/or other materials provided with the distribution.
+ .
+ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+ LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ POSSIBILITY OF SUCH DAMAGE.
+
+License: BSD-3-clause
+ Redistribution and use in source and binary forms, with or without
+ modification, are permitted provided that the following conditions are met:
+ .
+ 1) Redistributions of source code must retain the above copyright notice,
+ this list of conditions and the following disclaimer.
+ .
+ 2) Redistributions in binary form must reproduce the above copyright notice,
+ this list of conditions and the following disclaimer in the documentation
+ and/or other materials provided with the distribution.
+ .
+ 3) Neither the name of the ORGANIZATION nor the names of its contributors
+ may be used to endorse or promote products derived from this software
+ without specific prior written permission.
+ .
+ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+ LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ POSSIBILITY OF SUCH DAMAGE.
+
+License: Expat
+ Permission is hereby granted, free of charge, to any person
+ obtaining a copy of this software and associated
+ documentation files (the "Software"), to deal in the Software
+ without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense,
+ and/or sell copies of the Software, and to permit persons to
+ whom the Software is furnished to do so, subject to the
+ following conditions:
+ .
+ The above copyright notice and this permission notice shall
+ be included in all copies or substantial portions of the
+ Software.
+ .
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT
+ WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+ INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ MERCHANTABILITY, FITNESS FOR A PARTICULAR
+ PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+ SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+ LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ CONNECTION WITH THE SOFTWARE OR THE USE OR
+ OTHER DEALINGS IN THE SOFTWARE.
+
+License: FSFULLR
+ This file is free software; the Free Software Foundation gives
+ unlimited permission to copy and/or distribute it, with or without
+ modifications, as long as this notice is preserved.
+
+License: GPL-2
+ This package is free software; you can redistribute it and/or modify
+ it under the terms of the GNU General Public License version 2 as
+ published by the Free Software Foundation.
+ .
+ This package is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
+ .
+ You should have received a copy of the GNU General Public License
+ along with this package; if not, see <https://www.gnu.org/licenses/>.
+ .
+ On Debian systems, the complete text of the GNU General Public License version
+ 2 can be found in `/usr/share/common-licenses/GPL-2'.
+
+License: GPL-2+
+ This program is free software; you can redistribute it
+ and/or modify it under the terms of the GNU General Public
+ License as published by the Free Software Foundation; either
+ version 2 of the License, or (at your option) any later
+ version.
+ .
+ This program is distributed in the hope that it will be
+ useful, but WITHOUT ANY WARRANTY; without even the implied
+ warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ PURPOSE.  See the GNU General Public License for more
+ details.
+ .
+ You should have received a copy of the GNU General Public
+ License along with this package; if not,
+ see <https://www.gnu.org/licenses/>.
+ .
+ On Debian systems, the full text of the GNU General Public
+ License version 2 can be found in the file
+ `/usr/share/common-licenses/GPL-2'.
+
+License: GPL-3+
+ This program is free software: you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation, either version 3 of the License, or
+ (at your option) any later version.
+ .
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
+ .
+ You should have received a copy of the GNU General Public License
+ along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ .
+ On Debian systems the full text of the GNU General Public
+ License can be found in the `/usr/share/common-licenses/GPL-3' file.
+
+License: HPND-sell-variant
+ Permission to use, copy, modify, distribute, and sell this software
+ and its documentation for any purpose is hereby granted without
+ fee, provided that the above copyright notice appear in all copies
+ and that both that copyright notice and this permission notice
+ appear in supporting documentation, and that the name of Red Hat
+ not be used in advertising or publicity pertaining to distribution
+ of the software without specific, written prior permission.  Red
+ Hat makes no representations about the suitability of this software
+ for any purpose.  It is provided "as is" without express or implied
+ warranty.
+ .
+ THE AUTHORS DISCLAIM ALL WARRANTIES WITH REGARD TO THIS SOFTWARE,
+ INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS, IN
+ NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY SPECIAL, INDIRECT OR
+ CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS
+ OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT,
+ NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+ CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+License: LGPL
+ This file may be redistributed under the terms of the
+ GNU Lesser General Public License.
+ .
+ On Debian systems, the complete text of the GNU Lesser General Public
+ License can be found in ‘/usr/share/common-licenses/LGPL’.
+
+License: LGPL-2+
+ This program is free software: you can redistribute it and/or modify
+ it under the terms of the GNU Lesser General Public License as published by
+ the Free Software Foundation, either version 2 of the License, or
+ (at your option) any later version.
+ .
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ GNU Lesser General Public License for more details.
+ .
+ You should have received a copy of the GNU Lesser General Public License
+ along with this program. If not, see <http://www.gnu.org/licenses/>.
+ .
+ The complete text of the GNU Lesser General Public License
+ can be found in /usr/share/common-licenses/LGPL-2 file.
+
+License: LGPL-2.1
+ This program is free software; you can redistribute it and/or modify it
+ under the terms of the GNU Lesser General Public License as published by
+ the Free Software Foundation; either version 2.1 of the License, or
+ (at your option) any later version.
+ .
+ This program is distributed in the hope that it will be useful, but
+ WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ Lesser General Public License for more details.
+ .
+ You should have received a copy of the GNU Lesser General Public License
+ along with this program; If not, see <http://www.gnu.org/licenses/>.
+ .
+ On Debian systems, the complete text of the GNU Lesser General Public
+ License version 2.1 can be found in `/usr/share/common-licenses/LGPL-2.1'.
+
+License: LGPL-2.1+
+ This program is free software; you can redistribute it and/or modify
+ it under the terms of the GNU Lesser General Public License as published by
+ the Free Software Foundation; either version 2.1, or (at your option)
+ any later version.
+ .
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU Lesser General Public License for more details.
+ .
+ You should have received a copy of the GNU Lesser General Public License along
+ with this program; if not, see <https://www.gnu.org/licenses/>.
+ .
+ On Debian systems, the complete text of the GNU Lesser General Public
+ License version 2.1 can be found in ‘/usr/share/common-licenses/LGPL-2.1’.
+
+License: jpeg-group
+ This file is part of the Independent JPEG Group's software.
+ .
+ The authors make NO WARRANTY or representation, either express or implied,
+ with respect to this software, its quality, accuracy, merchantability, or
+ fitness for a particular purpose.  This software is provided "AS IS", and you,
+ its user, assume the entire risk as to its quality and accuracy.
+ .
+ This software is copyright (C) 1991-1998, Thomas G. Lane.
+ All Rights Reserved except as specified below.
+ .
+ Permission is hereby granted to use, copy, modify, and distribute this
+ software (or portions thereof) for any purpose, without fee, subject to these
+ conditions:
+ (1) If any part of the source code for this software is distributed, then this
+ README file must be included, with this copyright and no-warranty notice
+ unaltered; and any additions, deletions, or changes to the original files
+ must be clearly indicated in accompanying documentation.
+ (2) If only executable code is distributed, then the accompanying
+ documentation must state that "this software is based in part on the work of
+ the Independent JPEG Group".
+ (3) Permission for use of this software is granted only if the user accepts
+ full responsibility for any undesirable consequences; the authors accept
+ NO LIABILITY for damages of any kind.
+ .
+ These conditions apply to any software derived from or based on the IJG code,
+ not just to the unmodified library.  If you use our work, you ought to
+ acknowledge us.
+ .
+ Permission is NOT granted for the use of any IJG author's name or company name
+ in advertising or publicity relating to this software or products derived from
+ it.  This software may be referred to only as "the Independent JPEG Group's
+ software".
+ .
+ We specifically permit and encourage the use of this software as the basis of
+ commercial products, provided that all warranty or liability claims are
+ assumed by the product vendor.
+ .
+ This implementation is based on Arai, Agui, and Nakajima's algorithm for
+ scaled DCT.  Their original paper (Trans. IEICE E-71(11):1095) is in
+ Japanese, but the algorithm is described in the Pennebaker & Mitchell
+ JPEG textbook (see REFERENCES section in file README).  The following code
+ is based directly on figure 4-8 in P&M.

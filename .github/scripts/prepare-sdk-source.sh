@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+# SPDX-License-Identifier: MIT
+
 set -euo pipefail
 
 component="${1:?usage: prepare-sdk-source.sh <component> [expected-file]}"

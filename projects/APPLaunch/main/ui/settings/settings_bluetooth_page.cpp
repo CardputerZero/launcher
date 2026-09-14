@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "settings_bluetooth_page.hpp"
 #include "keyboard_text_input.hpp"
 #include "cp0_enum_cast.h"

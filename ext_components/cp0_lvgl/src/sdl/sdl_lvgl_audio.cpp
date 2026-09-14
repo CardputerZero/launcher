@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "hal_lvgl_bsp.h"
 #include "../cp0_audio_api_contract.hpp"
 #include "../cp0_audio_runtime_lifecycle.hpp"

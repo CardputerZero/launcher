@@ -2,6 +2,11 @@
 
 `launcher` is the application project collection for M5CardputerZero. Its core project is `projects/APPLaunch`. APPLaunch is the main on-device launcher: after boot, it initializes LVGL, displays the home carousel, shows the status bar, launches built-in pages or external applications, and provides features such as settings, terminal, music, recording, camera, and LoRa.
 
+For the current checkout-specific module boundaries, build switches, input
+event contract, and open-source notices, read
+[`docs/current-implementation-and-components.md`](../current-implementation-and-components.md)
+and [`docs/OPEN_SOURCE_COMPONENTS.md`](../OPEN_SOURCE_COMPONENTS.md) first.
+
 ## 1. Documentation Goals
 
 This documentation set answers the following questions:

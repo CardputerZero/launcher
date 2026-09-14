@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "esc_hold_lifecycle_model.hpp"
 
 bool EscHoldLifecycleModel::press(uint32_t now)

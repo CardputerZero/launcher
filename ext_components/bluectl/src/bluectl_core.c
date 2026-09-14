@@ -1,6 +1,10 @@
 /*
- * bluectl_core.c - DBus 连接管理/事件泵/错误处理/公共工具
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
  */
+
+
 #include "bluectl_internal.h"
 
 #include <ctype.h>
@@ -22,7 +26,7 @@ static const char *bctl_match_rules[] = {
 
 #define BCTL_N_MATCH_RULES (int)(sizeof(bctl_match_rules) / sizeof(bctl_match_rules[0]))
 
-/* ---------------- 基础工具 ---------------- */
+
 
 void bctl_strscpy(char *dst, const char *src, size_t len)
 {
@@ -87,7 +91,7 @@ int bctl_check_conn(struct bluectl_ctx *c)
 	return 1;
 }
 
-/* ---------------- 方法调用封装 ---------------- */
+
 
 DBusMessage *bctl_send(struct bluectl_ctx *c, DBusMessage *call, int timeout_ms)
 {
@@ -103,7 +107,7 @@ DBusMessage *bctl_send(struct bluectl_ctx *c, DBusMessage *call, int timeout_ms)
 		return NULL;
 	}
 	if (timeout_ms < 0) {
-		/* 公共 setter 接受 unsigned，但 libdbus 超时参数是 int。 */
+
 		timeout_ms = c->timeout_ms > (unsigned int)INT_MAX ? INT_MAX :
 			(int)c->timeout_ms;
 	}
@@ -197,7 +201,7 @@ DBusMessage *bctl_prop_get_all(struct bluectl_ctx *c, const char *path,
 	return bctl_send(c, call, -1);
 }
 
-/* ---------------- 迭代器读取工具 ---------------- */
+
 
 int bctl_read_bool(DBusMessageIter *it, int def)
 {
@@ -299,11 +303,11 @@ int bctl_dict_lookup(DBusMessageIter *dict, const char *name,
 		}
 		if (!strcmp(key, name) &&
 		    dbus_message_iter_get_arg_type(&entry) == DBUS_TYPE_VARIANT) {
-			/*
-			 * 单次 recurse 直接定位到变体内容迭代器。
-			 * 注意: 同一迭代器只能 recurse 一次(libdbus 会
-			 * 断言失败), 不可先 recurse 再从子迭代器 recurse。
-			 */
+
+
+
+
+
 			if (value)
 				dbus_message_iter_recurse(&entry, value);
 			return 1;
@@ -313,7 +317,7 @@ int bctl_dict_lookup(DBusMessageIter *dict, const char *name,
 	return 0;
 }
 
-/* ---------------- 对象枚举 ---------------- */
+
 
 int bctl_foreach_object(struct bluectl_ctx *c, bctl_object_cb cb, void *user)
 {
@@ -326,7 +330,7 @@ int bctl_foreach_object(struct bluectl_ctx *c, bctl_object_cb cb, void *user)
 	}
 	reply = bctl_call(c, BLUEZ_ROOT_PATH, IFACE_OM, "GetManagedObjects", -1);
 	if (!reply) {
-		/* org.bluez 未运行时 D-Bus 报 UnknownMethod, 提示更友好一些 */
+
 		if (strstr(c->err_name, "UnknownMethod") ||
 		    strstr(c->err_name, "ServiceUnknown")) {
 			c->err_code = BLUECTL_ERR_NO_BLUEZ;
@@ -368,12 +372,12 @@ int bctl_foreach_object(struct bluectl_ctx *c, bctl_object_cb cb, void *user)
 					dbus_message_iter_get_basic(&ientry, &iface);
 				dbus_message_iter_next(&ientry);
 
-				/*
-				 * ientry 此刻位于接口的 a{sv} 属性数组。
-				 * 注意: 必须把数组迭代器本身传给回调;
-				 * 若先 recurse, 得到的是数组首个 dict entry,
-				 * bctl_dict_lookup() 只认数组迭代器。
-				 */
+
+
+
+
+
+
 				if (iface && path &&
 				    dbus_message_iter_get_arg_type(&ientry) == DBUS_TYPE_ARRAY)
 					cb(path, iface, &ientry, user);
@@ -387,7 +391,7 @@ int bctl_foreach_object(struct bluectl_ctx *c, bctl_object_cb cb, void *user)
 	return BLUECTL_OK;
 }
 
-/* ---------------- 路径解析 ---------------- */
+
 
 void bctl_mac_from_path(const char *path, char *out, size_t len)
 {
@@ -404,7 +408,7 @@ void bctl_mac_from_path(const char *path, char *out, size_t len)
 	if (strncmp(p, "dev_", 4))
 		return;
 	p += 4;
-	/* 设备对象路径必须严格为 dev_XX_XX_XX_XX_XX_XX。 */
+
 	if (strlen(p) != 17)
 		return;
 	for (i = 0; i < 17; i++) {
@@ -436,7 +440,7 @@ static void find_first_cb(const char *path, const char *iface,
 	(void)props;
 	if (strcmp(iface, f->iface))
 		return;
-	/* ObjectManager 字典顺序未定义，默认适配器选择保持稳定。 */
+
 	if (f->found && strcmp(path, f->out) >= 0)
 		return;
 	bctl_strscpy(f->out, path, f->len);
@@ -501,7 +505,7 @@ static void find_device_cb(const char *path, const char *iface,
 
 	if (f->found || strcmp(iface, IFACE_DEVICE1))
 		return;
-	/* 对象路径自带 MAC, 免解析属性 */
+
 	bctl_mac_from_path(path, addr, sizeof(addr));
 	if (addr[0] && !strcasecmp(addr, f->target))
 		goto hit;
@@ -554,7 +558,7 @@ int bctl_device_path(struct bluectl_ctx *c, const char *device,
 	return BLUECTL_OK;
 }
 
-/* ---------------- 属性填充 ---------------- */
+
 
 void bctl_adapter_fill(DBusMessageIter *props, bluectl_adapter_t *out)
 {
@@ -632,7 +636,7 @@ void bctl_device_fill(DBusMessageIter *props, bluectl_device_t *out)
 	}
 }
 
-/* ---------------- 事件 ---------------- */
+
 
 static void bctl_emit(struct bluectl_ctx *c, bluectl_event_type_t type,
 		      const char *path, const char *iface,
@@ -777,7 +781,7 @@ static void handle_properties_changed(struct bluectl_ctx *c, DBusMessage *msg)
 	if (dbus_message_iter_get_arg_type(&it) != DBUS_TYPE_ARRAY)
 		return;
 
-	/* 变化的属性: 携带值 */
+
 	dbus_message_iter_recurse(&it, &changed);
 	while (dbus_message_iter_get_arg_type(&changed) == DBUS_TYPE_DICT_ENTRY) {
 		DBusMessageIter entry, val_it;
@@ -790,7 +794,7 @@ static void handle_properties_changed(struct bluectl_ctx *c, DBusMessage *msg)
 		dbus_message_iter_next(&entry);
 		if (key &&
 		    dbus_message_iter_get_arg_type(&entry) == DBUS_TYPE_VARIANT) {
-			/* 单次 recurse: 直接定位到变体内容 */
+
 			dbus_message_iter_recurse(&entry, &val_it);
 			bctl_variant_str(&val_it, val, sizeof(val));
 			bctl_emit(c, BLUECTL_EV_PROPERTY_CHANGED, path, iface,
@@ -799,7 +803,7 @@ static void handle_properties_changed(struct bluectl_ctx *c, DBusMessage *msg)
 		dbus_message_iter_next(&changed);
 	}
 
-	/* 失效的属性: 只有名字 */
+
 	if (!dbus_message_iter_next(&it) ||
 	    dbus_message_iter_get_arg_type(&it) != DBUS_TYPE_ARRAY)
 		return;
@@ -843,10 +847,10 @@ static void handle_name_owner_changed(struct bluectl_ctx *c, DBusMessage *msg)
 		bctl_emit(c, BLUECTL_EV_BLUEZ_DOWN, NULL, BLUEZ_NAME, NULL, NULL);
 }
 
-/*
- * 消息过滤器: 只处理信号; 返回 NOT_YET_HANDLED 以保证
- * agent 对象路径注册的 vtable 仍能收到方法调用。
- */
+
+
+
+
 static DBusHandlerResult bctl_filter(DBusConnection *conn, DBusMessage *msg,
 				     void *user)
 {
@@ -875,7 +879,7 @@ static DBusHandlerResult bctl_filter(DBusConnection *conn, DBusMessage *msg,
 	return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 }
 
-/* ---------------- 公共 API ---------------- */
+
 
 int bluectl_init(void)
 {
@@ -915,7 +919,7 @@ int bluectl_init(void)
 		return rv;
 	}
 
-	/* 保留 bluectl_init() 之前通过 bluectl_set_timeout() 设置的值。 */
+
 	if (!c->timeout_ms)
 		c->timeout_ms = BLUECTL_DEFAULT_TIMEOUT_MS;
 	c->err_code = BLUECTL_OK;
@@ -983,7 +987,7 @@ int bluectl_set_event_callback(bluectl_event_cb_t cb, void *user_data)
 	return BLUECTL_OK;
 }
 
-/* 分发已入队消息, 返回分发数量, 内存不足时返回 -1 */
+
 static int bctl_drain(struct bluectl_ctx *c)
 {
 	int dispatched = 0;
@@ -1015,8 +1019,8 @@ int bluectl_process(unsigned int timeout_ms)
 	}
 
 	if (dispatched == 0) {
-		/* 队列空: 阻塞等待新消息到达(0 = 非阻塞轮询) */
-		/* 超大 unsigned 值转换为 int 会变负并导致无限等待。 */
+
+
 		dbus_connection_read_write(c->conn,
 				timeout_ms > (unsigned int)INT_MAX ? INT_MAX :
 				(int)timeout_ms);

@@ -1,4 +1,7 @@
 #!/bin/sh
+# SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+# SPDX-License-Identifier: MIT
+
 set -eu
 test_root=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
 settings_ui_root=$(CDPATH= cd -- "$test_root/../main/ui/settings" && pwd)

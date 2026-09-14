@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "cp0_keyboard_key_contract.h"
 #include "cp0_keyboard_navigation_contract.h"
 #include "cp0_keyboard_queue.h"

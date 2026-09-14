@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "hal/hal_audio.h"
 #include "hal/hal_filesystem.h"
 #include "hal/hal_network.h"

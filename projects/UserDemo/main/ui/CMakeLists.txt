@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+# SPDX-License-Identifier: MIT
+
 SET(SOURCES components/ui_comp_button1.c
     components/ui_comp.c
     screens/ui_Screen1.c

@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "cp0_lvgl_app.h"
 #include "hal_lvgl_bsp.h"
 #include "../cp0_app_internal_utils.h"
@@ -363,9 +369,9 @@ private:
     {
         std::string output;
         std::string wifi_iface;
-        // 用 DEVICE,TYPE,STATE,CONNECTION 四列判断：只要 wifi 设备的 STATE 以 "connected"
-        // 开头就算已连接，避免插拔网线后 wlan0 变成 "connected (externally)" 且 CONNECTION
-        // 显示为 "--" 时被误判为未连接（#37）。
+
+
+
         if (cp0_process_commands::capture_argv_with_timeout(
                 {"nmcli", "-t", "-f", "DEVICE,TYPE,STATE,CONNECTION", "dev", "status"},
                 output, 2000) == 0) {

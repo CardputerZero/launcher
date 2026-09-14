@@ -1,3 +1,6 @@
+/* SPDX-License-Identifier: MIT
+ * Upstream license: LVGL-LICENSE.txt.
+ */
 /**
  * @file lv_freetype_glyph.c
  *

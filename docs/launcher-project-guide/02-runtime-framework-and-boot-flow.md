@@ -12,9 +12,12 @@ return cp0_lvgl_run(std::move(options));
 
 The setup callback performs only launcher work:
 
-1. Registers `LV_EVENT_KEYBOARD` when necessary.
-2. Calls `launcher_ui::init()`.
-3. Initializes the screen saver.
+1. Calls `launcher_ui::init()`.
+2. Initializes the screen saver.
+
+The device/SDL keyboard backend registers `LV_EVENT_KEYBOARD` during input
+initialization. Before setup, `after_resource_init` requests the backlight
+GPIO setting through `cp0_signal_settings_api`.
 
 The teardown callback calls `launcher_ui::deinit()`. Shared initialization and the LVGL run loop belong to `cp0_lvgl_app_runner.hpp` in the `cp0_lvgl` component.
 

@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "zclaw_chat_event.h"
 #include "zclaw_chat_layout.h"
 #include "zclaw_chat_stream_model.h"

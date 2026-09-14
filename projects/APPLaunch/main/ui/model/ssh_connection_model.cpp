@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "ssh_connection_model.hpp"
 #include "../keyboard_text_input.hpp"
 #include "integer_parse_policy.hpp"

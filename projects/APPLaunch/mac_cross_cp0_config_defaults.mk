@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+# SPDX-License-Identifier: MIT
+
 
 #brew tap messense/macos-cross-toolchains
 #brew install aarch64-unknown-linux-gnu

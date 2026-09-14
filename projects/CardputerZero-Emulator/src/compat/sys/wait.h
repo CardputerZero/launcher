@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 // Stub sys/wait.h for Windows
 #ifndef _SYS_WAIT_COMPAT_H
 #define _SYS_WAIT_COMPAT_H

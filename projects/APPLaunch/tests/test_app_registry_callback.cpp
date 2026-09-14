@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "../main/ui/model/app_registry_callback.hpp"
 #include "../main/ui/model/app_directory_watcher_contract.hpp"
 #include "../main/ui/model/app_registry_descriptor_contract.hpp"

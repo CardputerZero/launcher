@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 def_hal_fun(void(std::string), cp0_signal_audio_play)
 def_hal_fun(void(bool), cp0_signal_audio_cap)
 def_hal_fun(void(std::list<std::string>, std::function<void(int, std::string)>), cp0_signal_audio_setup)

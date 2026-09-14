@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "../main/ui/model/launcher_navigation_model.hpp"
 #include "../main/ui/model/launcher_startup_contract.hpp"
 

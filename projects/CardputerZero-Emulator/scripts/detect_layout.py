@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+# SPDX-License-Identifier: MIT
+
 """
 Detect LCD (transparent area) and key positions (dark blobs) from M5CardputerEmu.png
 """

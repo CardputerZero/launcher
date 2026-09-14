@@ -1,4 +1,10 @@
-/* mini.c - 诊断: 打印 get_adapters/get_devices 实际返回内容(不随组件发布) */
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
+
 #include <stdio.h>
 #include "bluectl.h"
 

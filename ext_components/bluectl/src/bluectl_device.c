@@ -1,6 +1,10 @@
 /*
- * bluectl_device.c - 设备操作(枚举/查询/pair/connect/trust/alias...)
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
  */
+
+
 #include "bluectl_internal.h"
 
 #include <stdio.h>
@@ -19,7 +23,7 @@ static int device_path_compare(const void *a, const void *b)
 
 struct bctl_list_devices {
 	struct bluectl_ctx *c;
-	const char *prefix;	/* 按适配器过滤: 适配器对象路径, NULL = 全部 */
+	const char *prefix;
 	bluectl_device_t *out;
 	int max;
 	int count;
@@ -37,12 +41,12 @@ static void list_devices_cb(const char *path, const char *iface,
 		size_t prefix_len = strlen(l->prefix);
 		size_t path_len = strlen(path);
 
-		/* 适配器前缀必须落在对象路径边界，避免 hci0 匹配 hci01。 */
+
 		if (path_len < prefix_len || strncmp(path, l->prefix, prefix_len) ||
 		    (path[prefix_len] != '/' && path[prefix_len] != '\0'))
 			return;
 	}
-	/* 先粗解析出 MAC, 过滤掉尚未拿到地址的临时对象 */
+
 	bctl_device_fill(props, &dev);
 	if (!dev.address[0])
 		return;
@@ -74,7 +78,7 @@ int bluectl_get_devices(const char *adapter, bluectl_device_t *out, int max)
 	rv = bctl_foreach_object(c, list_devices_cb, &l);
 	if (rv < 0)
 		return rv;
-	/* ObjectManager 不承诺字典迭代顺序, 对外 API 承诺按路径排序。 */
+
 	if (l.count > 1)
 		qsort(out, (size_t)l.count, sizeof(*out), device_path_compare);
 	return l.count;
@@ -109,7 +113,7 @@ int bluectl_get_device(const char *device, bluectl_device_t *out)
 	return BLUECTL_OK;
 }
 
-/* 设备方法调用(Pair/Connect/Disconnect) */
+
 static int device_method(const char *device, const char *method, int timeout_ms)
 {
 	struct bluectl_ctx *c = &g_bluectl;

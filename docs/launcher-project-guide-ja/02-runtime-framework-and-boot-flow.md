@@ -49,7 +49,6 @@ int main(void)
 {
     Cp0LvglRunOptions options;
     options.setup = []() {
-        if (LV_EVENT_KEYBOARD == 0) LV_EVENT_KEYBOARD = lv_event_register_id();
         launcher_ui::init();
         ui_screensaver_init();
         return true;
@@ -63,11 +62,15 @@ int main(void)
 
 1. runner が `lv_init()` と `cp0_lvgl_init()` を実行します。
 2. default display が存在することを確認した後、APPLaunch の setup callback を呼びます。
-3. setup が `LV_EVENT_KEYBOARD` を登録し、`launcher_ui::init()` と `ui_screensaver_init()` を実行します。
+3. setup は `launcher_ui::init()` と `ui_screensaver_init()` を実行します。`LV_EVENT_KEYBOARD` の登録はデバイス/SDL キーボード初期化側で行います。
 4. runner が最初の invalidate/refresh を行い、`lv_timer_handler()` を駆動します。timer がない場合は semaphore、ある場合は期限付き wait を使います。
 5. 終了時は teardown 後に sudo/RPC/camera/audio/PTY/input/WiFi/LoRa/battery/LVGL を順序どおり停止します。
 
 ### 3.2 First-Frame Refresh
+
+上のコードは setup/teardown の抜粋です。実装では setup の前に
+`after_resource_init` が `cp0_signal_settings_api` でバックライト GPIO
+設定を要求し、その結果をログに記録します。
 
 `ui_init()` が戻った後、コードはすぐに次を実行します。
 

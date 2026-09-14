@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 // Minimal sys/queue.h polyfill for Emscripten (STAILQ only)
 #ifndef _SYS_QUEUE_H_COMPAT
 #define _SYS_QUEUE_H_COMPAT

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+# SPDX-License-Identifier: MIT
+
 CONFIG_LVGL_COMPONENT_ENABLED=y
 CONFIG_LVGL_9_5_SRC=y
 

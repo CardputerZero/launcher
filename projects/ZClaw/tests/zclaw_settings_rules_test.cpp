@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "zclaw_provider_form_model.h"
 #include "zclaw_panel_lifecycle.h"
 #include "zclaw_settings_navigation_model.h"

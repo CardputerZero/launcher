@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 /**
  * @file lv_conf.h
  * Configuration file for LVGL v9.5 -- M5CardputerZero Emulator

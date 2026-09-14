@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #define APP_PAGE_IMPLEMENTATION_UNIT
 #include "ui_app_ip_panel.hpp"
 

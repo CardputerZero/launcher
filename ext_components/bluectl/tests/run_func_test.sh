@@ -1,11 +1,7 @@
 #!/bin/bash
-# run_func_test.sh - bluectl 功能测试入口
-#
-# 1. 启动私有 dbus-daemon(不做任何系统总线操作)
-# 2. 启动 mock org.bluez 服务(python3-dbus + GLib)
-# 3. 编译并运行 func_test, 校验 adapter/device/agent/media/事件全链路
-#
-# 依赖: gcc, pkg-config, dbus-daemon, python3-dbus, python3-gi, libdbus-1-dev
+# SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+# SPDX-License-Identifier: MIT
+
 set -u
 cd "$(dirname "$0")"
 

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
+# SPDX-License-Identifier: MIT
+
 # https://sysprogs.com/getfile/2542/raspberry64-gcc14.2.0.exe
 
 

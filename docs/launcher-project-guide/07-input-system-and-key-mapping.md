@@ -30,11 +30,11 @@ keyboard_queue + keyboard_mutex
 cp0_keypad_read_cb()
         |
         +-- lv_obj_send_event(lv_screen_active(), LV_EVENT_KEYBOARD, key_item)
-        +-- ui_global_hint_on_key(key_item)
+        +-- registered global key handler(key_item)
         +-- data->key = cp0_evdev_process_key(key_code)
 ```
 
-`LV_EVENT_KEYBOARD` is an APPLaunch custom event, not a built-in LVGL key event. It is registered during startup in `main.cpp`:
+`LV_EVENT_KEYBOARD` is the shared CP0 custom event. The device `cp0_lvgl_keyboard.c` or SDL `sdl_lvgl_keyboard.c` backend registers it during initialization, before APPLaunch setup:
 
 ```cpp
 if (LV_EVENT_KEYBOARD == 0)
@@ -55,6 +55,8 @@ struct key_item {
     char     sym_name[65];  // XKB keysym name
     char     utf8[16];      // UTF-8 character
     char     flage;
+    uint32_t semantic_key;
+    cp0_keyboard_input_context_t input_context;
     STAILQ_ENTRY(key_item) entries;
 };
 ```
@@ -75,47 +77,24 @@ Constants:
 
 Pages can use `key_code` for physical key checks, or use `utf8` / `codepoint` to read text input.
 
-## 3. Event Macros and Page Access Pattern
+## 3. Event access and ownership
 
-`projects/APPLaunch/main/ui/ui.h` provides common macros:
+`main/ui/ui.h` exposes `launcher_ui::events::keyboard_item`, `keyboard_key`, `keyboard_state`, `is_key_pressed` and `is_key_released`; the old uppercase event macros are no longer the API. `is_key_pressed` includes repeat (`state > 0`); use `KBD_KEY_PRESSED` for a single press.
 
-```c
-#define LV_EVENT_KEYBOARD_GET_KEY(e) \
-    ((struct key_item *)lv_event_get_param(e))->key_code
-
-#define LV_EVENT_KEYBOARD_GET_KEY_STATE(e) \
-    ((struct key_item *)lv_event_get_param(e))->key_state
-
-#define IS_KEY_PRESSED(e) \
-    ((lv_event_get_code(e) == LV_EVENT_KEYBOARD) && \
-     (LV_EVENT_KEYBOARD_GET_KEY_STATE(e) > 0))
-
-#define IS_KEY_RELEASED(e) \
-    ((lv_event_get_code(e) == LV_EVENT_KEYBOARD) && \
-     (LV_EVENT_KEYBOARD_GET_KEY_STATE(e) == 0))
-```
-
-Typical page event binding:
+Use native `LV_EVENT_KEY` with `lv_event_get_key()` for focus navigation, activation and cancellation. Use the custom event for text, physical keys, modifiers and repeat state. Check the event type before using a keyboard helper:
 
 ```cpp
-void event_handler_init()
+static void on_keyboard(lv_event_t *event)
 {
-    lv_obj_add_event_cb(root_screen_, UIIpPanelPage::static_lvgl_handler,
-                        LV_EVENT_ALL, this);
-}
-
-static void static_lvgl_handler(lv_event_t *e)
-{
-    auto *self = static_cast<UIIpPanelPage *>(lv_event_get_user_data(e));
-    if (!self || !IS_KEY_RELEASED(e))
-        return;
-
-    uint32_t key = LV_EVENT_KEYBOARD_GET_KEY(e);
-    self->handle_key(key);
+    if (!event || lv_event_get_code(event) !=
+            static_cast<lv_event_code_t>(LV_EVENT_KEYBOARD)) return;
+    const auto *item = launcher_ui::events::keyboard_item(event);
+    if (!item || item->key_state != KBD_KEY_PRESSED) return;
+    // Copy fields before scheduling any asynchronous work.
 }
 ```
 
-Note: most menu pages handle keys only on release to avoid duplicate triggers from press and repeat. Game-like pages may handle movement and shooting on press/repeat.
+The dispatcher owns `key_item` and releases it after synchronous delivery. Copy required fields for async work. Custom delivery precedes native delivery; `lv_event_stop_processing()` does not suppress the native path. For custom text input, save and restore the input context and `cp0_keyboard_set_lvgl_keypad_intercept(1)`. Remove event callbacks before the owning screen is destroyed.
 
 ## 4. Device-Side Input Thread
 
@@ -402,8 +381,8 @@ Recommended investigation order:
 
 New pages should follow these rules:
 
-- List and menu pages: handle `KEY_UP/DOWN/LEFT/RIGHT/ENTER/ESC` on `IS_KEY_RELEASED(e)`.
-- Game pages: handle continuous actions on `IS_KEY_PRESSED(e)` and accept repeat if needed.
+- List and menu pages: handle `KEY_UP/DOWN/LEFT/RIGHT/ENTER/ESC` on `launcher_ui::events::is_key_released(e)`.
+- Game pages: handle continuous actions on `launcher_ui::events::is_key_pressed(e)` and accept repeat if needed.
 - Text input pages: prefer `key_item::utf8`; use `keycode_to_char()` only for simple cases.
 - Back key: ESC must exit the current page or current popup; for multi-level views, return to the previous level first, then return home.
 - Direction substitute keys: if the device keyboard is supported, consistently support `F/X/Z/C`.
