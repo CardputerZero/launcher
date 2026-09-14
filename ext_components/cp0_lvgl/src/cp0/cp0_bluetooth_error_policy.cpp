@@ -39,7 +39,8 @@ bool is_pair_already_exists(const std::string &error_name)
 }
 
 bool is_idempotent_success(const std::string &command,
-                           const std::string &error_name)
+                           const std::string &error_name,
+                           const std::string &error_message)
 {
     if (is_pair_already_exists(error_name))
         return command == "pair";
@@ -50,9 +51,14 @@ bool is_idempotent_success(const std::string &command,
         return error_name == "org.bluez.Error.NotConnected";
     if (command == "start")
         return error_name == "org.bluez.Error.InProgress";
-    if (command == "stop")
+    if (command == "stop") {
+        // BlueZ uses Failed when this client's discovery session has already
+        // ended. Other Failed replies still indicate a real stop failure.
         return error_name == "org.bluez.Error.NotReady" ||
-               error_name == "org.bluez.Error.NotAuthorized";
+               error_name == "org.bluez.Error.NotAuthorized" ||
+               (error_name == "org.bluez.Error.Failed" &&
+                error_message == "No discovery started");
+    }
     return false;
 }
 

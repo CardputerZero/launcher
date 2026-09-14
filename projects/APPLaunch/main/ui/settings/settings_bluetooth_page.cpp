@@ -595,6 +595,7 @@ LvSettingBluetoothPage3::~LvSettingBluetoothPage3()
         for (auto &result : pending) {
             if (result.lifetime.expired() || result.owner != self || !self->ComponensObj)
                 continue;
+            if (result.generation < self->reset_generation_) continue;
             if (result.generation != self->generation_) {
                 try {
                     if (result.stale_handler) result.stale_handler(result.code, std::move(result.data));
@@ -612,7 +613,7 @@ LvSettingBluetoothPage3::~LvSettingBluetoothPage3()
             if (lifetime.expired()) break;
         }
         for (const auto &request : agent_events) {
-            if (lifetime.expired() || self->leaving_ || !self->ComponensObj) {
+            if (lifetime.expired() || self->leaving_ || self->reset_pending_ || !self->ComponensObj) {
                 if (request.reply) {
                     try { request.reply(false, {}); } catch (...) {}
                 }
@@ -650,7 +651,12 @@ LvSettingBluetoothPage3::~LvSettingBluetoothPage3()
         };
 
         const bool started = api_tasks_.start(
-            [arguments = std::move(arguments), callback = std::move(callback)]() mutable {
+            [arguments = std::move(arguments), callback = std::move(callback),
+             dispatch, request_generation]() mutable {
+                {
+                    std::lock_guard<std::mutex> lock(dispatch->mutex);
+                    if (request_generation < dispatch->minimum_generation) return;
+                }
                 try {
                     cp0_signal_bt_api(std::move(arguments), callback);
                 } catch (...) {
@@ -716,7 +722,7 @@ LvSettingBluetoothPage3::~LvSettingBluetoothPage3()
 
     void LvSettingBluetoothPage3::request_status()
 {
-        if (status_pending_) return;
+        if (status_pending_ || leaving_ || reset_pending_) return;
         status_pending_ = true;
         request_api(settings_bluetooth_com::status_request(), [this](int code, std::string data) {
             status_pending_ = false;
@@ -765,7 +771,7 @@ LvSettingBluetoothPage3::~LvSettingBluetoothPage3()
             }
             render();
             if (mode_ == LvSettingBluetoothListMode::Scan)
-                start_scan();
+                stop_scan([this] { start_scan(); });
             else
                 refresh_devices();
         }, [this](int, std::string) {
@@ -788,7 +794,8 @@ LvSettingBluetoothPage3::~LvSettingBluetoothPage3()
 
     void LvSettingBluetoothPage3::refresh_devices()
 {
-        if (!status_known_ || !powered_ || action_pending_ || list_pending_) return;
+        if (!status_known_ || !powered_ || action_pending_ || list_pending_ ||
+            reset_pending_) return;
         list_pending_ = true;
         loading_ = true;
         render();
@@ -854,11 +861,13 @@ LvSettingBluetoothPage3::~LvSettingBluetoothPage3()
 
     void LvSettingBluetoothPage3::start_scan()
 {
-        if (mode_ != LvSettingBluetoothListMode::Scan || !powered_ ||
+        if (mode_ != LvSettingBluetoothListMode::Scan || !powered_ || leaving_ ||
+            reset_pending_ ||
             scan_start_pending_ || scan_stop_pending_ || discovery_active_)
             return;
 
         scan_start_pending_ = true;
+        scan_stop_required_ = true;
         loading_ = true;
         error_message_.clear();
         render();
@@ -912,17 +921,72 @@ LvSettingBluetoothPage3::~LvSettingBluetoothPage3()
 
     void LvSettingBluetoothPage3::restart_scan()
 {
-        if (mode_ != LvSettingBluetoothListMode::Scan || !powered_ || action_pending_ ||
-            leaving_ || scan_start_pending_ || scan_stop_pending_)
+        if (mode_ != LvSettingBluetoothListMode::Scan || action_pending_ ||
+            leaving_ || scan_start_pending_ || scan_stop_pending_ || status_pending_ ||
+            reset_pending_)
             return;
 
         ++generation_;
         list_pending_ = false;
-        stop_scan([this] {
-            if (status_known_ && powered_ && !action_pending_) start_scan();
-        });
+        if (scan_timer_) {
+            lv_timer_delete(scan_timer_);
+            scan_timer_ = nullptr;
+        }
+        warning_active_ = false;
+        status_known_ = false;
+        error_message_.clear();
+        devices_.clear();
+        clamp_selection();
+        render();
+        request_status();
     }
 
+    void LvSettingBluetoothPage3::restart_bluetooth()
+    {
+        if (leaving_ || reset_pending_) return;
+        reset_pending_ = true;
+        reset_generation_ = ++generation_;
+        {
+            std::lock_guard<std::mutex> lock(api_dispatch_->mutex);
+            api_dispatch_->minimum_generation = reset_generation_;
+            api_dispatch_->pending.clear();
+            // BtReset completes these agent invocations in the backend.
+            api_dispatch_->agent_events.clear();
+        }
+        clear_agent_prompt();
+        agent_pairing_device_.clear();
+        agent_authorized_device_.clear();
+        cancel_action();
+        warning_active_ = false;
+        status_pending_ = false;
+        scan_start_pending_ = false;
+        scan_stop_pending_ = false;
+        ++scan_stop_request_id_;
+        list_pending_ = false;
+        if (scan_timer_) {
+            lv_timer_delete(scan_timer_);
+            scan_timer_ = nullptr;
+        }
+        if (status_retry_timer_) lv_timer_pause(status_retry_timer_);
+        discovery_active_ = false;
+        scan_after_stop_ = nullptr;
+        scan_stop_after_start_ = false;
+        error_message_.clear();
+        devices_.clear();
+        clamp_selection();
+        render();
+        request_api({"BtReset"}, [this](int code, std::string data) {
+            reset_pending_ = false;
+            if (!settings_bluetooth_com::success_without_payload(code, data)) {
+                error_message_ = data.empty() ? "Bluetooth restart failed." : data;
+                render();
+                return;
+            }
+            scan_stop_required_ = false;
+            status_known_ = false;
+            request_status();
+        });
+    }
 
     void LvSettingBluetoothPage3::stop_scan(std::function<void()> after_stop)
 {
@@ -930,7 +994,7 @@ LvSettingBluetoothPage3::~LvSettingBluetoothPage3()
             lv_timer_delete(scan_timer_);
             scan_timer_ = nullptr;
         }
-        const bool needs_stop = discovery_active_ || scan_start_pending_;
+        const bool needs_stop = discovery_active_ || scan_start_pending_ || scan_stop_required_;
         if (scan_start_pending_) {
             scan_stop_after_start_ = true;
             if (after_stop) {
@@ -967,6 +1031,7 @@ LvSettingBluetoothPage3::~LvSettingBluetoothPage3()
         }
 
         scan_stop_pending_ = true;
+        scan_stop_required_ = true;
         scan_after_stop_ = std::move(after_stop);
         const uint64_t stop_request_id = ++scan_stop_request_id_;
         const auto complete_stop = [this, stop_request_id](int code,
@@ -985,6 +1050,7 @@ LvSettingBluetoothPage3::~LvSettingBluetoothPage3()
                 render();
                 return;
             }
+            scan_stop_required_ = false;
             if (continuation) continuation();
         };
         request_api(settings_bluetooth_com::discovery_stop_request(),
@@ -1041,7 +1107,8 @@ LvSettingBluetoothPage3::~LvSettingBluetoothPage3()
 
     void LvSettingBluetoothPage3::activate_selected()
 {
-        if (action_pending_ || selected_index_ < 0 ||
+        if (action_pending_ || reset_pending_ || status_pending_ ||
+            scan_start_pending_ || scan_stop_pending_ || !error_message_.empty() || selected_index_ < 0 ||
             selected_index_ >= static_cast<int>(devices_.size()) || !powered_)
             return;
 
@@ -1071,7 +1138,7 @@ LvSettingBluetoothPage3::~LvSettingBluetoothPage3()
         };
         if (mode_ == LvSettingBluetoothListMode::Scan) {
             action_waiting_for_scan_stop_ = discovery_active_ ||
-                scan_start_pending_ || scan_stop_pending_;
+                scan_start_pending_ || scan_stop_pending_ || scan_stop_required_;
             if (action_waiting_for_scan_stop_)
                 stop_scan(submit);
             else {
@@ -1208,6 +1275,8 @@ LvSettingBluetoothPage3::~LvSettingBluetoothPage3()
 
     void LvSettingBluetoothPage3::remove_selected()
 {
+        if (reset_pending_ || status_pending_ ||
+            scan_start_pending_ || scan_stop_pending_ || !error_message_.empty()) return;
         if (action_pending_ || selected_index_ < 0 ||
             selected_index_ >= static_cast<int>(devices_.size()))
             return;
@@ -1229,7 +1298,7 @@ LvSettingBluetoothPage3::~LvSettingBluetoothPage3()
         render();
         if (mode_ == LvSettingBluetoothListMode::Scan) {
             action_waiting_for_scan_stop_ = discovery_active_ ||
-                scan_start_pending_ || scan_stop_pending_;
+                scan_start_pending_ || scan_stop_pending_ || scan_stop_required_;
             const auto submit = [this, address] { request_action("BtRemove", address); };
             if (action_waiting_for_scan_stop_)
                 stop_scan(submit);
@@ -1298,9 +1367,15 @@ LvSettingBluetoothPage3::~LvSettingBluetoothPage3()
             0x58A6FF,
             settings_fonts::sans(12, LV_FREETYPE_FONT_STYLE_BOLD));
 
+        if (reset_pending_) {
+            create_label(ComponensObj, "Restarting Bluetooth...", 8, 52, 304,
+                         0x58A6FF, settings_fonts::sans(14, LV_FREETYPE_FONT_STYLE_BOLD));
+            return;
+        }
+
         const char *hint = mode_ == LvSettingBluetoothListMode::Scan
-            ? "OK:act  D:remove  R:rescan  ESC:back"
-            : "OK:toggle  D:remove  ESC:back";
+            ? "OK:act D:remove R:scan B:reset ESC:back"
+            : "OK:toggle D:remove B:reset ESC:back";
         if (action_pending_) {
             create_label(ComponensObj,
                          action_message_.c_str(),
@@ -1309,30 +1384,38 @@ LvSettingBluetoothPage3::~LvSettingBluetoothPage3()
                          CP0_ENUM_CAST_INT(LayoutMetric::ScreenW) - 16,
                          0x58A6FF,
                          settings_fonts::sans(14, LV_FREETYPE_FONT_STYLE_BOLD));
-            hint = pair_cleanup_pending_ ? "Please wait..." : "ESC:back";
+            hint = pair_cleanup_pending_ ? "B:reset" : "B:reset  ESC:back";
         } else {
             std::string message;
             if (!status_known_)
                 message = error_message_.empty()
                     ? "Checking Bluetooth status..."
                     : error_message_;
-            else if (!powered_)
-                message = "Bluetooth is off. Enable Power first.";
             else if (!error_message_.empty())
                 message = error_message_;
+            else if (!powered_)
+                message = "Bluetooth is off. Enable Power first.";
             else if (devices_.empty())
                 message = mode_ == LvSettingBluetoothListMode::Scan
                     ? (loading_ ? "Scanning..." : "No devices found.")
                     : "No paired devices.";
 
             if (!message.empty()) {
-                create_label(ComponensObj,
+                lv_obj_t *message_label = create_label(ComponensObj,
                              message.c_str(),
                              8,
                              mode_ == LvSettingBluetoothListMode::Scan ? 45 : 52,
                              CP0_ENUM_CAST_INT(LayoutMetric::ScreenW) - 16,
                              error_message_.empty() ? 0x666666 : 0xFFAA00,
                              settings_fonts::sans(12));
+                if (message_label) {
+                    lv_label_set_long_mode(message_label, LV_LABEL_LONG_WRAP);
+                    lv_obj_set_height(message_label, 36);
+                }
+            }
+            if (!error_message_.empty() && mode_ == LvSettingBluetoothListMode::Scan &&
+                !status_pending_ && !scan_start_pending_ && !scan_stop_pending_) {
+                hint = "R:retry  B:reset  ESC:back";
             }
 
             if (mode_ == LvSettingBluetoothListMode::Scan) {
@@ -1345,7 +1428,7 @@ LvSettingBluetoothPage3::~LvSettingBluetoothPage3()
                              settings_fonts::sans(10));
             }
 
-            const int count = static_cast<int>(devices_.size());
+            const int count = message.empty() ? static_cast<int>(devices_.size()) : 0;
             const int offset = count <= CP0_ENUM_CAST_INT(LayoutMetric::VisibleRows)
                 ? 0
                 : std::clamp(selected_index_ - CP0_ENUM_CAST_INT(LayoutMetric::VisibleRows) / 2,
@@ -1457,7 +1540,7 @@ LvSettingBluetoothPage3::~LvSettingBluetoothPage3()
                                       request.method == "AuthorizeService";
         // Agent requests can be initiated by a remote device. They are valid
         // while this page is visible even when the user did not press Pair.
-        if (!supported_method || leaving_ || !ComponensObj) {
+        if (!supported_method || leaving_ || reset_pending_ || !ComponensObj) {
             if (request.reply) {
                 try { request.reply(false, {}); } catch (...) {}
             }
@@ -1776,6 +1859,11 @@ LvSettingBluetoothPage3::~LvSettingBluetoothPage3()
         auto *item = static_cast<const key_item *>(lv_event_get_param(event));
         if (!self || !item)
             return;
+        if (item->key_code == KEY_B || item->semantic_key == KEY_B) {
+            if (item->key_state == KBD_KEY_PRESSED) self->restart_bluetooth();
+            lv_event_stop_processing(event);
+            return;
+        }
         if (self->agent_prompt_active_) {
             self->handle_agent_key(*item);
             lv_event_stop_processing(event);
@@ -1822,6 +1910,10 @@ LvSettingBluetoothPage3::~LvSettingBluetoothPage3()
         const bool suppress_navigation = suppress_next_navigation_key_;
         suppress_next_navigation_key_ = false;
         if (suppress_navigation && key == LV_KEY_RIGHT) {
+            lv_event_stop_processing(event);
+            return;
+        }
+        if (reset_pending_) {
             lv_event_stop_processing(event);
             return;
         }

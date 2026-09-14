@@ -254,3 +254,35 @@ ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     "$(dirname "$0")/../main/ui/model/terminal_unicode.cpp" \
     -o "$build_dir/test_terminal_unicode"
 "$build_dir/test_terminal_unicode"
+
+# Exercise the real Bluetooth page and LVGL event dispatch on the host.
+repo_root=$(CDPATH= cd -- "$test_root/../../.." && pwd)
+lvgl_root="$repo_root/SDK/github_source/lvgl/lvgl_9_5/lvgl"
+bluetooth_build_dir="$build_dir/bluetooth_ui"
+mkdir -p "$bluetooth_build_dir"
+sdl_cflags=$(pkg-config --cflags sdl2)
+sdl_libs=$(pkg-config --libs sdl2)
+find "$lvgl_root/src" -type f -name '*.c' -print > "$bluetooth_build_dir/lvgl_sources"
+set --
+while IFS= read -r source; do
+    object="$bluetooth_build_dir/${source#"$lvgl_root/"}.o"
+    mkdir -p "$(dirname "$object")"
+    ${CC:-gcc} -DLV_CONF_INCLUDE_SIMPLE -DLV_KCONFIG_IGNORE \
+        -I"$test_root/low_battery_ui" -I"$lvgl_root/.." -I"$lvgl_root" \
+        $sdl_cflags -c "$source" -o "$object"
+    set -- "$@" "$object"
+done < "$bluetooth_build_dir/lvgl_sources"
+${CXX:-g++} -std=c++17 -fno-access-control -pthread \
+    -DLV_CONF_INCLUDE_SIMPLE -DLV_KCONFIG_IGNORE \
+    -I"$test_root/low_battery_ui" -I"$lvgl_root/.." -I"$lvgl_root" \
+    -I"$repo_root/ext_components/cp0_lvgl/include" \
+    -I"$test_root/../main/include" -I"$test_root/../main/ui" \
+    -I"$repo_root/SDK/github_source/eventpp/include" \
+    -I"$repo_root/SDK/components/utilities/include" \
+    $sdl_cflags \
+    "$repo_root/ext_components/cp0_lvgl/src/cp0_font_service.cpp" \
+    "$test_root/../main/ui/keyboard_text_input.cpp" \
+    "$settings_ui_root/settings_bluetooth_page.cpp" \
+    "$test_root/bluetooth_ui/test_bluetooth_ui.cpp" \
+    "$@" -lm $sdl_libs -o "$bluetooth_build_dir/test_bluetooth_ui"
+"$bluetooth_build_dir/test_bluetooth_ui"

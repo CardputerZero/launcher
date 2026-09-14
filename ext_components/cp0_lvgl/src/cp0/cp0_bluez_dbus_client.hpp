@@ -39,6 +39,7 @@ cp0_bt_status_t status();
 int list(cp0_bt_device_t *out, int max_devices, bool connected_only);
 
 void set_power_async(int enabled, Completion completion);
+void reset_async(Completion completion);
 void set_alias_async(const char *alias, Completion completion);
 void set_discoverable_async(int enabled, Completion completion);
 void start_discovery_async(Completion completion);

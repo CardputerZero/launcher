@@ -45,6 +45,12 @@ public:
         cp0::bluetooth::invoke_backend(callback, [&]() -> cp0::bluetooth::Reply {
             using cp0::bluetooth::Command;
             if (request.command == Command::Status) return {0, encode_status(status())};
+            if (request.command == Command::Reset) {
+                const int off_result = hal_bt_set_power(0);
+                simulated_bt_discoverable.store(false, std::memory_order_release);
+                const int on_result = hal_bt_set_power(1);
+                return {off_result == 0 ? on_result : off_result, {}};
+            }
             if (request.command == Command::Power) {
                 const int result = hal_bt_set_power(request.value);
                 if (result == 0 && request.value == 0)
