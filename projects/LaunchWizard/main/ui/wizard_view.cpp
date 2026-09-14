@@ -908,6 +908,14 @@ void start_wifi_connection()
     const bool hidden = g.wifi_hidden;
     g.wifi_connecting = true;
     g.wifi_connected = false;
+    // Discard completion state from an earlier attempt before launching a
+    // new worker. This prevents a queued result from being consumed as the
+    // outcome of the retry.
+    {
+        std::lock_guard<std::mutex> lock(g.mutex);
+        g.wifi_connect_ready = false;
+        g.wifi_connect_succeeded = false;
+    }
     g.wifi_ip.clear();
     g.wifi_connect_error.clear();
     render();
@@ -916,6 +924,9 @@ void start_wifi_connection()
         std::string connected_ip;
         const std::string error = launch_wizard::WizardService::connect_wifi(
             ssid, password, &connected_ip, hidden);
+        WifiConnectionStatus failed_status;
+        if (!error.empty())
+            failed_status = launch_wizard::WizardService::read_wifi_status();
         std::lock_guard<std::mutex> lock(g.mutex);
         g.wifi_connect_succeeded = error.empty();
         g.wifi_connect_error = error;
@@ -924,6 +935,16 @@ void start_wifi_connection()
             g.wifi_status_connected = true;
             g.wifi_status_ssid = ssid;
             g.wifi_status_ip = connected_ip;
+        } else {
+            // A failed retry invalidates any cached success for this SSID;
+            // otherwise returning to the list can offer a stale "connected"
+            // shortcut and bypass the password page.
+            const bool different_active_network =
+                failed_status.connected && !failed_status.ip.empty() &&
+                failed_status.ssid != ssid;
+            g.wifi_status_connected = different_active_network;
+            g.wifi_status_ssid = different_active_network ? failed_status.ssid : std::string();
+            g.wifi_status_ip = different_active_network ? failed_status.ip : std::string();
         }
         g.wifi_connect_ready = true;
         cp0_lvgl_wake();
@@ -1130,7 +1151,8 @@ void handle_enter()
         cancel_wifi_scan();
         g.wifi_ssid = g.wifi_list[g.wifi_sel].ssid;
         const bool already_connected =
-            g.wifi_status_connected && g.wifi_status_ssid == g.wifi_ssid;
+            g.wifi_status_connected && g.wifi_status_ssid == g.wifi_ssid &&
+            !g.wifi_status_ip.empty();
         g.wifi_security = g.wifi_list[g.wifi_sel].security;
         g.wifi_manual = false;
         g.wifi_hidden = false;
@@ -1392,8 +1414,19 @@ void poll_worker_cb(lv_timer_t *timer)
             const int scan_error = g.wifi_scan_result_error;
             g.wifi_scan_result_error = 0;
             if (g.wifi_scan_status.available) {
-                g.wifi_status_connected = g.wifi_scan_status.connected;
-                g.wifi_connected = g.wifi_scan_status.connected;
+                // Keep the status cache for the list banner, but only expose
+                // a connection to the password page once an IPv4 address is
+                // present. NetworkManager briefly reports connected while
+                // DHCP is pending, which otherwise creates a false success
+                // state after retrying a password.
+                // cp0 reports Ethernet as `connected` too, with an empty
+                // SSID. Only treat a Wi‑Fi status as connected when it names
+                // the active network and has an IPv4 address.
+                g.wifi_status_connected = g.wifi_scan_status.connected &&
+                                          !g.wifi_scan_status.ssid.empty() &&
+                                          !g.wifi_scan_status.ip.empty();
+                if (g.screen == Screen::WifiList)
+                    g.wifi_connected = g.wifi_status_connected;
                 g.wifi_status_ssid = g.wifi_scan_status.ssid;
                 g.wifi_status_ip = g.wifi_scan_status.ip;
             }

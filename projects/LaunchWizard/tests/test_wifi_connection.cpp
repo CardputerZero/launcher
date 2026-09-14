@@ -16,6 +16,7 @@ int radio_result = 0;
 int calls = 0;
 bool used_hidden = false;
 std::string submitted_password;
+std::string status_ip = "192.168.1.42";
 
 int connect(const char *ssid, const char *password, bool hidden)
 {
@@ -48,7 +49,7 @@ extern "C" int cp0_wifi_status_read(cp0_wifi_status_t *status)
     *status = {};
     status->connected = 1;
     std::strcpy(status->ssid, "NewNetwork");
-    std::strcpy(status->ip, "192.168.1.42");
+    std::strcpy(status->ip, status_ip.c_str());
     return 0;
 }
 
@@ -89,6 +90,16 @@ int main()
         assert(calls == 0);
         radio_result = 0;
     }
+
+    // An activated link without an IPv4 address must not be reported as a
+    // successful connection. This guards against the UI showing the
+    // connected page with "IP: Unavailable" while DHCP is still pending.
+    status_ip.clear();
+    std::string no_ip;
+    assert(WizardService::connect_wifi("NewNetwork", "newpassword", &no_ip) ==
+           "Wi-Fi did not become active");
+    assert(no_ip.empty());
+
     std::string ip = "stale IP";
     assert(!WizardService::connect_wifi("", "password", &ip).empty());
     assert(ip.empty());

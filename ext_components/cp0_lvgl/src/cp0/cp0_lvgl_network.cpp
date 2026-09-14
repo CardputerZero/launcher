@@ -251,9 +251,13 @@ public:
 
         update_status_cache();
         const cp0_wifi_status_t status = get_status();
-        if (command_result == 0 && status.connected && std::string(status.ssid) == ssid) {
+        // NetworkManager may report an activated Wi-Fi link before DHCP has
+        // completed. Treat that intermediate state as a failed connection so
+        // callers never surface a connected screen without a usable address.
+        const bool same_active_network =
+            command_result == 0 && status.connected && std::string(status.ssid) == ssid;
+        if (same_active_network && status.ip[0] != '\0')
             return 0;
-        }
 
         // Failed. When the user just entered a password, nmcli may have saved a
         // profile with that wrong password (named after the SSID). Delete it so the
@@ -261,6 +265,8 @@ public:
         if (with_password) {
             profile_forget(ssid);
         }
+        if (same_active_network)
+            return CP0_WIFI_ERROR_IP_CONFIG;
         if (command_result == -ETIMEDOUT) return CP0_WIFI_ERROR_TIMEOUT;
         return cp0::wifi::classify_command_failure(output);
     }

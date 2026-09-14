@@ -890,8 +890,11 @@ std::string WizardService::connect_wifi(const std::string &ssid, const std::stri
     bool active = false;
     do {
         status = {};
+        // A link can be marked connected while DHCP is still pending. Wait
+        // for a non-empty IPv4 address before reporting success; otherwise
+        // the UI advances to the connected page with "IP: Unavailable".
         active = cp0_wifi_status_read(&status) == 0 && status.connected &&
-                 ssid == status.ssid;
+                 ssid == status.ssid && status.ip[0] != '\0';
         if (active)
             break;
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
