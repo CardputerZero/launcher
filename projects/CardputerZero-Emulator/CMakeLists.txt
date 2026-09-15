@@ -189,6 +189,7 @@ file(GLOB CP0_LVGL_SDL_SRCS CONFIGURE_DEPENDS
 set(CP0_LVGL_WIN32_SRCS
     src/cp0_web_runtime.cpp
     ${CP0_LVGL_APP_COMMON_SRCS}
+    ${CP0_LVGL}/src/sdl/sdl_lvgl_keyboard.c
     ${CP0_LVGL}/src/win32/cp0_hal_stubs_win32.c
 )
 
