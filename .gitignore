@@ -36,3 +36,5 @@ bug
 compile_commands.json
 .vscode
 *.o
+.workflow-one
+job-logs.txt

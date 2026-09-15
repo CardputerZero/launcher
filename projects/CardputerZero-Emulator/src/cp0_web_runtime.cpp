@@ -111,6 +111,7 @@ volatile uint32_t LV_EVENT_KEYBOARD = 0;
 namespace {
 
 std::atomic<int> keyboard_input_context{KBD_INPUT_CONTEXT_NAVIGATION};
+cp0_keyboard_key_filter_t keyboard_key_filter = nullptr;
 
 struct WebKeyboard {
     key_item current{};
@@ -375,16 +376,22 @@ void web_keyboard_read(lv_indev_t *, lv_indev_data_t *data)
     pthread_mutex_lock(&keyboard_mutex);
     if (!STAILQ_EMPTY(&keyboard_queue)) {
         const int intercept = cp0_keyboard_get_lvgl_keypad_intercept();
+        const cp0_keyboard_key_filter_t filter = keyboard_key_filter;
         key_item *elm = STAILQ_FIRST(&keyboard_queue);
         STAILQ_REMOVE_HEAD(&keyboard_queue, entries);
 
-        lv_obj_t *root = lv_screen_active();
-        if (root) lv_obj_send_event(root, static_cast<lv_event_code_t>(LV_EVENT_KEYBOARD), elm);
+        int swallowed = 0;
+        if (filter)
+            swallowed = filter(elm);
+        if (!swallowed) {
+            lv_obj_t *root = lv_screen_active();
+            if (root) lv_obj_send_event(root, static_cast<lv_event_code_t>(LV_EVENT_KEYBOARD), elm);
 
-        if (!intercept) {
-            data->key = linux_key_to_lv(elm->key_code);
-            if (data->key)
-                data->state = static_cast<lv_indev_state_t>(elm->key_state);
+            if (!intercept) {
+                data->key = linux_key_to_lv(elm->key_code);
+                if (data->key)
+                    data->state = static_cast<lv_indev_state_t>(elm->key_state);
+            }
         }
         data->continue_reading = !STAILQ_EMPTY(&keyboard_queue);
         std::free(elm);
@@ -465,6 +472,16 @@ cp0_keyboard_input_context_t cp0_keyboard_get_input_context(void)
 {
     return static_cast<cp0_keyboard_input_context_t>(
         keyboard_input_context.load(std::memory_order_acquire));
+}
+
+void cp0_keyboard_set_key_filter(cp0_keyboard_key_filter_t filter)
+{
+    keyboard_key_filter = filter;
+}
+
+cp0_keyboard_key_filter_t cp0_keyboard_get_key_filter(void)
+{
+    return keyboard_key_filter;
 }
 
 const char *kbd_state_name(int state)
