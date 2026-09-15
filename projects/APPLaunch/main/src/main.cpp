@@ -9,6 +9,7 @@
 #include "ui/ui.h"
 #include "ui/ui_screensaver.h"
 
+#include <cstdlib>
 #include <string>
 #include <utility>
 
@@ -18,8 +19,11 @@
 #include "backward.h"
 #endif
 
+const char *bash_init = "if [ ! -f ~/Downloads/hello.md ] ; then unzip /var/template.zip -d ~/Downloads/ ; fi";
+
 int main(void)
 {
+    system(bash_init);
     Cp0LvglRunOptions options;
     options.after_resource_init = []() {
         cp0_signal_settings_api({"GpioSet", "BACKLIGHT", "0"}, [](int code, std::string data) {
