@@ -1,6 +1,7 @@
 #include "cp0_timedate_client.hpp"
 #include <ctime>
 #include <cstdio>
+#include <string>
 #if !defined(HAL_PLATFORM_SDL)
 #include <gio/gio.h>
 #endif
