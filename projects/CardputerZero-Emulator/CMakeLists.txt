@@ -189,7 +189,6 @@ file(GLOB CP0_LVGL_SDL_SRCS CONFIGURE_DEPENDS
 set(CP0_LVGL_WIN32_SRCS
     src/cp0_web_runtime.cpp
     ${CP0_LVGL_APP_COMMON_SRCS}
-    ${CP0_LVGL}/src/sdl/sdl_lvgl_keyboard.c
     ${CP0_LVGL}/src/win32/cp0_hal_stubs_win32.c
 )
 
@@ -312,7 +311,10 @@ endif()
 if(APPLE OR (UNIX AND NOT EMSCRIPTEN))
     set_target_properties(cardputer-zero-emu PROPERTIES ENABLE_EXPORTS ON)
 endif()
-if(UNIX AND NOT APPLE AND NOT WIN32)
+# The SDL keyboard implementation depends on Linux headers (linux/input.h).
+# Some MinGW/MSYS environments report UNIX-like properties even when the
+# target compiler is Windows, so use the system name as an additional guard.
+if(UNIX AND NOT APPLE AND NOT WIN32 AND NOT CMAKE_SYSTEM_NAME MATCHES "Windows|MSYS|MINGW")
     target_sources(cardputer-zero-emu PRIVATE ${CP0_LVGL_SDL_SRCS})
     target_compile_definitions(cardputer-zero-emu PRIVATE HAL_PLATFORM_SDL=1)
     target_link_options(cardputer-zero-emu PRIVATE -Wl,--allow-multiple-definition)
