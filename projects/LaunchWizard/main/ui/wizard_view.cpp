@@ -421,7 +421,7 @@ void render_wifi_list()
 {
     add_chrome(kAccentNetwork, 60);
     if (g.wifi_status_connected) {
-        const std::string connected = "Connected WiFi: " +
+        const std::string connected = "Connected Wi-Fi: " +
             field_tail(g.wifi_status_ssid, false, 10) + "  " +
             (g.wifi_status_ip.empty() ? std::string("No IP")
                                       : field_tail(g.wifi_status_ip, false, 15));
@@ -509,7 +509,7 @@ void render_wifi_password()
     add_chrome(kAccentNetwork, 60);
     if (g.wifi_connected) {
         add_label(ui.screen_obj, "WI-FI CONNECTED", font_sm(), 0x31d843, 36, 48);
-        const std::string status = "Connected WiFi: " + field_tail(g.wifi_ssid, false, 18);
+        const std::string status = "Connected Wi-Fi: " + field_tail(g.wifi_ssid, false, 18);
         add_message_label(ui.screen_obj, status.c_str(), font_sm(),
                           0xffffff, 36, 76, 248, 18);
         const std::string ip = "IP: " + (g.wifi_ip.empty() ? std::string("Unavailable") : g.wifi_ip);

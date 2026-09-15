@@ -52,7 +52,7 @@ extern "C" hal_wifi_status_t hal_wifi_get_status(void)
 {
     hal_wifi_status_t status{};
     status.connected = 1;
-    std::strncpy(status.ssid, "SimulatedWiFi", WIFI_SSID_MAX - 1);
+    std::strncpy(status.ssid, "SimulatedWi-Fi", WIFI_SSID_MAX - 1);
     std::strncpy(status.ip, "192.168.1.100", sizeof(status.ip) - 1);
     status.signal = 80;
     return status;
@@ -65,7 +65,7 @@ extern "C" int hal_wifi_scan(hal_wifi_ap_t *output, int max_access_points)
     const int count = std::min(max_access_points, 3);
     std::memset(output, 0, sizeof(hal_wifi_ap_t) * static_cast<size_t>(count));
     if (count > 0) {
-        std::strncpy(output[0].ssid, "SimulatedWiFi", WIFI_SSID_MAX - 1);
+        std::strncpy(output[0].ssid, "SimulatedWi-Fi", WIFI_SSID_MAX - 1);
         std::strncpy(output[0].security, "WPA2", sizeof(output[0].security) - 1);
         output[0].signal = 80;
         output[0].in_use = 1;
@@ -76,7 +76,7 @@ extern "C" int hal_wifi_scan(hal_wifi_ap_t *output, int max_access_points)
         output[1].signal = 55;
     }
     if (count > 2) {
-        std::strncpy(output[2].ssid, "FreeWiFi", WIFI_SSID_MAX - 1);
+        std::strncpy(output[2].ssid, "FreeWi-Fi", WIFI_SSID_MAX - 1);
         std::strncpy(output[2].security, "Open", sizeof(output[2].security) - 1);
         output[2].signal = 30;
     }

@@ -513,20 +513,20 @@ const lv_font_t *LvSettingWifiScanPage3::input_font(uint16_t size){
 const char *LvSettingWifiScanPage3::scan_error_message(int result){
         switch (result) {
             case CP0_WIFI_ERROR_RADIO_OFF:
-                return "WiFi is off. Enable WiFi to scan";
+                return "Wi-Fi is off. Enable Wi-Fi to scan";
             case CP0_WIFI_ERROR_TIMEOUT:
-                return "WiFi scan timed out. Press R to retry";
+                return "Wi-Fi scan timed out. Press R to retry";
             case CP0_WIFI_ERROR_SERVICE:
-                return "WiFi service unavailable. Press R to retry";
+                return "Wi-Fi service unavailable. Press R to retry";
             default:
-                return "WiFi scan failed. Press R to retry";
+                return "Wi-Fi scan failed. Press R to retry";
         }
     }
 
 const char *LvSettingWifiScanPage3::connection_error_message(int result){
         switch (result) {
             case CP0_WIFI_ERROR_RADIO_OFF:
-                return "WiFi is off";
+                return "Wi-Fi is off";
             case CP0_WIFI_ERROR_AUTH:
                 return "Incorrect password";
             case CP0_WIFI_ERROR_NOT_FOUND:
@@ -536,9 +536,9 @@ const char *LvSettingWifiScanPage3::connection_error_message(int result){
             case CP0_WIFI_ERROR_TIMEOUT:
                 return "Network operation timed out";
             case CP0_WIFI_ERROR_INVALID:
-                return "Invalid WiFi credentials";
+                return "Invalid Wi-Fi credentials";
             default:
-                return "WiFi service unavailable";
+                return "Wi-Fi service unavailable";
         }
     }
 
@@ -593,7 +593,7 @@ void LvSettingWifiScanPage3::create_password_panel(){
         lv_obj_remove_flag(password_panel_, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_remove_flag(password_panel_, LV_OBJ_FLAG_SCROLLABLE);
 
-        password_title_   = create_label(password_panel_, "WiFi password", 8, 8, 0x58A6FF,
+        password_title_   = create_label(password_panel_, "Wi-Fi password", 8, 8, 0x58A6FF,
                                          settings_fonts::sans(13, LV_FREETYPE_FONT_STYLE_BOLD));
         password_network_ = create_label(password_panel_, "", 8, 28, 0xCCCCCC, settings_fonts::cjk_sans(10));
         password_input_   = create_hidden_input(password_panel_, 48, metric(LayoutMetric::MaxPasswordBytes));
@@ -701,7 +701,7 @@ void LvSettingWifiScanPage3::render_password_panel(){
             if (password_input_) lv_obj_add_flag(password_input_, LV_OBJ_FLAG_HIDDEN);
             const bool forgetting = connection_state_ && connection_state_->operation == NetworkOperation::Forget;
             if (password_title_)
-                lv_label_set_text(password_title_, forgetting ? "Forgetting WiFi..." : "Connecting...");
+                lv_label_set_text(password_title_, forgetting ? "Forgetting Wi-Fi..." : "Connecting...");
             if (password_network_) {
                 const std::string text = "Network: " + password_ssid_;
                 lv_label_set_text(password_network_, text.c_str());
@@ -718,7 +718,7 @@ void LvSettingWifiScanPage3::render_password_panel(){
 
         if (password_value_) lv_obj_add_flag(password_value_, LV_OBJ_FLAG_HIDDEN);
         if (password_input_) lv_obj_remove_flag(password_input_, LV_OBJ_FLAG_HIDDEN);
-        if (password_title_) lv_label_set_text(password_title_, "WiFi password");
+        if (password_title_) lv_label_set_text(password_title_, "Wi-Fi password");
         if (password_network_) {
             std::string text = password_ssid_;
             if (!password_security_.empty()) {
@@ -788,12 +788,12 @@ void LvSettingWifiScanPage3::render_hidden_network_panel(){
 
 void LvSettingWifiScanPage3::refresh_status(){
         if (wifi_data_->status.connected && !wifi_data_->status.ssid.empty()) {
-            title_text_ = "Connected WiFi: ";
+            title_text_ = "Connected Wi-Fi: ";
             title_text_ += wifi_data_->status.ssid;
             title_text_ += "  ";
             title_text_ += wifi_data_->status.ip.empty() ? "No IP" : wifi_data_->status.ip;
         } else {
-            title_text_ = "WiFi: Not connected";
+            title_text_ = "Wi-Fi: Not connected";
         }
     }
 
@@ -827,10 +827,10 @@ void LvSettingWifiScanPage3::show_power_warning(){
         lv_obj_set_style_pad_all(power_warning_, 0, LV_PART_MAIN);
         lv_obj_clear_flag(power_warning_, LV_OBJ_FLAG_SCROLLABLE);
 
-        lv_obj_t *title     = lv_msgbox_add_title(power_warning_, "WiFi is disabled");
+        lv_obj_t *title     = lv_msgbox_add_title(power_warning_, "Wi-Fi is disabled");
         lv_obj_t *header    = lv_msgbox_get_header(power_warning_);
         lv_obj_t *content   = lv_msgbox_get_content(power_warning_);
-        lv_obj_t *message   = lv_msgbox_add_text(power_warning_, "Enable WiFi before continuing.");
+        lv_obj_t *message   = lv_msgbox_add_text(power_warning_, "Enable Wi-Fi before continuing.");
         lv_obj_t *ok_button = lv_msgbox_add_footer_button(power_warning_, "OK");
         lv_obj_t *footer    = lv_msgbox_get_footer(power_warning_);
         lv_obj_t *ok_label  = ok_button ? lv_obj_get_child(ok_button, 0) : nullptr;
@@ -915,7 +915,7 @@ void LvSettingWifiScanPage3::render(){
         if (title_) lv_label_set_text(title_, title_text_.c_str());
         if (empty_) {
             const std::string message = !scan_error_.empty() ? scan_error_
-                                        : scanning_          ? "Scanning for WiFi networks..."
+                                        : scanning_          ? "Scanning for Wi-Fi networks..."
                                                              : "No networks found. Press R to rescan.";
             lv_label_set_text(empty_, message.c_str());
             if (wifi_data_->access_points.empty())
@@ -1124,7 +1124,7 @@ std::string LvSettingWifiScanPage3::password_validation_error() const{
                        [](unsigned char ch) { return static_cast<char>(std::toupper(ch)); });
         if (security.find("802.1X") != std::string::npos || security.find("EAP") != std::string::npos ||
             security.find("ENTERPRISE") != std::string::npos)
-            return "Enterprise WiFi is not supported";
+            return "Enterprise Wi-Fi is not supported";
         if (security.find("WPA") == std::string::npos) return {};
         if (password_.size() >= 8 && password_.size() <= 63) return {};
         if (password_.size() == 64 &&
@@ -1320,7 +1320,7 @@ bool LvSettingWifiScanPage3::start_network_operation(NetworkOperation operation,
             connection_state_.reset();
             connection_pending_ = false;
             ++generation_;
-            const std::string error = "Unable to start WiFi operation";
+            const std::string error = "Unable to start Wi-Fi operation";
             if (origin == ConnectionOrigin::HiddenPasswordEntry) {
                 clear_password();
                 password_error_ = error;
@@ -1470,7 +1470,7 @@ void LvSettingWifiScanPage3::handle_dispatch_failures(){
             scanning_             = false;
             scan_restart_pending_ = false;
             ++generation_;
-            scan_error_ = "Unable to deliver WiFi scan result";
+            scan_error_ = "Unable to deliver Wi-Fi scan result";
             render();
         }
 
@@ -1482,7 +1482,7 @@ void LvSettingWifiScanPage3::handle_dispatch_failures(){
         connection_state_.reset();
         connection_pending_ = false;
         ++generation_;
-        const std::string error = "Unable to deliver WiFi operation result";
+        const std::string error = "Unable to deliver Wi-Fi operation result";
         if (state->origin == ConnectionOrigin::HiddenPasswordEntry) {
             password_error_ = error;
             clear_password();
@@ -1620,7 +1620,7 @@ void LvSettingWifiScanPage3::start_scan(){
         }
         if (!ui_dispatch_timer_) {
             scanning_   = false;
-            scan_error_ = "Unable to start WiFi scan";
+            scan_error_ = "Unable to start Wi-Fi scan";
             render();
             return;
         }
@@ -1671,7 +1671,7 @@ void LvSettingWifiScanPage3::start_scan(){
                 }
             })) {
             scanning_   = false;
-            scan_error_ = "Unable to start WiFi scan";
+            scan_error_ = "Unable to start Wi-Fi scan";
             render();
         }
     }

@@ -17,6 +17,16 @@ constexpr uint32_t kBarBackgroundColor = 0x555C66;
 constexpr uint32_t kAccentColor = 0xF2C94C;
 constexpr uint32_t kTextColor = 0xFFFFFF;
 
+void center_osd(lv_obj_t *obj)
+{
+    if (!obj) return;
+    lv_display_t *display = lv_obj_get_display(obj);
+    if (!display) return;
+    const lv_coord_t width = lv_display_get_horizontal_resolution(display);
+    const lv_coord_t height = lv_display_get_vertical_resolution(display);
+    lv_obj_set_pos(obj, (width - kWidth) / 2, (height - kHeight) / 2);
+}
+
 } // namespace
 
 bool LauncherMediaOsd::ensure_created() noexcept
@@ -36,7 +46,7 @@ bool LauncherMediaOsd::ensure_created() noexcept
     lv_obj_add_event_cb(container_, container_delete_cb, LV_EVENT_DELETE, this);
     lv_obj_remove_style_all(container_);
     lv_obj_set_size(container_, kWidth, kHeight);
-    lv_obj_center(container_);
+    center_osd(container_);
     lv_obj_set_style_bg_color(container_, lv_color_hex(kBackgroundColor), 0);
     lv_obj_set_style_bg_opa(container_, LV_OPA_90, 0);
     lv_obj_set_style_radius(container_, 8, 0);
@@ -120,7 +130,7 @@ bool LauncherMediaOsd::ensure_created() noexcept
 void LauncherMediaOsd::show() noexcept
 {
     try {
-    lv_obj_center(container_);
+    center_osd(container_);
     lv_obj_move_foreground(container_);
     lv_obj_clear_flag(container_, LV_OBJ_FLAG_HIDDEN);
     if (!hide_timer_)
@@ -154,7 +164,9 @@ void LauncherMediaOsd::show_level(const char *title, const char *icon, int perce
     lv_bar_set_value(bar_, state.percent, LV_ANIM_OFF);
     lv_obj_set_size(icon_, 30, 24);
     lv_obj_set_pos(icon_, 14, 10);
+    lv_obj_set_size(title_, 76, 18);
     lv_obj_set_pos(title_, 48, 12);
+    lv_obj_set_style_text_align(title_, LV_TEXT_ALIGN_LEFT, 0);
     lv_obj_set_pos(value_, 124, 12);
     lv_obj_clear_flag(value_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_clear_flag(bar_, LV_OBJ_FLAG_HIDDEN);
@@ -178,7 +190,9 @@ void LauncherMediaOsd::show_mute(bool muted) noexcept
     lv_label_set_text(title_, state.title.c_str());
     lv_obj_set_size(icon_, 60, 32);
     lv_obj_set_pos(icon_, 65, 12);
-    lv_obj_set_pos(title_, 55, 50);
+    lv_obj_set_size(title_, kWidth, 18);
+    lv_obj_set_pos(title_, 0, 50);
+    lv_obj_set_style_text_align(title_, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_add_flag(value_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(bar_, LV_OBJ_FLAG_HIDDEN);
     show();

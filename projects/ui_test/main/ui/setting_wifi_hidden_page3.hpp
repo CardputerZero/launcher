@@ -209,7 +209,7 @@ private:
         if (!ComponensObj || warning_active_) return;
         lv_obj_clean(ComponensObj);
         create_label(ComponensObj,
-                     "Add Hidden WiFi",
+                     "Add Hidden Wi-Fi",
                      8,
                      5,
                      SCREEN_W - 16,
@@ -329,7 +329,7 @@ private:
         lv_obj_set_style_bg_color(dialog, lv_color_hex(0x171717), LV_PART_MAIN);
         lv_obj_set_style_bg_opa(dialog, LV_OPA_COVER, LV_PART_MAIN);
         lv_obj_set_style_pad_all(dialog, 0, LV_PART_MAIN);
-        create_label(dialog, "WiFi power is off", 12, 10, 250, 0xFFAA00, &lv_font_montserrat_14);
+        create_label(dialog, "Wi-Fi power is off", 12, 10, 250, 0xFFAA00, &lv_font_montserrat_14);
         create_label(dialog, "Turn on Power before continuing.", 12, 36, 250, 0xCCCCCC, &lv_font_montserrat_12);
         create_label(dialog, "OK", 246, 68, 28, 0x58A6FF, &lv_font_montserrat_12);
     }
@@ -393,7 +393,7 @@ private:
                 if (lifetime.expired()) return;
                 saving_ = false;
                 if (result != 0) {
-                    error_ = "Hidden WiFi connection failed";
+                    error_ = "Hidden Wi-Fi connection failed";
                     render();
                 } else if (LeaveSelfPage) {
                     LeaveSelfPage();
@@ -407,11 +407,11 @@ private:
                 else
                     cp0_signal_wifi_api({"ConnectHidden", ssid, password}, callback);
             } catch (...) {
-                callback(-1, "WiFi service unavailable");
+                callback(-1, "Wi-Fi service unavailable");
             }
         })) {
             saving_ = false;
-            error_ = "WiFi request could not be scheduled";
+            error_ = "Wi-Fi request could not be scheduled";
             render();
         }
     }

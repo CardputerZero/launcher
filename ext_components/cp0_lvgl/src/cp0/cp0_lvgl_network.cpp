@@ -249,6 +249,23 @@ public:
             }
         }
 
+        // nmcli can return once the Wi-Fi link is activated while DHCP is
+        // still completing. Keep the IPv4 success requirement, but allow the
+        // address a short time to appear before declaring the connection bad.
+        if (command_result == 0) {
+            const auto deadline = std::chrono::steady_clock::now() +
+                                  std::chrono::seconds(5);
+            for (;;) {
+                update_status_cache();
+                const cp0_wifi_status_t pending = get_status();
+                if (pending.connected && std::string(pending.ssid) == ssid &&
+                    pending.ip[0] != '\0')
+                    break;
+                if (std::chrono::steady_clock::now() >= deadline)
+                    break;
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            }
+        }
         update_status_cache();
         const cp0_wifi_status_t status = get_status();
         // NetworkManager may report an activated Wi-Fi link before DHCP has
