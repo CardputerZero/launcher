@@ -662,39 +662,41 @@ void UISettingTreePage::create_page_detail()
     {
         mode_tree.append_child(root, SettingEntry{"User", settings_account_page_factory, PageType::FullCustom});
     }
-    if(0)
     {
         NodeIter date_time = mode_tree.append_child(root, SettingEntry{"Date & Time", roller_page_factory});
-        SettingEntry ntp_entry{"NTP", settings_rtc_ntp_api, true};
+        mode_tree.append_child(date_time,
+                               SettingEntry{"Info", settings_rtc_info_page_factory, PageType::FullCustom});
+        SettingEntry ntp_entry{"Network Time", settings_rtc_ntp_api, true};
         ntp_entry.status_read_policy = SettingStatusReadPolicy::Direct;
         mode_tree.append_child(date_time, std::move(ntp_entry));
+        NodeIter manual = mode_tree.append_child(date_time, SettingEntry{"Set Manually", roller_page_factory});
         {
-            NodeIter year = mode_tree.append_child(date_time, SettingEntry{"Year", rtc_page3_factory});
+            NodeIter year = mode_tree.append_child(manual, SettingEntry{"Year", rtc_page3_factory});
             append_numeric_options(mode_tree, year, 2000, 2099);
         }
         {
-            NodeIter month = mode_tree.append_child(date_time, SettingEntry{"Month", rtc_page3_factory});
+            NodeIter month = mode_tree.append_child(manual, SettingEntry{"Month", rtc_page3_factory});
             append_numeric_options(mode_tree, month, 1, 12);
         }
         {
-            NodeIter day = mode_tree.append_child(date_time, SettingEntry{"Day", rtc_page3_factory});
+            NodeIter day = mode_tree.append_child(manual, SettingEntry{"Day", rtc_page3_factory});
             append_numeric_options(mode_tree, day, 1, 31);
         }
         {
-            NodeIter hour = mode_tree.append_child(date_time, SettingEntry{"Hour", rtc_page3_factory});
+            NodeIter hour = mode_tree.append_child(manual, SettingEntry{"Hour", rtc_page3_factory});
             append_numeric_options(mode_tree, hour, 0, 23);
         }
         {
-            NodeIter minute = mode_tree.append_child(date_time, SettingEntry{"Minute", rtc_page3_factory});
+            NodeIter minute = mode_tree.append_child(manual, SettingEntry{"Minute", rtc_page3_factory});
             append_numeric_options(mode_tree, minute, 0, 59);
         }
         {
-            NodeIter second = mode_tree.append_child(date_time, SettingEntry{"Second", rtc_page3_factory});
+            NodeIter second = mode_tree.append_child(manual, SettingEntry{"Second", rtc_page3_factory});
             append_numeric_options(mode_tree, second, 0, 59);
         }
         {
             NodeIter write_rtc = mode_tree.append_child(
-                date_time, SettingEntry{"Write hardware RTC?", settings_rtc_confirm_page_factory});
+                manual, SettingEntry{"Write hardware RTC?", settings_rtc_confirm_page_factory});
             mode_tree.append_child(write_rtc, SettingEntry{"Yes"});
             mode_tree.append_child(write_rtc, SettingEntry{"No"});
         }

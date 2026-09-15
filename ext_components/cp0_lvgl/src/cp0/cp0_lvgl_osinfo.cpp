@@ -15,6 +15,7 @@
 #include "../cp0_update_job.hpp"
 #include "../cp0_launcher_updater.hpp"
 #include "cp0_process_commands.hpp"
+#include "cp0_timedate_client.hpp"
 
 #include <algorithm>
 #include <cerrno>
@@ -317,31 +318,20 @@ private:
 
     static int time_set(const char *timestamp)
     {
-        if (!timestamp || !timestamp[0])
-            return -1;
-        const char *argv[] = {"sudo", "date", "-s", timestamp, nullptr};
-        return cp0_process_run_argv(argv, 0);
+        return cp0_timedate_set_time(timestamp);
     }
 
     // Returns 1 if systemd automatic time sync (NTP) is enabled, 0 if disabled,
     // negative on failure to query.
     static int ntp_get()
     {
-        char output[64] = {};
-        const char *argv[] = {"timedatectl", "show", "-p", "NTP", "--value", nullptr};
-        if (cp0_process_capture_argv(argv, output, sizeof(output)) != 0)
-            return -1;
-        std::string s(output);
-        // trim trailing newline / whitespace
-        while (!s.empty() && (s.back() == '\n' || s.back() == '\r' || s.back() == ' '))
-            s.pop_back();
-        return s == "yes" ? 1 : 0;
+        int enabled = 0;
+        return cp0_timedate_get_ntp(&enabled) == 0 ? enabled : -1;
     }
 
     static int ntp_set(bool enable)
     {
-        const char *argv[] = {"sudo", "timedatectl", "set-ntp", enable ? "true" : "false", nullptr};
-        return cp0_process_run_argv(argv, 0);
+        return cp0_timedate_set_ntp(enable ? 1 : 0);
     }
 
     static int apt_update_background()
@@ -381,8 +371,12 @@ public:
 extern "C" void init_osinfo(void)
 {
     static cp0::SignalRegistration<decltype(cp0_signal_osinfo_api)> registration;
+    static cp0::SignalRegistration<decltype(cp0_signal_timedate_api)> timedate_registration;
     auto osinfo = std::make_shared<OsInfoSystem>();
     registration.replace(cp0_signal_osinfo_api, [osinfo](std::list<std::string> arg, std::function<void(int, std::string)> callback) {
+        osinfo->api_call(std::move(arg), std::move(callback));
+    });
+    timedate_registration.replace(cp0_signal_timedate_api, [osinfo](std::list<std::string> arg, std::function<void(int, std::string)> callback) {
         osinfo->api_call(std::move(arg), std::move(callback));
     });
 }

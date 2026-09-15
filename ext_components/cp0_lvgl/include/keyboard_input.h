@@ -49,6 +49,7 @@ struct key_item {
 };
 
 typedef void (*cp0_keyboard_key_handler_t)(const struct key_item *item);
+typedef int (*cp0_keyboard_key_filter_t)(const struct key_item *item);
 
 STAILQ_HEAD(keyboard_queue_t, key_item);
 extern struct keyboard_queue_t keyboard_queue;
@@ -60,6 +61,11 @@ void *keyboard_read_thread(void *argv);
 int cp0_keyboard_inject(uint32_t key_code, int key_state, uint32_t mods);
 int cp0_keyboard_inject_text(const char *utf8);
 void cp0_keyboard_set_global_key_handler(cp0_keyboard_key_handler_t handler);
+/* LVGL thread only. After the screensaver filter, a nonzero result consumes the
+ * key before custom events, global shortcuts, and native keypad delivery.
+ * The item is borrowed for this call only. NULL removes the filter. */
+void cp0_keyboard_set_key_filter(cp0_keyboard_key_filter_t filter);
+cp0_keyboard_key_filter_t cp0_keyboard_get_key_filter(void);
 /* Keep LV_EVENT_KEYBOARD delivery while suppressing the LVGL keypad group path. */
 void cp0_keyboard_set_lvgl_keypad_intercept(int intercept);
 int cp0_keyboard_get_lvgl_keypad_intercept(void);

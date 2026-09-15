@@ -74,6 +74,10 @@ trap 'rm -f "$binary" "$esc_state_object"' EXIT HUP INT TERM
 "$binary"
 
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror \
+    "$root/tests/test_bluetooth_recovery.cpp" -o "$binary"
+"$binary"
+
+"${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror \
     -I"$root/src" "$root/tests/test_pointer_lifecycle.cpp" -o "$binary"
 "$binary"
 
@@ -84,6 +88,13 @@ trap 'rm -f "$binary" "$esc_state_object"' EXIT HUP INT TERM
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror \
     -I"$root/include" -I"$root/src/cp0" \
     "$root/tests/test_wifi_error_policy.cpp" -o "$binary"
+"$binary"
+
+"${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -pthread \
+    -I"$root/include" -I"$root/../../SDK/github_source/eventpp/include" \
+    "$root/src/cp0/cp0_network_policy.cpp" \
+    "$root/src/cp0_network_api_contract.cpp" \
+    "$root/tests/test_wifi_connection.cpp" -o "$binary"
 "$binary"
 
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -pthread \

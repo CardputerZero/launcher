@@ -211,8 +211,17 @@ public:
 
         update_status_cache();
         const cp0_wifi_status_t current_status = get_status();
-        if (current_status.connected && std::string(current_status.ssid) == ssid)
-            return 0;
+        if (current_status.connected && std::string(current_status.ssid) == ssid) {
+            // A submitted password must be checked by a fresh activation.
+            const int disconnect_result = disconnect();
+            if (disconnect_result != 0)
+                return disconnect_result;
+            // Remove the active profile so NetworkManager cannot silently
+            // reuse its previous credentials during the next activation.
+            const int forget_result = profile_forget(ssid);
+            if (forget_result != 0 && forget_result != CP0_WIFI_ERROR_NOT_FOUND)
+                return forget_result;
+        }
 
         constexpr const char *kActivationTimeoutSeconds = "20";
         const bool with_password = password && password[0];
@@ -242,9 +251,13 @@ public:
 
         update_status_cache();
         const cp0_wifi_status_t status = get_status();
-        if (status.connected && std::string(status.ssid) == ssid) {
+        // NetworkManager may report an activated Wi-Fi link before DHCP has
+        // completed. Treat that intermediate state as a failed connection so
+        // callers never surface a connected screen without a usable address.
+        const bool same_active_network =
+            command_result == 0 && status.connected && std::string(status.ssid) == ssid;
+        if (same_active_network && status.ip[0] != '\0')
             return 0;
-        }
 
         // Failed. When the user just entered a password, nmcli may have saved a
         // profile with that wrong password (named after the SSID). Delete it so the
@@ -252,6 +265,8 @@ public:
         if (with_password) {
             profile_forget(ssid);
         }
+        if (same_active_network)
+            return CP0_WIFI_ERROR_IP_CONFIG;
         if (command_result == -ETIMEDOUT) return CP0_WIFI_ERROR_TIMEOUT;
         return cp0::wifi::classify_command_failure(output);
     }
@@ -318,7 +333,7 @@ public:
 
         std::string output;
         return cp0_process_commands::capture_argv_with_timeout(
-            {"nmcli", "dev", "disconnect", "iface", wifi_iface}, output, 5000);
+            {"nmcli", "dev", "disconnect", wifi_iface}, output, 5000);
     }
 
     int radio_enabled()

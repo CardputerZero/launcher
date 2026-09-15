@@ -85,9 +85,11 @@ if "CONFIG_CP0_LVGL_COMPONENT_ENABLED" in os.environ or "CONFIG_SIGSLOT_COMPONEN
             File('src/cp0/cp0_desktop_exec_policy.cpp'),
             File('src/cp0/cp0_process_commands.cpp'),
             File('src/cp0/cp0_process_lifecycle.cpp'),
+            File('src/cp0/cp0_timedate_client.cpp'),
         ]
     else:
         platform_srcs = Glob('src/cp0/*.c*')
+        platform_srcs += [File('src/cp0/cp0_timedate_client.cpp')]
         REQUIREMENTS += ['input', 'xkbcommon', 'udev', 'pthread']
         REQUIREMENTS += [':libdbus-1.so.3']
         configure_target_gio(REQUIREMENTS, DEFINITIONS, LDFLAGS)

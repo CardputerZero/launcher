@@ -45,7 +45,13 @@ bool test_wizard_model()
     expect(model.current_timezone().label == std::string("UTC+08:00"),
            "default timezone label must be UTC+08:00");
     std::set<std::string> timezone_labels;
+    std::set<std::string> timezone_names;
     for (const Timezone &timezone : kTimezones) {
+        expect(timezone.name != nullptr &&
+                   std::string(timezone.name).find('/') != std::string::npos,
+               "every UTC option must map to an IANA city timezone");
+        expect(timezone_names.insert(timezone.name).second,
+               "city timezone mappings must be unique");
         const std::string label = timezone.label;
         expect(label.size() == 9 && label.compare(0, 3, "UTC") == 0 &&
                    (label[3] == '+' || label[3] == '-') && label[6] == ':',
@@ -53,12 +59,17 @@ bool test_wizard_model()
         expect(timezone_labels.insert(label).second,
                "timezone labels must be unique");
     }
-    expect(std::string(kTimezones[6].name) == "America/New_York" &&
-               std::string(kTimezones[6].label) == "UTC-05:00",
-           "UTC-05:00 must retain a DST-capable IANA mapping");
-    expect(std::string(kTimezones[kTimezoneCount - 1].name) == "Pacific/Kiritimati" &&
-               std::string(kTimezones[kTimezoneCount - 1].label) == "UTC+14:00",
-           "UTC+14:00 timezone missing");
+    expect(std::string(kTimezones[3].name) == "Pacific/Pitcairn" &&
+               std::string(kTimezones[3].label) == "UTC-08:00",
+           "UTC-08:00 must map to the city list");
+    expect(std::string(kTimezones[12].name) == "Atlantic/Reykjavik" &&
+               std::string(kTimezones[12].label) == "UTC+00:00",
+           "UTC+00:00 must map to the city list");
+    expect(kTimezoneCount == 35,
+           "timezone list must contain the complete city timezone set");
+    expect(std::string(kTimezones[25].name) == "Asia/Shanghai" &&
+               std::string(kTimezones[25].label) == "UTC+08:00",
+           "UTC+08:00 must map to Shanghai");
     expect(validate_username("cardputer", error), "ordinary username rejected");
     expect(!validate_username("root", error), "root username accepted");
     expect(validate_hostname("CardputerZero", error), "default hostname rejected");

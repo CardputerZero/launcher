@@ -13,7 +13,8 @@ namespace cp0::bluetooth::policy {
 // BlueZ reports these errors for operations that have already reached the
 // requested state. They are success at the Settings API boundary.
 bool is_idempotent_success(const std::string &command,
-                           const std::string &error_name);
+                           const std::string &error_name,
+                           const std::string &error_message = {});
 
 // AlreadyExists/AlreadyPaired means that Pair() found a valid existing bond;
 // deleting it as recovery would make the next attempt less reliable.

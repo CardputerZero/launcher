@@ -29,6 +29,15 @@ int main()
     assert(is_idempotent_success("start", "org.bluez.Error.InProgress"));
     assert(is_idempotent_success("stop", "org.bluez.Error.NotReady"));
     assert(is_idempotent_success("stop", "org.bluez.Error.NotAuthorized"));
+    assert(is_idempotent_success("stop", "org.bluez.Error.Failed",
+                                 "No discovery started"));
+    assert(!is_idempotent_success("stop", "org.bluez.Error.Failed"));
+    assert(!is_idempotent_success("stop", "org.bluez.Error.Failed",
+                                  "Failed to stop discovery"));
+    assert(!is_idempotent_success("start", "org.bluez.Error.Failed",
+                                  "No discovery started"));
+    assert(!is_idempotent_success("stop", "org.freedesktop.DBus.Error.NoReply",
+                                  "No discovery started"));
     assert(!is_idempotent_success("stop", "org.bluez.Error.InProgress"));
     assert(!is_idempotent_success("remove", "org.bluez.Error.AlreadyExists"));
 

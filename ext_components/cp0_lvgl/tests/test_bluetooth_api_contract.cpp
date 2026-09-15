@@ -12,6 +12,9 @@
 int main()
 {
     cp0::bluetooth::Request request;
+    assert(cp0::bluetooth::parse_request({"BtReset"}, request));
+    assert(request.command == cp0::bluetooth::Command::Reset);
+    assert(!cp0::bluetooth::parse_request({"BtReset", "1"}, request));
     assert(cp0::bluetooth::parse_request({"BtStatus"}, request));
     assert(!cp0::bluetooth::parse_request({"BtStatus", "junk"}, request));
     assert(cp0::bluetooth::parse_request({"BtPower", "0"}, request));

@@ -5,6 +5,7 @@
  */
 
 #include "ui_screensaver.h"
+#include "ui_low_battery.h"
 
 #include "cp0_lvgl_app.h"
 #include "cp0_enum_cast.h"
@@ -185,6 +186,7 @@ void finish_screensaver_exit() noexcept
     } catch (...) {
     }
     s_exiting = false;
+    launcher_battery_ui::refresh_visibility();
 }
 
 void curtain_exit_anim_completed(lv_anim_t *animation) noexcept
@@ -367,6 +369,7 @@ void start_screensaver()
     lv_obj_set_size(s_overlay, width, height);
 
     const ScreensaverFrame frame = s_model.activate(width, height, lv_tick_get());
+    launcher_battery_ui::refresh_visibility();
     lv_obj_set_pos(s_block, frame.x, frame.y);
     set_block_image();
 
@@ -466,6 +469,11 @@ extern "C" int ui_screensaver_filter_key(const struct key_item *item)
         stop_screensaver();
         return 0;
     }
+}
+
+extern "C" int ui_screensaver_is_active(void)
+{
+    return s_model.active() || s_exiting;
 }
 
 extern "C" void ui_screensaver_set_foreground(int foreground)

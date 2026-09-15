@@ -308,7 +308,21 @@ void api_call(std::list<std::string> args, std::function<void(int, std::string)>
         cp0_zmq_logf("bt", "api async completion code=%d message=%s", code, message.c_str());
         report(callback, code, message == "ok" ? std::string() : message);
     };
-    if (request.command == Command::Power)
+    if (request.command == Command::Reset) {
+        std::vector<std::shared_ptr<BluetoothBackendSession>> sessions;
+        {
+            std::lock_guard<std::mutex> lock(g_sessions_mutex);
+            for (const auto &entry : g_sessions) {
+                entry.second->scanning.store(false);
+                sessions.push_back(entry.second);
+            }
+        }
+        // Legacy scan loops must finish submitting their old commands before
+        // the worker advances its reset generation.
+        for (const auto &session : sessions)
+            if (session->scan_thread.joinable()) session->scan_thread.join();
+        cp0_bluez_dbus::reset_async(std::move(completion));
+    } else if (request.command == Command::Power)
         cp0_bluez_dbus::set_power_async(request.value, std::move(completion));
     else if (request.command == Command::Alias)
         cp0_bluez_dbus::set_alias_async(request.text.c_str(), std::move(completion));

@@ -96,6 +96,7 @@ private:
     struct ApiDispatchState {
         std::mutex mutex;
         bool stopped = false;
+        uint64_t minimum_generation = 0;
         std::deque<ApiResult> pending;
         std::deque<AgentPromptRequest> agent_events;
     };
@@ -138,6 +139,8 @@ private:
     void start_scan();
 
     void restart_scan();
+
+    void restart_bluetooth();
 
     void stop_scan(std::function<void()> after_stop = {});
 
@@ -199,6 +202,10 @@ private:
     bool scan_stop_after_start_ = false;
     bool scan_stop_pending_ = false;
     bool discovery_active_ = false;
+    // A failed/unfinished start or stop may still own a BlueZ scan session.
+    bool scan_stop_required_ = false;
+    bool reset_pending_ = false;
+    uint64_t reset_generation_ = 0;
     bool agent_prompt_active_ = false;
     AgentPromptRequest agent_request_{};
     // Device object paths used to scope the one-time pairing/connection

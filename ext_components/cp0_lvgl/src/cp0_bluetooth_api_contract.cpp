@@ -85,6 +85,10 @@ bool parse_request(const std::list<std::string> &arguments, Request &request)
         return true;
     }
 
+    if (command == "BtReset") {
+        request.command = Command::Reset;
+        return arguments.size() == 1;
+    }
     if (command == "BtStatus" || command == "BtDiscoveryStart" ||
         command == "BtDiscoveryStop") {
         if (arguments.size() != 1) return false;

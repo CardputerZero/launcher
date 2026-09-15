@@ -143,11 +143,6 @@ public:
         const int validation = validate_credentials(ssid, password);
         if (validation != 0) return validation;
 
-        // Hidden networks that were configured previously must be activated
-        // from their saved profile. `nmcli dev wifi connect ... hidden yes`
-        // treats the request as a new connection and does not reliably reuse
-        // the existing credentials.
-        if (profile_exists(ssid)) return connect(ssid, {});
         return cp0_wifi_connect_hidden(ssid.c_str(), password.empty() ? nullptr : password.c_str());
     }
 

@@ -66,6 +66,11 @@ private:
 
 void settings_rtc_ntp_api(int command, void *data) noexcept;
 
+std::unique_ptr<DComponens::LvglComponensBase> settings_rtc_info_page_factory(
+    lv_obj_t *parent,
+    const NodeIter &parent_node,
+    std::function<void()> back_callback);
+
 std::unique_ptr<DComponens::LvglComponensBase> settings_rtc_page_factory(
     lv_obj_t *parent,
     const NodeIter &parent_node,

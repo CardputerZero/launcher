@@ -20,6 +20,7 @@
 #define SLOGD(...) do { } while (0)
 
 static cp0_keyboard_key_handler_t global_key_handler;
+static cp0_keyboard_key_filter_t key_filter;
 static cp0_keyboard_input_lifecycle_t keypad_lifecycle;
 static volatile int lvgl_keypad_intercept;
 
@@ -43,6 +44,16 @@ __attribute__((weak)) int ui_screensaver_filter_key(const struct key_item *item)
 void cp0_keyboard_set_global_key_handler(cp0_keyboard_key_handler_t handler)
 {
     global_key_handler = handler;
+}
+
+void cp0_keyboard_set_key_filter(cp0_keyboard_key_filter_t filter)
+{
+    key_filter = filter;
+}
+
+cp0_keyboard_key_filter_t cp0_keyboard_get_key_filter(void)
+{
+    return key_filter;
 }
 
 void cp0_keyboard_set_lvgl_keypad_intercept(int intercept)
@@ -104,6 +115,8 @@ static void keypad_read(lv_indev_t *indev, lv_indev_data_t *data)
               utf8_debug, item->codepoint, (void *)lv_screen_active());
 
         int swallowed = ui_screensaver_filter_key(item);
+        if (!swallowed && key_filter)
+            swallowed = key_filter(item);
         if (!swallowed) {
             lv_obj_t *root = lv_screen_active();
             if (root)

@@ -18,7 +18,7 @@ enum class Command {
     ConnectedListInit, ConnectedListGet, ConnectedListDeinit,
     ScanOn, ScanOff,
     Status, Power, Alias, Discoverable, Scan, DiscoveryStart, DiscoveryStop,
-    List, ConnectedList, Pair, CancelPairing, Connect, Disconnect, Remove,
+    List, ConnectedList, Pair, CancelPairing, Connect, Disconnect, Remove, Reset,
 };
 
 struct Request {

@@ -120,7 +120,8 @@ Status parse_device_status(const std::string &output)
             continue;
 
         wifi_found = true;
-        if (!connected && !has_connection)
+        // A profile name is also present while association/authentication is pending.
+        if (!connected)
             continue;
         status.connected = true;
         status.wifi_interface = fields[0];

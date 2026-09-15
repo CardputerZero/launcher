@@ -706,7 +706,11 @@ private:
         }
 
         cp0_wifi_status_t status{};
-        if (!read_status(status) || !status.connected || std::string(status.ssid) != ssid) {
+        // NM_DEVICE_STATE_ACTIVATED only means the Wi-Fi link is up; DHCP may
+        // still be pending. Do not report success until an IPv4 address is
+        // available, otherwise callers advance with an unusable connection.
+        if (!read_status(status) || !status.connected || std::string(status.ssid) != ssid ||
+            status.ip[0] == '\0') {
             if (add)
                 cleanup_failed_profile(ssid, created_uuid);
             return CP0_WIFI_ERROR_IP_CONFIG;

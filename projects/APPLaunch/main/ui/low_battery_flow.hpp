@@ -13,6 +13,7 @@ namespace launcher_battery_ui {
 enum class LowBatteryWarning {
     None,
     Undefined,
+    Reminder,
     Low,
     ShutdownCountdown,
 };
@@ -30,12 +31,25 @@ public:
             shutdown_requested_ = false;
             return;
         }
-        if (charging || soc >= 5) {
+        if (charging || soc > 20 || soc == 5) {
+            reminder_shown_ = false;
             warning_ = LowBatteryWarning::None;
             shutdown_requested_ = false;
             return;
         }
-        if (soc <= 0) {
+        if (soc > 5) {
+            shutdown_requested_ = false;
+            reminder_soc_ = soc;
+            if (!reminder_shown_) {
+                reminder_shown_ = true;
+                warning_ = LowBatteryWarning::Reminder;
+            } else if (warning_ != LowBatteryWarning::Reminder) {
+                warning_ = LowBatteryWarning::None;
+            }
+            return;
+        }
+        reminder_shown_ = false;
+        if (soc <= 3) {
             if (warning_ != LowBatteryWarning::ShutdownCountdown) {
                 countdown_started_ = now;
                 shutdown_requested_ = false;
@@ -46,6 +60,14 @@ public:
         warning_ = LowBatteryWarning::Low;
         shutdown_requested_ = false;
     }
+
+    void dismiss_reminder()
+    {
+        if (warning_ == LowBatteryWarning::Reminder)
+            warning_ = LowBatteryWarning::None;
+    }
+
+    int reminder_soc() const { return reminder_soc_; }
 
     bool take_shutdown_due(uint32_t now)
     {
@@ -77,6 +99,9 @@ private:
     LowBatteryWarning warning_ = LowBatteryWarning::None;
     uint32_t countdown_started_ = 0;
     bool shutdown_requested_ = false;
+    // Keep this latch through invalid reads to avoid repeating a reminder on recovery.
+    bool reminder_shown_ = false;
+    int reminder_soc_ = 0;
 };
 
 } // namespace launcher_battery_ui

@@ -6,6 +6,7 @@
 
 #include "cp0_bluez_dbus_client.hpp"
 #include "cp0_bluetooth_error_policy.hpp"
+#include "cp0_bluetooth_recovery.hpp"
 #include "cp0_lvgl_log.h"
 
 #include <gio/gio.h>
@@ -49,7 +50,7 @@ struct Snapshot {
 
 class BluezWorker {
 public:
-    ~BluezWorker() { stop(); }
+    ~BluezWorker() { stop(); g_clear_object(&command_cancellable_); }
 
     void start()
     {
@@ -157,9 +158,10 @@ public:
             return;
         }
         cp0_zmq_logf("bt", "command queued kind=%s value=%s", request->kind.c_str(), request->value.c_str());
-        invoke([request](BluezWorker *self) {
+        request->generation = command_generation_.load();
+        if (!invoke([request](BluezWorker *self) {
             self->execute(request);
-        });
+        })) finish(request, -1, "bluetooth worker unavailable");
     }
 
     void agent_reply(guint64 id, bool accepted, const std::string &text)
@@ -207,6 +209,7 @@ private:
         std::string value;
         cp0_bluez_dbus::Completion completion;
         bool connection_call = false;
+        uint64_t generation = 0;
     };
 
     struct PairCleanupRequest {
@@ -214,6 +217,7 @@ private:
         std::string path;
         std::string reason;
         bool force = false;
+        uint64_t generation = 0;
     };
 
     std::once_flag start_once_;
@@ -240,6 +244,9 @@ private:
 
     std::mutex snapshot_mutex_;
     Snapshot snapshot_;
+    std::atomic<uint64_t> command_generation_{1};
+    GCancellable *command_cancellable_ = g_cancellable_new();
+    bool resetting_ = false;
     std::mutex listener_mutex_;
     std::vector<cp0_bluez_dbus::SnapshotListener> listeners_;
 
@@ -691,6 +698,18 @@ private:
     {
         cp0_zmq_logf("bt", "command execute kind=%s value=%s adapter=%s",
                      request->kind.c_str(), request->value.c_str(), snapshot_.adapter_path.c_str());
+        if (request->generation != command_generation_.load()) {
+            finish(request, -1, "bluetooth request canceled by reset");
+            return;
+        }
+        if (resetting_) {
+            finish(request, -1, "bluetooth reset in progress");
+            return;
+        }
+        if (request->kind == "reset") {
+            begin_reset(request);
+            return;
+        }
         if (!connection_ || !snapshot_.adapter) {
             finish(request, -1, "no bluetooth adapter");
             return;
@@ -751,7 +770,7 @@ private:
                 request->connection_call = true;
                 g_dbus_connection_call(connection_, kBluez, path.c_str(), kDevice,
                                        method, nullptr, nullptr, G_DBUS_CALL_FLAGS_NONE,
-                                       kCallTimeoutMs, nullptr, method_done, request);
+                                       kCallTimeoutMs, command_cancellable_, method_done, request);
             }
         }
     }
@@ -763,12 +782,46 @@ private:
         return result;
     }
 
+    void begin_reset(CommandRequest *request)
+    {
+        resetting_ = true;
+        ++command_generation_;
+        g_cancellable_cancel(command_cancellable_);
+        g_clear_object(&command_cancellable_);
+        command_cancellable_ = g_cancellable_new();
+        // Cancel agent invocations without triggering RemoveDevice cleanup.
+        cancel_agent_requests("bluetooth reset", false);
+        pairing_device_path_.clear();
+        cp0_zmq_log("bt", "reset: canceled previous transactions");
+        if (!connection_ || !snapshot_.adapter) {
+            resetting_ = false;
+            finish(request, -1, "Bluetooth adapter unavailable.");
+            return;
+        }
+        cp0::bluetooth::recovery::restart(
+            [this](bool enabled, cp0::bluetooth::recovery::Completion complete) {
+                if (!connection_ || !snapshot_.adapter || snapshot_.adapter_path.empty()) {
+                    complete(-1, "Bluetooth adapter unavailable.");
+                    return;
+                }
+                auto *power = new CommandRequest{"power", enabled ? "1" : "0", std::move(complete)};
+                power->generation = command_generation_.load();
+                // Internal reset stages bypass the gate on external commands.
+                set_property("Powered", g_variant_new_boolean(enabled), power);
+            },
+            [this, request](int code, std::string message) {
+                resetting_ = false;
+                cp0_zmq_logf("bt", "reset complete code=%d message=%s", code, message.c_str());
+                finish(request, code, message.empty() ? "ok" : message.c_str());
+            });
+    }
+
     void set_property(const char *property, GVariant *value, CommandRequest *request)
     {
         GVariant *parameters = g_variant_new("(ssv)", kAdapter, property, value);
         request->connection_call = true;
         g_dbus_connection_call(connection_, kBluez, snapshot_.adapter_path.c_str(), kProperties, "Set",
-                               parameters, nullptr, G_DBUS_CALL_FLAGS_NONE, kCallTimeoutMs, nullptr,
+                               parameters, nullptr, G_DBUS_CALL_FLAGS_NONE, kCallTimeoutMs, command_cancellable_,
                                method_done, request);
     }
 
@@ -783,7 +836,7 @@ private:
         if (request->kind == "pair") timeout_ms = kPairTimeoutMs;
         else if (request->kind == "connect") timeout_ms = kConnectTimeoutMs;
         g_dbus_proxy_call(proxy, method, parameters, G_DBUS_CALL_FLAGS_NONE,
-                          timeout_ms, nullptr, method_done, request);
+                          timeout_ms, command_cancellable_, method_done, request);
     }
 
     static void method_done(GObject *source, GAsyncResult *result, gpointer user_data)
@@ -795,6 +848,12 @@ private:
             reply = g_dbus_connection_call_finish(G_DBUS_CONNECTION(source), result, &error);
         else
             reply = g_dbus_proxy_call_finish(G_DBUS_PROXY(source), result, &error);
+        if (auto *self = instance(); !self || request->generation != self->command_generation_.load()) {
+            if (reply) g_variant_unref(reply);
+            g_clear_error(&error);
+            finish(request, -1, "bluetooth request canceled by reset");
+            return;
+        }
         // BlueZ operations are intentionally idempotent at the Settings API
         // boundary. Pair() commonly leaves Device1 connected, so the UI's
         // follow-up Connect() can legitimately return AlreadyConnected. The
@@ -806,8 +865,12 @@ private:
             gchar *remote_error = g_dbus_error_get_remote_error(error);
             error_name = remote_error ? remote_error : "";
             g_free(remote_error);
+            // Classify BlueZ's message without GLib's GDBus.Error prefix.
+            GError *remote_detail = g_error_copy(error);
+            g_dbus_error_strip_remote_error(remote_detail);
             idempotent_success = cp0::bluetooth::policy::is_idempotent_success(
-                request->kind, error_name);
+                request->kind, error_name, remote_detail->message);
+            g_error_free(remote_detail);
 
             // Device1.Connect may wait for profile setup and time out even
             // though BlueZ has already raised Connected=true. Trust the
@@ -830,6 +893,17 @@ private:
         idempotent_success = idempotent_success || connect_already_established;
         const int code = (!error && reply) || idempotent_success ? 0 : -1;
         const std::string message = idempotent_success ? "ok" : (error ? error->message : "ok");
+
+        if (code == 0 && request->kind == "power") {
+            if (auto *self = instance()) {
+                std::lock_guard<std::mutex> lock(self->snapshot_mutex_);
+                self->snapshot_.status.powered = request->value == "1";
+                if (request->value == "0") {
+                    for (auto &item : self->snapshot_.devices)
+                        item.second.value.connected = 0;
+                }
+            }
+        }
 
         if (code == 0 && request->kind == "discoverable") {
             if (auto *self = instance()) {
@@ -953,6 +1027,13 @@ private:
     void handle_agent_call(const char *method, GVariant *parameters, GDBusMethodInvocation *invocation)
     {
         if (!method) return;
+        if (resetting_) {
+            if (std::strcmp(method, "Cancel") == 0 || std::strcmp(method, "Release") == 0)
+                g_dbus_method_invocation_return_value(invocation, nullptr);
+            else
+                g_dbus_method_invocation_return_dbus_error(invocation, "org.bluez.Error.Canceled", "bluetooth reset");
+            return;
+        }
         if (std::strcmp(method, "Release") == 0) {
             g_dbus_method_invocation_return_value(invocation, nullptr);
             cancel_agent_requests("agent released");
@@ -1085,7 +1166,7 @@ private:
         }
 
         auto *cleanup = new (std::nothrow) PairCleanupRequest{
-            this, path, reason ? reason : "pairing cleanup", force};
+            this, path, reason ? reason : "pairing cleanup", force, command_generation_.load()};
         if (!cleanup) {
             remove_device(path, reason, force);
             return;
@@ -1094,7 +1175,7 @@ private:
                      path.c_str(), cleanup->reason.c_str());
         g_dbus_connection_call(
             connection_, kBluez, path.c_str(), kDevice, "CancelPairing", nullptr,
-            nullptr, G_DBUS_CALL_FLAGS_NONE, kCallTimeoutMs, nullptr,
+            nullptr, G_DBUS_CALL_FLAGS_NONE, kCallTimeoutMs, command_cancellable_,
             [](GObject *source, GAsyncResult *result, gpointer user_data) {
                 std::unique_ptr<PairCleanupRequest> cleanup(
                     static_cast<PairCleanupRequest *>(user_data));
@@ -1109,7 +1190,7 @@ private:
                 }
                 if (reply) g_variant_unref(reply);
                 if (error) g_error_free(error);
-                if (cleanup->worker)
+                if (cleanup->worker && cleanup->generation == cleanup->worker->command_generation_.load())
                     cleanup->worker->remove_device(
                         cleanup->path, cleanup->reason.c_str(), cleanup->force);
             }, cleanup);
@@ -1136,7 +1217,7 @@ private:
         g_dbus_connection_call(connection_, kBluez, snapshot_.adapter_path.c_str(), kAdapter,
                                 "RemoveDevice", g_variant_new("(o)", path.c_str()),
                                 nullptr, G_DBUS_CALL_FLAGS_NONE, kCallTimeoutMs,
-                                nullptr, nullptr, nullptr);
+                                command_cancellable_, nullptr, nullptr);
     }
 
     void cancel_agent_requests(const char *message, bool cleanup_devices = true)
@@ -1185,6 +1266,7 @@ cp0_bt_status_t status() { return worker().status(); }
 int list(cp0_bt_device_t *out, int max_devices, bool connected_only) { return worker().list(out, max_devices, connected_only); }
 
 void set_power_async(int enabled, Completion completion) { command("power", enabled ? "1" : "0", std::move(completion)); }
+void reset_async(Completion completion) { command("reset", nullptr, std::move(completion)); }
 void set_alias_async(const char *alias, Completion completion) { command("alias", alias, std::move(completion)); }
 void set_discoverable_async(int enabled, Completion completion) { command("discoverable", enabled ? "1" : "0", std::move(completion)); }
 void start_discovery_async(Completion completion) { command("start", nullptr, std::move(completion)); }

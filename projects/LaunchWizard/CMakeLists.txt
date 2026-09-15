@@ -56,6 +56,19 @@ if(BUILD_TESTING)
     target_link_libraries(launch_wizard_core_tests PRIVATE LaunchWizard::core)
     add_test(NAME launch_wizard.core
              COMMAND launch_wizard_core_tests)
+
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        add_executable(launch_wizard_wifi_tests
+            tests/test_wifi_connection.cpp
+            main/ui/wizard_service.cpp
+        )
+        target_link_libraries(launch_wizard_wifi_tests PRIVATE LaunchWizard::core)
+        target_compile_definitions(launch_wizard_wifi_tests PRIVATE LAUNCH_WIZARD_DRY_RUN=0)
+        # Keep the real Wi-Fi service while discarding unrelated device services.
+        target_compile_options(launch_wizard_wifi_tests PRIVATE -UNDEBUG -ffunction-sections -fdata-sections)
+        target_link_options(launch_wizard_wifi_tests PRIVATE -Wl,--gc-sections)
+        add_test(NAME launch_wizard.wifi COMMAND launch_wizard_wifi_tests)
+    endif()
 endif()
 
 install(TARGETS launch_wizard_core

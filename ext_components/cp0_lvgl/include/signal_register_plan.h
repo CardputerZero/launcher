@@ -20,6 +20,7 @@ def_hal_fun(void(uint64_t, std::string, std::string, std::string, std::function<
 def_hal_fun(void(std::list<std::string>, std::function<void(int, std::string)>), cp0_signal_settings_api)
 def_hal_fun(void(std::list<std::string>, std::function<void(int, std::string)>), cp0_signal_process_api)
 def_hal_fun(void(std::list<std::string>, std::function<void(int, std::string)>), cp0_signal_osinfo_api)
+def_hal_fun(void(std::list<std::string>, std::function<void(int, std::string)>), cp0_signal_timedate_api)
 def_hal_fun(void(std::list<std::string>, std::function<void(int, std::string)>), cp0_signal_bq27220_api)
 def_hal_fun(void(), cp0_signal_network)
 def_hal_fun(void(), cp0_signal_forkexec)

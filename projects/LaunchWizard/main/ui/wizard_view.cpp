@@ -117,6 +117,21 @@ lv_obj_t *add_label(lv_obj_t *parent, const char *text, const lv_font_t *font,
     return label;
 }
 
+// Labels created without a width grow past the 320 px screen and are clipped
+// by the page. Error/status text is dynamic, so constrain it and let LVGL
+// wrap it instead of silently dropping the right hand side.
+lv_obj_t *add_message_label(lv_obj_t *parent, const char *text,
+                            const lv_font_t *font, uint32_t color,
+                            int x, int y, int width, int height = LV_SIZE_CONTENT)
+{
+    lv_obj_t *label = add_label(parent, text, font, color, x, y);
+    lv_obj_set_width(label, width);
+    if (height != LV_SIZE_CONTENT)
+        lv_obj_set_height(label, height);
+    lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
+    return label;
+}
+
 lv_obj_t *add_rect(lv_obj_t *parent, int x, int y, int w, int h, uint32_t bg,
                    int border_w, uint32_t border_color, int radius, lv_opa_t bg_opa = LV_OPA_COVER)
 {
@@ -329,7 +344,8 @@ void render_account()
                    g.account_focus == 2, kAccentAccount, !g.account_password_visible);
 
     if (!g.form_error.empty())
-        add_label(ui.screen_obj, g.form_error.c_str(), font_xs(), 0xff6b6b, 36, 137);
+        add_message_label(ui.screen_obj, g.form_error.c_str(), font_xs(),
+                          0xff6b6b, 36, 137, 276, 15);
 
     add_key_hint(8, "ESC", 31, "BACK", kAccentAccount);
     add_key_hint(72, "ALT", 98, g.account_password_visible ? "HIDE" : "SHOW", kAccentAccount);
@@ -381,7 +397,8 @@ void render_ethernet_config()
     }
 
     if (!g.ethernet_error.empty())
-        add_label(ui.screen_obj, g.ethernet_error.c_str(), font_xs(), 0xff5a5a, 194, 58);
+        add_message_label(ui.screen_obj, g.ethernet_error.c_str(), font_xs(),
+                          0xff5a5a, 194, 58, 118, 15);
     add_key_hint(8, "ESC", 31, "BACK", kAccentNetwork);
     add_key_hint(92, "Z/C", 119, "MODE", kAccentNetwork);
     add_key_hint(172, "OK", 191, "CONFIRM", kAccentNetwork);
@@ -408,7 +425,8 @@ void render_wifi_list()
             field_tail(g.wifi_status_ssid, false, 10) + "  " +
             (g.wifi_status_ip.empty() ? std::string("No IP")
                                       : field_tail(g.wifi_status_ip, false, 15));
-        add_label(ui.screen_obj, connected.c_str(), font_xs(), 0x31d843, 30, 41);
+        add_message_label(ui.screen_obj, connected.c_str(), font_xs(),
+                          0x31d843, 20, 41, 280, 15);
     } else {
         add_label(ui.screen_obj, "SELECT WI-FI", font_sm(), kAccentNetwork, 36, 40);
     }
@@ -439,8 +457,9 @@ void render_wifi_list()
             ? g.wifi_scan_error.c_str()
             : (g.wifi_scan_retrying ? "No networks yet. Retrying..."
                                     : "No networks found. Press R.");
-        add_label(ui.screen_obj, message, font_sm(),
-                  g.wifi_scan_error.empty() ? kColorMuted : 0xff5a5a, 36, 82);
+        add_message_label(ui.screen_obj, message, font_sm(),
+                          g.wifi_scan_error.empty() ? kColorMuted : 0xff5a5a,
+                          36, 82, 248, 30);
         add_key_hint(14, "ESC", 38, "BACK", kAccentNetwork);
         add_key_hint(105, "R", 124, "RESCAN", kAccentNetwork);
         add_key_hint(190, "ALT", 214, "ADD HIDDEN", kAccentNetwork);
@@ -490,10 +509,12 @@ void render_wifi_password()
     add_chrome(kAccentNetwork, 60);
     if (g.wifi_connected) {
         add_label(ui.screen_obj, "WI-FI CONNECTED", font_sm(), 0x31d843, 36, 48);
-        const std::string status = "Connected WiFi: " + field_tail(g.wifi_ssid, false, 24);
-        add_label(ui.screen_obj, status.c_str(), font_sm(), 0xffffff, 36, 76);
+        const std::string status = "Connected WiFi: " + field_tail(g.wifi_ssid, false, 18);
+        add_message_label(ui.screen_obj, status.c_str(), font_sm(),
+                          0xffffff, 36, 76, 248, 18);
         const std::string ip = "IP: " + (g.wifi_ip.empty() ? std::string("Unavailable") : g.wifi_ip);
-        add_label(ui.screen_obj, ip.c_str(), font_sm(), kColorMuted, 36, 99);
+        add_message_label(ui.screen_obj, ip.c_str(), font_sm(),
+                          kColorMuted, 36, 99, 248, 18);
         add_key_hint(14, "ESC", 38, "BACK", kAccentNetwork);
         add_key_hint(208, "OK", 232, "NEXT", kAccentNetwork);
         return;
@@ -518,7 +539,8 @@ void render_wifi_password()
     if (g.wifi_connecting)
         add_label(ui.screen_obj, "Connecting...", font_sm(), kAccentNetwork, 38, 128);
     else if (!g.wifi_connect_error.empty())
-        add_label(ui.screen_obj, g.wifi_connect_error.c_str(), font_sm(), 0xff5a5a, 38, 128);
+        add_message_label(ui.screen_obj, g.wifi_connect_error.c_str(), font_xs(),
+                          0xff5a5a, 38, 123, 274, 28);
 
     add_key_hint(8, "ESC", 31, "BACK", kAccentNetwork);
     add_key_hint(72, "ALT", 98, g.wifi_password_visible ? "HIDE" : "SHOW", kAccentNetwork);
@@ -549,7 +571,8 @@ void render_manual_time()
         lv_obj_t *dialog = add_rect(ui.screen_obj, 38, 46, 244, 88, kColorFieldBg,
                                     2, kAccentTime, 4);
         add_label(dialog, "INVALID DATE OR TIME", font_sm(), kAccentTime, 14, 11);
-        add_label(dialog, g.time_warning_message.c_str(), font_sm(), 0xffffff, 14, 35);
+        add_message_label(dialog, g.time_warning_message.c_str(), font_sm(),
+                          0xffffff, 14, 35, 216, 30);
         add_label(dialog, "OK", font_xs(), kAccentTime, 14, 66);
         add_label(dialog, "CLOSE", font_xs(), 0xffffff, 38, 66);
     }
@@ -618,14 +641,12 @@ void render_applying()
     lv_anim_set_repeat_count(&rotation, LV_ANIM_REPEAT_INFINITE);
     lv_anim_start(&rotation);
 
-    ui.config_status_label = add_label(
-        ui.screen_obj, message.c_str(), font_sm(), kColorMuted, 24, 108);
-    lv_label_set_long_mode(ui.config_status_label, LV_LABEL_LONG_DOT);
-    lv_obj_set_width(ui.config_status_label, 272);
+    ui.config_status_label = add_message_label(
+        ui.screen_obj, message.c_str(), font_sm(), kColorMuted, 24, 104, 272, 28);
     lv_obj_set_style_text_align(ui.config_status_label, LV_TEXT_ALIGN_CENTER, 0);
     const std::string step_text = "Step " + std::to_string(step) + "/" + std::to_string(total);
     lv_obj_t *step_label = add_label(
-        ui.screen_obj, step_text.c_str(), font_sm(), kAccentDone, 0, 132);
+        ui.screen_obj, step_text.c_str(), font_sm(), kAccentDone, 0, 134);
     lv_obj_set_width(step_label, kScreenWidth);
     lv_obj_set_style_text_align(step_label, LV_TEXT_ALIGN_CENTER, 0);
     add_key_hint(14, "ESC", 38, "CANCEL", kAccentDone);
@@ -647,10 +668,8 @@ void render_restart_or_error(bool restarting)
     { std::lock_guard<std::mutex> lock(g.mutex); message = g.worker_message; }
     add_label(ui.screen_obj, restarting ? "Restarting device..." : "Configuration failed",
               font_lg(), 0xffffff, 36, 54);
-    lv_obj_t *label = add_label(ui.screen_obj, message.c_str(), font_sm(),
-                                restarting ? kColorMuted : 0xff5a5a, 36, 84);
-    lv_obj_set_width(label, 248);
-    lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
+    add_message_label(ui.screen_obj, message.c_str(), font_sm(),
+                      restarting ? kColorMuted : 0xff5a5a, 36, 84, 248, 52);
     if (!restarting) {
         add_key_hint(14, "ESC", 38, "BACK", kAccentTime);
         add_key_hint(132, "OK", 156, "RETRY", kAccentTime);
@@ -908,6 +927,14 @@ void start_wifi_connection()
     const bool hidden = g.wifi_hidden;
     g.wifi_connecting = true;
     g.wifi_connected = false;
+    // Discard completion state from an earlier attempt before launching a
+    // new worker. This prevents a queued result from being consumed as the
+    // outcome of the retry.
+    {
+        std::lock_guard<std::mutex> lock(g.mutex);
+        g.wifi_connect_ready = false;
+        g.wifi_connect_succeeded = false;
+    }
     g.wifi_ip.clear();
     g.wifi_connect_error.clear();
     render();
@@ -916,6 +943,9 @@ void start_wifi_connection()
         std::string connected_ip;
         const std::string error = launch_wizard::WizardService::connect_wifi(
             ssid, password, &connected_ip, hidden);
+        WifiConnectionStatus failed_status;
+        if (!error.empty())
+            failed_status = launch_wizard::WizardService::read_wifi_status();
         std::lock_guard<std::mutex> lock(g.mutex);
         g.wifi_connect_succeeded = error.empty();
         g.wifi_connect_error = error;
@@ -924,6 +954,16 @@ void start_wifi_connection()
             g.wifi_status_connected = true;
             g.wifi_status_ssid = ssid;
             g.wifi_status_ip = connected_ip;
+        } else {
+            // A failed retry invalidates any cached success for this SSID;
+            // otherwise returning to the list can offer a stale "connected"
+            // shortcut and bypass the password page.
+            const bool different_active_network =
+                failed_status.connected && !failed_status.ip.empty() &&
+                failed_status.ssid != ssid;
+            g.wifi_status_connected = different_active_network;
+            g.wifi_status_ssid = different_active_network ? failed_status.ssid : std::string();
+            g.wifi_status_ip = different_active_network ? failed_status.ip : std::string();
         }
         g.wifi_connect_ready = true;
         cp0_lvgl_wake();
@@ -1130,7 +1170,8 @@ void handle_enter()
         cancel_wifi_scan();
         g.wifi_ssid = g.wifi_list[g.wifi_sel].ssid;
         const bool already_connected =
-            g.wifi_status_connected && g.wifi_status_ssid == g.wifi_ssid;
+            g.wifi_status_connected && g.wifi_status_ssid == g.wifi_ssid &&
+            !g.wifi_status_ip.empty();
         g.wifi_security = g.wifi_list[g.wifi_sel].security;
         g.wifi_manual = false;
         g.wifi_hidden = false;
@@ -1392,8 +1433,19 @@ void poll_worker_cb(lv_timer_t *timer)
             const int scan_error = g.wifi_scan_result_error;
             g.wifi_scan_result_error = 0;
             if (g.wifi_scan_status.available) {
-                g.wifi_status_connected = g.wifi_scan_status.connected;
-                g.wifi_connected = g.wifi_scan_status.connected;
+                // Keep the status cache for the list banner, but only expose
+                // a connection to the password page once an IPv4 address is
+                // present. NetworkManager briefly reports connected while
+                // DHCP is pending, which otherwise creates a false success
+                // state after retrying a password.
+                // cp0 reports Ethernet as `connected` too, with an empty
+                // SSID. Only treat a Wi‑Fi status as connected when it names
+                // the active network and has an IPv4 address.
+                g.wifi_status_connected = g.wifi_scan_status.connected &&
+                                          !g.wifi_scan_status.ssid.empty() &&
+                                          !g.wifi_scan_status.ip.empty();
+                if (g.screen == Screen::WifiList)
+                    g.wifi_connected = g.wifi_status_connected;
                 g.wifi_status_ssid = g.wifi_scan_status.ssid;
                 g.wifi_status_ip = g.wifi_scan_status.ip;
             }

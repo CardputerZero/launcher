@@ -11,7 +11,9 @@
 #include "first_boot_policy.h"
 #include "service_handoff.h"
 
+#if __has_include("global_config.h")
 #include "global_config.h"
+#endif
 #include "cp0_lvgl_app.h"
 
 #include <arpa/inet.h>
@@ -855,63 +857,44 @@ std::string apply_ssh(bool enabled)
 std::string WizardService::connect_wifi(const std::string &ssid, const std::string &password,
                                         std::string *connected_ip, bool hidden)
 {
+    if (connected_ip)
+        connected_ip->clear();
     if (ssid.empty())
-        return "";
+        return "Wi-Fi SSID required";
 #if LAUNCH_WIZARD_DRY_RUN
-    print_command({hidden ? "nmcli-hidden-wifi-connect" : "cp0_wifi_connect", ssid,
+    print_command({hidden ? "cp0_wifi_connect_hidden" : "cp0_wifi_connect", ssid,
                    password.empty() ? "<saved/open>" : "<password>"}, nullptr);
     if (connected_ip)
         *connected_ip = "192.168.1.100";
 #else
-    // Raspberry Pi Imager can provision and activate this profile before the
-    // first-boot wizard starts. Treat selecting that same SSID as success;
-    // asking NetworkManager to activate it again can return a transient error
-    // even though the device is already online.
-    cp0_wifi_status_t current{};
-    if (cp0_wifi_status_read(&current) == 0 && current.connected &&
-        std::string(current.ssid) == ssid) {
-        if (connected_ip)
-            *connected_ip = current.ip;
-        return "";
-    }
     if (cp0_wifi_radio_set_enabled(1) != 0)
         return "Wi-Fi radio could not be enabled";
-    if (hidden) {
-        std::vector<std::string> args = {
-            "nmcli", "--wait", "20", "dev", "wifi", "connect", ssid,
-        };
-        if (!password.empty())
-            args.insert(args.end(), {"password", password});
-        args.insert(args.end(), {"hidden", "yes"});
-        const CommandResult result = run_command(args);
-        if (result.code != 0)
-            return result.output.empty() ? "Hidden Wi-Fi connect failed" : result.output;
-    } else {
-        const int connect_result = cp0_wifi_connect(
-            ssid.c_str(), password.empty() ? nullptr : password.c_str());
-        if (connect_result != 0) {
-            switch (connect_result) {
-            case CP0_WIFI_ERROR_AUTH: return "Incorrect Wi-Fi password";
-            case CP0_WIFI_ERROR_NOT_FOUND: return "Wi-Fi network is no longer available";
-            case CP0_WIFI_ERROR_IP_CONFIG: return "Wi-Fi connected but IP setup failed";
-            case CP0_WIFI_ERROR_RADIO_OFF: return "Wi-Fi radio is disabled";
-            case CP0_WIFI_ERROR_TIMEOUT: return "Wi-Fi connection timed out; retry";
-            default: return "Network service could not connect; retry";
-            }
+    const char *credential = password.empty() ? nullptr : password.c_str();
+    const int connect_result = hidden ? cp0_wifi_connect_hidden(ssid.c_str(), credential)
+                                      : cp0_wifi_connect(ssid.c_str(), credential);
+    if (connect_result != 0) {
+        switch (connect_result) {
+        case CP0_WIFI_ERROR_AUTH: return "Incorrect Wi-Fi password";
+        case CP0_WIFI_ERROR_NOT_FOUND: return "Wi-Fi network is no longer available";
+        case CP0_WIFI_ERROR_IP_CONFIG: return "Wi-Fi connected but IP setup failed";
+        case CP0_WIFI_ERROR_RADIO_OFF: return "Wi-Fi radio is disabled";
+        case CP0_WIFI_ERROR_TIMEOUT: return "Wi-Fi connection timed out; retry";
+        default: return "Network service could not connect; retry";
         }
     }
 
-    // Hidden connections are created directly through nmcli, while
-    // cp0_wifi_status_read() serves a cache refreshed every three seconds.
-    // Give that cache time to observe the successful NetworkManager change.
+    // Allow the status cache to observe the successful activation.
     cp0_wifi_status_t status{};
     const auto status_deadline =
         std::chrono::steady_clock::now() + std::chrono::seconds(6);
     bool active = false;
     do {
         status = {};
+        // A link can be marked connected while DHCP is still pending. Wait
+        // for a non-empty IPv4 address before reporting success; otherwise
+        // the UI advances to the connected page with "IP: Unavailable".
         active = cp0_wifi_status_read(&status) == 0 && status.connected &&
-                 ssid == status.ssid;
+                 ssid == status.ssid && status.ip[0] != '\0';
         if (active)
             break;
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
