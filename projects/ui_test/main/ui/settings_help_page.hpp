@@ -93,7 +93,7 @@ public:
         add_label(8, 45, "Saved to ~/Pictures/Screenshots", 0x888888, text_font);
         add_label(8, 61, "Home: Hold ESC 3s", 0xECECEC, text_font);
         add_label(8, 77, "Navigate: Arrow keys / OK / ESC", 0xECECEC, text_font);
-        add_label(8, 93, "WiFi: Setting > WiFi > Scan", 0xECECEC, text_font);
+        add_label(8, 93, "Wi-Fi: Setting > Wi-Fi > Scan", 0xECECEC, text_font);
         add_label(8, 128, "ESC: back", 0x666666, text_font);
     }
 

@@ -38,7 +38,7 @@ def test_initial_disabled_state_shows_the_wifi_warning():
         create_ui,
         re.DOTALL,
     )
-    assert disabled_branch, "missing disabled-WiFi branch"
+    assert disabled_branch, "missing disabled-Wi-Fi branch"
     branch_body = disabled_branch.group("body")
     assert re.search(r"\brender\s*\(\s*\)\s*;", branch_body)
     assert re.search(r"\bshow_power_warning\s*\(\s*\)\s*;", branch_body)
@@ -56,14 +56,14 @@ def test_radio_off_scan_result_shows_the_wifi_warning():
     assert any("show_power_warning" in body for body in radio_off_checks)
 
     scan_errors = function_body("const char *LvSettingWifiScanPage3::scan_error_message")
-    assert "WiFi is off. Enable WiFi to scan" in string_literals(scan_errors)
+    assert "Wi-Fi is off. Enable Wi-Fi to scan" in string_literals(scan_errors)
 
 
 def test_wifi_warning_refers_to_the_enable_control():
     warning = function_body("void LvSettingWifiScanPage3::show_power_warning")
     warning_copy = string_literals(warning)
-    assert "WiFi is disabled" in warning_copy
-    assert "Enable WiFi before continuing." in warning_copy
+    assert "Wi-Fi is disabled" in warning_copy
+    assert "Enable Wi-Fi before continuing." in warning_copy
 
     # Internal member names may retain "power"; this contract covers text that
     # can actually reach the UI through a C++ string literal.

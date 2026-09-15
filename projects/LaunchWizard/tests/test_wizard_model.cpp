@@ -74,7 +74,7 @@ bool test_wizard_model()
     expect(!validate_username("root", error), "root username accepted");
     expect(validate_hostname("CardputerZero", error), "default hostname rejected");
     expect(!validate_hostname("bad host", error), "hostname with spaces accepted");
-    expect(validate_wifi_ssid("Hidden WiFi", error), "valid Wi-Fi SSID rejected");
+    expect(validate_wifi_ssid("Hidden Wi-Fi", error), "valid Wi-Fi SSID rejected");
     expect(!validate_wifi_ssid("", error), "empty Wi-Fi SSID accepted");
     expect(!validate_wifi_ssid(std::string(33, 'x'), error), "oversized Wi-Fi SSID accepted");
     expect(classify_wifi_security("") == WifiSecurity::Open,
