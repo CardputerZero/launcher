@@ -1,5 +1,27 @@
 # APPLaunch development guidance
 
+## Before code analysis: ensure `compile_commands.json` exists
+
+Before analyzing the code, check whether `compile_commands.json` exists in this
+directory (`projects/APPLaunch/compile_commands.json`). If it does not, follow
+the cross-compilation instructions in `../../README_ZH.md` (repo root): load
+the config matching your current platform, then run one cross-compilation:
+
+```bash
+export CONFIG_DEFAULT_FILE=linux_x86_cross_cp0_config_defaults.mk
+bbear -- scons -j22
+```
+
+`linux_x86_cross_cp0_config_defaults.mk` corresponds to the current platform
+(Linux x86_64 host, CP0 cross toolchain). Pick the matching
+`*_config_defaults.mk` for your platform from `../../README_ZH.md` — for
+example `linux_x86_sdl2_config_defaults.mk` for the SDL2 simulator on Linux.
+
+This command generates `compile_commands.json` in this directory. Then use the
+source files that actually participate in the cross-compilation (as listed in
+`compile_commands.json`) to confirm which code the project really uses, before
+working on the coding task.
+
 ## Scoped-enum conversions
 
 `cp0_lvgl` exports the public header `cp0_enum_cast.h`. Include it directly in
