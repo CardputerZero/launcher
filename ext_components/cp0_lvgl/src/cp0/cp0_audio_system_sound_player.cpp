@@ -24,7 +24,10 @@
 
 namespace {
 
-constexpr std::size_t kSoundCount = 3;
+/* Slots 0..2 are the platform's own startup/switch/enter sounds.  Applications
+ * can register further short sounds by name, which lands them on the same cached,
+ * asynchronous playback path instead of the uncached per-file player. */
+constexpr std::size_t kDefaultSoundCount = 3;
 constexpr ma_uint32 kChannels = 2;
 constexpr ma_uint32 kSampleRate = 48000;
 constexpr ma_uint32 kPeriodMilliseconds = 20;
@@ -47,8 +50,7 @@ class Cp0SystemSoundPlayer::Impl
 {
 public:
     Impl()
-        : names_{"Ding2.wav", "key_back.wav", "key_back.wav"}
-        , worker_(&Impl::worker_loop, this)
+        : worker_(&Impl::worker_loop, this)
     {
     }
 
@@ -78,8 +80,27 @@ public:
         command.type = CommandType::Reload;
         {
             std::lock_guard<std::mutex> lock(mutex_);
-            for (std::size_t i = 0; i < names_.size() && i < names.size(); ++i)
+            if (names.size() > names_.size()) names_.resize(names.size());
+            for (std::size_t i = 0; i < names.size(); ++i)
                 if (!names[i].empty()) names_[i] = names[i];
+            command.names = names_;
+            commands_.push_back(std::move(command));
+        }
+        wake_.notify_one();
+        return 0;
+    }
+
+    int add_named(const std::vector<std::string> &names)
+    {
+        Command command;
+        command.type = CommandType::Reload;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            for (const std::string &name : names) {
+                if (name.empty()) continue;
+                if (std::find(names_.begin(), names_.end(), name) != names_.end()) continue;
+                names_.push_back(name);
+            }
             command.names = names_;
             commands_.push_back(std::move(command));
         }
@@ -89,11 +110,13 @@ public:
 
     bool play_index(std::size_t index, PlayCallback callback)
     {
-        if (!enabled_.load(std::memory_order_acquire) || index >= kSoundCount)
+        if (!enabled_.load(std::memory_order_acquire))
             return false;
         {
             std::lock_guard<std::mutex> lock(mutex_);
-            if (stopping_ || !enabled_.load(std::memory_order_relaxed)) return false;
+            if (index >= names_.size() || stopping_ ||
+                !enabled_.load(std::memory_order_relaxed))
+                return false;
             Command command;
             command.type = CommandType::Play;
             command.index = index;
@@ -106,13 +129,22 @@ public:
 
     bool play_named(const std::string &name)
     {
-        std::size_t index = kSoundCount;
+        if (name.empty()) return false;
         {
             std::lock_guard<std::mutex> lock(mutex_);
             const auto it = std::find(names_.begin(), names_.end(), name);
-            if (it != names_.end()) index = static_cast<std::size_t>(it - names_.begin());
+            if (it == names_.end() || stopping_ ||
+                !enabled_.load(std::memory_order_relaxed))
+                return false;
+            // Resolve and enqueue under one lock; play_index() takes this same
+            // non-recursive mutex and cannot be called while it is held.
+            Command command;
+            command.type = CommandType::Play;
+            command.index = static_cast<std::size_t>(it - names_.begin());
+            commands_.push_back(std::move(command));
         }
-        return index < kSoundCount && play_index(index, nullptr);
+        wake_.notify_one();
+        return true;
     }
 
     void suspend()
@@ -151,6 +183,7 @@ public:
 
     bool contains(const std::string &name) const
     {
+        if (name.empty()) return false;
         std::lock_guard<std::mutex> lock(mutex_);
         return std::find(names_.begin(), names_.end(), name) != names_.end();
     }
@@ -172,6 +205,12 @@ public:
         return enabled_.load(std::memory_order_acquire);
     }
 
+    std::size_t sound_count() const
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return names_.size();
+    }
+
 private:
     enum class CommandType {
         Play,
@@ -184,7 +223,7 @@ private:
     struct Command {
         CommandType type = CommandType::Play;
         std::size_t index = 0;
-        std::array<std::string, kSoundCount> names;
+        std::vector<std::string> names;
         PlayCallback callback;
     };
 
@@ -196,7 +235,7 @@ private:
 
     void worker_loop()
     {
-        std::array<std::string, kSoundCount> initial_names;
+        std::vector<std::string> initial_names;
         {
             std::lock_guard<std::mutex> lock(mutex_);
             initial_names = names_;
@@ -297,10 +336,13 @@ private:
         return true;
     }
 
-    void decode_cache(const std::array<std::string, kSoundCount> &names)
+    void decode_cache(const std::vector<std::string> &names)
     {
         clear_cache();
-        for (std::size_t i = 0; i < cache_.size(); ++i)
+        cache_.resize(names.size());
+        sounds_.resize(names.size());
+        sound_initialized_.assign(names.size(), false);
+        for (std::size_t i = 0; i < names.size(); ++i)
             decode_sound(cache_[i], names[i]);
     }
 
@@ -364,8 +406,8 @@ private:
 
     bool play(std::size_t index)
     {
-        if (index >= kSoundCount || !cache_[index].buffer_initialized || !open_engine() ||
-            !sound_initialized_[index])
+        if (index >= cache_.size() || !cache_[index].buffer_initialized || !open_engine() ||
+            index >= sound_initialized_.size() || !sound_initialized_[index])
             return false;
 
         wait_for_engine_warmup();
@@ -397,16 +439,16 @@ private:
     mutable std::mutex mutex_;
     std::condition_variable wake_;
     std::deque<Command> commands_;
-    std::array<std::string, kSoundCount> names_;
+    std::vector<std::string> names_{"Ding2.wav", "key_back.wav", "key_back.wav"};
     std::atomic<bool> enabled_{true};
     bool stopping_ = false;
     std::thread worker_;
 
-    std::array<CachedSound, kSoundCount> cache_;
+    std::vector<CachedSound> cache_;
     ma_context context_{};
     ma_engine engine_{};
-    std::array<ma_sound, kSoundCount> sounds_{};
-    std::array<bool, kSoundCount> sound_initialized_{};
+    std::vector<ma_sound> sounds_;
+    std::vector<bool> sound_initialized_{};
     bool context_initialized_ = false;
     bool engine_initialized_ = false;
     std::chrono::steady_clock::time_point engine_warmup_deadline_{};
@@ -459,7 +501,12 @@ bool Cp0SystemSoundPlayer::enabled() const
     return impl_->enabled();
 }
 
+int Cp0SystemSoundPlayer::add_named(const std::vector<std::string> &names)
+{
+    return impl_->add_named(names);
+}
+
 std::size_t Cp0SystemSoundPlayer::sound_count() const
 {
-    return kSoundCount;
+    return impl_->sound_count();
 }

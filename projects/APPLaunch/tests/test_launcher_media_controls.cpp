@@ -167,5 +167,32 @@ int main()
     configured_brightness = 255;
     assert(launcher_media_controls::adjust_brightness(10) == 100);
     assert(backlight_value == 255);
+
+    // Screen-off suspends the panel without touching the persisted brightness.
+    backlight_value = 178;
+    configured_brightness = 178;
+    const int suspended = launcher_media_controls::suspend_backlight();
+    assert(suspended == 178);
+    assert(backlight_value == 0);
+    assert(configured_brightness == 178);
+
+    launcher_media_controls::restore_backlight(suspended);
+    assert(backlight_value == 178);
+    assert(configured_brightness == 178);
+
+    // Nothing captured means there is nothing to restore.
+    launcher_media_controls::restore_backlight(0);
+    launcher_media_controls::restore_backlight(-1);
+    assert(backlight_value == 178);
+
+    // A zero reading carries no restore information, so the persisted step is
+    // used instead of leaving the panel dark after wake-up.
+    backlight_value = 0;
+    const int fallback = launcher_media_controls::suspend_backlight();
+    assert(fallback > 0 && fallback <= backlight_maximum);
+    assert(backlight_value == 0);
+    launcher_media_controls::restore_backlight(fallback);
+    assert(backlight_value == fallback);
+    assert(configured_brightness == 178);
     return 0;
 }

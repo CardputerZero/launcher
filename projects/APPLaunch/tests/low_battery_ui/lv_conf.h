@@ -7,4 +7,7 @@
 #define LV_FONT_MONTSERRAT_14 1
 #define LV_USE_SNAPSHOT 1
 #define LV_USE_SDL 1
+#define LV_USE_LODEPNG 1
+#define LV_USE_FS_STDIO 1
+#define LV_FS_STDIO_LETTER 'A'
 #endif

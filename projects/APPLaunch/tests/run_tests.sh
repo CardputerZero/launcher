@@ -15,6 +15,7 @@ python3 "$test_root/test_preinstalled_app_packaging.py"
 python3 "$test_root/test_settings_storage_build_contract.py"
 python3 "$test_root/test_static_resource_staging.py"
 python3 "$test_root/test_screensaver_image_contract.py"
+python3 "$test_root/test_lockscreen_contract.py"
 python3 "$test_root/test_home_icon_fallback_contract.py"
 PYTHONPATH="$test_root/..${PYTHONPATH:+:$PYTHONPATH}" \
     python3 "$test_root/test_config_default_file.py"
@@ -183,6 +184,11 @@ ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     "$test_root/../main/ui/model/screensaver_model.cpp" \
     -o "$build_dir/test_screensaver_model"
 "$build_dir/test_screensaver_model"
+${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
+    -I"$test_root/../../../ext_components/cp0_lvgl/include" \
+    "$test_root/test_lockscreen_state_model.cpp" \
+    -o "$build_dir/test_lockscreen_state_model"
+"$build_dir/test_lockscreen_state_model"
 ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     -I"$test_root/../../../ext_components/cp0_lvgl/include" \
     "$test_root/test_esc_hold_lifecycle_model.cpp" \

@@ -104,6 +104,11 @@ private:
 class AppPageRoot
 {
 public:
+    /** Height in pixels of the standard top bar region. Layout consumers that
+     *  must stay clear of the bar (such as the screensaver panel) use this
+     *  instead of repeating the value. */
+    static constexpr int kTopBarHeightPx = 20;
+
     AppPageRoot();
     virtual ~AppPageRoot();
 
@@ -142,7 +147,7 @@ public:
     lv_obj_t *root_screen_ = nullptr;
     std::function<void()> navigate_home;
     bool has_bottom_bar_ = false;
-    int top_bar_height_px_ = 20;
+    int top_bar_height_px_ = kTopBarHeightPx;
 
 private:
     static void screen_delete_cb(lv_event_t *event);

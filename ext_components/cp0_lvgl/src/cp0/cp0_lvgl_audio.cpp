@@ -282,6 +282,16 @@ public:
         report(callback, ret, ret == 0 ? "ok" : "system sound reload failed\n");
     }
 
+    void RegisterSystemSounds(arg_t arg, callback_t callback)
+    {
+        std::vector<std::string> names;
+        auto it = arg.begin();
+        if(it != arg.end()) ++it;
+        for(; it != arg.end(); ++it) names.push_back(*it);
+        int ret = system_sounds_.add_named(names);
+        report(callback, ret, ret == 0 ? "ok" : "system sound register failed\n");
+    }
+
     void SystemSoundPlay(int index, callback_t callback)
     {
         if(index < 0 || index >= static_cast<int>(system_sounds_.sound_count()))
@@ -532,6 +542,7 @@ public:
             map_fun(MuteRead),
             map_fun(MuteToggle),
             map_fun(SetSystemSoundNames),
+            map_fun(RegisterSystemSounds),
         };
 
 #undef map_fun

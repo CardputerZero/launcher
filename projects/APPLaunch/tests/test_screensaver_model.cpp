@@ -7,6 +7,8 @@
 #include "../main/ui/model/screensaver_model.hpp"
 #include "../main/ui/model/screensaver_runtime_contract.hpp"
 
+#include "input_keys.h"
+
 #include <cassert>
 #include <cstdint>
 
@@ -57,11 +59,11 @@ int main()
     assert(frame.color_changed);
     assert(frame.color_index == 1);
 
-    assert(model.filter_key(42, false, 40000));
-    assert(!model.active());
-    assert(model.filter_key(42, true, 40010));
-    assert(!model.filter_key(42, false, 40020));
+    // While the screensaver is up the model only records activity; the lock
+    // screen owns every key, so nothing here clears the active flag.
+    model.note_activity(40020);
     assert(model.last_activity_tick() == 40020);
+    assert(model.active());
 
     model.activate(10, 10, 50000);
     frame = model.advance(10, 10, 50040);
@@ -77,4 +79,43 @@ int main()
 
     model.reset(UINT32_MAX - 10);
     assert(model.should_activate(9, 20, true));
+
+    // ---- Long-press gesture that requests the lock ----
+    ScreensaverModel hold;
+    assert(ScreensaverModel::screen_off_hold_ms() == 3000);
+    hold.reset(1000);
+    assert(!hold.hold_pending());
+    assert(!hold.poll_hold(500000));
+
+    hold.observe_hold_key(KEY_TAB, false, 2000);
+    assert(hold.hold_pending());
+    assert(!hold.poll_hold(4999));
+    // Auto-repeat must not restart the window, or a held key never matures.
+    hold.observe_hold_key(KEY_TAB, false, 4000);
+    assert(!hold.poll_hold(4999));
+    assert(hold.poll_hold(5000));
+    // The threshold reports once per hold, and entering the lock clears it.
+    assert(!hold.poll_hold(9000));
+    hold.activate(240, 135, 5000);
+    assert(hold.active() && !hold.hold_pending());
+
+    // A short tap never requests anything.
+    hold.observe_hold_key(KEY_TAB, false, 100);
+    hold.observe_hold_key(KEY_TAB, true, 200);
+    assert(!hold.hold_pending());
+    assert(!hold.poll_hold(500000));
+
+    // Another key cancels the gesture.
+    hold.observe_hold_key(KEY_TAB, false, 100);
+    hold.observe_hold_key(KEY_ENTER, false, 200);
+    assert(!hold.hold_pending());
+    assert(!hold.poll_hold(500000));
+
+    // Leaving the lock clears a pending gesture along with the active flag.
+    hold.observe_hold_key(KEY_TAB, false, 10);
+    hold.deactivate();
+    assert(!hold.hold_pending() && !hold.active());
+    hold.observe_hold_key(KEY_TAB, false, 20);
+    hold.set_foreground(false, 30);
+    assert(!hold.hold_pending() && !hold.active() && !hold.foreground());
 }

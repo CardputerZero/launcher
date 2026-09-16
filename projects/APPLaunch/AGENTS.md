@@ -155,6 +155,57 @@ callback stops only that event's propagation; it does not cancel the later
 native LVGL path. A key consumed by the screensaver filter is delivered to
 neither business path.
 
+The screensaver filter also observes one key it does not own: while idle it
+tracks the press and release of the long-press gesture that enters the lock and
+reports them as *not* consumed, so the page underneath keeps the short-press
+meaning of that key. Once the gesture matures the lock takes every key over, and
+because only a fresh press changes lock state, the held key's repeats and its
+release cannot walk the machine. Do not make the idle observation path consume a
+key, and keep every observed press paired with its release.
+
+The screensaver panel is an `lv_layer_top()` overlay, not a page, and it is a lock
+screen. While it is up the lock owns every key, so page-level shortcuts never see
+them. The states live in `model/lockscreen_state_model.hpp`: (1) locked paints
+pure black over the whole display, (2) any fresh press shows the cached Lofoten
+wallpaper below the page's own top bar and asks for the next step, (3) TAB
+arms the unlock and ENTER confirms it. Any state with no input for 10 s falls back
+to (1), and any press restarts that countdown. Only a fresh press changes state —
+a repeat is activity and a release does nothing — which is what keeps the held TAB
+that entered the lock from walking the machine on its own release.
+
+Because (1) paints black itself, the black screen never depends on the backlight:
+the simulator, web and win32 backends accept `BacklightWrite 0` and dim nothing,
+so a panel that relied on it would be fully visible there. Driving the backlight
+down is a power optimisation, and the visible states restore it before showing the
+wallpaper. The 320x150 wallpaper starts at
+`AppPageRoot::kTopBarHeightPx`, which leaves the page's top bar visible. Unlocking
+slides the wallpaper away; idle lock states do not drive animation frames. Drive the
+exit animation from the stored panel rectangle instead of
+`lv_obj_get_height()`/`lv_obj_get_y()`: an object that has not been through a
+layout pass reports zero geometry, which silently skips the animation.
+
+The unlock hint is a black-backed yellow label covering the top bar's title,
+leaving its network, clock and battery visible. It is a sibling on `lv_layer_top()`
+so the wallpaper's bounds cannot clip it. Move it above the wallpaper on wake,
+hide it on sleep/exit, and delete it when the wallpaper overlay is deleted.
+Use `TAB&ENTER to unlock` and `Press ENTER to unlock` for the two visible states.
+The supplied JPEG is packaged as `lofoten_320x150.png` for the existing PNG
+decoder; own its decoded draw buffer until teardown and reuse it on every wake.
+
+The lock screen has four sounds under `share/audio/` (MP3, because the built-in
+decoders cover WAV/MP3/FLAC but not OGG): `lock.mp3` whenever the panel enters the
+black state, `select.mp3` when a press advances the lock, `blocked.mp3` when a
+press does neither — the model reports that as `blocked` — and `unlock.mp3` on the
+confirmation. They are registered once with `RegisterSystemSounds` and then played
+by name with `cp0_signal_system_play`, which puts them on the platform's
+system-sound player: it decodes each sound once, keeps the decoded PCM and a warm
+engine, and plays on its own worker thread. Do not route them through the
+unregistered per-file fallback — that re-opens the audio device on every play and
+swallows the start of a short sound while the sink settles — and do not hand-roll a
+second player. Registration appends after the platform's three indexed slots, so
+the launcher's startup/switch/enter sounds keep their indices, and the indexed
+`SystemSoundPlay` contract stays limited to 0..2.
+
 Text-entry and other custom-input modes should suppress the native group path
 while retaining `LV_EVENT_KEYBOARD`:
 
