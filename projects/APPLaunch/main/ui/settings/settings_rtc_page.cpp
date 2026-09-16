@@ -1519,7 +1519,12 @@ std::string settings_rtc_local_time_text()
 {
     const std::time_t now = std::time(nullptr);
     std::tm local{};
-    if (now == 0 || !localtime_r(&now, &local)) return {};
+    if (now == 0) return {};
+#if defined(_WIN32)
+    if (localtime_s(&local, &now) != 0) return {};
+#else
+    if (localtime_r(&now, &local) == nullptr) return {};
+#endif
     char buffer[32] = {};
     std::snprintf(buffer,
                   sizeof(buffer),
