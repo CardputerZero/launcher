@@ -38,3 +38,6 @@ compile_commands.json
 *.o
 .workflow-one
 job-logs.txt
+runpool*
+RUNPOOL-VERDICT.md
+council

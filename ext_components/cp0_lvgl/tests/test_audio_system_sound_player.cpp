@@ -54,4 +54,31 @@ int main()
     assert(player.contains("left.wav"));
     assert(player.contains("right.wav"));
     assert(!player.contains("Ding2.wav"));
+
+    // Extra sounds append after the platform slots, so reload()ing the platform
+    // names later cannot displace them and the indexed slots keep their order.
+    assert(player.add_named({"lock.mp3", "blocked.mp3", "select.mp3", "unlock.mp3"}) == 0);
+    assert(player.sound_count() == 7);
+    assert(player.contains("lock.mp3") && player.contains("unlock.mp3"));
+    assert(player.contains("startup.wav") && player.contains("right.wav"));
+    assert(!player.contains(""));
+
+    // Registering the same name twice is a no-op, so a module that registers on
+    // every init cannot grow the list without bound.
+    assert(player.add_named({"lock.mp3", "unlock.mp3"}) == 0);
+    assert(player.sound_count() == 7);
+    assert(player.add_named({}) == 0);
+    assert(player.sound_count() == 7);
+
+    // Named playback is called on the UI thread; it must enqueue without
+    // recursively locking the player's mutex or waiting for audio playback.
+    auto named = std::async(std::launch::async, [&player] {
+        return player.play_named("lock.mp3");
+    });
+    assert(named.wait_for(std::chrono::seconds(2)) == std::future_status::ready);
+    assert(named.get());
+    assert(!player.play_named(""));
+    assert(!player.play_named("unknown.mp3"));
+    player.set_enabled(false);
+    assert(!player.play_named("lock.mp3"));
 }

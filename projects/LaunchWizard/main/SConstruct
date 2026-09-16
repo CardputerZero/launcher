@@ -12,16 +12,17 @@ applaunch_lvgl_dir = ADir("../../APPLaunch/main/lvgl")
 
 SRCS = Glob("src/*.c*")
 SRCS += append_srcs_dir(ADir("ui"))
+
 INCLUDE = [ADir("."), ADir("ui"), applaunch_lvgl_dir]
 PRIVATE_INCLUDE = []
-REQUIREMENTS = ["cp0_lvgl", "lvgl_component", "pthread", "crypt", "Sigslot", "eventpp", "Miniaudio"]
+REQUIREMENTS = ["cp0_lvgl", "lvgl_component", "pthread", "crypt", "Sigslot", "eventpp", "Miniaudio", "dl", "m"]
 STATIC_LIB = []
 DYNAMIC_LIB = []
 DEFINITIONS = []
 DEFINITIONS_PRIVATE = []
 LDFLAGS = []
 LINK_SEARCH_PATH = []
-STATIC_FILES = []
+STATIC_FILES = [(ADir("../APPLaunch"), "APPLaunch")]
 
 lvgl_component = list(filter(
     lambda component: component["target"] == "lvgl_component",

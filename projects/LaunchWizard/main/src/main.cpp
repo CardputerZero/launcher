@@ -5,6 +5,7 @@
  */
 
 #include "application.h"
+#include "wizard_key_sound.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -12,6 +13,9 @@
 
 int main(int argc, char *argv[])
 {
+    if (argc == 2 && strcmp(argv[1], "--key-sound-worker") == 0)
+        return launch_wizard::run_key_sound_worker();
+
     // Allow forcing the OOBE for previews/demos on an already-configured device
     // (e.g. LAUNCH_WIZARD_FORCE=1 or passing --test/--force).
     const char *force_env = getenv("LAUNCH_WIZARD_FORCE");

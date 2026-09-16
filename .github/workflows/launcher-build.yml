@@ -186,6 +186,7 @@ jobs:
 
     - name: Bundle LaunchWizard into APPLaunch package tree
       run: |
+        cp -a projects/LaunchWizard/dist/APPLaunch/. projects/APPLaunch/dist/APPLaunch/
         mkdir -p projects/APPLaunch/dist/APPLaunch/bin
         cp projects/LaunchWizard/dist/LaunchWizard projects/APPLaunch/dist/APPLaunch/bin/LaunchWizard
         chmod 0755 projects/APPLaunch/dist/APPLaunch/bin/LaunchWizard

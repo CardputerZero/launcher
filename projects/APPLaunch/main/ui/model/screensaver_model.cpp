@@ -6,6 +6,8 @@
 
 #include "screensaver_model.hpp"
 
+#include "input_keys.h"
+
 #include <algorithm>
 
 namespace {
@@ -23,7 +25,7 @@ uint32_t elapsed_since(uint32_t now, uint32_t previous)
 void ScreensaverModel::reset(uint32_t now)
 {
     active_ = false;
-    swallow_active_ = false;
+    clear_hold();
     last_activity_tick_ = now;
     last_frame_tick_ = 0;
 }
@@ -48,6 +50,7 @@ ScreensaverFrame ScreensaverModel::activate(int width, int height, uint32_t now)
     velocity_y_ = kVelocityY;
     color_index_ = 0;
     active_ = true;
+    clear_hold();
     last_frame_tick_ = now;
     return frame(true);
 }
@@ -55,6 +58,7 @@ ScreensaverFrame ScreensaverModel::activate(int width, int height, uint32_t now)
 void ScreensaverModel::deactivate()
 {
     active_ = false;
+    clear_hold();
     last_frame_tick_ = 0;
 }
 
@@ -84,25 +88,46 @@ ScreensaverFrame ScreensaverModel::advance(int width, int height, uint32_t now)
     return frame(collided);
 }
 
-bool ScreensaverModel::filter_key(uint32_t key_code, bool released, uint32_t now)
+void ScreensaverModel::note_activity(uint32_t now)
 {
     last_activity_tick_ = now;
-    if (swallow_active_) {
-        if (key_code == swallowed_key_code_) {
-            if (released) swallow_active_ = false;
-            return true;
-        }
-        swallow_active_ = false;
-    }
-
-    if (!active_) return false;
-    deactivate();
-    swallowed_key_code_ = key_code;
-    swallow_active_ = !released;
-    return true;
 }
 
 ScreensaverFrame ScreensaverModel::frame(bool color_changed) const
 {
     return {x_milli_ / 1000, y_milli_ / 1000, color_index_, color_changed};
+}
+
+void ScreensaverModel::observe_hold_key(uint32_t key_code, bool released, uint32_t now)
+{
+    if (key_code != KEY_TAB) {
+        /* A different key ends the gesture, but it still belongs to the page. */
+        clear_hold();
+        return;
+    }
+    if (released) {
+        clear_hold();
+        return;
+    }
+    /* Auto-repeat reports further presses while the key stays down; keeping the
+     * original tick is what lets a genuinely held key reach the threshold. */
+    if (hold_pending_) return;
+    hold_down_tick_ = now;
+    hold_pending_ = true;
+    hold_fired_ = false;
+}
+
+bool ScreensaverModel::poll_hold(uint32_t now)
+{
+    if (!hold_pending_ || hold_fired_) return false;
+    if (elapsed_since(now, hold_down_tick_) < screen_off_hold_ms()) return false;
+    hold_fired_ = true;
+    return true;
+}
+
+void ScreensaverModel::clear_hold()
+{
+    hold_down_tick_ = 0;
+    hold_pending_ = false;
+    hold_fired_ = false;
 }

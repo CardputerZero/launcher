@@ -100,10 +100,9 @@ int backlight_max()
     return maximum > 0 ? maximum : 100;
 }
 
-int read_brightness()
+int read_backlight_raw(int maximum)
 {
     int raw = -1;
-    const int maximum = backlight_max();
     cp0_signal_settings_api({"BacklightRead"}, [&](int code, std::string data) {
         int parsed = 0;
         if (code == 0 && LauncherMediaControlsModel::parse_int(data, parsed) && parsed >= 0)
@@ -115,6 +114,24 @@ int read_brightness()
         const int fallback = setup_values::brightness_step_value(fallback_index, maximum);
         raw = read_config_int(setup_values::kBrightnessConfigKey, fallback);
     }
+    return raw;
+}
+
+int write_backlight_raw(int raw)
+{
+    int written = -1;
+    cp0_signal_settings_api({"BacklightWrite", std::to_string(raw)}, [&](int code, std::string data) {
+        int parsed = 0;
+        if (code == 0 && LauncherMediaControlsModel::parse_int(data, parsed) && parsed >= 0)
+            written = parsed;
+    });
+    return written;
+}
+
+int read_brightness()
+{
+    const int maximum = backlight_max();
+    const int raw = read_backlight_raw(maximum);
     const int percent = setup_values::brightness_step_percent_from_raw(raw, maximum);
     model.set_brightness(percent);
     return percent;
@@ -126,12 +143,7 @@ int write_brightness(int previous_percent, int percent)
     const int maximum = backlight_max();
     const int raw = setup_values::brightness_step_value(target_index, maximum);
 
-    int written = -1;
-    cp0_signal_settings_api({"BacklightWrite", std::to_string(raw)}, [&](int code, std::string data) {
-        int parsed = 0;
-        if (code == 0 && LauncherMediaControlsModel::parse_int(data, parsed) && parsed >= 0)
-            written = parsed;
-    });
+    const int written = write_backlight_raw(raw);
     if (written < 0) return previous_percent;
     const int previous_raw = setup_values::brightness_step_value(
         setup_values::brightness_step_index(previous_percent), maximum);
@@ -187,6 +199,29 @@ bool toggle_mute()
         }
     });
     return muted;
+}
+
+int suspend_backlight()
+{
+    std::lock_guard<std::mutex> operation_lock(brightness_control::operation_mutex());
+    const int maximum = backlight_max();
+    int previous = read_backlight_raw(maximum);
+    if (previous <= 0) {
+        /* A zero reading carries no restore information; fall back to the
+         * persisted step so waking up cannot leave the panel dark. */
+        const int fallback_index = setup_values::brightness_step_index(
+            model.brightness_or(setup_values::kBrightnessMaxPercent));
+        previous = setup_values::brightness_step_value(fallback_index, maximum);
+    }
+    if (write_backlight_raw(0) < 0) return -1;
+    return previous;
+}
+
+void restore_backlight(int raw)
+{
+    if (raw <= 0) return;
+    std::lock_guard<std::mutex> operation_lock(brightness_control::operation_mutex());
+    (void)write_backlight_raw(raw);
 }
 
 } // namespace launcher_media_controls

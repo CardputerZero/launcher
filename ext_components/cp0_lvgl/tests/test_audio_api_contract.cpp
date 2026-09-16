@@ -87,6 +87,20 @@ void test_names_and_setup_commands()
     assert(!cp0::audio::parse_api_request(
         {"SetSystemSoundNames", "1", "2", "3", "4"}, request));
 
+    // Applications append their own named sounds instead of taking over the
+    // platform slots.
+    assert(!cp0::audio::parse_api_request({"RegisterSystemSounds"}, request));
+    assert(cp0::audio::parse_api_request(
+        {"RegisterSystemSounds", "lock.mp3", "unlock.mp3"}, request));
+    assert(request.command == cp0::audio::ApiCommand::RegisterSystemSounds);
+    assert(request.names.size() == 2 && request.names[0] == "lock.mp3");
+    {
+        std::list<std::string> too_many{"RegisterSystemSounds"};
+        for (std::size_t i = 0; i <= cp0::audio::kMaxRegisteredSystemSounds; ++i)
+            too_many.push_back("s" + std::to_string(i) + ".mp3");
+        assert(!cp0::audio::parse_api_request(too_many, request));
+    }
+
     SetupRequest setup;
     assert(!cp0::audio::parse_setup_request({}, setup));
     assert(!cp0::audio::parse_setup_request({"unknown"}, setup));

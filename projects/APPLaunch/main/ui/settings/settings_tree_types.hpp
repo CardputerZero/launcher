@@ -156,6 +156,12 @@ enum class PageType : int {
     NextPageNeeded = 1,
     FullCustom     = 2,
 };
+// A refused activation: the submenu shows this in a modal instead of opening
+// the entry.  The strings must outlive the entry (use literals).
+struct ActivationBlock {
+    const char *title;
+    const char *message;
+};
 struct SettingEntry {
     std::string label;
     SettingPageFactory page_factory;
@@ -171,6 +177,11 @@ struct SettingEntry {
     uint64_t status_generation = 0;
     // Last explicitly committed value-page selection; -1 means use the page default.
     int32_t selected_index = -1;
+    // Optional gate: return nullptr to allow activation, or a static reason to
+    // refuse it and explain why.  Consulted by the second-level roller only -
+    // the root-level LvSettingRoller never reads it, so a gate on a root-level
+    // entry would be silently ignored.
+    std::function<const ActivationBlock *()> activation_gate;
 
     SettingEntry() = default;
     SettingEntry(const std::string &name) : label(name)

@@ -93,6 +93,7 @@ public:
             map_fun(MuteRead),
             map_fun(MuteToggle),
             map_fun(SetSystemSoundNames),
+            map_fun(RegisterSystemSounds),
         };
 #undef map_fun
 
@@ -139,7 +140,7 @@ private:
     bool waveform_enabled_ = false;
     int volume_ = kDefaultVolume;
     bool muted_ = false;
-    std::array<std::string, 3> system_sound_names_ = {"Ding2.wav", "switch.wav", "enter.wav"};
+    std::vector<std::string> system_sound_names_ = {"Ding2.wav", "switch.wav", "enter.wav"};
     bool system_sound_enabled_ = true;
 
     void report(callback_t callback, int code, const std::string &data)
@@ -341,12 +342,30 @@ private:
 
     void SetSystemSoundNames(arg_t arg, callback_t callback)
     {
+        std::vector<std::string> names;
         auto it = arg.begin();
         if (it != arg.end())
             ++it;
-        for (size_t i = 0; i < system_sound_names_.size() && it != arg.end(); ++i, ++it) {
-            if (!it->empty())
-                system_sound_names_[i] = *it;
+        for (; it != arg.end(); ++it) names.push_back(*it);
+        if (names.size() > system_sound_names_.size())
+            system_sound_names_.resize(names.size());
+        for (size_t i = 0; i < names.size(); ++i) {
+            if (!names[i].empty())
+                system_sound_names_[i] = names[i];
+        }
+        report(callback, 0, "ok");
+    }
+
+    void RegisterSystemSounds(arg_t arg, callback_t callback)
+    {
+        auto it = arg.begin();
+        if (it != arg.end())
+            ++it;
+        for (; it != arg.end(); ++it) {
+            if (it->empty()) continue;
+            const auto found = std::find(system_sound_names_.begin(), system_sound_names_.end(), *it);
+            if (found == system_sound_names_.end())
+                system_sound_names_.push_back(*it);
         }
         report(callback, 0, "ok");
     }

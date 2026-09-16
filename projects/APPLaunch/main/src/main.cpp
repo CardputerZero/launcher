@@ -19,7 +19,7 @@
 #include "backward.h"
 #endif
 
-const char *bash_init = "if [ ! -f ~/Downloads/hello.md ] ; then unzip /var/template.zip -d ~/Downloads/ ; fi";
+const char *bash_init = "if [ ! -f ~/Downloads/hello.md ] ; then unzip /var/template.zip -d ~/Downloads/ ; sync ; fi";
 
 int main(void)
 {

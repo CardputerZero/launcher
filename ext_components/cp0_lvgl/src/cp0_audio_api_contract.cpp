@@ -101,6 +101,14 @@ bool parse_api_request(const std::list<std::string> &args, ApiRequest &request)
         request.names.assign(argument, args.end());
         return true;
     }
+    if (command == "RegisterSystemSounds") {
+        request.command = ApiCommand::RegisterSystemSounds;
+        if (args.size() < 2 ||
+            args.size() > kMaxRegisteredSystemSounds + 1)
+            return false;
+        request.names.assign(argument, args.end());
+        return true;
+    }
     return false;
 }
 
