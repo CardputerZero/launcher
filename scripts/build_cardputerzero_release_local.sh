@@ -122,6 +122,8 @@ cp -a "$ROOT/projects/AppStore/dist/APPLaunch/." \
     "$ROOT/projects/APPLaunch/dist/APPLaunch/"
 cp -a "$ROOT/projects/ZClaw/dist/APPLaunch/." \
     "$ROOT/projects/APPLaunch/dist/APPLaunch/"
+cp -a "$ROOT/projects/LaunchWizard/dist/APPLaunch/." \
+    "$ROOT/projects/APPLaunch/dist/APPLaunch/"
 PREINSTALLED_MANIFEST="$ROOT/projects/APPLaunch/dist/APPLaunch/preinstalled-desktop-apps.tsv"
 ZCLAW_DESKTOP="$ROOT/projects/APPLaunch/dist/APPLaunch/applications/zclaw.desktop"
 test -f "$ZCLAW_DESKTOP"
@@ -152,6 +154,9 @@ CONTENTS=$(mktemp)
 trap 'rm -f "$CONTENTS"' EXIT
 dpkg-deb -c "$PACKAGE" >"$CONTENTS"
 grep -q './usr/share/APPLaunch/bin/LaunchWizard$' "$CONTENTS"
+for cue in key lock unlock error notification achievement; do
+    grep -q "./usr/share/APPLaunch/share/audio/launch-wizard-${cue}.wav$" "$CONTENTS"
+done
 grep -q './usr/share/APPLaunch/bin/M5CardputerZero-APPLaunch$' "$CONTENTS"
 grep -q './usr/share/APPLaunch/preinstalled-desktop-apps.tsv$' "$CONTENTS"
 

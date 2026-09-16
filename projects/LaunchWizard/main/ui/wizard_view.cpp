@@ -15,6 +15,7 @@
 #include "wizard_model.h"
 #include "wizard_input_context.hpp"
 #include "wizard_fonts.h"
+#include "wizard_key_sound.h"
 #include "wizard_service.h"
 #include "cp0_lvgl_app_runner.hpp"
 #include "cp0_bounded_task_registry.hpp"
@@ -68,6 +69,7 @@ constexpr uint32_t kAccentSsh = 0x2ec5ff;       // cyan
 constexpr uint32_t kAccentDone = 0x31d843;      // green
 
 using launch_wizard::Screen;
+using launch_wizard::WizardSoundCue;
 using launch_wizard::Timezone;
 using launch_wizard::WifiConnectionStatus;
 using launch_wizard::WifiNetwork;
@@ -79,6 +81,9 @@ constexpr auto kWifiInitialRetryPeriod = std::chrono::seconds(2);
 // Wizard model (all data collected across screens)
 // ---------------------------------------------------------------------------
 struct UiRuntime {
+    launch_wizard::WizardKeySound key_sound;
+    WizardSoundCue input_cue = WizardSoundCue::Typing;
+    bool input_sound_pending = false;
     lv_obj_t *screen_obj = nullptr;
     lv_timer_t *poll_timer = nullptr;
     lv_obj_t *config_status_label = nullptr;
@@ -713,6 +718,12 @@ void start_apply()
 {
     if (g.busy)
         return;
+    if (ui.input_sound_pending) {
+        ui.key_sound.play(ui.input_cue);
+        ui.input_sound_pending = false;
+    }
+    // Account migration needs UID 1000 to have no running processes.
+    ui.key_sound.stop();
     ui.cancel.store(false);
     g.busy = true;
     {
@@ -918,6 +929,7 @@ void start_wifi_connection()
             g.wifi_ssid, g.wifi_security, g.wifi_password,
             g.wifi_hidden, validation_error)) {
         g.wifi_connect_error = validation_error;
+        ui.input_cue = WizardSoundCue::Error;
         render();
         return;
     }
@@ -970,6 +982,7 @@ void start_wifi_connection()
     })) {
         g.wifi_connecting = false;
         g.wifi_connect_error = "Unable to start Wi-Fi connection";
+        ui.input_cue = WizardSoundCue::Error;
         render();
     }
 }
@@ -1068,6 +1081,7 @@ void confirm_manual_time()
     if (!launch_wizard::validate_manual_datetime(g.manual_date, g.manual_time, error)) {
         g.time_warning_message = error;
         g.time_warning_visible = true;
+        ui.input_cue = WizardSoundCue::Error;
         render();
         return;
     }
@@ -1104,6 +1118,7 @@ bool validate_account_fields()
 
 void handle_enter()
 {
+    ui.input_cue = WizardSoundCue::Confirm;
     switch (g.screen) {
     case Screen::Welcome:
         g.timezone_sel = g.timezone_index;
@@ -1117,8 +1132,10 @@ void handle_enter()
         std::string error;
         if (g.hostname.empty())
             g.hostname = "CardputerZero";
-        if (!launch_wizard::validate_hostname(g.hostname, error))
+        if (!launch_wizard::validate_hostname(g.hostname, error)) {
+            ui.input_cue = WizardSoundCue::Error;
             return;
+        }
         g.account_password_visible = false;
         go(Screen::Account);
         break;
@@ -1130,8 +1147,10 @@ void handle_enter()
             render();
             return;
         }
-        if (!validate_account_fields())
+        if (!validate_account_fields()) {
+            ui.input_cue = WizardSoundCue::Error;
             return;
+        }
         go(Screen::Network);
         break;
     case Screen::Network:
@@ -1158,6 +1177,7 @@ void handle_enter()
         } else {
             g.ethernet_error = launch_wizard::validate_ethernet_config(g);
             if (!g.ethernet_error.empty()) {
+                ui.input_cue = WizardSoundCue::Error;
                 render();
                 return;
             }
@@ -1240,9 +1260,11 @@ void handle_tab()
     case Screen::EthernetConfig:
         g.ethernet_error = launch_wizard::validate_ethernet_config(g);
         if (!g.ethernet_error.empty()) {
+            ui.input_cue = WizardSoundCue::Error;
             render();
             return;
         }
+        ui.input_cue = WizardSoundCue::Confirm;
         go(Screen::Ssh);
         break;
     case Screen::WifiPassword:
@@ -1267,7 +1289,7 @@ void handle_tab()
     }
 }
 
-void keyboard_event_cb(lv_event_t *event)
+void handle_keyboard_event(lv_event_t *event)
 {
     if (lv_event_get_code(event) != static_cast<lv_event_code_t>(LV_EVENT_KEYBOARD))
         return;
@@ -1330,12 +1352,14 @@ void keyboard_event_cb(lv_event_t *event)
     if (g.screen == Screen::Account && key_code == KEY_LEFTALT &&
         key->key_state == KBD_KEY_PRESSED) {
         g.account_password_visible = !g.account_password_visible;
+        ui.input_cue = g.account_password_visible ? WizardSoundCue::Unlock : WizardSoundCue::Lock;
         render();
         return;
     }
     if (g.screen == Screen::WifiPassword && key_code == KEY_LEFTALT &&
         key->key_state == KBD_KEY_PRESSED && !g.wifi_connecting && !g.wifi_connected) {
         g.wifi_password_visible = !g.wifi_password_visible;
+        ui.input_cue = g.wifi_password_visible ? WizardSoundCue::Unlock : WizardSoundCue::Lock;
         render();
         return;
     }
@@ -1416,6 +1440,20 @@ void keyboard_event_cb(lv_event_t *event)
     }
 }
 
+void keyboard_event_cb(lv_event_t *event)
+{
+    if (lv_event_get_code(event) != static_cast<lv_event_code_t>(LV_EVENT_KEYBOARD))
+        return;
+    const auto *key = static_cast<key_item *>(lv_event_get_param(event));
+    if (!key) return;
+    ui.input_cue = WizardSoundCue::Typing;
+    ui.input_sound_pending = !g.busy && key->key_state == KBD_KEY_PRESSED;
+    handle_keyboard_event(event);
+    // Choose the final result once, so validation errors do not follow a typing click.
+    if (ui.input_sound_pending) ui.key_sound.play(ui.input_cue);
+    ui.input_sound_pending = false;
+}
+
 void poll_worker_cb(lv_timer_t *timer)
 {
     (void)timer;
@@ -1484,8 +1522,10 @@ void poll_worker_cb(lv_timer_t *timer)
     if (wifi_connect_finished) {
         g.wifi_connecting = false;
         g.wifi_connected = wifi_connect_succeeded;
-        if (g.screen == Screen::WifiPassword)
+        if (g.screen == Screen::WifiPassword) {
+            ui.key_sound.play(wifi_connect_succeeded ? WizardSoundCue::Confirm : WizardSoundCue::Error);
             render();
+        }
     }
 
     bool finished = false;
@@ -1502,10 +1542,15 @@ void poll_worker_cb(lv_timer_t *timer)
     if (finished) {
         g.busy = false;
         if (g.screen == Screen::Applying) {
+            ui.key_sound.start();
+            ui.key_sound.play(succeeded ? WizardSoundCue::Complete : WizardSoundCue::Error);
             go(succeeded ? Screen::RestartPrompt : Screen::ApplyError);
         } else if (g.screen == Screen::Restarting) {
             if (succeeded) ui.quit.store(true);
-            else go(Screen::RestartPrompt);
+            else {
+                ui.key_sound.play(WizardSoundCue::Error);
+                go(Screen::RestartPrompt);
+            }
         }
     } else if (g.screen == Screen::Applying && ui.config_status_label) {
         std::string message;
@@ -1563,6 +1608,7 @@ void launch_wizard_register_event(void)
 bool launch_wizard_ui_setup(void)
 {
     cp0_keyboard_set_lvgl_keypad_intercept(0);
+    ui.key_sound.start();
     fonts.init();
     ui.input_context_scope = std::make_unique<Cp0KeyboardInputContextScope>(
         launch_wizard::wizard_input_context(g));
@@ -1596,6 +1642,7 @@ bool launch_wizard_should_quit(void)
 void launch_wizard_ui_teardown(void)
 {
     cp0_keyboard_set_lvgl_keypad_intercept(0);
+    ui.key_sound.stop();
     ui.cancel.store(true);
     {
         std::lock_guard<std::mutex> lock(g.mutex);

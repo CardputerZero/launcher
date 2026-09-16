@@ -50,9 +50,9 @@ ExecStart=/usr/share/APPLaunch/bin/LaunchWizard
 WorkingDirectory=/usr/share/APPLaunch
 ```
 
-`setup.ini` installs `dist/LaunchWizard` at that exact path and prints both
-SHA-256 values. It intentionally does not stop or restart the service while
-deploying; activation is an explicit device-side operation.
+Install `dist/LaunchWizard` at that exact path and merge `dist/APPLaunch/` into
+`/usr/share/APPLaunch/` to deploy the audio resources as well. The local release
+script and CI bundle both into the APPLaunch package.
 
 Both build paths follow the same `main/src` and `main/ui` layout as the
 HelloWorld reference project.
@@ -67,3 +67,36 @@ The SDL acceptance pages can be opened directly with:
 The UI follows an MSV boundary: `WizardModel` owns setup state and validation,
 platform operations are isolated from it, and the LVGL source owns view objects
 and translates input events into model changes.
+
+## Key sound
+
+The wizard uses the same six active cues and per-cue volumes as Keyboard-Guide:
+
+| Feedback | Local WAV | Trigger |
+| --- | --- | --- |
+| Typing | `launch-wizard-key.wav` | Text entry, navigation, back, and focus switching |
+| Lock | `launch-wizard-lock.wav` | Hide a password |
+| Unlock | `launch-wizard-unlock.wav` | Show a password |
+| Error | `launch-wizard-error.wav` | Validation, connection, apply, or reboot failure |
+| Confirm | `launch-wizard-notification.wav` | Confirm an action or complete a Wi-Fi connection |
+| Complete | `launch-wizard-achievement.wav` | Successfully apply configuration |
+
+Each initial key press selects one cue after processing the action; releases
+and auto-repeat do not trigger another sound. Asynchronous results have their
+own feedback. The CC0 files live in `APPLaunch/share/audio/`, alongside their
+license notice. The tutorial's two currently unused assets (`mechanical-complete`
+and `mechanical-progress-step`) are not included.
+Like ZClaw, the project uses SCons `STATIC_FILES` to copy the resource tree to
+`dist/APPLaunch/`. It has no build-time dependency on Keyboard-Guide's assets.
+Playback resolves resources relative to the executable in both the `dist/`
+layout and the installed `/usr/share/APPLaunch/` layout, regardless of the
+working directory.
+
+An exec'ed audio helper preloads the cues with miniaudio and plays them through
+PulseAudio at 48 kHz stereo, with the same 1.5 master gain as the tutorial. New
+feedback replaces the current sound, except that the completion cue is allowed
+to finish before more key sounds play. When the wizard runs as root, only the helper drops to UID 1000
+and connects to that user's audio session. Playback requests are nonblocking;
+audio initialization failures are logged and leave the wizard usable silently.
+The helper is stopped and reaped before account migration, restarted when apply
+finishes, and stopped during UI teardown.

@@ -58,6 +58,19 @@ if(BUILD_TESTING)
              COMMAND launch_wizard_core_tests)
 
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        find_package(Threads REQUIRED)
+        add_executable(launch_wizard_key_sound_tests
+            tests/test_key_sound.cpp
+            main/ui/wizard_key_sound.cpp
+        )
+        target_include_directories(launch_wizard_key_sound_tests PRIVATE
+            ../../ext_components/Miniaudio/include)
+        target_link_libraries(launch_wizard_key_sound_tests PRIVATE
+            LaunchWizard::core Threads::Threads ${CMAKE_DL_LIBS} m)
+        target_compile_options(launch_wizard_key_sound_tests PRIVATE -UNDEBUG)
+        add_test(NAME launch_wizard.key_sound COMMAND launch_wizard_key_sound_tests)
+        set_tests_properties(launch_wizard.key_sound PROPERTIES TIMEOUT 15)
+
         add_executable(launch_wizard_wifi_tests
             tests/test_wifi_connection.cpp
             main/ui/wizard_service.cpp
