@@ -140,6 +140,15 @@ public:
     {
         return ComponensObj;
     }
+    // Resting x of this page's root object inside its parent, in the parent's
+    // coordinate space.  Full-width pages (320px value / info / confirm pages)
+    // rest at the left edge; the nested roller page draws its rows in the
+    // right-hand column and overrides this.  The page-3 slide animation uses
+    // it as the on-screen resting position in both directions.
+    virtual int panel_x() const
+    {
+        return 0;
+    }
     void SetPos(int32_t x, int32_t y) const
     {
         lv_obj_set_pos(ComponensObj, x, y);

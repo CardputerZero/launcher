@@ -11,6 +11,7 @@
 #include <string>
 
 #include "lvgl_components.hpp"
+#include "settings_tree_types.hpp"
 
 class LvSettingRtcPage3 : public LvSettingValuePage3Base {
 public:
@@ -65,6 +66,32 @@ private:
 };
 
 void settings_rtc_ntp_api(int command, void *data) noexcept;
+
+// Number of days in the month currently held by the RTC edit session.  The
+// "Day" entry is declared as a static 1..31 list, so its options have to be
+// rebuilt from this before the day page is constructed.
+int settings_rtc_days_in_current_month() noexcept;
+
+// Drop unsaved manual time edits held by the RTC session.  Manual edits belong
+// to a single visit to Date & Time, so leaving the submenu abandons them and a
+// later visit cannot write a stale timestamp.
+void settings_rtc_discard_edits() noexcept;
+
+// Why "Set Manually" must refuse activation right now, or nullptr when it may
+// open.  Deliberately the same NTP status the field pages re-read on entry, so
+// the gate and their own guard cannot disagree.
+const ActivationBlock *settings_rtc_manual_edit_block() noexcept;
+
+// Re-read Network Time instead of reusing the per-process cache, so the status
+// icon and the gate agree with what the field pages will see.  This is a local
+// D-Bus property fetch (~35ms on hardware), not a blocking wait.
+void settings_rtc_refresh_ntp() noexcept;
+
+// "YYYY-MM-DD HH:MM:SS" from the system clock, and "On"/"Off"/"Unavailable" for
+// Network Time.  The Date & Time Info page re-reads both every second, so these
+// must stay cheap - the time comes from std::time, not from D-Bus.
+std::string settings_rtc_local_time_text();
+std::string settings_rtc_ntp_status_text();
 
 std::unique_ptr<DComponens::LvglComponensBase> settings_rtc_info_page_factory(
     lv_obj_t *parent,

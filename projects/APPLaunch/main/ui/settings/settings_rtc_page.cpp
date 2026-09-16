@@ -112,7 +112,9 @@ private:
 
     Values values_ = {2026, 1, 1, 0, 0, 0};
     bool ntp_on_ = true;
-    bool ntp_available_ = true;
+    // "Not observed yet", not "available": an unread status must map to
+    // Unavailable instead of being reported as a state we never saw.
+    bool ntp_available_ = false;
     bool dirty_ = false;
 };
 
@@ -543,8 +545,10 @@ namespace {
 
 struct NtpAdapterState {
     std::mutex mutex;
-    bool available = true;
-    bool enabled = true;
+    // Start "unknown" rather than "on": a green tick before the first
+    // successful read would claim an NTP state this process never observed.
+    bool available = false;
+    bool enabled = false;
     bool pending = false;
     bool initialized = false;
 };
@@ -555,12 +559,17 @@ NtpAdapterState &ntp_adapter_state()
     return state;
 }
 
-void refresh_ntp_cache()
+// The status icon and the "Set Manually" gate read the cached value as soon as
+// this returns, so the backend must deliver its callback inline.  It does today
+// (osinfo dispatch invokes synchronously); if that ever changes, both readers
+// silently go stale - the gate blocks on an old state and the Info page falls
+// back to the placeholder time.
+void refresh_ntp_cache(bool force = false)
 {
     auto &state = ntp_adapter_state();
     {
         std::lock_guard<std::mutex> lock(state.mutex);
-        if (state.pending || state.initialized) return;
+        if (state.pending || (!force && state.initialized)) return;
         state.pending = true;
     }
 
@@ -785,12 +794,13 @@ int read_local_time_async(TimeReadCallback callback)
 {
     if (!callback) return api_error_code(ApiError::InvalidArgument);
 
-    auto delivered = std::make_shared<std::atomic_bool>(false);
-    auto deliver = [callback = std::move(callback), delivered](TimeReadResult result) mutable {
-        if (delivered->exchange(true, std::memory_order_acq_rel)) return;
-        invoke_noexcept(callback, std::move(result));
-    };
-
+    // Mirrors read_ntp_async: the callback is moved exactly once, into the
+    // backend handler.  An earlier revision moved it into a `deliver` wrapper
+    // that was never called, so this lambda captured an already-empty
+    // std::function; invoke_noexcept() then dropped the result and the
+    // LocalTime reply never arrived.  That left refresh_pending set forever,
+    // which made every field edit on Date & Time fail with "Reading RTC
+    // status" and left the model at its placeholder values.
     cp0_signal_timedate_api({"LocalTime"}, [callback = std::move(callback)](int code, std::string payload) {
         invoke_noexcept(callback, make_time_result(code, std::move(payload)));
     });
@@ -832,12 +842,11 @@ int refresh_async(RefreshCallback callback)
 int set_ntp_async(bool enabled, PrivilegedCallback callback, RequestStartedCallback started)
 {
     if (!callback) return api_error_code(ApiError::InvalidArgument);
-    if (started) started(0, 0);
-    cp0_signal_timedate_api({"NtpSet", enabled ? "1" : "0"}, [callback = std::move(callback)](int code, std::string) {
-            PrivilegedResult result; result.result_code = code; result.kind = classify_privileged_result(code);
-            invoke_noexcept(callback, std::move(result));
-        });
-    return 0;
+    // Writing the clock needs privileges.  The timedated D-Bus API answers an
+    // unprivileged session with InteractiveAuthorizationRequired, so the write
+    // has to go through the sudo coordinator - which also hands back a real,
+    // cancellable request id and writes the hardware RTC via `hwclock -w`.
+    return submit_privileged({"NtpSet", enabled ? "1" : "0"}, std::move(callback), std::move(started));
 }
 
 int set_time_async(std::string timestamp, PrivilegedCallback callback, RequestStartedCallback started)
@@ -845,12 +854,7 @@ int set_time_async(std::string timestamp, PrivilegedCallback callback, RequestSt
     if (!callback) return api_error_code(ApiError::InvalidArgument);
     RtcValues parsed{};
     if (!RtcStateModel::parse_timestamp(timestamp, parsed)) return api_error_code(ApiError::InvalidArgument);
-    if (started) started(0, 0);
-    cp0_signal_timedate_api({"TimeSet", std::move(timestamp)}, [callback = std::move(callback)](int code, std::string) {
-            PrivilegedResult result; result.result_code = code; result.kind = classify_privileged_result(code);
-            invoke_noexcept(callback, std::move(result));
-        });
-    return 0;
+    return submit_privileged({"TimeSet", std::move(timestamp)}, std::move(callback), std::move(started));
 }
 
 int cancel_request(std::uint64_t request_id)
@@ -949,7 +953,7 @@ void settings_rtc_ntp_api(int command, void *data) noexcept
         bool pending = false;
         {
             std::lock_guard<std::mutex> lock(state.mutex);
-            enabled = state.enabled;
+            enabled = state.available && state.enabled;
             pending = state.pending;
         }
         if (!data) return;
@@ -974,6 +978,10 @@ void settings_rtc_ntp_api(int command, void *data) noexcept
         desired = !state.enabled;
         state.pending = true;
     }
+    // Switching the NTP mode supersedes any manual edits that have not been
+    // written yet.  Without this the workflow's dirty flag made the toggle a
+    // dead key with no feedback at all.
+    session.discard_edits();
     if (!session.begin_ntp_toggle(desired)) {
         std::lock_guard<std::mutex> lock(state.mutex);
         state.pending = false;
@@ -1004,10 +1012,15 @@ void settings_rtc_ntp_api(int command, void *data) noexcept
 
 namespace {
 
+// The status label is an error banner, not a page footer.  It lives in the
+// value page's empty top-left corner: x .. x+w must stay clear of the value
+// column, whose left-most glyph starts at ValueListX + ValueBoxX = 116, so
+// 4 + 104 leaves 8px of margin.  Keeping it here instead of the bottom edge
+// means the value list never loses rows to it.
 enum class LayoutMetric : int {
-    StatusLabelW    = 232,
-    StatusLabelX    = 84,
-    StatusLabelY    = 118,
+    StatusLabelW    = 104,
+    StatusLabelX    = 4,
+    StatusLabelY    = 4,
     StatusTextColor = 0xFF6666,
     StatusFontSize  = 10,
 };
@@ -1062,6 +1075,11 @@ LvSettingRtcPage3::LvSettingRtcPage3() : impl_(std::make_unique<Impl>()) {}
 LvSettingRtcPage3::LvSettingRtcPage3(lv_obj_t *parent, const NodeIter &parent_node)
     : LvSettingValuePage3Base(parent_node, {}), impl_(std::make_unique<Impl>())
 {
+    // Always derive the highlighted row from the model.  activate_selected()
+    // stores the chosen index on the tree node, and once the model clamps the
+    // day to the selected month that stored index can point at a value the
+    // model no longer holds.
+    parent_node->selected_index = -1;
     install_actions();
     initialize(parent);
     create_status_label();
@@ -1073,6 +1091,11 @@ LvSettingRtcPage3::LvSettingRtcPage3(lv_obj_t *parent,
                                      std::function<void()> back_callback)
     : LvSettingValuePage3Base(parent_node, std::move(back_callback)), impl_(std::make_unique<Impl>())
 {
+    // Always derive the highlighted row from the model.  activate_selected()
+    // stores the chosen index on the tree node, and once the model clamps the
+    // day to the selected month that stored index can point at a value the
+    // model no longer holds.
+    parent_node->selected_index = -1;
     install_actions();
     initialize(parent);
     create_status_label();
@@ -1153,6 +1176,9 @@ void LvSettingRtcPage3::create_status_label()
     impl_->status_label = lv_label_create(ComponensObj);
     if (!impl_->status_label) return;
     lv_obj_set_width(impl_->status_label, ::metric(::LayoutMetric::StatusLabelW));
+    // WRAP, never CLIP: the longer messages ("Disable NTP before editing
+    // time") do not fit on one 104px line and must not be truncated.
+    lv_label_set_long_mode(impl_->status_label, LV_LABEL_LONG_WRAP);
     lv_obj_set_pos(impl_->status_label,
                    ::metric(::LayoutMetric::StatusLabelX),
                    ::metric(::LayoutMetric::StatusLabelY));
@@ -1185,9 +1211,18 @@ void LvSettingRtcPage3::start_refresh()
                     impl_->refresh_pending = false;
                     auto &workflow = settings_rtc::session();
                     workflow.set_ntp_status(result.ntp.status);
-                    const bool time_loaded = result.time.valid && workflow.load_local_time(result.time.payload);
+                    // Adopt the freshly read clock only while nothing has been
+                    // edited yet.  Reloading on every field page used to wipe the
+                    // previous page's edit, so setting two fields before writing
+                    // was impossible - the second page reset the first one's
+                    // value.  Short-circuit keeps load_local_time() (and its
+                    // clearing of dirty_) out of the pending-edit path.
+                    const bool keep_edits = workflow.state().dirty();
+                    const bool time_ok =
+                        keep_edits ||
+                        (result.time.valid && workflow.load_local_time(result.time.payload));
                     if (!result.ntp.available) set_error("NTP status unavailable");
-                    else if (!time_loaded) set_error("RTC time unavailable");
+                    else if (!time_ok) set_error("RTC time unavailable");
                     else clear_error();
                     select(initial_selection());
                 });
@@ -1267,7 +1302,15 @@ void LvSettingRtcConfirmPage3::restore_actions() noexcept
 
 SettingApiResult LvSettingRtcConfirmPage3::discard_and_leave()
 {
-    if (activation_pending()) return SettingApiResult::Failure;
+    // activation_pending() is true for this very activation (the base class
+    // sets it before calling this handler), so it cannot mean "a write is
+    // already running" - guarding on it made "No" fail every time.
+    // request_state is only set between begin_save() and its outcome, which is
+    // exactly the condition we want.
+    if (impl_->request_state) {
+        set_error("RTC write in progress");
+        return SettingApiResult::Failure;
+    }
     cancel_backend_request();
     settings_rtc::session().discard_edits();
     clear_error();
@@ -1329,6 +1372,9 @@ void LvSettingRtcConfirmPage3::Impl::enqueue_outcome(
     settings_rtc::PrivilegedResultKind outcome) noexcept
 {
     if (request->terminal.exchange(true, std::memory_order_acq_rel)) return;
+    // A stale outcome must not touch the workflow: cancel_time_commit() is not
+    // ownership-checked, so releasing here could cancel a *newer* commit.  The
+    // page's own teardown (cancel_backend_request) already releases its commit.
     if (!sink.valid()) return;
 
     const bool queued = SettingsAsync::Dispatch::enqueue_from_callback(
@@ -1372,6 +1418,9 @@ void LvSettingRtcConfirmPage3::create_status_label()
     impl_->status_label = lv_label_create(ComponensObj);
     if (!impl_->status_label) return;
     lv_obj_set_width(impl_->status_label, ::metric(::LayoutMetric::StatusLabelW));
+    // WRAP, never CLIP: the longer messages ("Disable NTP before editing
+    // time") do not fit on one 104px line and must not be truncated.
+    lv_label_set_long_mode(impl_->status_label, LV_LABEL_LONG_WRAP);
     lv_obj_set_pos(impl_->status_label,
                    ::metric(::LayoutMetric::StatusLabelX),
                    ::metric(::LayoutMetric::StatusLabelY));
@@ -1423,6 +1472,41 @@ void LvSettingRtcConfirmPage3::leave_page()
     if (impl_->back_callback) impl_->back_callback();
 }
 
+int settings_rtc_days_in_current_month() noexcept
+{
+    return settings_rtc::session().state().field_max(settings_rtc::RtcField::DAY);
+}
+
+void settings_rtc_discard_edits() noexcept
+{
+    settings_rtc::session().discard_edits();
+}
+
+const ActivationBlock *settings_rtc_manual_edit_block() noexcept
+{
+    static constexpr ActivationBlock kInFlight{
+        "RTC operation in progress", "Wait for it to finish, then try again."};
+    static constexpr ActivationBlock kUnavailable{
+        "Network Time status unavailable", "Cannot change the clock right now."};
+    static constexpr ActivationBlock kNetworkTimeOn{
+        "Network Time is on", "Turn off Network Time to set the clock manually."};
+
+    auto &workflow = settings_rtc::session();
+    if (workflow.pending()) return &kInFlight;
+
+    const auto &state = workflow.state();
+    if (!state.ntp_available()) return &kUnavailable;
+    if (state.ntp_on()) return &kNetworkTimeOn;
+    return nullptr;
+}
+
+void settings_rtc_refresh_ntp() noexcept
+{
+    // force: the caller needs a value observed now, not the first one this
+    // process happened to see.
+    settings_rtc::refresh_ntp_cache(true);
+}
+
 std::unique_ptr<DComponens::LvglComponensBase> settings_rtc_page_factory(
     lv_obj_t *parent,
     const NodeIter &parent_node,
@@ -1431,18 +1515,67 @@ std::unique_ptr<DComponens::LvglComponensBase> settings_rtc_page_factory(
     return std::make_unique<LvSettingRtcPage3>(parent, parent_node, std::move(back_callback));
 }
 
+std::string settings_rtc_local_time_text()
+{
+    const std::time_t now = std::time(nullptr);
+    std::tm local{};
+    if (now == 0 || !localtime_r(&now, &local)) return {};
+    char buffer[32] = {};
+    std::snprintf(buffer,
+                  sizeof(buffer),
+                  "%04d-%02d-%02d %02d:%02d:%02d",
+                  local.tm_year + 1900,
+                  local.tm_mon + 1,
+                  local.tm_mday,
+                  local.tm_hour,
+                  local.tm_min,
+                  local.tm_sec);
+    return buffer;
+}
+
+std::string settings_rtc_ntp_status_text()
+{
+    const auto &state = settings_rtc::session().state();
+    if (!state.ntp_available()) return "Unavailable";
+    return state.ntp_on() ? "On" : "Off";
+}
+
 std::unique_ptr<DComponens::LvglComponensBase> settings_rtc_info_page_factory(
     lv_obj_t *parent,
     const NodeIter &parent_node,
     std::function<void()> back_callback)
 {
-    const auto &state = settings_rtc::session().state();
+    // Nothing on this path used to load the local time, so the Info page always
+    // reported the model's placeholder (2026-01-01) unless a field page had
+    // been visited first.  LocalTime is answered from the host clock, so this
+    // read completes inline and cannot block the UI.
+    auto &workflow = settings_rtc::session();
+
+    auto time      = std::make_shared<settings_rtc::TimeReadResult>();
+    auto delivered = std::make_shared<std::atomic_bool>(false);
+    settings_rtc::read_local_time_async([time, delivered](settings_rtc::TimeReadResult result) {
+        *time = std::move(result);
+        delivered->store(true, std::memory_order_release);
+    });
+    if (delivered->load(std::memory_order_acquire) && time->valid) {
+        workflow.load_local_time(time->payload);
+    }
+
     settings_t12b::about_help::Content content{
         "Date & Time",
-        {"Current: " + state.timestamp(),
-         std::string("Network Time: ") + (state.ntp_on() ? "On" : "Off")}};
-    return std::make_unique<LvSettingStaticInfoPage3>(
+        {"Current: " + settings_rtc_local_time_text(),
+         "Network Time: " + settings_rtc_ntp_status_text()}};
+    auto page = std::make_unique<LvSettingStaticInfoPage3>(
         parent, parent_node, std::move(back_callback), std::move(content));
+    // A frozen clock is the one thing an Info page must not show, so keep both
+    // lines fresh while it is on screen.
+    page->set_lines_provider([](std::vector<std::string> &lines) {
+        if (lines.size() < 2) return false;
+        lines[0] = "Current: " + settings_rtc_local_time_text();
+        lines[1] = "Network Time: " + settings_rtc_ntp_status_text();
+        return true;
+    });
+    return page;
 }
 
 std::unique_ptr<DComponens::LvglComponensBase> settings_rtc_confirm_page_factory(

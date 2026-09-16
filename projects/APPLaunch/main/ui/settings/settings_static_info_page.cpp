@@ -10,6 +10,7 @@
 
 #include "cp0_font_service.hpp"
 
+#include <cstddef>
 #include <utility>
 
 namespace {
@@ -73,9 +74,38 @@ LvSettingStaticInfoPage3::LvSettingStaticInfoPage3(
 
 LvSettingStaticInfoPage3::~LvSettingStaticInfoPage3()
 {
+    if (lines_timer_) {
+        lv_timer_delete(lines_timer_);
+        lines_timer_ = nullptr;
+    }
+    lines_provider_ = nullptr;
+    line_labels_.clear();
     if (ComponensObj) {
         lv_obj_delete(ComponensObj);
         ComponensObj = nullptr;
+    }
+}
+
+void LvSettingStaticInfoPage3::set_lines_provider(
+    std::function<bool(std::vector<std::string> &)> provider)
+{
+    lines_provider_ = std::move(provider);
+    if (!lines_provider_ || lines_timer_ || !ComponensObj) return;
+    lines_timer_ = lv_timer_create(&LvSettingStaticInfoPage3::refresh_lines_cb, 1000, this);
+}
+
+void LvSettingStaticInfoPage3::refresh_lines_cb(lv_timer_t *timer)
+{
+    auto *self = static_cast<LvSettingStaticInfoPage3 *>(lv_timer_get_user_data(timer));
+    if (!self || !self->lines_provider_) return;
+
+    std::vector<std::string> lines = self->content_.lines;
+    if (!self->lines_provider_(lines) || lines.size() != self->line_labels_.size()) return;
+
+    for (std::size_t index = 0; index < lines.size(); ++index) {
+        lv_obj_t *label = self->line_labels_[index];
+        if (!label || lines[index] == lv_label_get_text(label)) continue;
+        lv_label_set_text(label, lines[index].c_str());
     }
 }
 
@@ -132,6 +162,7 @@ void LvSettingStaticInfoPage3::create_ui(lv_obj_t *parent)
                                     settings_fonts::cjk_sans(12),
                                     true);
         if (!label) break;
+        line_labels_.push_back(label);
         lv_obj_update_layout(label);
         y += lv_obj_get_height(label) + metric(LayoutMetric::LineGap);
     }

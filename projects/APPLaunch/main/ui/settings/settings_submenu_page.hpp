@@ -40,7 +40,6 @@ public:
         LabelBoxX    = 0,
         LabelBoxW    = 80,
         StatusIconX  = 100,
-        Page3X       = 0,
         PageWidth    = 320,
         Page3AnimMs  = 200,
     };
@@ -74,9 +73,25 @@ public:
 
     void SetSelfUiMode(PageType mode) override;
 
+    // A nested roller page keeps its rows in the right-hand column, so the
+    // page-3 slide must come to rest at PanelX rather than the left edge.
+    int panel_x() const override;
+
+    // Optional cleanup run when this page is torn down, after the third-level
+    // page has been destroyed.  Pages that own cross-page session state (such
+    // as Date & Time) use it to abandon that state together with the page.
+    void set_on_destroy(std::function<void()> callback)
+    {
+        on_destroy_ = std::move(callback);
+    }
+
     std::string selected_entry_label() const;
 
     void show_power_warning();
+
+    // Modal that refuses activation and explains why.  While it is up it owns
+    // every key, so the page underneath cannot be used.
+    void show_blocked_warning(const char *title_text, const char *message_text);
 
     void set_compact_mode(bool enabled);
 
@@ -164,4 +179,5 @@ private:
     lv_obj_t *arrow_down_                       = nullptr;
     lv_obj_t *utility_obj_                      = nullptr;
     lv_obj_t *power_warning_              = nullptr;
+    std::function<void()> on_destroy_;
 };
