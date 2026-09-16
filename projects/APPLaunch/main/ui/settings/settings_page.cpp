@@ -237,7 +237,20 @@ static std::unique_ptr<DComponens::LvglComponensBase> roller_page_factory(lv_obj
         }
     }
 #endif
-    return std::make_unique<LvSettingRollerPage2>(parent, page_node, std::move(on_back));
+    if (page_node->label == "Date & Time") {
+        // Refresh before the page is built: the constructor's own status read
+        // then sees initialized=true and returns, so one visit costs one D-Bus
+        // read instead of two.  The status icon and the Set Manually gate both
+        // read the value this leaves behind.
+        settings_rtc_refresh_ntp();
+    }
+    auto page = std::make_unique<LvSettingRollerPage2>(parent, page_node, std::move(on_back));
+    if (page_node->label == "Date & Time") {
+        // Manual time edits belong to a single visit to Date & Time; leaving the
+        // submenu abandons them so a later visit cannot write a stale time.
+        page->set_on_destroy([] { settings_rtc_discard_edits(); });
+    }
+    return page;
 }
 
 static std::unique_ptr<DComponens::LvglComponensBase> roller_page3_factory(lv_obj_t *parent, const NodeIter &page_node,
@@ -276,6 +289,30 @@ static std::unique_ptr<DComponens::LvglComponensBase> bq_calibrate_page3_factory
 static std::unique_ptr<DComponens::LvglComponensBase> rtc_page3_factory(lv_obj_t *parent, const NodeIter &page_node,
                                                                         std::function<void()> on_back)
 {
+    // "Day" is declared with a static 1..31 option list, but the model clamps
+    // the day to the month that is actually selected.  Rebuild the options from
+    // the model so the page can never offer a date that would be rejected on
+    // commit.  This runs before the page object is constructed and after the
+    // previous third-level page (with its per-entry action backups) has been
+    // destroyed, so nothing holds an iterator into the children being replaced.
+    if (page_node->label == "Day") {
+        if (Tree *tree = settings_tree_factory_context()) {
+            // Safe to replace the children here: LoadNextPage() returns early
+            // while roller3_ is set, so the previous third-level page has been
+            // destroyed - and its restore_actions() has run - before this
+            // factory is called.  No live SettingEntry* points into these
+            // children; dropping that guard would turn this into a
+            // use-after-free.
+            tree->erase_children(page_node);
+            const int days = settings_rtc_days_in_current_month();
+            // The model keeps the month within 1..12, so this is 28..31; clamp
+            // so a bad value cannot build a page with no rows at all.
+            const int last_day = days >= 1 ? days : 31;
+            for (int day = 1; day <= last_day; ++day) {
+                tree->append_child(page_node, SettingEntry{std::to_string(day)});
+            }
+        }
+    }
     return std::make_unique<LvSettingRtcPage3>(parent, page_node, std::move(on_back));
 }
 
@@ -669,7 +706,12 @@ void UISettingTreePage::create_page_detail()
         SettingEntry ntp_entry{"Network Time", settings_rtc_ntp_api, true};
         ntp_entry.status_read_policy = SettingStatusReadPolicy::Direct;
         mode_tree.append_child(date_time, std::move(ntp_entry));
-        NodeIter manual = mode_tree.append_child(date_time, SettingEntry{"Set Manually", roller_page_factory});
+        SettingEntry manual_entry{"Set Manually", roller_page_factory};
+        // While Network Time keeps the clock there is nothing to set by hand, so
+        // refuse the page up front and say why instead of letting every edit
+        // fail one by one.
+        manual_entry.activation_gate = [] { return settings_rtc_manual_edit_block(); };
+        NodeIter manual = mode_tree.append_child(date_time, std::move(manual_entry));
         {
             NodeIter year = mode_tree.append_child(manual, SettingEntry{"Year", rtc_page3_factory});
             append_numeric_options(mode_tree, year, 2000, 2099);
@@ -691,12 +733,8 @@ void UISettingTreePage::create_page_detail()
             append_numeric_options(mode_tree, minute, 0, 59);
         }
         {
-            NodeIter second = mode_tree.append_child(manual, SettingEntry{"Second", rtc_page3_factory});
-            append_numeric_options(mode_tree, second, 0, 59);
-        }
-        {
             NodeIter write_rtc = mode_tree.append_child(
-                manual, SettingEntry{"Write hardware RTC?", settings_rtc_confirm_page_factory});
+                manual, SettingEntry{"Write RTC?", settings_rtc_confirm_page_factory});
             mode_tree.append_child(write_rtc, SettingEntry{"Yes"});
             mode_tree.append_child(write_rtc, SettingEntry{"No"});
         }

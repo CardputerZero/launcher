@@ -13,6 +13,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "lvgl_components.hpp"
 
@@ -50,7 +51,15 @@ public:
     void LeaveNextPage() override;
     void create_ui(lv_obj_t *parent) override;
 
+    // Optional: re-generate the body lines while the page is on screen.  The
+    // callback fills `lines` and returns true to repaint; a false return or a
+    // different line count leaves the labels untouched.  Date & Time uses this
+    // so its clock keeps ticking instead of freezing at construction time.
+    void set_lines_provider(std::function<bool(std::vector<std::string> &)> provider);
+
 private:
+    static void refresh_lines_cb(lv_timer_t *timer);
+
     lv_obj_t *add_label(const std::string &text,
                         int x,
                         int y,
@@ -62,6 +71,9 @@ private:
 
     NodeIter page_node_;
     settings_t12b::about_help::Content content_;
+    std::function<bool(std::vector<std::string> &)> lines_provider_;
+    std::vector<lv_obj_t *> line_labels_;
+    lv_timer_t *lines_timer_ = nullptr;
 };
 
 std::unique_ptr<DComponens::LvglComponensBase> settings_t12b_about_page_factory(

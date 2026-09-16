@@ -79,6 +79,13 @@ LvSettingRollerPage2::~LvSettingRollerPage2()
     }
     roller3_.reset();
     stop_page3_animations();
+    // Run after roller3_ is gone so any in-flight write it owns has already
+    // been cancelled and released the workflow.
+    if (on_destroy_) {
+        auto callback = std::move(on_destroy_);
+        on_destroy_ = nullptr;
+        callback();
+    }
     if (ComponensObj) {
         lv_obj_delete(ComponensObj);
         ComponensObj = nullptr;
@@ -212,7 +219,7 @@ std::string LvSettingRollerPage2::selected_entry_label() const
     return std::next(parent_node_.begin(), selected_index)->label;
 }
 
-void LvSettingRollerPage2::show_power_warning()
+void LvSettingRollerPage2::show_blocked_warning(const char *title_text, const char *message_text)
 {
     if (power_warning_ || !parent_) return;
     power_warning_ = lv_msgbox_create(parent_);
@@ -227,10 +234,10 @@ void LvSettingRollerPage2::show_power_warning()
     lv_obj_set_style_pad_all(power_warning_, 0, LV_PART_MAIN);
     lv_obj_clear_flag(power_warning_, LV_OBJ_FLAG_SCROLLABLE);
 
-    lv_obj_t *title     = lv_msgbox_add_title(power_warning_, "Bluetooth power is off");
+    lv_obj_t *title     = lv_msgbox_add_title(power_warning_, title_text ? title_text : "Unavailable");
     lv_obj_t *header    = lv_msgbox_get_header(power_warning_);
     lv_obj_t *content   = lv_msgbox_get_content(power_warning_);
-    lv_obj_t *message   = lv_msgbox_add_text(power_warning_, "Turn on Power before continuing.");
+    lv_obj_t *message   = lv_msgbox_add_text(power_warning_, message_text ? message_text : "");
     lv_obj_t *ok_button = lv_msgbox_add_footer_button(power_warning_, "OK");
     lv_obj_t *footer    = lv_msgbox_get_footer(power_warning_);
     lv_obj_t *ok_label  = ok_button ? lv_obj_get_child(ok_button, 0) : nullptr;
@@ -297,6 +304,11 @@ void LvSettingRollerPage2::show_power_warning()
     DComponens::lvgl_bind_event(
         power_warning_, LV_EVENT_KEY, nullptr,
         std::bind(&LvSettingRollerPage2::handle_power_warning_key, this, std::placeholders::_1));
+}
+
+void LvSettingRollerPage2::show_power_warning()
+{
+    show_blocked_warning("Bluetooth power is off", "Turn on Power before continuing.");
 }
 
 void LvSettingRollerPage2::set_compact_mode(bool enabled)
@@ -512,7 +524,10 @@ void LvSettingRollerPage2::create_third_page(const NodeIter &page_node)
         return;
     }
 
-    lv_obj_set_style_translate_x(roller3_->Get(), metric(LayoutMetric::PageWidth), LV_PART_MAIN);
+    // The transition is driven by the object's x coordinate below.  Keep the
+    // style translation neutral so it does not add a second page-width offset
+    // to full-custom pages such as System -> Storage.
+    lv_obj_set_style_translate_x(roller3_->Get(), 0, LV_PART_MAIN);
     AnimateNextOut(nullptr);
 }
 
@@ -546,6 +561,11 @@ int LvSettingRollerPage2::page_object_base_x(lv_obj_t *object) const
     return object ? lv_obj_get_x(object) : 0;
 }
 
+int LvSettingRollerPage2::panel_x() const
+{
+    return metric(LayoutMetric::PanelX);
+}
+
 void LvSettingRollerPage2::animate_object_to(lv_obj_t *object, int end_x)
 {
     if (!object) return;
@@ -568,8 +588,12 @@ void LvSettingRollerPage2::animate_page3_root(bool entering)
 
     lv_obj_t *root = roller3_->Get();
     lv_anim_del(root, nullptr);
-    const int start_x = entering ? metric(LayoutMetric::PageWidth) : metric(LayoutMetric::Page3X);
-    const int end_x   = entering ? metric(LayoutMetric::Page3X) : metric(LayoutMetric::PageWidth);
+    // Coming in, the page slides from off-screen right to its resting column.
+    // Going out it returns there, never to a hard-coded 0: a nested roller
+    // page rests at PanelX, and a full-width page rests at 0.
+    const int rest_x  = roller3_->panel_x();
+    const int start_x = entering ? metric(LayoutMetric::PageWidth) : rest_x;
+    const int end_x   = entering ? rest_x : metric(LayoutMetric::PageWidth);
     lv_obj_set_x(root, start_x);
     lv_anim_t animation;
     lv_anim_init(&animation);
@@ -602,11 +626,12 @@ void LvSettingRollerPage2::animate_first_page_objects(bool entering)
 
 int LvSettingRollerPage2::page2_target_x(lv_obj_t *object, bool entering) const
 {
+    // This panel steps aside by its own rest offset so that its coordinates and
+    // the third-level page agree on where the left column ends.  For
+    // ComponensObj/selection_bg_ the base is PanelX, so this matches the
+    // previous hand-written target of 0.
     const int base_x = page_object_base_x(object);
-    if (object == selection_bg_ || object == ComponensObj) {
-        return entering ? 0 : base_x;
-    }
-    return entering ? base_x - metric(LayoutMetric::PanelX) : base_x;
+    return entering ? base_x - panel_x() : base_x;
 }
 
 void LvSettingRollerPage2::start_page3_transition(bool entering)
@@ -643,7 +668,7 @@ void LvSettingRollerPage2::finish_page3_transition(bool entering)
 {
     if (entering) {
         if (roller3_ && roller3_->Get()) {
-            lv_obj_set_x(roller3_->Get(), metric(LayoutMetric::Page3X));
+            lv_obj_set_x(roller3_->Get(), roller3_->panel_x());
             if (input_group_) {
                 lv_group_add_obj(input_group_, roller3_->Get());
                 lv_group_focus_obj(roller3_->Get());
@@ -894,6 +919,15 @@ void LvSettingRollerPage2::handle_key_event(lv_event_t *event)
         scroll_to_selected(cont, !wrapped);
     } else if (key == LV_KEY_ENTER || key == LV_KEY_RIGHT) {
         auto selected_node = std::next(parent_node_.begin(), selected_index);
+        // An entry may refuse activation outright; explain why instead of
+        // opening a page whose every action would fail.
+        if (selected_node->activation_gate) {
+            if (const ActivationBlock *block = selected_node->activation_gate()) {
+                show_blocked_warning(block->title, block->message);
+                lv_event_stop_processing(event);
+                return;
+            }
+        }
         if (selected_node->page_factory) {
             LoadNextPage();
         } else if (selected_node->Componens_api) {
