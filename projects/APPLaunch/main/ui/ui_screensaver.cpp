@@ -13,6 +13,7 @@
 #include "keyboard_input.h"
 #include "launcher_media_controls.h"
 #include "launcher_platform.hpp"
+#include "launcher_toast.h"
 #include "lvgl/lvgl.h"
 #include "lvgl/src/draw/lv_image_decoder_private.h"
 #include "model/lockscreen_state_model.hpp"
@@ -33,6 +34,8 @@ namespace {
 constexpr uint32_t kIdleCheckMs = 500;
 constexpr uint32_t kHoldPollMs = 100;
 constexpr uint32_t kExitAnimationMs = 350;
+/* Shown once the idle TAB hold matures past the model's hint delay. */
+constexpr const char *kHoldHintText = "Hold TAB 5s lock";
 
 class ScreensaverImageCache
 {
@@ -236,6 +239,15 @@ void show_hint(const char *text)
     lv_obj_set_pos(s_hint, 0, 0);
     lv_obj_move_foreground(s_hint);
     lv_obj_clear_flag(s_hint, LV_OBJ_FLAG_HIDDEN);
+}
+
+/* The launcher toast is shared with the other global hints, so only clear it
+ * while this gesture owns it.  The following activate()/deactivate() resets the
+ * model flag; hiding here is what stops the persistent hint outliving the hold. */
+void hide_hold_hint()
+{
+    if (!s_model.hold_hint_visible()) return;
+    launcher_toast().hide();
 }
 
 /* ---- lock-screen sounds ------------------------------------------------
@@ -550,6 +562,7 @@ void stop_screensaver(bool was_active = false, bool animated = false)
      * drop the lock so the next entry starts black. */
     release_screen_off_backlight();
     hide_hint();
+    hide_hold_hint();
     s_lock.reset(lv_tick_get());
     s_model.deactivate();
     update_timer_period();
@@ -596,6 +609,7 @@ void enter_lockscreen()
     apply_panel(panel);
     if (s_block) lv_obj_add_flag(s_block, LV_OBJ_FLAG_HIDDEN);
     hide_hint();
+    hide_hold_hint();
 
     const uint32_t now = lv_tick_get();
     s_model.activate(panel.width, panel.height, now);
@@ -648,7 +662,10 @@ void timer_cb(lv_timer_t *timer) noexcept
         return;
     }
 
-    if (s_model.poll_hold(now)) {
+    const ScreensaverHoldDecision hold = s_model.poll_hold(now);
+    if (hold.show_hint)
+        launcher_toast().show_persistent(kHoldHintText);
+    if (hold.fire) {
         enter_lockscreen();
         return;
     }
@@ -736,7 +753,10 @@ extern "C" int ui_screensaver_filter_key(const struct key_item *item)
     /* Idle: watch the long-press gesture without consuming the key, so that a
      * short press still reaches the pages that use this key themselves. */
     s_model.note_activity(now);
-    s_model.observe_hold_key(item->key_code, released, now);
+    const ScreensaverHoldDecision hold =
+        s_model.observe_hold_key(item->key_code, released, now);
+    if (hold.hide_hint)
+        launcher_toast().hide();
     update_timer_period();
     return 0;
     } catch (...) {

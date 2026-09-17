@@ -158,7 +158,10 @@ neither business path.
 The screensaver filter also observes one key it does not own: while idle it
 tracks the press and release of the long-press gesture that enters the lock and
 reports them as *not* consumed, so the page underneath keeps the short-press
-meaning of that key. Once the gesture matures the lock takes every key over, and
+meaning of that key. The gesture is TAB held for 5000 ms; the model announces it
+with `Hold TAB 5s lock` on the shared launcher toast from its hint delay (500 ms)
+until the hold ends. Clear that toast on release, on a different key, and when
+the lock is entered or left. Once the gesture matures the lock takes every key over, and
 because only a fresh press changes lock state, the held key's repeats and its
 release cannot walk the machine. Do not make the idle observation path consume a
 key, and keep every observed press paired with its release.

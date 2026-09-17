@@ -9,6 +9,31 @@
 
 extern "C" void test_keyboard_read(lv_indev_t *, lv_indev_data_t *);
 
+/* ui_screensaver.cpp announces the idle TAB hold through the shared launcher
+ * toast.  This harness renders no toast, so record the transitions instead of
+ * building the real object. */
+static int hold_hint_shows;
+static int hold_hint_hides;
+static const char *hold_hint_text;
+
+void LauncherToast::show(const char *text) noexcept { (void)text; }
+
+void LauncherToast::show_persistent(const char *text) noexcept
+{
+    hold_hint_text = text;
+    ++hold_hint_shows;
+}
+
+void LauncherToast::hide() { ++hold_hint_hides; }
+
+void LauncherToast::shutdown() {}
+
+LauncherToast &launcher_toast()
+{
+    static LauncherToast toast;
+    return toast;
+}
+
 static cp0_battery_info_t battery{};
 static int shutdown_calls;
 static int custom_events;
@@ -154,12 +179,23 @@ static void test_hold_gesture_enters_lock()
     backlight_suspends = 0;
     backlight_restores = 0;
 
-    // Until the threshold matures the key still belongs to the page.
+    // Until the threshold matures the key still belongs to the page; the gesture
+    // announces itself first without taking the key over.
+    hold_hint_shows = 0;
+    hold_hint_hides = 0;
     key(KEY_TAB, KBD_KEY_PRESSED, false);
-    advance(2999);
+    advance(499);
+    ::timer_cb(s_timer);
+    assert(hold_hint_shows == 0);
+    advance(1);
+    ::timer_cb(s_timer);
+    assert(hold_hint_shows == 1);
+    assert(std::strcmp(hold_hint_text, "Hold TAB 5s lock") == 0);
+    advance(4499);
     ::timer_cb(s_timer);
     assert(!ui_screensaver_is_active());
     assert(backlight_raw == 128 && backlight_suspends == 0);
+    assert(hold_hint_hides == 0);
 
     // Auto-repeat keeps the original window instead of restarting it.
     key(KEY_TAB, KBD_KEY_REPEATED, false);
@@ -170,6 +206,8 @@ static void test_hold_gesture_enters_lock()
     assert(s_panel.black);
     assert(backlight_raw == 0 && backlight_suspends == 1);
     assert(!s_model.hold_pending());
+    // Entering the lock clears the persistent announcement.
+    assert(hold_hint_hides == 1);
     assert(s_block && lv_obj_has_flag(s_block, LV_OBJ_FLAG_HIDDEN));
     assert(s_hint && lv_obj_has_flag(s_hint, LV_OBJ_FLAG_HIDDEN));
     assert_sound("lock.mp3");

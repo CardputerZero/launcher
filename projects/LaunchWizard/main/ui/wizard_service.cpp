@@ -80,6 +80,10 @@ constexpr const char *kKeyboardGuideMarker =
     "/var/lib/LaunchWizard/run-keyboard-guide";
 constexpr const char *kKeyboardGuideBinary =
     "/usr/share/APPLaunch/bin/M5CardputerZero-Keyboard-Guide";
+// The lesson only repaints the screen with APPLaunch's logo when asked to. The
+// wizard keeps the display after the first-boot lesson ends, so it opts in; the
+// launcher's own keyboard-guide.desktop entry intentionally does not.
+constexpr const char *kKeyboardGuideExitLogoArgument = "--exit-logo";
 
 void remove_oobe_markers(std::string *first_error = nullptr)
 {
@@ -1165,11 +1169,12 @@ void launch_wizard::WizardService::run_keyboard_guide()
                     pulse_socket.c_str());
         args = {"/usr/sbin/runuser", "-u", username, "--", "/usr/bin/env",
                 "-u", "PULSE_SERVER", "-u", "PULSE_RUNTIME_PATH",
-                "XDG_RUNTIME_DIR=" + runtime_dir, kKeyboardGuideBinary};
+                "XDG_RUNTIME_DIR=" + runtime_dir, kKeyboardGuideBinary,
+                kKeyboardGuideExitLogoArgument};
     } else {
         fprintf(stderr,
                 "LaunchWizard: UID 1000 user missing; running guide as root\n");
-        args = {kKeyboardGuideBinary};
+        args = {kKeyboardGuideBinary, kKeyboardGuideExitLogoArgument};
     }
 
     printf("LaunchWizard: starting keyboard guide\n");

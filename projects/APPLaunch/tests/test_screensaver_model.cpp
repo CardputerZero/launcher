@@ -82,34 +82,50 @@ int main()
 
     // ---- Long-press gesture that requests the lock ----
     ScreensaverModel hold;
-    assert(ScreensaverModel::screen_off_hold_ms() == 3000);
+    assert(ScreensaverModel::screen_off_hold_ms() == 5000);
+    assert(ScreensaverModel::hold_hint_ms() == 500);
     hold.reset(1000);
     assert(!hold.hold_pending());
-    assert(!hold.poll_hold(500000));
+    assert(!hold.hold_hint_visible());
+    assert(!hold.poll_hold(500000).fire);
 
-    hold.observe_hold_key(KEY_TAB, false, 2000);
+    ScreensaverHoldDecision decision = hold.observe_hold_key(KEY_TAB, false, 2000);
+    assert(!decision.show_hint && !decision.hide_hint && !decision.fire);
     assert(hold.hold_pending());
-    assert(!hold.poll_hold(4999));
+    // The gesture announces itself once, before it fires.
+    assert(!hold.poll_hold(2499).show_hint);
+    decision = hold.poll_hold(2500);
+    assert(decision.show_hint && !decision.fire);
+    assert(hold.hold_hint_visible());
+    assert(!hold.poll_hold(4000).show_hint);
     // Auto-repeat must not restart the window, or a held key never matures.
-    hold.observe_hold_key(KEY_TAB, false, 4000);
-    assert(!hold.poll_hold(4999));
-    assert(hold.poll_hold(5000));
+    assert(!hold.observe_hold_key(KEY_TAB, false, 4000).hide_hint);
+    assert(!hold.poll_hold(6999).fire);
+    decision = hold.poll_hold(7000);
+    assert(decision.fire && !decision.show_hint);
     // The threshold reports once per hold, and entering the lock clears it.
-    assert(!hold.poll_hold(9000));
-    hold.activate(240, 135, 5000);
-    assert(hold.active() && !hold.hold_pending());
+    assert(!hold.poll_hold(9000).fire);
+    hold.activate(240, 135, 7000);
+    assert(hold.active() && !hold.hold_pending() && !hold.hold_hint_visible());
 
-    // A short tap never requests anything.
+    // A short tap never requests anything and never shows the hint.
     hold.observe_hold_key(KEY_TAB, false, 100);
     hold.observe_hold_key(KEY_TAB, true, 200);
-    assert(!hold.hold_pending());
-    assert(!hold.poll_hold(500000));
+    assert(!hold.hold_pending() && !hold.hold_hint_visible());
+    assert(!hold.poll_hold(500000).fire);
 
-    // Another key cancels the gesture.
+    // Releasing clears a visible hint.
     hold.observe_hold_key(KEY_TAB, false, 100);
-    hold.observe_hold_key(KEY_ENTER, false, 200);
-    assert(!hold.hold_pending());
-    assert(!hold.poll_hold(500000));
+    assert(hold.poll_hold(600).show_hint && hold.hold_hint_visible());
+    decision = hold.observe_hold_key(KEY_TAB, true, 700);
+    assert(decision.hide_hint && !hold.hold_pending() && !hold.hold_hint_visible());
+
+    // Another key cancels the gesture and clears its hint.
+    hold.observe_hold_key(KEY_TAB, false, 100);
+    assert(hold.poll_hold(600).show_hint);
+    decision = hold.observe_hold_key(KEY_ENTER, false, 700);
+    assert(decision.hide_hint && !hold.hold_pending() && !hold.hold_hint_visible());
+    assert(!hold.poll_hold(500000).fire);
 
     // Leaving the lock clears a pending gesture along with the active flag.
     hold.observe_hold_key(KEY_TAB, false, 10);
