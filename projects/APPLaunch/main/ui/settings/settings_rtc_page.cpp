@@ -1538,6 +1538,43 @@ std::string settings_rtc_local_time_text()
     return buffer;
 }
 
+std::string settings_rtc_timezone_text()
+{
+    const std::time_t now = std::time(nullptr);
+    std::tm local{};
+#if defined(_WIN32)
+    _tzset();
+    if (localtime_s(&local, &now) != 0) return "Unavailable";
+    const bool dst = local.tm_isdst > 0;
+    const char *abbreviation = dst ? _tzname[1] : _tzname[0];
+    if (abbreviation == nullptr || abbreviation[0] == '\0') abbreviation = _tzname[0];
+    const long utc_offset = -(_timezone - (dst ? _dstbias : 0));
+#else
+    if (localtime_r(&now, &local) == nullptr) return "Unavailable";
+    const char *abbreviation = local.tm_zone;
+    const long utc_offset = local.tm_gmtoff; // Seconds east of UTC.
+#endif
+
+    char buffer[32] = {};
+    if (utc_offset == 0) {
+        std::snprintf(buffer, sizeof(buffer), "UTC");
+    } else {
+        const long magnitude = utc_offset < 0 ? -utc_offset : utc_offset;
+        std::snprintf(buffer,
+                      sizeof(buffer),
+                      "UTC%c%02ld:%02ld",
+                      utc_offset < 0 ? '-' : '+',
+                      magnitude / 3600,
+                      (magnitude % 3600) / 60);
+    }
+
+    if (abbreviation == nullptr || abbreviation[0] == '\0' ||
+        std::strcmp(abbreviation, "UTC") == 0) {
+        return buffer;
+    }
+    return std::string(buffer) + " (" + abbreviation + ")";
+}
+
 std::string settings_rtc_ntp_status_text()
 {
     const auto &state = settings_rtc::session().state();
@@ -1569,15 +1606,17 @@ std::unique_ptr<DComponens::LvglComponensBase> settings_rtc_info_page_factory(
     settings_t12b::about_help::Content content{
         "Date & Time",
         {"Current: " + settings_rtc_local_time_text(),
-         "Network Time: " + settings_rtc_ntp_status_text()}};
+         "Network Time: " + settings_rtc_ntp_status_text(),
+         "Time Zone: " + settings_rtc_timezone_text()}};
     auto page = std::make_unique<LvSettingStaticInfoPage3>(
         parent, parent_node, std::move(back_callback), std::move(content));
-    // A frozen clock is the one thing an Info page must not show, so keep both
+    // A frozen clock is the one thing an Info page must not show, so keep all
     // lines fresh while it is on screen.
     page->set_lines_provider([](std::vector<std::string> &lines) {
-        if (lines.size() < 2) return false;
+        if (lines.size() < 3) return false;
         lines[0] = "Current: " + settings_rtc_local_time_text();
         lines[1] = "Network Time: " + settings_rtc_ntp_status_text();
+        lines[2] = "Time Zone: " + settings_rtc_timezone_text();
         return true;
     });
     return page;

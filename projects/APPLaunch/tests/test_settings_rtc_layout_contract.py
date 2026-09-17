@@ -384,6 +384,7 @@ def test_info_page_clock_keeps_ticking():
     assert "page->set_lines_provider(" in factory
     assert 'lines[0] = "Current: " + settings_rtc_local_time_text();' in factory
     assert 'lines[1] = "Network Time: " + settings_rtc_ntp_status_text();' in factory
+    assert 'lines[2] = "Time Zone: " + settings_rtc_timezone_text();' in factory
 
     # A timer drives the provider, and the page owns and deletes it.
     static = normalized(STATIC_CPP)
