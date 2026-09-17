@@ -9,6 +9,7 @@
 #include "zclaw_approval_coordinator.h"
 #include "zclaw_chat_view.h"
 #include "zclaw_fonts.hpp"
+#include "zclaw_help_view.h"
 #include "zclaw_input_dialog.h"
 #include "zclaw_input_workflow.h"
 #include "zclaw_runtime_state.h"
@@ -26,10 +27,11 @@ UiActionDispatcher::UiActionDispatcher(
     InputDialog &input, InputWorkflow &input_workflow,
     ApprovalCoordinator &approvals, SettingsCoordinator &settings,
     SettingsWorkflow &settings_workflow, ChatView &chat,
+    HelpView &help,
     RequestQuit request_quit)
     : config_(config), shell_(shell), fonts_(fonts), input_(input),
       input_workflow_(input_workflow), approvals_(approvals), settings_(settings),
-      settings_workflow_(settings_workflow), chat_(chat),
+      settings_workflow_(settings_workflow), chat_(chat), help_(help),
       request_quit_(std::move(request_quit))
 {
 }
@@ -112,6 +114,12 @@ void UiActionDispatcher::execute(const KeyAction &action)
         else
             settings_.open(shell_.content());
         break;
+    case KeyActionType::ToggleHelp:
+        if (help_.visible())
+            help_.hide();
+        else
+            help_.show();
+        break;
     case KeyActionType::SettingsBack:
         if (settings_workflow_.navigate_back(
                 RuntimeState::first_run_needed(config_.config())))
@@ -130,16 +138,28 @@ void UiActionDispatcher::execute(const KeyAction &action)
         settings_.move_selection(1);
         break;
     case KeyActionType::ChatScrollUp:
-        chat_.scroll(24);
+        if (help_.visible())
+            help_.scroll(-1);
+        else
+            chat_.scroll(24);
         break;
     case KeyActionType::ChatScrollDown:
-        chat_.scroll(-24);
+        if (help_.visible())
+            help_.scroll(1);
+        else
+            chat_.scroll(-24);
         break;
     case KeyActionType::ChatPageUp:
-        chat_.scroll_page(1);
+        if (help_.visible())
+            help_.scroll(-4);
+        else
+            chat_.scroll_page(1);
         break;
     case KeyActionType::ChatPageDown:
-        chat_.scroll_page(-1);
+        if (help_.visible())
+            help_.scroll(4);
+        else
+            chat_.scroll_page(-1);
         break;
     case KeyActionType::ChatOpenInput:
         input_.open_chat(&fonts_);

@@ -73,6 +73,14 @@ int main()
     assert(adapted.key == Key::PageUp && adapted.phase == KeyPhase::Released);
     adapted = zclaw::adapt_key_event(KEY_PAGEDOWN, KBD_KEY_RELEASED, 0, "");
     assert(adapted.key == Key::PageDown && adapted.phase == KeyPhase::Released);
+#ifdef KEY_HELP
+    adapted = zclaw::adapt_key_event(KEY_HELP, KBD_KEY_RELEASED, 0, "");
+    assert(adapted.key == Key::Help && adapted.phase == KeyPhase::Released);
+#endif
+#ifdef KEY_HELP
+    adapted = zclaw::adapt_key_event(KEY_HELP, KBD_KEY_RELEASED, 0, "");
+    assert(adapted.key == Key::Help && adapted.phase == KeyPhase::Released);
+#endif
     adapted = zclaw::adapt_key_event(KEY_RESERVED, 99, KBD_MOD_CTRL, "x");
     assert(adapted.key == Key::Other && adapted.phase == KeyPhase::Unknown);
     assert(!adapted.shift && adapted.text == "x");
@@ -208,6 +216,18 @@ int main()
            KeyActionType::SettingsDeleteProvider);
 
     context.settings_open = false;
+    assert(routed(context, KeyPhase::Released, Key::Help).type ==
+           KeyActionType::ToggleHelp);
+    context.help_visible = true;
+    assert(routed(context, KeyPhase::Released, Key::Help).type ==
+           KeyActionType::ToggleHelp);
+    assert(routed(context, KeyPhase::Released, Key::Escape).type ==
+           KeyActionType::ToggleHelp);
+    assert(routed(context, KeyPhase::Released, Key::F).type ==
+           KeyActionType::ChatScrollUp);
+    assert(routed(context, KeyPhase::Repeated, Key::X).type ==
+           KeyActionType::ChatScrollDown);
+    context.help_visible = false;
     assert(routed(context, KeyPhase::Unknown, Key::Enter).type ==
            KeyActionType::None);
     assert(routed(context, KeyPhase::Pressed, Key::Enter).type ==
@@ -234,5 +254,39 @@ int main()
            KeyActionType::ChatOpenInput);
     assert(routed(context, KeyPhase::Released, Key::Escape).type ==
            KeyActionType::None);
+
+    context.help_visible = true;
+    assert(routed(context, KeyPhase::Released, Key::Help).type ==
+           KeyActionType::ToggleHelp);
+    assert(routed(context, KeyPhase::Released, Key::Escape).type ==
+           KeyActionType::ToggleHelp);
+    assert(routed(context, KeyPhase::Released, Key::Backspace).type ==
+           KeyActionType::ToggleHelp);
+    assert(routed(context, KeyPhase::Released, Key::F).type ==
+           KeyActionType::ChatScrollUp);
+    assert(routed(context, KeyPhase::Released, Key::X).type ==
+           KeyActionType::ChatScrollDown);
+    assert(routed(context, KeyPhase::Released, Key::PageUp).type ==
+           KeyActionType::ChatPageUp);
+    assert(routed(context, KeyPhase::Released, Key::PageDown).type ==
+           KeyActionType::ChatPageDown);
+    assert(routed(context, KeyPhase::Released, Key::Enter).type ==
+           KeyActionType::None);
+    assert(routed(context, KeyPhase::Repeated, Key::F).type ==
+           KeyActionType::ChatScrollUp);
+    assert(routed(context, KeyPhase::Repeated, Key::X).type ==
+           KeyActionType::ChatScrollDown);
+    context.help_visible = false;
+    assert(routed(context, KeyPhase::Released, Key::Help).type ==
+           KeyActionType::ToggleHelp);
+
+    context.input_open = true;
+    assert(routed(context, KeyPhase::Released, Key::Help).type ==
+           KeyActionType::ToggleHelp);
+    context.input_open = false;
+    context.settings_open = true;
+    assert(routed(context, KeyPhase::Released, Key::Help).type ==
+           KeyActionType::ToggleHelp);
+    context.settings_open = false;
     return 0;
 }
