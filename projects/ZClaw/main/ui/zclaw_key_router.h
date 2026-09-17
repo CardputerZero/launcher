@@ -41,6 +41,7 @@ enum class Key {
     X,
     Y,
     Z,
+    Help,
 };
 
 struct KeyEvent {
@@ -58,6 +59,7 @@ struct KeyRouteContext {
     bool setup_retry_pending = false;
     bool setup_in_flight = false;
     bool settings_open = false;
+    bool help_visible = false;
     SettingsView settings_view = SettingsView::Main;
 };
 
@@ -86,6 +88,7 @@ enum class KeyActionType {
     SetupRetryActivate,
     SetupRetryDismiss,
     ToggleSettings,
+    ToggleHelp,
     SettingsBack,
     SettingsActivate,
     SettingsDeleteProvider,
