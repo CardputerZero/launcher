@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 set -eu
+python3 "$(dirname "$0")/test_time_set_command.py"
 build_dir="${TMPDIR:-/tmp}/cp0-lvgl-tests"
 mkdir -p "$build_dir"
 ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror -pthread \

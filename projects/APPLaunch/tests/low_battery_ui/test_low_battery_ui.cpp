@@ -237,7 +237,7 @@ static void test_screensaver_panel()
     assert(s_panel.y == top && s_panel.height == height - top);
     assert(lv_obj_get_style_bg_image_src(s_overlay, LV_PART_MAIN) == s_background_cache.image());
     assert(s_hint && !lv_obj_has_flag(s_hint, LV_OBJ_FLAG_HIDDEN));
-    assert(std::strcmp(lv_label_get_text(s_hint), "TAB & ENTER to unlock") == 0);
+    assert(std::strcmp(lv_label_get_text(s_hint), "Press TAB to unlock") == 0);
     lv_obj_update_layout(s_overlay);
     assert(lv_obj_get_y(s_hint) == 0);
     assert(lv_obj_get_height(s_hint) == top);
@@ -275,7 +275,7 @@ static void test_screensaver_panel()
     // A key that is not the confirmation steps back to (2).
     key(KEY_ESC, KBD_KEY_PRESSED, true);
     assert(s_lock.state() == LockscreenState::PendingUnlock);
-    assert(std::strcmp(lv_label_get_text(s_hint), "TAB & ENTER to unlock") == 0);
+    assert(std::strcmp(lv_label_get_text(s_hint), "Press TAB to unlock") == 0);
     assert_sound("blocked.mp3");
     key(KEY_ESC, KBD_KEY_RELEASED, true);
 

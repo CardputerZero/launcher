@@ -188,7 +188,7 @@ The unlock hint is a black-backed yellow label covering the top bar's title,
 leaving its network, clock and battery visible. It is a sibling on `lv_layer_top()`
 so the wallpaper's bounds cannot clip it. Move it above the wallpaper on wake,
 hide it on sleep/exit, and delete it when the wallpaper overlay is deleted.
-Use `TAB & ENTER to unlock` and `Press ENTER to unlock` for the two visible states.
+Use `Press TAB to unlock` and `Press ENTER to unlock` for the two visible states.
 The supplied JPEG is packaged as `lofoten_320x150.png` for the existing PNG
 decoder; own its decoded draw buffer until teardown and reuse it on every wake.
 

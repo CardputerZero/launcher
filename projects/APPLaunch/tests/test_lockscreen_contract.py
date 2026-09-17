@@ -82,7 +82,7 @@ assert "panel_layout" not in SOURCE
 # The visible states show cached wallpaper, with step hints over the top-bar title.
 assert "ScreensaverPanel wake_panel()" in SOURCE
 assert "apply_panel(wake_panel())" in SOURCE
-assert "TAB & ENTER to unlock" in SOURCE
+assert "Press TAB to unlock" in SOURCE
 assert "Press ENTER to unlock" in SOURCE
 assert "show_hint(" in SOURCE and "hide_hint()" in SOURCE
 assert 'launcher_platform::path("lofoten_320x150.png")' in SOURCE

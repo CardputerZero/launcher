@@ -621,7 +621,7 @@ void show_lockscreen_panel()
     release_screen_off_backlight();
     show_hint(s_lock.state() == LockscreenState::Armed
                   ? "Press ENTER to unlock"
-                  : "TAB & ENTER to unlock");
+                  : "Press TAB to unlock");
 }
 
 /* Back to (1) after the visible state timed out. */
