@@ -65,22 +65,55 @@ KeyAction route_key(const KeyRouteContext &context, const KeyEvent &event)
             return input_edit_action(event);
 
         // Keyboard repeat events are emitted while a navigation key is held.
-        // Handle them in the chat view so a long press keeps scrolling.
-        if (event.phase == KeyPhase::Repeated && !context.approval_pending &&
-            !context.setup_retry_pending && !context.settings_open) {
-            switch (normalize_navigation_key(event.key)) {
-            case Key::Up:
-                return {KeyActionType::ChatScrollUp, {}};
-            case Key::Down:
-                return {KeyActionType::ChatScrollDown, {}};
-            default:
-                break;
+        // Handle them in the help view first so a long press keeps scrolling,
+        // and otherwise in the chat view.
+        if (event.phase == KeyPhase::Repeated) {
+            if (context.help_visible) {
+                switch (normalize_navigation_key(event.key)) {
+                case Key::Up:
+                    return {KeyActionType::ChatScrollUp, {}};
+                case Key::Down:
+                    return {KeyActionType::ChatScrollDown, {}};
+                default:
+                    break;
+                }
+            }
+            if (!context.approval_pending && !context.setup_retry_pending &&
+                !context.settings_open) {
+                switch (normalize_navigation_key(event.key)) {
+                case Key::Up:
+                    return {KeyActionType::ChatScrollUp, {}};
+                case Key::Down:
+                    return {KeyActionType::ChatScrollDown, {}};
+                default:
+                    break;
+                }
             }
         }
         return {};
     }
     if (event.phase != KeyPhase::Released)
         return {};
+
+    if (event.key == Key::Help)
+        return {KeyActionType::ToggleHelp, {}};
+
+    if (context.help_visible) {
+        if (event.key == Key::Escape || event.key == Key::Backspace)
+            return {KeyActionType::ToggleHelp, {}};
+        switch (normalize_navigation_key(event.key)) {
+        case Key::Up:
+            return {KeyActionType::ChatScrollUp, {}};
+        case Key::Down:
+            return {KeyActionType::ChatScrollDown, {}};
+        case Key::PageUp:
+            return {KeyActionType::ChatPageUp, {}};
+        case Key::PageDown:
+            return {KeyActionType::ChatPageDown, {}};
+        default:
+            return {};
+        }
+    }
 
     if (context.input_open) {
         if (event.key == Key::Escape)

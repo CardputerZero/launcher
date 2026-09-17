@@ -67,6 +67,13 @@ assert "s_model.observe_hold_key(item->key_code, released, now)" in SOURCE
 assert "s_model.poll_hold(now)" in SOURCE
 assert "kHoldPollMs = 100" in SOURCE
 
+# The gesture announces itself through the shared launcher toast before it locks,
+# and clears that announcement again as soon as the gesture ends.
+assert "launcher_toast().show_persistent(kHoldHintText)" in SOURCE
+assert '"Hold TAB 5s lock"' in SOURCE
+assert "hold.hide_hint" in SOURCE
+assert "hold.fire" in SOURCE
+
 # The panel geometry has a single source of truth in the page shell, and the
 # visible lock states clear the top bar so the status bar stays part of the layout.
 assert "kTopBarHeightPx" in PAGE_SHELL
@@ -82,7 +89,7 @@ assert "panel_layout" not in SOURCE
 # The visible states show cached wallpaper, with step hints over the top-bar title.
 assert "ScreensaverPanel wake_panel()" in SOURCE
 assert "apply_panel(wake_panel())" in SOURCE
-assert "TAB&ENTER to unlock" in SOURCE
+assert "Press TAB to unlock" in SOURCE
 assert "Press ENTER to unlock" in SOURCE
 assert "show_hint(" in SOURCE and "hide_hint()" in SOURCE
 assert 'launcher_platform::path("lofoten_320x150.png")' in SOURCE

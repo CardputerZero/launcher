@@ -34,6 +34,9 @@ Key adapt_key(std::uint32_t key_code)
     case KEY_X: return Key::X;
     case KEY_Y: return Key::Y;
     case KEY_Z: return Key::Z;
+#ifdef KEY_HELP
+    case KEY_HELP: return Key::Help;
+#endif
     default: return Key::Other;
     }
 }

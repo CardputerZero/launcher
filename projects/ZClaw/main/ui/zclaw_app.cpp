@@ -20,6 +20,7 @@
 #include "zclaw_key_router.h"
 #include "zclaw_local_async_backend.h"
 #include "zclaw_fonts.hpp"
+#include "zclaw_help_view.h"
 #include "zclaw_paths.h"
 #include "zclaw_provider_manager.h"
 #include "zclaw_settings_coordinator.h"
@@ -64,6 +65,7 @@ class ZClawApp : public AppPageRoot
                                              input_dialog_, fonts_};
     zclaw::ApprovalCoordinator approvals_{fonts_, ui_tasks_};
     zclaw::ChatView chat_view_;
+    zclaw::HelpView help_view_;
     zclaw::SettingsWorkflow settings_workflow_{
         provider_manager_, config_manager_, settings_ui_, input_dialog_, fonts_,
         chat_view_, async_service_, sounds_};
@@ -79,7 +81,7 @@ class ZClawApp : public AppPageRoot
         [this] { settings_workflow_.open_setup(shell_view_.content(), true); }};
     zclaw::UiActionDispatcher actions_{
         config_manager_, shell_view_, fonts_, input_dialog_, input_workflow_,
-        approvals_, settings_ui_, settings_workflow_, chat_view_,
+        approvals_, settings_ui_, settings_workflow_, chat_view_, help_view_,
         [] { g_quit_requested = 1; }};
 
 public:
@@ -95,6 +97,7 @@ public:
                                 send_button_path))
             return;
         chat_view_.create(shell_view_.content(), &fonts_, avatar_path_);
+        help_view_.create(lv_layer_top(), &fonts_);
         if (!storage_warning_.empty())
             chat_view_.append_assistant_message(storage_warning_);
         event_handler_init();
@@ -167,9 +170,11 @@ private:
         context.setup_in_flight = settings_workflow_.setup_in_flight();
         context.settings_open = settings_ui_.is_open();
         context.settings_view = settings_ui_.state().view();
+        context.help_visible = help_view_.visible();
 
+        const uint32_t key_code = item->semantic_key ? item->semantic_key : item->key_code;
         const zclaw::KeyEvent event = zclaw::adapt_key_event(
-            item->key_code, item->key_state, item->mods, item->utf8);
+            key_code, item->key_state, item->mods, item->utf8);
         actions_.execute(zclaw::route_key(context, event));
     }
 };

@@ -98,31 +98,46 @@ ScreensaverFrame ScreensaverModel::frame(bool color_changed) const
     return {x_milli_ / 1000, y_milli_ / 1000, color_index_, color_changed};
 }
 
-void ScreensaverModel::observe_hold_key(uint32_t key_code, bool released, uint32_t now)
+ScreensaverHoldDecision ScreensaverModel::observe_hold_key(uint32_t key_code, bool released,
+                                                           uint32_t now)
 {
+    ScreensaverHoldDecision decision;
     if (key_code != KEY_TAB) {
         /* A different key ends the gesture, but it still belongs to the page. */
+        decision.hide_hint = hold_hint_shown_;
         clear_hold();
-        return;
+        return decision;
     }
     if (released) {
+        decision.hide_hint = hold_hint_shown_;
         clear_hold();
-        return;
+        return decision;
     }
     /* Auto-repeat reports further presses while the key stays down; keeping the
      * original tick is what lets a genuinely held key reach the threshold. */
-    if (hold_pending_) return;
+    if (hold_pending_) return decision;
     hold_down_tick_ = now;
     hold_pending_ = true;
     hold_fired_ = false;
+    hold_hint_shown_ = false;
+    return decision;
 }
 
-bool ScreensaverModel::poll_hold(uint32_t now)
+ScreensaverHoldDecision ScreensaverModel::poll_hold(uint32_t now)
 {
-    if (!hold_pending_ || hold_fired_) return false;
-    if (elapsed_since(now, hold_down_tick_) < screen_off_hold_ms()) return false;
+    ScreensaverHoldDecision decision;
+    if (!hold_pending_ || hold_fired_) return decision;
+
+    const uint32_t held = elapsed_since(now, hold_down_tick_);
+    if (!hold_hint_shown_ && held >= hold_hint_ms()) {
+        hold_hint_shown_ = true;
+        decision.show_hint = true;
+    }
+    if (held < screen_off_hold_ms()) return decision;
+
     hold_fired_ = true;
-    return true;
+    decision.fire = true;
+    return decision;
 }
 
 void ScreensaverModel::clear_hold()
@@ -130,4 +145,5 @@ void ScreensaverModel::clear_hold()
     hold_down_tick_ = 0;
     hold_pending_ = false;
     hold_fired_ = false;
+    hold_hint_shown_ = false;
 }

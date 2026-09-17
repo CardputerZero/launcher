@@ -158,7 +158,10 @@ neither business path.
 The screensaver filter also observes one key it does not own: while idle it
 tracks the press and release of the long-press gesture that enters the lock and
 reports them as *not* consumed, so the page underneath keeps the short-press
-meaning of that key. Once the gesture matures the lock takes every key over, and
+meaning of that key. The gesture is TAB held for 5000 ms; the model announces it
+with `Hold TAB 5s lock` on the shared launcher toast from its hint delay (500 ms)
+until the hold ends. Clear that toast on release, on a different key, and when
+the lock is entered or left. Once the gesture matures the lock takes every key over, and
 because only a fresh press changes lock state, the held key's repeats and its
 release cannot walk the machine. Do not make the idle observation path consume a
 key, and keep every observed press paired with its release.
@@ -188,7 +191,7 @@ The unlock hint is a black-backed yellow label covering the top bar's title,
 leaving its network, clock and battery visible. It is a sibling on `lv_layer_top()`
 so the wallpaper's bounds cannot clip it. Move it above the wallpaper on wake,
 hide it on sleep/exit, and delete it when the wallpaper overlay is deleted.
-Use `TAB&ENTER to unlock` and `Press ENTER to unlock` for the two visible states.
+Use `Press TAB to unlock` and `Press ENTER to unlock` for the two visible states.
 The supplied JPEG is packaged as `lofoten_320x150.png` for the existing PNG
 decoder; own its decoded draw buffer until teardown and reuse it on every wake.
 

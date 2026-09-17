@@ -384,6 +384,7 @@ def test_info_page_clock_keeps_ticking():
     assert "page->set_lines_provider(" in factory
     assert 'lines[0] = "Current: " + settings_rtc_local_time_text();' in factory
     assert 'lines[1] = "Network Time: " + settings_rtc_ntp_status_text();' in factory
+    assert 'lines[2] = "Time Zone: " + settings_rtc_timezone_text();' in factory
 
     # A timer drives the provider, and the page owns and deletes it.
     static = normalized(STATIC_CPP)
@@ -406,6 +407,74 @@ def test_field_page_keeps_edits_made_on_an_earlier_field_page():
     # edits are pending, or setting more than one field becomes impossible.
     assert "keep_edits ||" in refresh
     assert refresh.index("keep_edits ||") < refresh.index("load_local_time(result.time.payload)")
+
+
+def test_status_hint_records_its_target_without_a_stale_read_back():
+    """The page-2 return animation targets the hint's resting x.
+
+    set_status_hint() used to read that x back with lv_obj_get_x() right after
+    lv_obj_set_pos(), but an object's coords are not refreshed until the next
+    layout pass, so it stored the previous x.  Every open/close of a
+    third-level page then animated "ok:enter" towards that stale value, walking
+    it one frame further left on each visit.
+    """
+    body = normalized(
+        function_body(
+            SUBMENU_CPP,
+            "void LvSettingRollerPage2::set_status_hint(const char *text, uint32_t color)",
+        )
+    )
+    assert "const int hint_x =" in body
+    assert "hint_base_x_ = hint_x;" in body
+    assert "hint_base_x_ = lv_obj_get_x(hint_);" not in body
+
+
+def test_page3_root_animation_is_started_first_so_its_callback_runs_last():
+    """The page-3 root owns the status refresh in finish_page3_transition().
+
+    lv_anim_start() inserts at the head of LVGL's animation list and
+    anim_timer() walks from the head, so the last-started animation completes
+    first.  Starting the root last made its callback (and the corrected
+    set_status_hint() it issues) run before the hint animation's final frame,
+    which then overwrote the position with the stale target.
+    """
+    body = normalized(
+        function_body(
+            SUBMENU_CPP,
+            "void LvSettingRollerPage2::start_page3_transition(bool entering)",
+        )
+    )
+    root_at = body.index("animate_page3_root(entering);")
+    assert root_at < body.index("animate_first_page_objects(entering);")
+    assert root_at < body.index("animate_object_to(hint_,")
+
+
+def test_status_polling_does_not_move_hint_during_page3_or_lock_transitions():
+    body = normalized(
+        function_body(
+            SUBMENU_CPP,
+            "void LvSettingRollerPage2::set_status_hint(const char *text, uint32_t color)",
+        )
+    )
+    assert "if (roller3_ || page3_transitioning_) return;" in body
+    assert body.index("hint_base_x_ = hint_x;") < body.index(
+        "if (roller3_ || page3_transitioning_) return;"
+    )
+    assert body.index("lv_obj_set_pos(hint_, hint_x") > body.index(
+        "if (roller3_ || page3_transitioning_) return;"
+    )
+
+
+def test_page3_completion_snaps_hint_after_stale_animation_frames():
+    body = normalized(
+        function_body(
+            SUBMENU_CPP,
+            "void LvSettingRollerPage2::finish_page3_transition(bool entering)",
+        )
+    )
+    assert "lv_anim_del(object, nullptr);" in body
+    assert "snap(hint_, page2_target_x(hint_, entering));" in body
+    assert body.index("snap(hint_,") < body.index("if (entering)")
 
 
 if __name__ == "__main__":

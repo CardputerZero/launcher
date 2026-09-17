@@ -15,6 +15,7 @@ namespace zclaw {
 class ApprovalCoordinator;
 class ChatView;
 class FontManager;
+class HelpView;
 class InputDialog;
 class InputWorkflow;
 class SettingsCoordinator;
@@ -32,6 +33,7 @@ public:
                        ApprovalCoordinator &approvals,
                        SettingsCoordinator &settings,
                        SettingsWorkflow &settings_workflow, ChatView &chat,
+                       HelpView &help,
                        RequestQuit request_quit);
 
     void execute(const KeyAction &action);
@@ -48,6 +50,7 @@ private:
     SettingsCoordinator &settings_;
     SettingsWorkflow &settings_workflow_;
     ChatView &chat_;
+    HelpView &help_;
     RequestQuit request_quit_;
 };
 

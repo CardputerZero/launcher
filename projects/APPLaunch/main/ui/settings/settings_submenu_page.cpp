@@ -173,9 +173,24 @@ void LvSettingRollerPage2::set_status_hint(const char *text, uint32_t color)
     lv_label_set_text(hint_, text ? text : "");
     lv_obj_set_style_text_color(hint_, lv_color_hex(color), LV_PART_MAIN);
     lv_obj_update_layout(hint_);
-    lv_obj_set_pos(hint_, metric(LayoutMetric::PanelX) + metric(LayoutMetric::PanelW) - 6 - lv_obj_get_width(hint_),
+    // Record the right-aligned target directly instead of reading it back with
+    // lv_obj_get_x().  lv_obj_set_pos() only writes the style property; the
+    // object's coords are not refreshed until the next layout pass, so the
+    // read-back returned the previous position.  That stale x then became the
+    // target of the page-2 return animation, which made "ok:enter" creep one
+    // animation frame to the left every time the third-level page was opened
+    // and closed again.
+    const int hint_x = metric(LayoutMetric::PanelX) + metric(LayoutMetric::PanelW) - 6 - lv_obj_get_width(hint_);
+    hint_base_x_ = hint_x;
+
+    // Network status polling continues while a third-level page (or the lock
+    // screen) is visible. During that time the page-2 controls are either
+    // shifted or being animated; moving the hint here would fight the
+    // transition and make it jump when the overlay is dismissed. The next
+    // transition completion snaps it to the appropriate resting coordinate.
+    if (roller3_ || page3_transitioning_) return;
+    lv_obj_set_pos(hint_, hint_x,
                    metric(LayoutMetric::BarY) + (metric(LayoutMetric::BarH) - lv_obj_get_height(hint_)) / 2);
-    hint_base_x_ = lv_obj_get_x(hint_);
 }
 
 void LvSettingRollerPage2::SetSelfUiMode(PageType mode)
@@ -642,6 +657,14 @@ void LvSettingRollerPage2::start_page3_transition(bool entering)
     if (!entering && input_group_) {
         lv_group_remove_obj(roller3_->Get());
     }
+    // Start the page-3 slide first.  lv_anim_start() inserts each animation at
+    // the head of LVGL's list and anim_timer() walks from the head, so the
+    // first-started animation is completed last.  The page-3 root owns the
+    // completion callback that runs finish_page3_transition() and then
+    // set_status_hint(); keeping it last makes that status write the final word
+    // on the hint's position instead of letting the hint animation's last frame
+    // overwrite it with a stale target.
+    animate_page3_root(entering);
     animate_first_page_objects(entering);
     animate_object_to(selection_bg_, page2_target_x(selection_bg_, entering));
     animate_object_to(ComponensObj, page2_target_x(ComponensObj, entering));
@@ -649,7 +672,6 @@ void LvSettingRollerPage2::start_page3_transition(bool entering)
     animate_object_to(arrow_down_, page2_target_x(arrow_down_, entering));
     animate_object_to(right_arrow_, page2_target_x(right_arrow_, entering));
     animate_object_to(hint_, page2_target_x(hint_, entering));
-    animate_page3_root(entering);
 }
 
 void LvSettingRollerPage2::page3_enter_done_cb(lv_anim_t *animation)
@@ -666,6 +688,22 @@ void LvSettingRollerPage2::page3_leave_done_cb(lv_anim_t *animation)
 
 void LvSettingRollerPage2::finish_page3_transition(bool entering)
 {
+    // Stop every sibling animation before applying the final coordinates. A
+    // status callback can arrive at the same time as the page-root animation;
+    // snapping here prevents its stale final frame from moving the hint after
+    // the transition has logically completed.
+    auto snap = [this](lv_obj_t *object, int x) {
+        if (!object) return;
+        lv_anim_del(object, nullptr);
+        lv_obj_set_x(object, x);
+    };
+    snap(selection_bg_, page2_target_x(selection_bg_, entering));
+    snap(ComponensObj, page2_target_x(ComponensObj, entering));
+    snap(arrow_up_, page2_target_x(arrow_up_, entering));
+    snap(arrow_down_, page2_target_x(arrow_down_, entering));
+    snap(right_arrow_, page2_target_x(right_arrow_, entering));
+    snap(hint_, page2_target_x(hint_, entering));
+
     if (entering) {
         if (roller3_ && roller3_->Get()) {
             lv_obj_set_x(roller3_->Get(), roller3_->panel_x());

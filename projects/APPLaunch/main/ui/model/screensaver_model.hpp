@@ -19,6 +19,17 @@ struct ScreensaverFrame
     bool color_changed = false;
 };
 
+struct ScreensaverHoldDecision
+{
+    /* The hold matured past the hint delay: announce what the gesture will do. */
+    bool show_hint = false;
+    /* A visible hint was cleared (release, another key, or a state change), so
+     * the caller must take the announcement down again. */
+    bool hide_hint = false;
+    /* The hold matured past the lock delay: enter the lock screen. */
+    bool fire = false;
+};
+
 class ScreensaverModel
 {
 public:
@@ -29,7 +40,10 @@ public:
         Count = 8,
     };
     enum class ScreenOffMetric : uint32_t {
-        HoldMs = 3000,
+        HoldMs = 5000,
+    };
+    enum class HoldHintMetric : uint32_t {
+        HintMs = 500,
     };
 
     static constexpr int block_size()
@@ -47,6 +61,11 @@ public:
         return CP0_ENUM_CAST_UINT32(ScreenOffMetric::HoldMs);
     }
 
+    static constexpr uint32_t hold_hint_ms()
+    {
+        return CP0_ENUM_CAST_UINT32(HoldHintMetric::HintMs);
+    }
+
     void reset(uint32_t now);
     void set_foreground(bool foreground, uint32_t now);
     bool should_activate(uint32_t now, uint32_t timeout_ms, bool runtime_ready) const;
@@ -62,12 +81,13 @@ public:
     /* Observation-only tracking of the long-press that requests the lock.
      * It never reports a consume decision: the press and release must keep
      * reaching the page underneath, which owns the short-tap meaning of the
-     * same key.  poll_hold() reports the gesture maturing. */
-    void observe_hold_key(uint32_t key_code, bool released, uint32_t now);
-    bool poll_hold(uint32_t now);
+     * same key.  poll_hold() reports the hint maturing and the gesture firing. */
+    ScreensaverHoldDecision observe_hold_key(uint32_t key_code, bool released, uint32_t now);
+    ScreensaverHoldDecision poll_hold(uint32_t now);
 
     bool active() const { return active_; }
     bool hold_pending() const { return hold_pending_; }
+    bool hold_hint_visible() const { return hold_hint_shown_; }
     bool foreground() const { return foreground_; }
     uint32_t last_activity_tick() const { return last_activity_tick_; }
 
@@ -87,4 +107,5 @@ private:
     bool foreground_ = true;
     bool hold_pending_ = false;
     bool hold_fired_ = false;
+    bool hold_hint_shown_ = false;
 };
