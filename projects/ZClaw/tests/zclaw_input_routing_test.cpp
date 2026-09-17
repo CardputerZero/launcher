@@ -69,6 +69,8 @@ int main()
     assert(!adapted.shift && adapted.text.empty());
     adapted = zclaw::adapt_key_event(KEY_ESC, KBD_KEY_RELEASED, 0, "");
     assert(adapted.key == Key::Escape && adapted.phase == KeyPhase::Released);
+    adapted = zclaw::adapt_key_event(KEY_HELP, KBD_KEY_RELEASED, 0, "");
+    assert(adapted.key == Key::Help && adapted.phase == KeyPhase::Released);
     adapted = zclaw::adapt_key_event(KEY_PAGEUP, KBD_KEY_RELEASED, 0, "");
     assert(adapted.key == Key::PageUp && adapted.phase == KeyPhase::Released);
     adapted = zclaw::adapt_key_event(KEY_PAGEDOWN, KBD_KEY_RELEASED, 0, "");
@@ -93,7 +95,31 @@ int main()
            KeyActionType::Quit);
 
     context.startup = StartupState::Ready;
+    assert(routed(context, KeyPhase::Released, Key::Help).type ==
+           KeyActionType::HelpOpen);
+    context.help_open = true;
+    assert(routed(context, KeyPhase::Released, Key::Escape).type ==
+           KeyActionType::HelpClose);
+    assert(routed(context, KeyPhase::Released, Key::Help).type ==
+           KeyActionType::HelpClose);
+    assert(routed(context, KeyPhase::Released, Key::Enter).type ==
+           KeyActionType::None);
+    assert(routed(context, KeyPhase::Released, Key::Up).type ==
+           KeyActionType::HelpScrollUp);
+    assert(routed(context, KeyPhase::Released, Key::F).type ==
+           KeyActionType::HelpScrollUp);
+    assert(routed(context, KeyPhase::Repeated, Key::Down).type ==
+           KeyActionType::HelpScrollDown);
+    assert(routed(context, KeyPhase::Released, Key::X).type ==
+           KeyActionType::HelpScrollDown);
+    assert(routed(context, KeyPhase::Pressed, Key::F).type ==
+           KeyActionType::None);
+    assert(routed(context, KeyPhase::Pressed, Key::Other, false, "x").type ==
+           KeyActionType::None);
+    context.help_open = false;
     context.input_open = true;
+    assert(routed(context, KeyPhase::Released, Key::Help).type ==
+           KeyActionType::HelpOpen);
     zclaw::KeyAction action =
         routed(context, KeyPhase::Pressed, Key::Other, false, "hello");
     assert(action.type == KeyActionType::InputInsertText &&

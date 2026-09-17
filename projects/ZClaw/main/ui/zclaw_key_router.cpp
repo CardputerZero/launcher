@@ -53,12 +53,29 @@ KeyAction input_edit_action(const KeyEvent &event)
 
 KeyAction route_key(const KeyRouteContext &context, const KeyEvent &event)
 {
+    if (context.help_open) {
+        if (event.phase == KeyPhase::Released &&
+            (event.key == Key::Escape || event.key == Key::Help))
+            return {KeyActionType::HelpClose, {}};
+        if (event.phase == KeyPhase::Released ||
+            event.phase == KeyPhase::Repeated) {
+            if (event.key == Key::F || event.key == Key::Up)
+                return {KeyActionType::HelpScrollUp, {}};
+            if (event.key == Key::X || event.key == Key::Down)
+                return {KeyActionType::HelpScrollDown, {}};
+        }
+        return {};
+    }
+
     if (context.startup != StartupState::Ready) {
         if (context.startup == StartupState::Offline &&
             event.phase == KeyPhase::Released && event.key == Key::Enter)
             return {KeyActionType::Quit, {}};
         return {};
     }
+
+    if (event.phase == KeyPhase::Released && event.key == Key::Help)
+        return {KeyActionType::HelpOpen, {}};
 
     if (event.phase == KeyPhase::Pressed || event.phase == KeyPhase::Repeated) {
         if (context.input_open)

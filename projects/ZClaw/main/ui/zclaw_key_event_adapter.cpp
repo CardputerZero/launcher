@@ -18,6 +18,7 @@ Key adapt_key(std::uint32_t key_code)
     switch (key_code) {
     case KEY_ENTER: return Key::Enter;
     case KEY_ESC: return Key::Escape;
+    case KEY_HELP: return Key::Help;
     case KEY_BACKSPACE: return Key::Backspace;
     case KEY_DELETE: return Key::Delete;
     case KEY_TAB: return Key::Tab;

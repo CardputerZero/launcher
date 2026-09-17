@@ -28,9 +28,12 @@
 #include "zclaw_shell_view.h"
 #include "zclaw_startup_view.h"
 #include "zclaw_startup_workflow.h"
+#include "zclaw_theme.h"
 #include "zclaw_ui_task_queue.h"
 #include "zclaw_ui_config_manager.h"
 #include "zclaw_ui_action_dispatcher.h"
+#include "zclaw_widgets.h"
+#include "settings_fonts.hpp"
 
 #include <csignal>
 #include <memory>
@@ -81,6 +84,9 @@ class ZClawApp : public AppPageRoot
         config_manager_, shell_view_, fonts_, input_dialog_, input_workflow_,
         approvals_, settings_ui_, settings_workflow_, chat_view_,
         [] { g_quit_requested = 1; }};
+    lv_obj_t *help_view_ = nullptr;
+    lv_obj_t *help_content_ = nullptr;
+    int help_previous_intercept_ = 0;
 
 public:
     ZClawApp()
@@ -105,12 +111,58 @@ public:
     {
         lv_obj_remove_event_cb_with_user_data(
             root_screen_, ZClawApp::static_lvgl_handler, this);
+        hide_help();
         approvals_.shutdown();
         async_service_.shutdown();
         ui_tasks_->shutdown();
     }
 
 private:
+    void show_help()
+    {
+        if (help_view_)
+            return;
+        help_view_ = zclaw::widgets::box(lv_layer_top(), 0, 0, 320, 170,
+                                         0x000000);
+        if (!help_view_)
+            return;
+        zclaw::widgets::label(help_view_, "ESC/Fn+H:Close", 8, 2, 208, 22,
+                              settings_fonts::sans(16), 0xF2C94C);
+        zclaw::widgets::label(help_view_, "Help", 256, 2, 56, 22,
+                              settings_fonts::sans(18), 0x4778B8,
+                              LV_TEXT_ALIGN_RIGHT);
+        help_content_ = zclaw::widgets::box(help_view_, 0, 26, 320, 144,
+                                             0x000000);
+        lv_obj_set_style_pad_bottom(help_content_, 8, LV_PART_MAIN);
+        lv_obj_add_flag(help_content_, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_scroll_dir(help_content_, LV_DIR_VER);
+        lv_obj_set_scrollbar_mode(help_content_, LV_SCROLLBAR_MODE_ON);
+        lv_obj_set_style_width(help_content_, 4, LV_PART_SCROLLBAR);
+        lv_obj_set_style_bg_color(help_content_, lv_color_hex(0x4E5157),
+                                  LV_PART_SCROLLBAR);
+        lv_obj_set_style_bg_opa(help_content_, LV_OPA_COVER, LV_PART_SCROLLBAR);
+        zclaw::widgets::label(help_content_,
+            "A Personal AI Assistant based on ZeroClaw, supporting multiple LLM providers.\n\n"
+            "Enter your API Key during setup, or complete setup first and edit the configuration file later. See the M5Stack documentation for details.\n\n"
+            "Enter: start typing a message\n"
+            "F / X: scroll up / down\n"
+            "Tab: settings",
+            8, 0, 296, LV_SIZE_CONTENT, settings_fonts::sans(14),
+            zclaw::theme::kWhite);
+        help_previous_intercept_ = cp0_keyboard_get_lvgl_keypad_intercept();
+        cp0_keyboard_set_lvgl_keypad_intercept(1);
+    }
+
+    void hide_help()
+    {
+        if (!help_view_)
+            return;
+        lv_obj_del(help_view_);
+        help_view_ = nullptr;
+        help_content_ = nullptr;
+        cp0_keyboard_set_lvgl_keypad_intercept(help_previous_intercept_);
+    }
+
     void load_configuration()
     {
         std::string error;
@@ -166,11 +218,22 @@ private:
             settings_workflow_.setup_retry_pending();
         context.setup_in_flight = settings_workflow_.setup_in_flight();
         context.settings_open = settings_ui_.is_open();
+        context.help_open = help_view_ != nullptr;
         context.settings_view = settings_ui_.state().view();
 
         const zclaw::KeyEvent event = zclaw::adapt_key_event(
             item->key_code, item->key_state, item->mods, item->utf8);
-        actions_.execute(zclaw::route_key(context, event));
+        const zclaw::KeyAction action = zclaw::route_key(context, event);
+        if (action.type == zclaw::KeyActionType::HelpOpen)
+            show_help();
+        else if (action.type == zclaw::KeyActionType::HelpClose)
+            hide_help();
+        else if (action.type == zclaw::KeyActionType::HelpScrollUp && help_content_)
+            lv_obj_scroll_by_bounded(help_content_, 0, 32, LV_ANIM_OFF);
+        else if (action.type == zclaw::KeyActionType::HelpScrollDown && help_content_)
+            lv_obj_scroll_by_bounded(help_content_, 0, -32, LV_ANIM_OFF);
+        else
+            actions_.execute(action);
     }
 };
 

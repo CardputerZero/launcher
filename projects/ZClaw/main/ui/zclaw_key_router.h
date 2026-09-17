@@ -25,6 +25,7 @@ enum class Key {
     Other,
     Enter,
     Escape,
+    Help,
     Backspace,
     Delete,
     Tab,
@@ -58,12 +59,17 @@ struct KeyRouteContext {
     bool setup_retry_pending = false;
     bool setup_in_flight = false;
     bool settings_open = false;
+    bool help_open = false;
     SettingsView settings_view = SettingsView::Main;
 };
 
 enum class KeyActionType {
     None,
     Quit,
+    HelpOpen,
+    HelpClose,
+    HelpScrollUp,
+    HelpScrollDown,
     InputInsertText,
     InputInsertNewline,
     InputEraseBefore,
