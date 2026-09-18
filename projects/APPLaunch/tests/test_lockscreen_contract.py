@@ -92,7 +92,7 @@ assert "apply_panel(wake_panel())" in SOURCE
 assert "Press TAB to unlock" in SOURCE
 assert "Press ENTER to unlock" in SOURCE
 assert "show_hint(" in SOURCE and "hide_hint()" in SOURCE
-assert 'launcher_platform::path("lofoten_320x150.png")' in SOURCE
+assert 'launcher_platform::path("lockscreen.png")' in SOURCE
 assert "lv_draw_buf_dup(decoder.decoded)" in SOURCE
 assert "panel.black ? nullptr : s_background_cache.image()" in SOURCE
 

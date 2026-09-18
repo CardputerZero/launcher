@@ -56,7 +56,7 @@ trap cleanup EXIT
 
 common_flags=(
     -DLV_CONF_INCLUDE_SIMPLE -DLV_KCONFIG_IGNORE
-    "-DTEST_LOCKSCREEN_BACKGROUND=\"A:$project/APPLaunch/share/images/lofoten_320x150.png\""
+    "-DTEST_LOCKSCREEN_BACKGROUND=\"A:$project/APPLaunch/share/images/lockscreen.png\""
     "-I$test_dir" "-I$lvgl/.." "-I$lvgl" "-I$component/include"
     "-I$project/main/include" "-I$root/SDK/github_source/eventpp/include"
     "-I$root/SDK/components/utilities/include"

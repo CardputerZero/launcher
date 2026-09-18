@@ -74,5 +74,8 @@ int main()
     const auto about = settings_t12b::about_help::about("1.2.3", "2026-08-24", "stable", "abc123");
     const auto credit = settings_t12b::about_help::credit();
     assert(!about.title.empty() && about.lines.size() >= 4);
-    assert(credit.title == "Credit" && !credit.lines.empty());
+    assert(credit.title == "Third-Party Licenses & Credits");
+    assert(credit.lines.size() > 300);
+    assert(credit.lines.front().find("Kickstarter backers") != std::string::npos);
+    assert(credit.lines.back() == "Public Domain");
 }

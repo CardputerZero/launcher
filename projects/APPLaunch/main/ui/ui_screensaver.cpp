@@ -502,7 +502,7 @@ void create_objects()
     }
 
     if (!s_background_cache.image())
-        s_background_cache.load(launcher_platform::path("lofoten_320x150.png"));
+        s_background_cache.load(launcher_platform::path("lockscreen.png"));
 
     if (!s_overlay) {
         lv_obj_t *parent = lv_layer_top();

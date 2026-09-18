@@ -580,7 +580,7 @@ int main()
         if (reply) reply(0, "");
     });
     cp0_signal_filesystem_api.append([](std::list<std::string> arguments, std::function<void(int, std::string)> reply) {
-        if (reply) reply(0, arguments.back() == "lofoten_320x150.png"
+        if (reply) reply(0, arguments.back() == "lockscreen.png"
                                ? TEST_LOCKSCREEN_BACKGROUND : "/missing-screensaver-test-image.png");
     });
     cp0_signal_settings_api.append([](std::list<std::string> arguments,

@@ -122,7 +122,7 @@ def test_system_replaces_about_with_requested_entries():
         r'append_child\(\s*system,\s*SettingEntry\{"([^"]+)"',
         system,
     )
-    assert system_entries == ["Software", "Storage", "Credit"]
+    assert system_entries == ["Software", "Storage", "Licenses"]
     assert "settings_update_page_factory" in system
     assert "settings_storage_page_factory" in system
     assert "settings_credit_page_factory" in system
