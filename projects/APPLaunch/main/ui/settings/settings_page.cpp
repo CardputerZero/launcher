@@ -747,7 +747,7 @@ void UISettingTreePage::create_page_detail()
         mode_tree.append_child(system,
                                SettingEntry{"Storage", settings_storage_page_factory, PageType::FullCustom});
         mode_tree.append_child(system,
-                               SettingEntry{"Credit", settings_credit_page_factory, PageType::FullCustom});
+                               SettingEntry{"Licenses", settings_credit_page_factory, PageType::FullCustom});
         settings_t12b::append_boot_action_child(
             mode_tree, system, settings_t12b::boot_actions::Action::Reboot, confirm_page3_factory);
     }

@@ -140,6 +140,14 @@ identity, `semantic_key` for context-normalized navigation, `utf8` for text,
 `main/ui/ui.h`, but only after confirming that the event is
 `LV_EVENT_KEYBOARD`.
 
+The Cardputer uses a shared keyboard layout. In the default navigation
+context, the physical keys map as `KEY_F` → up, `KEY_X` → down, `KEY_Z` → left,
+and `KEY_C` → right. Custom `LV_EVENT_KEYBOARD` handlers that process
+physical repeat events should match the raw `key_code` when they need these
+keyboard-specific controls. The native `LV_EVENT_KEY` path receives the
+context-normalized LVGL key and can continue using `LV_KEY_UP`/`LV_KEY_DOWN`/
+`LV_KEY_LEFT`/`LV_KEY_RIGHT`.
+
 Do not parse `LV_EVENT_KEY` with `keyboard_item()` or cast its parameter to
 `key_item`; native LVGL key events have different parameter semantics and must
 be read with `lv_event_get_key()`. Conversely, do not expect
@@ -192,7 +200,7 @@ leaving its network, clock and battery visible. It is a sibling on `lv_layer_top
 so the wallpaper's bounds cannot clip it. Move it above the wallpaper on wake,
 hide it on sleep/exit, and delete it when the wallpaper overlay is deleted.
 Use `Press TAB to unlock` and `Press ENTER to unlock` for the two visible states.
-The supplied JPEG is packaged as `lofoten_320x150.png` for the existing PNG
+The supplied JPEG is packaged as `lockscreen.png` for the existing PNG
 decoder; own its decoded draw buffer until teardown and reuse it on every wake.
 
 The lock screen has four sounds under `share/audio/` (MP3, because the built-in

@@ -58,6 +58,8 @@ public:
     void set_lines_provider(std::function<bool(std::vector<std::string> &)> provider);
 
 private:
+    static void keyboard_event_cb(lv_event_t *event);
+    static void scroll_event_cb(lv_event_t *event);
     static void refresh_lines_cb(lv_timer_t *timer);
 
     lv_obj_t *add_label(const std::string &text,
@@ -68,12 +70,17 @@ private:
                         bool wrap);
 
     void handle_key_event(lv_event_t *event);
+    void handle_repeated_key(uint32_t key);
 
     NodeIter page_node_;
     settings_t12b::about_help::Content content_;
     std::function<bool(std::vector<std::string> &)> lines_provider_;
     std::vector<lv_obj_t *> line_labels_;
+    lv_obj_t *scroll_body_ = nullptr;
+    lv_obj_t *keyboard_root_ = nullptr;
+    lv_event_dsc_t *keyboard_event_dsc_ = nullptr;
     lv_timer_t *lines_timer_ = nullptr;
+    bool scroll_animation_active_ = false;
 };
 
 std::unique_ptr<DComponens::LvglComponensBase> settings_t12b_about_page_factory(
