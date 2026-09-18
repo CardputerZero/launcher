@@ -279,18 +279,17 @@ static void test_screensaver_panel()
     lv_obj_update_layout(s_overlay);
     assert(lv_obj_get_y(s_hint) == 0);
     assert(lv_obj_get_height(s_hint) == top);
-    assert(lv_obj_get_width(s_hint) == width - 116);
     lv_point_t text_size{};
     lv_text_get_size(&text_size, lv_label_get_text(s_hint), &lv_font_montserrat_14,
                      0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
-    assert(text_size.x <= lv_obj_get_width(s_hint) - 5);
+    assert(lv_obj_get_width(s_hint) == text_size.x + 5);
     assert(lv_obj_get_style_bg_opa(s_hint, LV_PART_MAIN) == LV_OPA_COVER);
     assert(lv_color_eq(lv_obj_get_style_bg_color(s_hint, LV_PART_MAIN), lv_color_black()));
     auto *snapshot = lv_snapshot_take(lv_layer_top(), LV_COLOR_FORMAT_RGB888);
     assert(snapshot);
     int yellow_pixels = 0;
     for (int y = 0; y < top; ++y) {
-        for (int x = 0; x < width - 116; ++x) {
+        for (int x = 0; x < lv_obj_get_width(s_hint); ++x) {
             const auto *pixel = static_cast<const uint8_t *>(lv_draw_buf_goto_xy(snapshot, x, y));
             if (pixel[2] > 100 && pixel[1] > 70 && pixel[0] < 30) ++yellow_pixels;
         }
@@ -306,7 +305,7 @@ static void test_screensaver_panel()
     assert(std::strcmp(lv_label_get_text(s_hint), "Press ENTER to unlock") == 0);
     lv_text_get_size(&text_size, lv_label_get_text(s_hint), &lv_font_montserrat_14,
                      0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
-    assert(text_size.x <= lv_obj_get_width(s_hint) - 5);
+    assert(lv_obj_get_width(s_hint) == text_size.x + 5);
     assert_sound("select.mp3");
     key(KEY_TAB, KBD_KEY_RELEASED, true);
 

@@ -75,7 +75,7 @@ private:
     lv_obj_t *knob_ = nullptr;
     lv_obj_t *title_label_ = nullptr;
     lv_obj_t *usb_label_ = nullptr;
-    lv_obj_t *hub_label_ = nullptr;
+    lv_obj_t *otg_label_ = nullptr;
     lv_obj_t *step_one_label_ = nullptr;
     lv_obj_t *step_two_label_ = nullptr;
     lv_obj_t *step_three_label_ = nullptr;
