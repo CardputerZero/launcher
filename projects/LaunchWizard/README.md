@@ -68,6 +68,26 @@ The UI follows an MSV boundary: `WizardModel` owns setup state and validation,
 platform operations are isolated from it, and the LVGL source owns view objects
 and translates input events into model changes.
 
+## Timezone modes
+
+The timezone list shows only standard UTC offsets, without city or region names.
+After selecting an offset, choose a time mode:
+
+- **Winter** (default): keep the displayed standard offset throughout the year.
+- **Summer**: keep the mapped daylight saving offset throughout the year. This
+  option is offered only for mappings with a configured daylight saving adjustment,
+  which may be 30 minutes rather than one hour.
+
+For the UTC-05:00 selection, Winter always uses UTC-05:00 and Summer always
+uses UTC-04:00. UTC+08:00 offers only Winter. The internal IANA mapping is used
+only to determine whether a Summer option exists; it is not shown in the UI.
+
+Manual modes use fixed `Etc/GMT` zones for whole hours. Fractional offsets are
+compiled using `zic` (provided by `libc-bin` on the Debian device image) into
+`/usr/share/zoneinfo/LaunchWizard/`. Applying a timezone requires `timedatectl`
+and root access; failure stops setup and offers retry. Host timezone tests use
+temporary files and never change the host's timezone.
+
 ## Key sound
 
 The wizard uses the same six active cues and per-cue volumes as Keyboard-Guide:

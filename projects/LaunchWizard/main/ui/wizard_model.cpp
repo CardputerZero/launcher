@@ -9,6 +9,7 @@
 #include <arpa/inet.h>
 #include <cctype>
 #include <cstdlib>
+#include <cstdio>
 #include <algorithm>
 
 namespace launch_wizard {
@@ -16,6 +17,32 @@ namespace launch_wizard {
 const Timezone &WizardModel::current_timezone() const
 {
     return kTimezones[timezone_index];
+}
+
+bool timezone_supports_daylight(const Timezone &timezone) noexcept
+{
+    return timezone.daylight_minutes > 0;
+}
+
+int timezone_mode_count(const Timezone &timezone) noexcept
+{
+    return timezone_supports_daylight(timezone) ? 2 : 1;
+}
+
+int timezone_offset_minutes(const Timezone &timezone, TimezoneMode mode)
+{
+    const std::string label = timezone.label;
+    const int standard = (std::stoi(label.substr(4, 2)) * 60 +
+                          std::stoi(label.substr(7, 2))) * (label[3] == '-' ? -1 : 1);
+    return standard + (mode == TimezoneMode::Daylight ? timezone.daylight_minutes : 0);
+}
+
+std::string timezone_offset_label(int minutes)
+{
+    char label[16];
+    std::snprintf(label, sizeof(label), "UTC%c%02d:%02d", minutes < 0 ? '-' : '+',
+                  std::abs(minutes) / 60, std::abs(minutes) % 60);
+    return label;
 }
 
 bool validate_username(const std::string &name, std::string &error)
