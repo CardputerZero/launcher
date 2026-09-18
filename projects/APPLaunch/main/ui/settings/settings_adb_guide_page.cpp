@@ -845,11 +845,11 @@ void LvSettingAdbGuidePage3::create_ui(lv_obj_t *parent)
     add_label(232, 42, "USB-C", 0x46DC87, text_font);
     add_chip(24, 28, 32, 44, 0x1A1A1C, 0x5A5C64, 6, 2);
     add_chip(33, 33, 14, 34, 0x0E0E10, 0x0E0E10, 4, 0);
-    usb_label_ = add_label(26, 14, "USB", 0x46DC87, text_font);
-    hub_label_ = add_label(28, 72, "HUB", 0xEB5F5F, text_font);
+    otg_label_ = add_label(26, 14, "OTG", 0xEB5F5F, text_font);
+    usb_label_ = add_label(28, 72, "USB", 0x46DC87, text_font);
 
-    knob_ = add_chip(32, 54, 16, 10, 0x46DC87, 0x2A6F49, 3, 1);
-    step_one_label_ = add_label(8, 80, "1  Slide LEFT switch  HUB -> USB", 0xECECEC, text_font);
+    knob_ = add_chip(32, enabling_ ? 34 : 54, 16, 10, 0x46DC87, 0x2A6F49, 3, 1);
+    step_one_label_ = add_label(8, 80, "1  Slide LEFT switch  OTG -> USB", 0xECECEC, text_font);
     step_two_label_ = add_label(8, 95, "2  USB hub & peripherals turn OFF", 0xF0C850, text_font);
     step_three_label_ = add_label(8, 110, "3  Cable -> top-right USB-C port", 0x46DC87, text_font);
     confirm_label_ = add_label(8, metric(LayoutMetric::ScreenH) - 16,
@@ -924,7 +924,7 @@ void LvSettingAdbGuidePage3::start_animation()
     lv_anim_t animation;
     lv_anim_init(&animation);
     lv_anim_set_var(&animation, knob_);
-    lv_anim_set_values(&animation, enabling_ ? 54 : 34, enabling_ ? 34 : 54);
+    lv_anim_set_values(&animation, enabling_ ? 34 : 54, enabling_ ? 54 : 34);
     lv_anim_set_time(&animation, 650);
     lv_anim_set_playback_time(&animation, 650);
     lv_anim_set_repeat_count(&animation, LV_ANIM_REPEAT_INFINITE);
@@ -941,16 +941,16 @@ void LvSettingAdbGuidePage3::render_guide()
 {
     if (title_label_)
         lv_label_set_text(title_label_, enabling_ ? "Enable ADB - switch USB to device"
-                                                   : "Disable ADB - switch USB to hub");
+                                                   : "Disable ADB - switch USB to OTG");
+    if (otg_label_)
+        lv_obj_set_style_text_color(otg_label_, lv_color_hex(enabling_ ? 0xEB5F5F : 0x46DC87),
+                                    LV_PART_MAIN);
     if (usb_label_)
         lv_obj_set_style_text_color(usb_label_, lv_color_hex(enabling_ ? 0x46DC87 : 0x9A9AA0),
                                     LV_PART_MAIN);
-    if (hub_label_)
-        lv_obj_set_style_text_color(hub_label_, lv_color_hex(enabling_ ? 0xEB5F5F : 0x46DC87),
-                                    LV_PART_MAIN);
     if (step_one_label_)
-        lv_label_set_text(step_one_label_, enabling_ ? "1  Slide LEFT switch  HUB -> USB"
-                                                     : "1  Slide LEFT switch  USB -> HUB");
+        lv_label_set_text(step_one_label_, enabling_ ? "1  Slide LEFT switch  OTG -> USB"
+                                                     : "1  Slide LEFT switch  USB -> OTG");
     if (step_two_label_)
         lv_label_set_text(step_two_label_, enabling_ ? "2  USB hub & peripherals turn OFF"
                                                      : "2  USB hub & peripherals come back");
