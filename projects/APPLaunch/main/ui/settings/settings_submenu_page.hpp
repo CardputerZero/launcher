@@ -144,6 +144,8 @@ private:
 
     void finish_page3_transition(bool entering);
 
+    void set_network_time_icon_hidden(bool hidden);
+
     void invoke_page3_animation_callback();
 
     void scroll_to_selected(lv_obj_t *cont, bool animated);
@@ -168,6 +170,7 @@ private:
     std::function<void()> page3_animation_over_ = nullptr;
     lv_group_t *input_group_                    = nullptr;
     bool compact_mode_                          = false;
+    bool page3_hides_network_time_icon_         = false;
     int arrow_up_base_x_                        = 0;
     int arrow_down_base_x_                      = 0;
     int right_arrow_base_x_                     = 0;

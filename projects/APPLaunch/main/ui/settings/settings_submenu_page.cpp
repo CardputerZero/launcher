@@ -40,11 +40,14 @@ void LvSettingRollerPage2::LoadNextPage()
     auto selected_node = std::next(parent_node_.begin(), selected_index);
     if (!selected_node->page_factory || page3_transitioning_ || roller3_ || !parent_) return;
 
+    page3_hides_network_time_icon_ = selected_node->label == "Set Manually";
+
     lv_group_t *group = ComponensObj ? lv_obj_get_group(ComponensObj) : nullptr;
 
     roller3_ = selected_node->page_factory(ui_APP_Container, selected_node,
                                            std::bind(&LvSettingRollerPage2::LeaveNextPage, this));
     if (!roller3_ || !roller3_->Get()) {
+        page3_hides_network_time_icon_ = false;
         roller3_.reset();
         return;
     }
@@ -654,6 +657,7 @@ void LvSettingRollerPage2::start_page3_transition(bool entering)
     if (!roller3_ || !roller3_->Get()) return;
 
     page3_transitioning_ = true;
+    if (page3_hides_network_time_icon_ && entering) set_network_time_icon_hidden(true);
     if (!entering && input_group_) {
         lv_group_remove_obj(roller3_->Get());
     }
@@ -744,8 +748,28 @@ void LvSettingRollerPage2::finish_page3_transition(bool entering)
         request_status_refresh(row, it);
     }
     SetSelfUiMode(PageType::Normal);
+    if (page3_hides_network_time_icon_) set_network_time_icon_hidden(false);
+    page3_hides_network_time_icon_ = false;
     page3_transitioning_ = false;
     invoke_page3_animation_callback();
+}
+
+void LvSettingRollerPage2::set_network_time_icon_hidden(bool hidden)
+{
+    if (!ComponensObj) return;
+
+    uint32_t row_index = 0;
+    for (auto node = parent_node_.begin(); node != parent_node_.end(); ++node, ++row_index) {
+        if (node->label != "Network Time") continue;
+        lv_obj_t *row = lv_obj_get_child(ComponensObj, row_index);
+        lv_obj_t *status_icon = row ? lv_obj_get_child(row, 1) : nullptr;
+        if (!status_icon) return;
+        if (hidden)
+            lv_obj_add_flag(status_icon, LV_OBJ_FLAG_HIDDEN);
+        else
+            lv_obj_clear_flag(status_icon, LV_OBJ_FLAG_HIDDEN);
+        return;
+    }
 }
 
 void LvSettingRollerPage2::invoke_page3_animation_callback()

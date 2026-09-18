@@ -79,7 +79,10 @@ public:
             decision.show_panel = true;
             break;
         case LockscreenState::PendingUnlock:
-            if (key_code == KEY_TAB) {
+            if (key_code == KEY_ESC) {
+                state_ = LockscreenState::Locked;
+                decision.sleep = true;
+            } else if (key_code == KEY_TAB) {
                 state_ = LockscreenState::Armed;
                 decision.show_panel = true;
             } else {
@@ -87,7 +90,10 @@ public:
             }
             break;
         case LockscreenState::Armed:
-            if (key_code == KEY_ENTER || key_code == KEY_KPENTER) {
+            if (key_code == KEY_ESC) {
+                state_ = LockscreenState::Locked;
+                decision.sleep = true;
+            } else if (key_code == KEY_ENTER || key_code == KEY_KPENTER) {
                 decision.unlock = true;
             } else {
                 /* Any other key steps back to (2) rather than unlocking. */
