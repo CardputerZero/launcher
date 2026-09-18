@@ -269,55 +269,52 @@ void render_welcome()
     add_key_hint(132, "OK", 156, "START", kAccentWelcome);
 }
 
-// Generic single-column list (timezone / wifi).
-void render_list(const char *title, uint32_t accent,
-                 const std::vector<std::string> &left,
-                 const std::vector<std::string> &right, int sel,
-                 const char *ok_hint)
-{
-    add_chrome(accent, 24);
-    add_label(ui.screen_obj, title, font_sm(), accent, 36, 40);
-
-    const int count = static_cast<int>(left.size());
-    const int visible = 4;
-    int start = sel - 1;
-    if (start < 0)
-        start = 0;
-    if (start > count - visible)
-        start = count - visible;
-    if (start < 0)
-        start = 0;
-
-    const int row_y0 = 60;
-    const int row_h = 24;
-    for (int i = 0; i < visible && start + i < count; ++i) {
-        int idx = start + i;
-        int y = row_y0 + i * row_h;
-        bool is_sel = idx == sel;
-        if (is_sel) {
-            add_rect(ui.screen_obj, 30, y - 1, 260, 22, kColorRowSelBg, 0, 0, 4);
-            add_label(ui.screen_obj, ">", font_md(), accent, 42, y + 1);
-        }
-        add_label(ui.screen_obj, left[idx].c_str(), font_md(),
-                  is_sel ? 0xffffff : kColorMuted, 66, y + 2);
-        if (idx < static_cast<int>(right.size()) && !right[idx].empty()) {
-            add_label(ui.screen_obj, right[idx].c_str(), font_sm(),
-                      is_sel ? 0xffffff : kColorMuted, 240, y + 3);
-        }
-    }
-
-    add_key_hint(14, "ESC", 38, "BACK", accent);
-    add_key_hint(132, "OK", 156, ok_hint, accent);
-}
-
 void render_timezone_list()
 {
-    std::vector<std::string> left, right;
-    for (const Timezone &t : kTimezones) {
-        left.emplace_back(t.label);
-        right.emplace_back("");
+    add_chrome(kAccentRegion, 24);
+    add_label(ui.screen_obj, "TIMEZONE", font_sm(), kAccentRegion, 36, 40);
+    add_label(ui.screen_obj, "TIME MODE", font_sm(), kAccentRegion, 178, 40);
+    const int start = std::max(0, std::min(g.timezone_sel - 1, kTimezoneCount - 4));
+    for (int row = 0; row < 4; ++row) {
+        const int index = start + row;
+        const int y = 60 + row * 24;
+        const bool selected = g.timezone_focus == 0 && index == g.timezone_sel;
+        if (selected) {
+            add_rect(ui.screen_obj, 30, y - 1, 132, 22, kColorRowSelBg, 0, 0, 4);
+            add_label(ui.screen_obj, ">", font_md(), kAccentRegion, 42, y + 1);
+        }
+        // Region IDs supply automatic DST rules but are not UI choices.
+        add_label(ui.screen_obj, kTimezones[index].label, font_md(),
+                  (g.timezone_focus == 0 && index == g.timezone_sel) ? 0xffffff : kColorMuted,
+                  58, y + 2);
     }
-    render_list("TIMEZONE", kAccentRegion, left, right, g.timezone_sel, "CONFIRM");
+    using launch_wizard::TimezoneMode;
+    const Timezone &timezone = kTimezones[g.timezone_sel];
+    std::vector<std::string> labels = {
+        std::string("Winter ") + timezone.label,
+    };
+    if (launch_wizard::timezone_supports_daylight(timezone))
+        labels.push_back("Summer " + launch_wizard::timezone_offset_label(
+            launch_wizard::timezone_offset_minutes(timezone, TimezoneMode::Daylight)));
+    for (int row = 0; row < static_cast<int>(labels.size()); ++row) {
+        const int y = 60 + row * 28;
+        const bool selected = row == g.timezone_mode_sel;
+        const bool focused = g.timezone_focus == 1 && selected;
+        // Keep the selected row background aligned with its radio and label,
+        // even when keyboard focus is on the UTC list at the left.
+        if (selected)
+            add_rect(ui.screen_obj, 164, y - 1, 154, 24, kColorRowSelBg, 0, 0, 4);
+        add_rect(ui.screen_obj, 172, y + 6, 10, 10, kColorRowSelBg,
+                 1, selected ? kAccentRegion : kColorMuted, 5);
+        if (selected)
+            add_rect(ui.screen_obj, 175, y + 9, 4, 4, kAccentRegion, 0, 0, 2);
+        lv_obj_t *mode_label = add_label(ui.screen_obj, labels[row].c_str(), font_sm(),
+                  focused ? 0xffffff : (selected ? kAccentRegion : kColorMuted), 188, y + 3);
+        lv_obj_set_width(mode_label, 126);
+        lv_label_set_long_mode(mode_label, LV_LABEL_LONG_DOT);
+    }
+    add_key_hint(14, "ESC", 38, "BACK", kAccentRegion);
+    add_key_hint(132, "OK", 156, "CONFIRM", kAccentRegion);
 }
 
 void render_hostname()
@@ -1026,8 +1023,17 @@ void move_focus(int delta)
 {
     switch (g.screen) {
     case Screen::TimezoneList: {
-        int n = kTimezoneCount;
-        g.timezone_sel = (g.timezone_sel + delta + n) % n;
+        if (g.timezone_focus == 0) {
+            g.timezone_sel = (g.timezone_sel + delta + kTimezoneCount) % kTimezoneCount;
+            const int mode_count = launch_wizard::timezone_mode_count(kTimezones[g.timezone_sel]);
+            if (g.timezone_mode_sel >= mode_count) {
+                g.timezone_mode = launch_wizard::TimezoneMode::Standard;
+                g.timezone_mode_sel = 0;
+            }
+        } else {
+            const int count = launch_wizard::timezone_mode_count(kTimezones[g.timezone_sel]);
+            g.timezone_mode_sel = (g.timezone_mode_sel + delta + count) % count;
+        }
         render();
         break;
     }
@@ -1122,10 +1128,16 @@ void handle_enter()
     switch (g.screen) {
     case Screen::Welcome:
         g.timezone_sel = g.timezone_index;
+        g.timezone_focus = 0;
         go(Screen::TimezoneList);
         break;
     case Screen::TimezoneList:
         g.timezone_index = g.timezone_sel;
+        g.timezone_mode = static_cast<launch_wizard::TimezoneMode>(g.timezone_mode_sel);
+        if (g.timezone_mode_sel >= launch_wizard::timezone_mode_count(current_timezone())) {
+            g.timezone_mode = launch_wizard::TimezoneMode::Standard;
+            g.timezone_mode_sel = 0;
+        }
         go(Screen::Hostname);
         break;
     case Screen::Hostname: {
@@ -1395,6 +1407,13 @@ void handle_keyboard_event(lv_event_t *event)
             key_code = KEY_LEFT;
         else if (key_code == KEY_C)
             key_code = KEY_RIGHT;
+    }
+
+    if (g.screen == Screen::TimezoneList &&
+        (key_code == KEY_LEFT || key_code == KEY_RIGHT)) {
+        g.timezone_focus = key_code == KEY_RIGHT ? 1 : 0;
+        render();
+        return;
     }
 
     switch (key_code) {

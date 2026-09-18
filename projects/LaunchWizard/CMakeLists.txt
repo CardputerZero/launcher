@@ -18,6 +18,7 @@ add_library(launch_wizard_core
     main/ui/first_boot_policy.cpp
     main/ui/manual_datetime_validation.cpp
     main/ui/service_handoff.cpp
+    main/ui/timezone_setup.cpp
     main/ui/wizard_model.cpp
 )
 add_library(LaunchWizard::core ALIAS launch_wizard_core)
@@ -58,6 +59,13 @@ if(BUILD_TESTING)
              COMMAND launch_wizard_core_tests)
 
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        add_executable(launch_wizard_timezone_tests tests/test_timezone.cpp)
+        find_program(LAUNCH_WIZARD_ZIC zic REQUIRED)
+        target_compile_definitions(launch_wizard_timezone_tests PRIVATE
+            LAUNCH_WIZARD_ZIC="${LAUNCH_WIZARD_ZIC}")
+        target_link_libraries(launch_wizard_timezone_tests PRIVATE LaunchWizard::core)
+        add_test(NAME launch_wizard.timezone COMMAND launch_wizard_timezone_tests)
+
         find_package(Threads REQUIRED)
         add_executable(launch_wizard_key_sound_tests
             tests/test_key_sound.cpp

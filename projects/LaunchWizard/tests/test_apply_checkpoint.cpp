@@ -64,6 +64,10 @@ bool test_apply_checkpoint()
     changed.hostname = "different-host";
     expect(wizard_configuration_fingerprint(changed) != fingerprint,
            "apply fingerprint did not include hostname");
+    changed.hostname = configuration.hostname;
+    changed.timezone_mode = TimezoneMode::Daylight;
+    expect(wizard_configuration_fingerprint(changed) != fingerprint,
+           "apply fingerprint did not include time mode");
     WizardModel manual_time_changed;
     manual_time_changed.password = configuration.password;
     manual_time_changed.wifi_password = configuration.wifi_password;

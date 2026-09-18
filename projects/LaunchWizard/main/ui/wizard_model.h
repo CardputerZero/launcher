@@ -34,7 +34,17 @@ enum class Screen {
 struct Timezone {
     const char *name;
     const char *label;
+    int daylight_minutes = 0;
 };
+
+enum class TimezoneMode { Standard, Daylight };
+
+// Every UTC choice supports winter (standard-time) mode. Summer (daylight)
+// mode is offered only when the internal mapping has a real DST adjustment.
+bool timezone_supports_daylight(const Timezone &timezone) noexcept;
+int timezone_mode_count(const Timezone &timezone) noexcept;
+int timezone_offset_minutes(const Timezone &timezone, TimezoneMode mode);
+std::string timezone_offset_label(int minutes);
 
 struct WifiNetwork {
     std::string ssid;
@@ -76,22 +86,25 @@ struct WifiConnectionStatus {
     std::string ip;
 };
 
+// The UI selects and displays only UTC offsets, never city/region names.
+// IANA names are internal mappings for automatic seasonal rules; labels are
+// standard offsets. Manual daylight adjustments can also be half an hour.
 inline constexpr Timezone kTimezones[] = {
     {"Pacific/Pago_Pago",       "UTC-11:00"},
     {"Pacific/Honolulu",        "UTC-10:00"},
-    {"America/Anchorage",       "UTC-09:00"},
-    {"Pacific/Pitcairn",        "UTC-08:00"},
-    {"America/Denver",          "UTC-07:00"},
-    {"America/Chicago",         "UTC-06:00"},
-    {"America/New_York",        "UTC-05:00"},
-    {"America/Halifax",         "UTC-04:00"},
-    {"America/St_Johns",        "UTC-03:30"},
+    {"America/Anchorage",       "UTC-09:00", 60},
+    {"America/Los_Angeles",     "UTC-08:00", 60},
+    {"America/Denver",          "UTC-07:00", 60},
+    {"America/Chicago",         "UTC-06:00", 60},
+    {"America/New_York",        "UTC-05:00", 60},
+    {"America/Halifax",         "UTC-04:00", 60},
+    {"America/St_Johns",        "UTC-03:30", 60},
     {"America/Sao_Paulo",       "UTC-03:00"},
     {"Atlantic/South_Georgia",  "UTC-02:00"},
-    {"Atlantic/Azores",         "UTC-01:00"},
-    {"Atlantic/Reykjavik",      "UTC+00:00"},
-    {"Europe/Paris",            "UTC+01:00"},
-    {"Europe/Helsinki",         "UTC+02:00"},
+    {"Atlantic/Azores",         "UTC-01:00", 60},
+    {"Europe/London",           "UTC+00:00", 60},
+    {"Europe/Paris",            "UTC+01:00", 60},
+    {"Europe/Helsinki",         "UTC+02:00", 60},
     {"Europe/Istanbul",         "UTC+03:00"},
     {"Asia/Tehran",             "UTC+03:30"},
     {"Asia/Dubai",              "UTC+04:00"},
@@ -105,12 +118,12 @@ inline constexpr Timezone kTimezones[] = {
     {"Asia/Shanghai",           "UTC+08:00"},
     {"Australia/Eucla",         "UTC+08:45"},
     {"Asia/Tokyo",              "UTC+09:00"},
-    {"Australia/Adelaide",      "UTC+09:30"},
-    {"Australia/Sydney",        "UTC+10:00"},
-    {"Australia/Lord_Howe",     "UTC+10:30"},
+    {"Australia/Adelaide",      "UTC+09:30", 60},
+    {"Australia/Sydney",        "UTC+10:00", 60},
+    {"Australia/Lord_Howe",     "UTC+10:30", 30},
     {"Pacific/Noumea",          "UTC+11:00"},
-    {"Pacific/Auckland",        "UTC+12:00"},
-    {"Pacific/Chatham",         "UTC+12:45"},
+    {"Pacific/Auckland",        "UTC+12:00", 60},
+    {"Pacific/Chatham",         "UTC+12:45", 60},
     {"Pacific/Apia",            "UTC+13:00"},
     {"Pacific/Kiritimati",      "UTC+14:00"},
 };
@@ -122,6 +135,9 @@ struct WizardModel {
     Screen screen = Screen::Welcome;
     int timezone_index = kDefaultTimezoneIndex;
     int timezone_sel = kDefaultTimezoneIndex;
+    TimezoneMode timezone_mode = TimezoneMode::Standard;
+    int timezone_mode_sel = 0;
+    int timezone_focus = 0;  // 0 = UTC offset list, 1 = time mode list.
     std::string hostname = "CardputerZero";
     std::string username = "pi";
     std::string password = "pi";

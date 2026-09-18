@@ -10,6 +10,7 @@
 #include "command_runner.h"
 #include "first_boot_policy.h"
 #include "service_handoff.h"
+#include "timezone_setup.h"
 
 #if __has_include("global_config.h")
 #include "global_config.h"
@@ -799,15 +800,6 @@ std::string enable_applaunch_service(const std::string &user, unsigned int uid)
 // ---------------------------------------------------------------------------
 // System integration -- OOBE steps (timezone / hostname / wifi / ssh).
 // ---------------------------------------------------------------------------
-std::string apply_timezone(const std::string &timezone)
-{
-    if (timezone.empty())
-        return "Timezone is required";
-    CommandResult result = run_command({"timedatectl", "set-timezone", timezone});
-    return result.code == 0 ? std::string() :
-        (result.output.empty() ? "Failed to set timezone" : result.output);
-}
-
 std::string apply_hostname(const std::string &hostname)
 {
     if (hostname.empty())
@@ -985,7 +977,8 @@ std::string WizardService::apply(
     const std::function<void(const ProgressEvent &)> &progress,
     const std::function<bool()> &cancelled)
 {
-    const std::string timezone = g.current_timezone().name;
+    const Timezone timezone = g.current_timezone();
+    const TimezoneMode timezone_mode = g.timezone_mode;
     const std::string hostname = g.hostname;
     const std::string username = g.username;
     const std::string password = g.password;
@@ -1014,10 +1007,10 @@ std::string WizardService::apply(
         }};
     };
     std::vector<ApplyStep> steps = {
-        best_effort("Setting timezone...", [timezone] {
-            const std::string error = apply_timezone(timezone);
+        {"Setting timezone...", [timezone, timezone_mode] {
+            const std::string error = apply_timezone(timezone, timezone_mode, run_command);
             return error.empty() ? error : "Timezone failed: " + error;
-        }),
+        }},
         best_effort("Setting hostname...", [hostname] {
             const std::string error = apply_hostname(hostname);
             return error.empty() ? error : "Hostname failed: " + error;
