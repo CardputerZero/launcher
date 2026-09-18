@@ -234,8 +234,10 @@ void show_hint(const char *text)
 {
     if (!s_hint || !text) return;
     lv_label_set_text(s_hint, text);
-    // Cover the title only; leave the right-hand network, time and battery visible.
-    lv_obj_set_size(s_hint, std::max(0, s_panel.width - 116), AppPageRoot::kTopBarHeightPx);
+    /* Size the mask from the rendered text. A fixed width leaves a large black
+     * block after the short TAB/ENTER instruction. */
+    lv_obj_set_size(s_hint, LV_SIZE_CONTENT, AppPageRoot::kTopBarHeightPx);
+    lv_obj_update_layout(s_hint);
     lv_obj_set_pos(s_hint, 0, 0);
     lv_obj_move_foreground(s_hint);
     lv_obj_clear_flag(s_hint, LV_OBJ_FLAG_HIDDEN);
