@@ -214,6 +214,34 @@ def test_manual_entry_is_gated_while_network_time_is_on():
         "manual_entry.activation_gate = [] { return settings_rtc_manual_edit_block(); };"
         in PAGE_CPP
     )
+    # Set Manually is a nested roller workflow.  Only the Network Time status
+    # icon from its parent menu is hidden while the manual editor is open.
+    submenu = normalized(SUBMENU_CPP)
+    assert 'page3_hides_network_time_icon_ = selected_node->label == "Set Manually";' in submenu
+    transition = normalized(
+        function_body(
+            SUBMENU_CPP,
+            "void LvSettingRollerPage2::start_page3_transition(bool entering)",
+        )
+    )
+    assert "page3_hides_network_time_icon_ && entering" in transition
+    finish = normalized(
+        function_body(
+            SUBMENU_CPP,
+            "void LvSettingRollerPage2::finish_page3_transition(bool entering)",
+        )
+    )
+    assert "set_network_time_icon_hidden(false)" in finish
+    assert "page3_hides_network_time_icon_ = false" in finish
+    icon = normalized(
+        function_body(
+            SUBMENU_CPP,
+            "void LvSettingRollerPage2::set_network_time_icon_hidden(bool hidden)",
+        )
+    )
+    assert 'node->label != "Network Time"' in icon
+    assert "lv_obj_get_child(row, 1)" in icon
+    assert "lv_obj_add_flag(status_icon, LV_OBJ_FLAG_HIDDEN)" in icon
 
     block = normalized(
         function_body(

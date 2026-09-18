@@ -40,40 +40,57 @@ int main()
     assert(model.state() == LockscreenState::PendingUnlock);
     assert(model.visible());
 
-    // (2) waits for the gesture: any other key only counts as activity.
+    // (2) ESC returns to the black screen immediately.
     decision = press(model, KEY_ESC, 3000);
+    assert(decision.consumed && decision.sleep);
+    assert(!decision.show_panel && !decision.unlock && !decision.blocked);
+    assert(model.state() == LockscreenState::Locked);
+
+    // Wake again. Other keys only count as activity while the panel is visible.
+    decision = press(model, KEY_SPACE, 3500);
+    assert(decision.consumed && decision.show_panel);
+    assert(model.state() == LockscreenState::PendingUnlock);
+    decision = press(model, KEY_SPACE, 4000);
     assert(decision.consumed && decision.blocked);
     assert(!decision.show_panel && !decision.sleep && !decision.unlock);
     assert(model.state() == LockscreenState::PendingUnlock);
 
     // (2) -> (3) on TAB, and the panel is refreshed for the new hint.
-    decision = press(model, KEY_TAB, 4000);
+    decision = press(model, KEY_TAB, 5000);
     assert(decision.consumed && decision.show_panel && !decision.blocked);
     assert(model.state() == LockscreenState::Armed);
 
     // (3) -> (2) on any key that is not a confirmation.
-    decision = press(model, KEY_TAB, 5000);
+    decision = press(model, KEY_TAB, 6000);
     assert(decision.consumed && decision.show_panel && decision.blocked);
     assert(!decision.unlock);
     assert(model.state() == LockscreenState::PendingUnlock);
 
-    decision = press(model, KEY_TAB, 6000);
+    decision = press(model, KEY_TAB, 7000);
     assert(model.state() == LockscreenState::Armed);
 
     // (3) + ENTER leaves the lock screen; the caller resets for the next entry.
-    decision = press(model, KEY_ENTER, 7000);
+    decision = press(model, KEY_ENTER, 8000);
     assert(decision.consumed && decision.unlock);
     assert(!decision.show_panel && !decision.sleep && !decision.blocked);
     model.reset(7001);
     assert(model.state() == LockscreenState::Locked);
 
     // The keypad Enter confirms as well.
-    decision = press(model, KEY_ESC, 8000);
+    decision = press(model, KEY_SPACE, 9000);
     assert(model.state() == LockscreenState::PendingUnlock);
-    decision = press(model, KEY_TAB, 8001);
+    decision = press(model, KEY_TAB, 9001);
     assert(model.state() == LockscreenState::Armed);
-    decision = press(model, KEY_KPENTER, 8002);
+    decision = press(model, KEY_KPENTER, 9002);
     assert(decision.unlock);
+
+    // ESC also returns the armed confirmation screen to black.
+    model.reset(10000);
+    press(model, KEY_SPACE, 10000);
+    press(model, KEY_TAB, 10001);
+    decision = press(model, KEY_ESC, 10002);
+    assert(decision.consumed && decision.sleep);
+    assert(model.state() == LockscreenState::Locked);
 
     // Auto-repeat is activity only: holding TAB cannot walk (2) into (3), and
     // holding a key in (3) cannot keep stepping the machine.
@@ -104,9 +121,9 @@ int main()
     decision = press(model, KEY_ESC, 100000);
     assert(model.state() == LockscreenState::PendingUnlock);
     assert(!model.poll(109999).sleep);
-    // A press resets the countdown, even one that does not change state.
-    const LockscreenDecision activity = model.handle_key(KEY_ESC, true, false, 105000);
-    assert(activity.consumed && !activity.show_panel);
+    // A non-navigation press resets the countdown, even one that does not change state.
+    const LockscreenDecision activity = model.handle_key(KEY_SPACE, true, false, 105000);
+    assert(activity.consumed && !activity.show_panel && activity.blocked);
     assert(!model.poll(114999).sleep);
     assert(model.poll(115000).sleep);
 

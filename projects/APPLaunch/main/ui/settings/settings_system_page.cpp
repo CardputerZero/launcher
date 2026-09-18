@@ -1017,6 +1017,7 @@ void show_update_confirmation(LvSettingUpdatePage3 *page)
         (state->candidate_commit.empty() ? std::string("unknown") : state->candidate_commit);
     state->dialog_message = lv_msgbox_add_text(state->dialog, message.c_str());
     if (state->dialog_message) {
+        lv_obj_set_style_text_color(state->dialog_message, lv_color_hex(0xECECEC), LV_PART_MAIN);
         lv_label_set_long_mode(state->dialog_message, LV_LABEL_LONG_SCROLL_CIRCULAR);
         lv_obj_set_style_text_font(state->dialog_message, settings_fonts::sans(12), LV_PART_MAIN);
     }

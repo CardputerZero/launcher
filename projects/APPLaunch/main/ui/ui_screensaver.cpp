@@ -35,7 +35,7 @@ constexpr uint32_t kIdleCheckMs = 500;
 constexpr uint32_t kHoldPollMs = 100;
 constexpr uint32_t kExitAnimationMs = 350;
 /* Shown once the idle TAB hold matures past the model's hint delay. */
-constexpr const char *kHoldHintText = "Hold TAB 5s lock";
+constexpr const char *kHoldHintText = "Hold TAB for 5s to lock";
 
 class ScreensaverImageCache
 {
@@ -742,6 +742,8 @@ extern "C" int ui_screensaver_filter_key(const struct key_item *item)
         if (decision.unlock) {
             play_lockscreen_sound("unlock.mp3");
             stop_screensaver(true, true);
+        } else if (decision.sleep) {
+            sleep_lockscreen();
         } else {
             if (decision.blocked)
                 play_lockscreen_sound("blocked.mp3");
