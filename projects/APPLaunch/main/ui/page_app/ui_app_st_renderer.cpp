@@ -60,7 +60,8 @@ void UISTPage::create_ui()
                      0, BIG_VIEW_ROWS * CHAR_H, 0x8B949E);
 
     static constexpr const char *BOTTOM_TEXT[BOTTOM_BAR_SLOTS] = {
-        "F4 <", "F5 up", "F6 normal", "F7 down", "F8 >",
+        "F4 " LV_SYMBOL_LEFT, "F5 " LV_SYMBOL_UP, "F6 normal",
+        "F7 " LV_SYMBOL_DOWN, "F8 " LV_SYMBOL_RIGHT,
     };
     constexpr int SLOT_WIDTH = TERM_W / BOTTOM_BAR_SLOTS;
     for (int index = 0; index < BOTTOM_BAR_SLOTS; ++index) {
@@ -119,6 +120,41 @@ void UISTPage::create_ui()
     lv_obj_add_flag(cursor_label_, LV_OBJ_FLAG_HIDDEN);
 }
 
+void UISTPage::create_help()
+{
+    if (!help_factory_ || !terminal_container_ || help_overlay_) return;
+    help_overlay_ = help_factory_(terminal_container_);
+    if (!help_overlay_) return;
+    lv_obj_add_event_cb(help_overlay_, static_renderer_delete_cb, LV_EVENT_DELETE, this);
+    lv_obj_add_flag(help_overlay_, LV_OBJ_FLAG_HIDDEN);
+}
+
+bool UISTPage::help_visible() const
+{
+    return help_overlay_ && !lv_obj_has_flag(help_overlay_, LV_OBJ_FLAG_HIDDEN);
+}
+
+void UISTPage::show_help()
+{
+    if (!help_overlay_) return;
+    lv_obj_clear_flag(help_overlay_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_move_foreground(help_overlay_);
+    show_cursor(false);
+}
+
+void UISTPage::hide_help()
+{
+    if (!help_overlay_) return;
+    lv_obj_add_flag(help_overlay_, LV_OBJ_FLAG_HIDDEN);
+    if (terminal_active_) update_cursor();
+}
+
+void UISTPage::scroll_help(int direction)
+{
+    if (!help_overlay_ || direction == 0) return;
+    lv_obj_scroll_by_bounded(help_overlay_, 0, direction * 36, LV_ANIM_ON);
+}
+
 void UISTPage::bind_events()
 {
     if (!root_screen_) return;
@@ -142,7 +178,7 @@ void UISTPage::detach_renderer_callbacks()
 {
     std::vector<lv_obj_t *> objects = {
         terminal_container_, term_canvas_, scrollbar_track_, scrollbar_thumb_,
-        hscrollbar_track_, hscrollbar_thumb_, cursor_label_,
+        hscrollbar_track_, hscrollbar_thumb_, cursor_label_, help_overlay_,
     };
     objects.insert(objects.end(), bottom_labels_.begin(), bottom_labels_.end());
     objects.insert(objects.end(), bottom_indicators_.begin(), bottom_indicators_.end());
@@ -167,6 +203,7 @@ void UISTPage::static_renderer_delete_cb(lv_event_t *event) noexcept
         if (self->scrollbar_thumb_ == deleted) self->scrollbar_thumb_ = nullptr;
         if (self->hscrollbar_track_ == deleted) self->hscrollbar_track_ = nullptr;
         if (self->hscrollbar_thumb_ == deleted) self->hscrollbar_thumb_ = nullptr;
+        if (self->help_overlay_ == deleted) self->help_overlay_ = nullptr;
         for (lv_obj_t *&label : self->bottom_labels_)
             if (label == deleted) label = nullptr;
         for (lv_obj_t *&indicator : self->bottom_indicators_)
@@ -198,6 +235,7 @@ void UISTPage::static_renderer_delete_cb(lv_event_t *event) noexcept
             self->scrollbar_thumb_ = nullptr;
             self->hscrollbar_track_ = nullptr;
             self->hscrollbar_thumb_ = nullptr;
+            self->help_overlay_ = nullptr;
             self->cursor_label_ = nullptr;
             self->bottom_labels_.fill(nullptr);
             self->bottom_indicators_.fill(nullptr);
@@ -247,6 +285,7 @@ void UISTPage::event_cb(lv_event_t *event)
         scrollbar_thumb_ = nullptr;
         hscrollbar_track_ = nullptr;
         hscrollbar_thumb_ = nullptr;
+        help_overlay_ = nullptr;
         cursor_label_ = nullptr;
         bottom_labels_.fill(nullptr);
         bottom_indicators_.fill(nullptr);
@@ -272,6 +311,24 @@ void UISTPage::event_cb(lv_event_t *event)
     }
     if (key->key_code == KEY_LEFTSHIFT || key->key_code == KEY_RIGHTSHIFT) {
         shift_down_ = key->key_state != KBD_KEY_RELEASED;
+        return;
+    }
+    const bool help_key = key->key_code == KEY_HELP ||
+                          (key->key_code == KEY_H && (key->mods & KBD_MOD_FN) != 0);
+    if (help_visible()) {
+        if (key->key_state == KBD_KEY_PRESSED && (help_key || key->key_code == KEY_ESC))
+            hide_help();
+        else if (key->key_state) {
+            const bool up = key->key_code == KEY_UP || key->key_code == KEY_F ||
+                            key->semantic_key == KEY_UP;
+            const bool down = key->key_code == KEY_DOWN || key->key_code == KEY_X ||
+                              key->semantic_key == KEY_DOWN;
+            if (up || down) scroll_help(up ? 1 : -1);
+        }
+        return;
+    }
+    if (help_key && key->key_state == KBD_KEY_PRESSED) {
+        if (help_overlay_) show_help();
         return;
     }
     if (key->key_state && key->key_code == KEY_F6) {

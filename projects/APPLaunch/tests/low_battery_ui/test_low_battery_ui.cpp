@@ -190,8 +190,8 @@ static void test_hold_gesture_enters_lock()
     advance(1);
     ::timer_cb(s_timer);
     assert(hold_hint_shows == 1);
-    assert(std::strcmp(hold_hint_text, "Hold TAB for 5s to lock") == 0);
-    advance(4499);
+    assert(std::strcmp(hold_hint_text, "Hold TAB for 3s to lock") == 0);
+    advance(2499);
     ::timer_cb(s_timer);
     assert(!ui_screensaver_is_active());
     assert(backlight_raw == 128 && backlight_suspends == 0);

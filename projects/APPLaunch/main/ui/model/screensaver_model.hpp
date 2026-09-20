@@ -40,7 +40,7 @@ public:
         Count = 8,
     };
     enum class ScreenOffMetric : uint32_t {
-        HoldMs = 5000,
+        HoldMs = 3000,
     };
     enum class HoldHintMetric : uint32_t {
         HintMs = 500,

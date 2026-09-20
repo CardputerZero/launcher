@@ -82,7 +82,7 @@ int main()
 
     // ---- Long-press gesture that requests the lock ----
     ScreensaverModel hold;
-    assert(ScreensaverModel::screen_off_hold_ms() == 5000);
+    assert(ScreensaverModel::screen_off_hold_ms() == 3000);
     assert(ScreensaverModel::hold_hint_ms() == 500);
     hold.reset(1000);
     assert(!hold.hold_pending());
@@ -100,12 +100,12 @@ int main()
     assert(!hold.poll_hold(4000).show_hint);
     // Auto-repeat must not restart the window, or a held key never matures.
     assert(!hold.observe_hold_key(KEY_TAB, false, 4000).hide_hint);
-    assert(!hold.poll_hold(6999).fire);
-    decision = hold.poll_hold(7000);
+    assert(!hold.poll_hold(4999).fire);
+    decision = hold.poll_hold(5000);
     assert(decision.fire && !decision.show_hint);
     // The threshold reports once per hold, and entering the lock clears it.
     assert(!hold.poll_hold(9000).fire);
-    hold.activate(240, 135, 7000);
+    hold.activate(240, 135, 5000);
     assert(hold.active() && !hold.hold_pending() && !hold.hold_hint_visible());
 
     // A short tap never requests anything and never shows the hint.

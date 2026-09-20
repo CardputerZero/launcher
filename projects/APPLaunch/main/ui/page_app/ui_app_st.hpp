@@ -10,6 +10,7 @@
 #include "../launcher_ui_app_page.hpp"
 #include "../model/page_timer_lifecycle.hpp"
 #include "../model/st_page_contract.hpp"
+#include "../terminal_help_factory.hpp"
 #include "../model/terminal_unicode.hpp"
 #include "cp0_lvgl_app.h"
 #include "input_keys.h"
@@ -132,7 +133,7 @@ class UISTPage : public AppPage
 public:
     bool terminal_sysplause = true;
 
-    UISTPage();
+    explicit UISTPage(TerminalHelpFactory help_factory = nullptr);
     ~UISTPage();
 
     void exec(std::string cmd);
@@ -170,6 +171,7 @@ private:
     lv_obj_t *scrollbar_thumb_ = nullptr;
     lv_obj_t *hscrollbar_track_ = nullptr;
     lv_obj_t *hscrollbar_thumb_ = nullptr;
+    lv_obj_t *help_overlay_ = nullptr;
     std::array<lv_obj_t *, BOTTOM_BAR_SLOTS> bottom_labels_{};
     std::array<lv_obj_t *, BOTTOM_BAR_SLOTS> bottom_indicators_{};
     const lv_font_t *mono_font_ = nullptr;
@@ -178,6 +180,7 @@ private:
     PageTimerLifecycle<lv_timer_t *> cursor_timer_;
 
     std::string pty_handle_;
+    TerminalHelpFactory help_factory_ = nullptr;
     bool terminal_active_ = false;
     bool waiting_key_to_exit_ = false;
     bool cursor_blink_visible_ = false;
@@ -240,6 +243,11 @@ private:
     void process_bytes(const char *data, int length);
 
     void create_ui();
+    void create_help();
+    void show_help();
+    void hide_help();
+    void scroll_help(int direction);
+    bool help_visible() const;
     bool renderer_ready() const;
     void bind_events();
     void detach_renderer_callbacks();

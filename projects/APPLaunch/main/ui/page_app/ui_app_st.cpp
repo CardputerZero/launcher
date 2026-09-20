@@ -13,12 +13,13 @@
 #include <cstdlib>
 #include <cstring>
 
-UISTPage::UISTPage()
-    : AppPage()
+UISTPage::UISTPage(TerminalHelpFactory help_factory)
+    : AppPage(), help_factory_(help_factory)
 {
     set_page_title("CLI");
     reset_terminal();
     create_ui();
+    create_help();
     if (!renderer_ready()) {
         if (terminal_container_) lv_obj_delete(terminal_container_);
         return;
@@ -55,6 +56,7 @@ void UISTPage::exec(const std::string &command, const std::list<std::string> &ar
 
     terminal_active_ = true;
     waiting_key_to_exit_ = false;
+    hide_help();
     big_mode_ = false;
     term_cols_ = NORMAL_COLS;
     term_rows_ = NORMAL_ROWS;
