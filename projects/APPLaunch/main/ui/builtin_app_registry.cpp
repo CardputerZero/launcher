@@ -8,11 +8,13 @@
 
 #include "app_display_order.hpp"
 #include "app_registry.h"
+#include "cli_terminal_help.hpp"
 #include "launch.h"
 #include "ui.h"
 #include "generated/page_app.h"
 #include "launcher_platform.hpp"
 #include "model/dynamic_app_registry.hpp"
+#include "python_terminal_help.hpp"
 #include "settings/settings_page.hpp"
 #include <array>
 #include <cstring>
@@ -30,12 +32,19 @@ struct BuiltinAppRegistration {
     bool sysplause;
     bool run_as_root;
     BuiltinAppAppender append;
+    TerminalHelpFactory help_factory = nullptr;
 };
 
 template <class PageT>
 void append_page_app(std::list<app> &apps, const AppDescriptor &desc)
 {
     apps.emplace_back(desc.label, launcher_platform::path(desc.icon), page_v<PageT>);
+}
+
+void append_cli_app(std::list<app> &apps, const AppDescriptor &desc)
+{
+    apps.emplace_back(desc.label, launcher_platform::path(desc.icon), page_v<UISTPage>,
+                      create_cli_help);
 }
 
 std::string resolved_exec(const BuiltinAppRegistration &registration)
@@ -56,7 +65,8 @@ void append_builtin_app(std::list<app> &apps, const BuiltinAppRegistration &regi
                       resolved_exec(registration),
                       registration.terminal,
                       registration.sysplause,
-                      registration.run_as_root);
+                      registration.run_as_root,
+                      registration.help_factory);
 }
 
 constexpr BuiltinAppRegistration BUILTIN_APPS[] = {
@@ -65,8 +75,9 @@ constexpr BuiltinAppRegistration BUILTIN_APPS[] = {
     {{"Store", "store_100.png", "app_Store", false, true},
      "@appstore_exec", false, true, false, nullptr},
     {{"CLI", "cli_100.png", "app_CLI", false, true},
-     nullptr, false, true, false, append_page_app<UISTPage>},
-    {{"Python", "python_100.png", "app_Python", true, false}, "python3", true, false, false, nullptr},
+     nullptr, false, true, false, append_cli_app},
+    {{"Python", "python_100.png", "app_Python", true, false},
+     "python3", true, false, false, nullptr, create_python_help},
 #if defined(__linux__) && !defined(HAL_PLATFORM_SDL)
     {{"SSH", "ssh_100.png", "app_SSH", true, false},
      nullptr, false, true, false, append_page_app<UISSHPage>},

@@ -129,13 +129,14 @@ void Launch::abort_page_launch() noexcept
     }
 }
 
-void Launch::launch_Exec_in_terminal(const std::string &exec, bool sysplause)
+void Launch::launch_Exec_in_terminal(const std::string &exec, bool sysplause,
+                                     TerminalHelpFactory help_factory)
 {
     if (!begin_page_launch()) return;
     SLOGI("Launching terminal app: %s", exec.c_str());
     ui_loading::show("Loading...");
     lv_refr_now(nullptr);
-    auto p = std::make_shared<UISTPage>();
+    auto p = std::make_shared<UISTPage>(help_factory);
     if (!p->screen())
         throw std::runtime_error("terminal page creation failed");
     app_Page = p;

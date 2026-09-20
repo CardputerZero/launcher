@@ -70,7 +70,7 @@ assert "kHoldPollMs = 100" in SOURCE
 # The gesture announces itself through the shared launcher toast before it locks,
 # and clears that announcement again as soon as the gesture ends.
 assert "launcher_toast().show_persistent(kHoldHintText)" in SOURCE
-assert '"Hold TAB for 5s to lock"' in SOURCE
+assert '"Hold TAB for 3s to lock"' in SOURCE
 assert "hold.hide_hint" in SOURCE
 assert "hold.fire" in SOURCE
 

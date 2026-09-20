@@ -42,3 +42,20 @@ app::app(std::string name,
         else owner->launch_Exec(exec, run_as_root);
     };
 }
+
+app::app(std::string name,
+         std::string icon,
+         std::string exec,
+         bool terminal,
+         bool sysplause,
+         bool run_as_root,
+         TerminalHelpFactory help_factory)
+    : Name(std::move(name)), Icon(std::move(icon)), Exec(exec)
+{
+    launch = [exec = std::move(exec), terminal, sysplause, run_as_root,
+              help_factory](Launch *owner) {
+        if (!owner || exec.empty()) return;
+        if (terminal) owner->launch_Exec_in_terminal(exec, sysplause, help_factory);
+        else owner->launch_Exec(exec, run_as_root);
+    };
+}

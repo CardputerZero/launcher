@@ -76,6 +76,7 @@ void UISTPage::start_command(const std::string &command,
 
 void UISTPage::start_shell()
 {
+    hide_help();
     start_command("bash", {
         "-c",
         "cd ~ && "

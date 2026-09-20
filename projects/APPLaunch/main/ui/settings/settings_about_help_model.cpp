@@ -59,6 +59,8 @@ Content credit()
         "Third-Party Licenses & Credits",
         split_lines(R"CP0_LICENSES(Our sincere thanks to all Kickstarter backers who helped make CardputerZero possible.
 
+We also thank the early community contributors who helped shape CardputerZero: eggfly (Factory Firmware), zhuzhe1983 (Store), whywilson (RFID), JdaieLin (XiaoZhi), vicliu624 (LoFiBox-Zero), doodlewind (PocketJS), 7h30th3r0n3 (RaspyJack), bmorcelli (ESP Flasher), geo-tp (Retro-Zero), andreahaku IU4APC (Radio), n0xa (czconsole), marivaaldo (Flint), YUK_KND (ZeroTop), hishizuka (Bikecomputer), NDenchi (StackChan-Zero), GOROman.
+
 CardputerZero is built with open-source software, fonts and media, along with attributed public-domain and Creative Commons resources.
 
 - Software:
@@ -408,7 +410,12 @@ CC BY 3.0
 Apollo 11 Guidance Computer excerpt: BURN_BABY_BURN
 Virtual AGC project and MIT Museum
 https://github.com/chrislgarry/Apollo-11/blob/master/Luminary099/BURN_BABY_BURN--MASTER_IGNITION_ROUTINE.agc
-Public Domain)CP0_LICENSES"),
+Public Domain
+
+Lofoten Aurora lock screen
+Johannes Groll
+https://commons.wikimedia.org/wiki/File:Lofoten,_Norway_(Unsplash).jpg
+CC0-1.0)CP0_LICENSES"),
     };
 }
 

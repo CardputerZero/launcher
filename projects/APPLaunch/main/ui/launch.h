@@ -12,6 +12,7 @@
 #include "ui_loading.h"
 #include "esc_ui_watchdog.h"
 #include "model/launcher_navigation_model.hpp"
+#include "terminal_help_factory.hpp"
 
 #include <cstddef>
 #include <functional>
@@ -19,6 +20,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 class Launch;
@@ -43,9 +45,14 @@ struct app
     app(std::string name, std::string icon, std::string exec, bool terminal);
     app(std::string name, std::string icon, std::string exec, bool terminal, bool sysplause);
     app(std::string name, std::string icon, std::string exec, bool terminal, bool sysplause, bool run_as_root);
+    app(std::string name, std::string icon, std::string exec, bool terminal, bool sysplause,
+        bool run_as_root, TerminalHelpFactory help_factory);
 
     template <class PageT>
     app(std::string name, std::string icon, page_t<PageT> tag);
+    template <class PageT>
+    app(std::string name, std::string icon, page_t<PageT> tag,
+        TerminalHelpFactory help_factory);
 };
 
 class Launch
@@ -69,7 +76,8 @@ private:
     void go_back_home();
     bool begin_page_launch();
     void abort_page_launch() noexcept;
-    void launch_Exec_in_terminal(const std::string &exec, bool sysplause = true);
+    void launch_Exec_in_terminal(const std::string &exec, bool sysplause = true,
+                                 TerminalHelpFactory help_factory = nullptr);
     void launch_Exec(const std::string &exec, bool keep_root = false);
     void applications_load();
     void refresh_home_carousel();
@@ -103,6 +111,28 @@ app::app(std::string name, std::string icon, page_t<PageT>)
         ui_loading::show("Loading...");
         lv_refr_now(nullptr);
         auto page = std::make_shared<PageT>();
+        if (!page->screen())
+            throw std::runtime_error("application page creation failed");
+        owner->app_Page = page;
+        page->navigate_home = std::bind(&Launch::go_back_home, owner);
+        ui_loading::hide();
+        cp0_lvgl_start_app_page(*page);
+    };
+}
+
+template <class PageT>
+app::app(std::string name, std::string icon, page_t<PageT>, TerminalHelpFactory help_factory)
+    : Name(std::move(name)), Icon(std::move(icon))
+{
+    launch = [help_factory](Launch *owner) {
+        if (!owner->begin_page_launch()) return;
+        ui_loading::show("Loading...");
+        lv_refr_now(nullptr);
+        std::shared_ptr<PageT> page;
+        if constexpr (std::is_constructible_v<PageT, TerminalHelpFactory>)
+            page = std::make_shared<PageT>(help_factory);
+        else
+            page = std::make_shared<PageT>();
         if (!page->screen())
             throw std::runtime_error("application page creation failed");
         owner->app_Page = page;
