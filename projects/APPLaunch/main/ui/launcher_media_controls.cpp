@@ -11,6 +11,7 @@
 #include "model/launcher_media_model.hpp"
 #include "model/setup_value_policy.hpp"
 
+#include <algorithm>
 #include <string>
 
 namespace {
@@ -199,6 +200,18 @@ bool toggle_mute()
         }
     });
     return muted;
+}
+
+bool restore_startup_backlight()
+{
+    std::lock_guard<std::mutex> operation_lock(brightness_control::operation_mutex());
+    const int maximum = backlight_max();
+    const int saved = read_config_int(setup_values::kBrightnessConfigKey, maximum);
+    const int target = saved > 0 ? std::min(saved, maximum) : maximum;
+    const int written = write_backlight_raw(target);
+    if (written <= 0 || written > maximum) return false;
+    model.set_brightness(setup_values::brightness_step_percent_from_raw(written, maximum));
+    return written == target;
 }
 
 int suspend_backlight()
