@@ -12,6 +12,8 @@ extern "C" {
 
 struct key_item;
 
+/* Legacy API names retained for keyboard backends; this module only handles
+ * the lock screen, not the removed bouncing-image screensaver. */
 void ui_screensaver_init(void);
 void ui_screensaver_deinit(void);
 int ui_screensaver_filter_key(const struct key_item *item);

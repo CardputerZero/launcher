@@ -11,7 +11,7 @@ APPLaunch process
 ├── main.cpp
 │   └── cp0_lvgl_run(options)
 │       ├── lv_init() / cp0_lvgl_init()
-│       ├── setup callback: launcher_ui::init() / ui_screensaver_init()
+│       ├── setup callback: launcher_ui::init() / ui_screensaver_init() (lock screen)
 │       ├── lv_timer_handler() + semaphore wait
 │       └── teardown callback: launcher_ui::deinit()
 └── launcher_ui::init()
@@ -62,7 +62,7 @@ int main(void)
 
 1. runner が `lv_init()` と `cp0_lvgl_init()` を実行します。
 2. default display が存在することを確認した後、APPLaunch の setup callback を呼びます。
-3. setup は `launcher_ui::init()` と `ui_screensaver_init()` を実行します。`LV_EVENT_KEYBOARD` の登録はデバイス/SDL キーボード初期化側で行います。
+3. setup は `launcher_ui::init()` とロック画面用の `ui_screensaver_init()` を実行します。`LV_EVENT_KEYBOARD` の登録はデバイス/SDL キーボード初期化側で行います。
 4. runner が最初の invalidate/refresh を行い、`lv_timer_handler()` を駆動します。timer がない場合は semaphore、ある場合は期限付き wait を使います。
 5. 終了時は teardown 後に sudo/RPC/camera/audio/PTY/input/WiFi/LoRa/battery/LVGL を順序どおり停止します。
 
@@ -70,7 +70,9 @@ int main(void)
 
 上のコードは setup/teardown の抜粋です。実装では setup の前に
 `after_resource_init` が `cp0_signal_settings_api` でバックライト GPIO
-設定を要求し、その結果をログに記録します。
+設定を要求し、`launcher_media_controls::restore_startup_backlight()` で通常の輝度を復元し、その結果をログに記録します。
+
+削除されたのは画像が跳ね回るスクリーンセーバーだけで、ロック画面は残っています。`ui_screensaver_*` は既存の呼び出し元との互換性のために維持している名前です。Screen -> DarkTime は自動ロックまでの待機時間を設定し、TAB の 3 秒長押しでもロックできます。Never は自動ロックだけを無効にします。`launcher_ui::deinit()` は `ui_screensaver_deinit()` も呼び出します。
 
 `ui_init()` が戻った後、コードはすぐに次を実行します。
 
@@ -291,7 +293,7 @@ main()
 
 ## 8. External Application Foreground Handoff
 
-`Launch::launch_Exec()` は外部プロセスの実行前に screensaver foreground を下げ、入力 group を解除し、LVGL timer を停止します。その後 `cp0_signal_process_api({"ExecBlocking", ...})` を呼び、終了後に timer、ホーム入力 group、ホーム screen、foreground flag を復元します。フォアグラウンド切り替えはメインループの lock-file polling ではなく、この blocking 起動経路で完結します。
+`Launch::launch_Exec()` は外部プロセスの実行前に `ui_screensaver_set_foreground(0)` でロック画面を解除・停止し、入力 group を解除し、LVGL timer を停止します。その後 `cp0_signal_process_api({"ExecBlocking", ...})` を呼び、終了後に timer、ホーム入力 group、ホーム screen を復元し、`ui_screensaver_set_foreground(1)` で自動ロックの待機時間を再計測します。フォアグラウンド切り替えはメインループの lock-file polling ではなく、この blocking 起動経路で完結します。
 
 ## 9. Notes
 

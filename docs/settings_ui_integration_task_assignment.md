@@ -287,6 +287,8 @@
 
 ### T07：Screen/Backlight/DarkTime
 
+当前实现保留锁屏和 DarkTime，仅删除弹跳图片屏保。DarkTime 页面位于 APPLaunch 的 `main/ui/settings/settings_screen_timeout_page.*`，锁屏运行时仍使用 `ui_screensaver_*` 旧接口名；不能将其作为屏保残留删除。
+
 **主要文件范围**
 
 - `settings_brightness_page.hpp`
@@ -296,7 +298,7 @@
 **API 范围**
 
 - `BacklightRead`、`BacklightMax`、`BacklightWrite`。
-- DarkTime 复用旧配置键和 `config` API；键名、默认值和保存行为以旧实现为准。
+- DarkTime 使用 `dark_time` 配置键，默认 `30` 秒；`0` 仅关闭自动锁屏。
 - 配置写入使用 `GetInt`、`SetInt`、`Save`，不得只改内存状态。
 
 **重点任务**
@@ -304,7 +306,7 @@
 - 复用旧 `setup_value_policy` 的非负数、范围和默认值规则。
 - 处理设备 backlight 最大值不是 100 的情况，做好百分比与原始值换算。
 - 写入失败时回滚选中项。
-- DarkTime 的 Never/10S/30S/60S/300S 映射到旧配置值并保存。
+- DarkTime 的 Never/10S/30S/60S/300S 映射到 `0/10/30/60/300` 并保存，锁屏运行时读取该值；Never 下长按 TAB 3 秒仍能手动锁屏。
 
 ### T08：Camera Resolution
 

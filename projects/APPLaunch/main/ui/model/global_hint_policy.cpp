@@ -78,6 +78,9 @@ GlobalHintAction GlobalHintPolicy::action_for(const GlobalHintKeyInput &input) c
     if (!input.pressed)
         return GlobalHintAction::NONE;
 
+    if (input.key_code == KEY_F10 && input.shift && !input.control && !input.alt)
+        return GlobalHintAction::RESET_LCD;
+
     if (input.key_code == KEY_SYSRQ || input.key_code == KEY_PRINT ||
         (input.key_code == KEY_S && input.control && input.alt))
         return GlobalHintAction::TAKE_SCREENSHOT;

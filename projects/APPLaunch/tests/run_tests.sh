@@ -15,7 +15,6 @@ python3 "$test_root/test_settings_rtc_layout_contract.py"
 python3 "$test_root/test_preinstalled_app_packaging.py"
 python3 "$test_root/test_settings_storage_build_contract.py"
 python3 "$test_root/test_static_resource_staging.py"
-python3 "$test_root/test_screensaver_image_contract.py"
 python3 "$test_root/test_lockscreen_contract.py"
 python3 "$test_root/test_home_icon_fallback_contract.py"
 PYTHONPATH="$test_root/..${PYTHONPATH:+:$PYTHONPATH}" \

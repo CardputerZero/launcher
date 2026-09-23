@@ -57,6 +57,12 @@ private:
     void restore_actions() noexcept;
     SettingApiResult discard_and_leave();
     SettingApiResult begin_save();
+    SettingApiResult begin_save(bool allow_before_factory_time);
+    void show_factory_time_warning(const ActivationSink &sink);
+    void close_factory_time_warning() noexcept;
+    void resolve_factory_time_warning(bool confirm);
+    void handle_factory_time_warning_key(lv_event_t *event);
+    void handle_factory_time_warning_click(lv_event_t *event);
     void create_status_label();
     void set_error(const char *message);
     void clear_error();

@@ -17,6 +17,7 @@ enum class GlobalHintAction {
     VOLUME_DOWN,
     TOGGLE_MUTE,
     TAKE_SCREENSHOT,
+    RESET_LCD,
     SHOW_LOCK_HINT,
 };
 
@@ -27,6 +28,7 @@ struct GlobalHintKeyInput {
     bool repeated = false;
     bool control = false;
     bool alt = false;
+    bool shift = false;
 };
 
 class GlobalHintPolicy

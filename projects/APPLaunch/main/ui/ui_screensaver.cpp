@@ -19,12 +19,9 @@
 #include "model/lockscreen_state_model.hpp"
 #include "model/screensaver_model.hpp"
 #include "model/screensaver_runtime_contract.hpp"
-#include "screensaver_fallback.h"
-#include "sample_log.h"
 #include "ui_app_page.hpp"
 
 #include <algorithm>
-#include <cstdlib>
 #include <future>
 #include <string>
 #include <utility>
@@ -36,78 +33,6 @@ constexpr uint32_t kHoldPollMs = 100;
 constexpr uint32_t kExitAnimationMs = 350;
 /* Shown once the idle TAB hold matures past the model's hint delay. */
 constexpr const char *kHoldHintText = "Hold TAB for 3s to lock";
-
-class ScreensaverImageCache
-{
-public:
-    ScreensaverImageCache() = default;
-    ScreensaverImageCache(const ScreensaverImageCache &) = delete;
-    ScreensaverImageCache &operator=(const ScreensaverImageCache &) = delete;
-
-    bool load(const std::string &path)
-    {
-        if (loaded_ || fallback_active_ || path.empty()) return image() != nullptr;
-        if (decode_and_prepare(path)) {
-            loaded_ = true;
-            return true;
-        }
-
-        // Keep a valid image available after a decoder or filesystem failure.
-        // The embedded resource also prevents every screensaver activation from
-        // retrying the same broken file indefinitely.
-        fallback_active_ = true;
-        return true;
-    }
-
-    const lv_image_dsc_t *image() const
-    {
-        return (loaded_ || fallback_active_) ? &screensaver_fallback : nullptr;
-    }
-
-    bool using_fallback() const { return fallback_active_; }
-
-    void reset()
-    {
-        loaded_ = false;
-        fallback_active_ = false;
-    }
-
-private:
-    static bool decode_and_prepare(const std::string &path)
-    {
-        lv_image_decoder_dsc_t decoder{};
-        lv_image_decoder_args_t args{};
-        args.no_cache = true;
-        if (lv_image_decoder_open(&decoder, path.c_str(), &args) != LV_RESULT_OK)
-            return false;
-
-        const lv_draw_buf_t *source = decoder.decoded;
-        if (!source || source->header.w == 0 || source->header.h == 0 ||
-            source->header.cf != LV_COLOR_FORMAT_ARGB8888) {
-            lv_image_decoder_close(&decoder);
-            return false;
-        }
-
-        const uint32_t block_size = static_cast<uint32_t>(ScreensaverModel::block_size());
-        auto *output = reinterpret_cast<lv_color32_t *>(screensaver_fallback_map);
-        for (uint32_t y = 0; y < block_size; ++y) {
-            const uint32_t source_y = std::min<uint32_t>(
-                source->header.h - 1, y * source->header.h / block_size);
-            const auto *src = static_cast<const lv_color32_t *>(
-                lv_draw_buf_goto_xy(source, 0, source_y));
-            for (uint32_t x = 0; x < block_size; ++x) {
-                const uint32_t source_x = std::min<uint32_t>(
-                    source->header.w - 1, x * source->header.w / block_size);
-                output[y * block_size + x] = src[source_x];
-            }
-        }
-        lv_image_decoder_close(&decoder);
-        return true;
-    }
-
-    bool loaded_ = false;
-    bool fallback_active_ = false;
-};
 
 class LockscreenBackgroundCache
 {
@@ -153,23 +78,16 @@ private:
 };
 
 lv_obj_t *s_overlay = nullptr;
-lv_obj_t *s_block = nullptr;
 lv_obj_t *s_hint = nullptr;
 lv_timer_t *s_timer = nullptr;
 ScreensaverModel s_model;
 LockscreenStateModel s_lock;
 bool s_exiting = false;
 std::future<bool> s_audio_prepare_future;
-ScreensaverImageCache s_image_cache;
 LockscreenBackgroundCache s_background_cache;
 /* Raw backlight value captured when the panel is forced dark, or -1 while the
  * backlight is under normal control. */
 int s_screen_off_backlight_raw = -1;
-
-void set_block_image()
-{
-    lv_image_set_src(s_block, s_image_cache.image());
-}
 
 struct ScreensaverPanel
 {
@@ -403,32 +321,6 @@ void cancel_exit_animation() noexcept
     s_exiting = false;
 }
 
-void block_delete_cb(lv_event_t *event) noexcept
-{
-    try {
-        if (!event || !screensaver_delete_is_tracked(
-                lv_event_get_target(event), lv_event_get_current_target(event), s_block))
-            return;
-        s_block = nullptr;
-        s_exiting = false;
-        hide_hint();
-        if (s_overlay) lv_obj_add_flag(s_overlay, LV_OBJ_FLAG_HIDDEN);
-        s_model.deactivate();
-        release_screen_off_backlight();
-        update_timer_period();
-    } catch (...) {
-        s_block = nullptr;
-        s_exiting = false;
-        hide_hint();
-        release_screen_off_backlight();
-        update_timer_period();
-        try {
-            s_model.deactivate();
-        } catch (...) {
-        }
-    }
-}
-
 void overlay_delete_cb(lv_event_t *event) noexcept
 {
     try {
@@ -436,7 +328,6 @@ void overlay_delete_cb(lv_event_t *event) noexcept
                 lv_event_get_target(event), lv_event_get_current_target(event), s_overlay))
             return;
         s_overlay = nullptr;
-        s_block = nullptr;
         if (s_hint) lv_obj_delete(s_hint);
         s_hint = nullptr;
         s_exiting = false;
@@ -445,7 +336,6 @@ void overlay_delete_cb(lv_event_t *event) noexcept
         update_timer_period();
     } catch (...) {
         s_overlay = nullptr;
-        s_block = nullptr;
         if (s_hint) lv_obj_delete(s_hint);
         s_hint = nullptr;
         s_exiting = false;
@@ -492,15 +382,6 @@ void create_objects()
     if (!display)
         return;
 
-    if (!s_image_cache.image()) {
-        const std::string path = launcher_platform::path("screensaver.png");
-        if (!s_image_cache.load(path))
-            SLOGW("[SCREENSAVER] failed to cache image: %s", path.c_str());
-        else if (s_image_cache.using_fallback())
-            SLOGW("[SCREENSAVER] using embedded fallback image after decode failure: %s",
-                  path.c_str());
-    }
-
     if (!s_background_cache.image())
         s_background_cache.load(launcher_platform::path("lockscreen.png"));
 
@@ -534,22 +415,6 @@ void create_objects()
             lv_obj_add_flag(s_hint, LV_OBJ_FLAG_HIDDEN);
         }
     }
-    if (s_block) return;
-
-    s_block = lv_image_create(s_overlay);
-    if (!s_block) {
-        lv_obj_delete(s_overlay);
-        return;
-    }
-    lv_obj_add_event_cb(s_block, block_delete_cb, LV_EVENT_DELETE, nullptr);
-    lv_obj_remove_style_all(s_block);
-    lv_obj_set_size(s_block, ScreensaverModel::block_size(), ScreensaverModel::block_size());
-    set_block_image();
-    lv_obj_clear_flag(s_block, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_clear_flag(s_block, LV_OBJ_FLAG_SCROLLABLE);
-    /* This legacy icon stays hidden, but decoding it refreshes the shared
-     * fallback icon used by the home screen. The wallpaper has its own cache. */
-    lv_obj_add_flag(s_block, LV_OBJ_FLAG_HIDDEN);
 
     lv_obj_add_flag(s_overlay, LV_OBJ_FLAG_HIDDEN);
 }
@@ -609,12 +474,11 @@ void enter_lockscreen()
 
     cancel_exit_animation();
     apply_panel(panel);
-    if (s_block) lv_obj_add_flag(s_block, LV_OBJ_FLAG_HIDDEN);
     hide_hint();
     hide_hold_hint();
 
     const uint32_t now = lv_tick_get();
-    s_model.activate(panel.width, panel.height, now);
+    s_model.activate();
     s_lock.reset(now);
     launcher_battery_ui::refresh_visibility();
 
@@ -713,9 +577,7 @@ extern "C" void ui_screensaver_deinit(void)
     if (s_hint)
         lv_obj_delete(s_hint);
     s_overlay = nullptr;
-    s_block = nullptr;
     s_hint = nullptr;
-    s_image_cache.reset();
     s_background_cache.reset();
     s_model.reset(0);
     s_model.set_foreground(false, 0);

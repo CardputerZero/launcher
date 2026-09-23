@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "cp0_font_service.hpp"
+#include "cp0_enum_cast.h"
 
 namespace {
 
@@ -1249,6 +1250,9 @@ bool LvSettingWifiScanPage3::start_network_operation(NetworkOperation operation,
         state->password          = password;
         state->security          = security;
         state->generation        = ++generation_;
+        std::fprintf(stderr, "[wifi-connect] stage=ui-submit generation=%llu operation=%d hidden=%d\n",
+                     static_cast<unsigned long long>(state->generation),
+                     CP0_ENUM_CAST_INT(operation), origin == ConnectionOrigin::HiddenPasswordEntry);
         connection_state_        = state;
         connection_pending_      = true;
         password_ssid_           = ssid;
@@ -1351,26 +1355,6 @@ void LvSettingWifiScanPage3::stop_connection(){
         ++generation_;
     }
 
-void LvSettingWifiScanPage3::cancel_connection(){
-        if (!connection_pending_) return;
-        const bool hidden = connection_state_ && connection_state_->origin == ConnectionOrigin::HiddenPasswordEntry;
-        stop_connection();
-        if (hidden) {
-            clear_password();
-            password_error_ = "Connection cancelled";
-            view_           = View::HiddenSsid;
-            render();
-            return;
-        }
-        password_ssid_.clear();
-        password_security_.clear();
-        password_error_.clear();
-        view_ = View::List;
-        scan_error_.clear();
-        render();
-        start_scan();
-    }
-
 void LvSettingWifiScanPage3::process_connection_result(const ConnectionResult &result){
         if (!result.state) return;
         auto lifetime = result.state->lifetime.lock();
@@ -1389,6 +1373,12 @@ void LvSettingWifiScanPage3::process_connection_result(const ConnectionResult &r
             (!result.status_valid || !status_matches_network(result.status, state->ssid))) {
             operation_result = result.status_valid ? CP0_WIFI_ERROR_IP_CONFIG : CP0_WIFI_ERROR_SERVICE;
         }
+        std::fprintf(stderr,
+                     "[wifi-connect] stage=ui-result generation=%llu backend_rc=%d ui_rc=%d "
+                     "status_valid=%d connected=%d target_matches=%d\n",
+                     static_cast<unsigned long long>(state->generation), result.result, operation_result,
+                     result.status_valid, result.status.connected,
+                     status_matches_network(result.status, state->ssid));
 
         if (state->origin == ConnectionOrigin::HiddenPasswordEntry) {
             if (operation_result == 0) {
@@ -1534,7 +1524,6 @@ void LvSettingWifiScanPage3::keyboard_event_cb(lv_event_t *event){
 
         if (self->view_ == View::HiddenSsid) {
             if (self->connection_pending_) {
-                if (item->key_code == KEY_ESC) self->cancel_connection();
                 lv_event_stop_processing(event);
                 return;
             }
@@ -1780,9 +1769,7 @@ void LvSettingWifiScanPage3::handle_key_event(lv_event_t *event){
         }
 
         if (view_ == View::HiddenSsid) {
-            if (connection_pending_) {
-                if (key == LV_KEY_ESC) cancel_connection();
-            } else {
+            if (!connection_pending_) {
                 if (key == LV_KEY_ESC) {
                     leave_hidden_ssid_prompt();
                 } else if (key == LV_KEY_UP || key == LV_KEY_DOWN) {

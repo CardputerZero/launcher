@@ -6,6 +6,7 @@
 
 #include "cp0_lvgl_app_runner.hpp"
 #include "sample_log.h"
+#include "ui/launcher_media_controls.h"
 #include "ui/ui.h"
 #include "ui/ui_screensaver.h"
 
@@ -32,6 +33,10 @@ int main(void)
             else
                 SLOGE("[BOOT] failed to set m5ioe1 line 9 low: %s", data.c_str());
         });
+        if (launcher_media_controls::restore_startup_backlight())
+            SLOGI("[BOOT] restored working backlight brightness");
+        else
+            SLOGE("[BOOT] failed to restore working backlight brightness");
     };
     options.setup = []() {
         SLOGI("[BOOT] cp0_lvgl initialized");

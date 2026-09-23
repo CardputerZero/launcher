@@ -17,6 +17,10 @@ int adjust_volume(int delta_percent);
 int adjust_brightness(int delta_percent);
 bool toggle_mute();
 
+// Apply saved brightness at startup, defaulting to maximum for missing/invalid
+// values. Does not persist changes or reuse a screen-off hardware reading.
+bool restore_startup_backlight();
+
 /* Drive the panel backlight to zero without persisting anything, for the
  * screen-off gesture.  Returns the raw value to hand back to
  * restore_backlight(), or -1 when the backlight could not be suspended.  The

@@ -238,8 +238,6 @@ private:
 
     void stop_connection();
 
-    void cancel_connection();
-
     void process_connection_result(const ConnectionResult &result);
 
     void handle_dispatch_failures();

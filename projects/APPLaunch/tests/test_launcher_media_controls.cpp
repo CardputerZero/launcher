@@ -29,6 +29,9 @@ int configured_volume = 80;
 int backlight_maximum = 255;
 int backlight_value = 102;
 int configured_brightness = 102;
+bool brightness_config_missing = false;
+bool backlight_write_failed = false;
+int config_writes = 0;
 bool sink_muted = true;
 int mute_toggles = 0;
 std::vector<std::string> audio_commands;
@@ -75,9 +78,14 @@ int main()
             const std::string command = arguments.front();
             if (command == "GetInt") {
                 const std::string key = *std::next(arguments.begin());
+                if (key == "brightness" && brightness_config_missing) {
+                    reply(callback, 0, *std::next(arguments.begin(), 2));
+                    return;
+                }
                 reply(callback, 0, std::to_string(
                     key == "brightness" ? configured_brightness : configured_volume));
             } else if (command == "SetInt") {
+                ++config_writes;
                 assert(arguments.size() == 3);
                 const std::string key = *std::next(arguments.begin());
                 const int value = std::stoi(*std::next(arguments.begin(), 2));
@@ -104,6 +112,10 @@ int main()
                 reply(callback, 0, std::to_string(backlight_value));
             } else if (command == "BacklightWrite") {
                 assert(arguments.size() == 2);
+                if (backlight_write_failed) {
+                    reply(callback, -1, "write failed");
+                    return;
+                }
                 backlight_value = std::stoi(*std::next(arguments.begin()));
                 reply(callback, 0, std::to_string(backlight_value));
             } else {
@@ -194,5 +206,35 @@ int main()
     launcher_media_controls::restore_backlight(fallback);
     assert(backlight_value == fallback);
     assert(configured_brightness == 178);
+
+    // Restart after screen-off must restore the saved raw value, even when it
+    // comes from a legacy brightness level outside the current 10% steps.
+    const int previous_config_writes = config_writes;
+    configured_brightness = 64;
+    backlight_value = 0;
+    assert(launcher_media_controls::restore_startup_backlight());
+    assert(backlight_value == 64);
+    assert(configured_brightness == 64);
+
+    for (int saved : {0, -1, 999}) {
+        configured_brightness = saved;
+        backlight_value = 0;
+        assert(launcher_media_controls::restore_startup_backlight());
+        assert(backlight_value == backlight_maximum);
+        assert(configured_brightness == saved);
+    }
+    brightness_config_missing = true;
+    backlight_value = 0;
+    assert(launcher_media_controls::restore_startup_backlight());
+    assert(backlight_value == backlight_maximum);
+    brightness_config_missing = false;
+
+    backlight_write_failed = true;
+    backlight_value = 0;
+    assert(!launcher_media_controls::restore_startup_backlight());
+    assert(backlight_value == 0);
+    backlight_write_failed = false;
+    assert(config_writes == previous_config_writes);
+
     return 0;
 }

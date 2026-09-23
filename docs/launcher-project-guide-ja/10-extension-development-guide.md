@@ -190,7 +190,7 @@ projects/APPLaunch/APPLaunch/applications/vim.desktop.temple
 Name=Vim
 Exec=vim
 Terminal=true
-Icon=share/images/email.png
+Icon=share/images/cli_100.png
 Type=Application
 ```
 
@@ -364,7 +364,7 @@ cp0_signal_config_api({"GetInt", "my_option", "1"}, [](int code, std::string val
 値を選択する第 2 階層または第 3 階層ページについては、既存実装を参照してください。
 
 - `enter_brightness_adjust()`: 輝度選択。
-- `enter_darktime_adjust()`: 画面オフタイムアウト選択。
+- `main/ui/settings/settings_screen_timeout_page.*` の `LvSettingDarkTimePage3`: Screen -> DarkTime の選択、非同期設定保存、失敗時のロールバック。自動ロックは `ui_screensaver.cpp` が実行します。
 - `enter_volume_adjust()` と `apply_volume()`: 音量保存と適用。
 - `enter_camera_resolution()`: カメラ解像度。
 - `enter_startup_mode()`: 起動モード。

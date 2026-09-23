@@ -14,6 +14,15 @@
 
 namespace cp0::wifi {
 
+inline bool is_missing_key_management(const std::string &output)
+{
+    std::string lower = output;
+    std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    return lower.find("802-11-wireless-security.key-mgmt: property is missing") != std::string::npos;
+}
+
 inline int classify_command_failure(const std::string &output)
 {
     std::string lower = output;

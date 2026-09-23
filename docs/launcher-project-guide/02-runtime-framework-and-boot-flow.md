@@ -13,13 +13,14 @@ return cp0_lvgl_run(std::move(options));
 The setup callback performs only launcher work:
 
 1. Calls `launcher_ui::init()`.
-2. Initializes the screen saver.
+2. Calls `ui_screensaver_init()` for the lock screen. The API retains its legacy name; the bouncing-image screensaver has been removed.
 
 The device/SDL keyboard backend registers `LV_EVENT_KEYBOARD` during input
 initialization. Before setup, `after_resource_init` requests the backlight
-GPIO setting through `cp0_signal_settings_api`.
+GPIO setting through `cp0_signal_settings_api` and restores working brightness
+through `launcher_media_controls::restore_startup_backlight()`.
 
-The teardown callback calls `launcher_ui::deinit()`. Shared initialization and the LVGL run loop belong to `cp0_lvgl_app_runner.hpp` in the `cp0_lvgl` component.
+The teardown callback calls `launcher_ui::deinit()`, which also calls `ui_screensaver_deinit()`. Shared initialization and the LVGL run loop belong to `cp0_lvgl_app_runner.hpp` in the `cp0_lvgl` component.
 
 ## 2. Launcher UI Ownership
 
@@ -60,7 +61,7 @@ Fixed entries come from `builtin_app_registry.cpp`. Dynamic entries come from `d
 
 Internal pages are created as `std::shared_ptr<PageT>` and displayed with `cp0_lvgl_start_app_page()`. `LauncherPageLifecycleModel` rejects overlapping launches and home requests. Returning home is scheduled with `lv_async_call()` so the active event callback can finish before the page object is released.
 
-External applications use `cp0_signal_process_api({"ExecBlocking", ...})`. Before the blocking call, APPLaunch disables the screen saver foreground state, unbinds input, disables LVGL timers, and refreshes the display. After the child exits it restores timers, the home input group, the home screen, and foreground state.
+External applications use `cp0_signal_process_api({"ExecBlocking", ...})`. Before the blocking call, APPLaunch calls `ui_screensaver_set_foreground(0)` to clear and pause the lock screen, unbinds input, disables LVGL timers, and refreshes the display. After the child exits it restores timers, the home input group, and the home screen, then calls `ui_screensaver_set_foreground(1)` to restart the lock-screen idle interval.
 
 This coordination is implemented inside `Launch::launch_Exec()`; there is no separate polling function in the launcher main loop.
 

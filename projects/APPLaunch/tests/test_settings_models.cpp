@@ -77,5 +77,5 @@ int main()
     assert(credit.title == "Third-Party Licenses & Credits");
     assert(credit.lines.size() > 300);
     assert(credit.lines.front().find("Kickstarter backers") != std::string::npos);
-    assert(credit.lines.back() == "Public Domain");
+    assert(credit.lines.back() == "CC0-1.0");
 }

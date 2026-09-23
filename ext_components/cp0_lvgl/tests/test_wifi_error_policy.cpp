@@ -10,6 +10,13 @@
 
 int main()
 {
+    assert(cp0::wifi::is_missing_key_management(
+        "Error: Failed to modify connection: 802-11-wireless-security.key-mgmt: property is missing"));
+    assert(cp0::wifi::is_missing_key_management("802-11-wireless-security.key-mgmt: Property is missing"));
+    assert(!cp0::wifi::is_missing_key_management("802-11-wireless-security.key-mgmt: unsupported value"));
+    assert(!cp0::wifi::is_missing_key_management("802-11-wireless-security.psk: property is missing"));
+    assert(!cp0::wifi::is_missing_key_management("Authentication failed"));
+    assert(!cp0::wifi::is_missing_key_management("Timeout expired"));
     assert(cp0::wifi::classify_command_failure("Secrets were required") ==
            CP0_WIFI_ERROR_AUTH);
     assert(cp0::wifi::classify_command_failure("No network with SSID found") ==

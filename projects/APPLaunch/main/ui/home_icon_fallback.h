@@ -12,8 +12,8 @@
 extern "C" {
 #endif
 
-extern const lv_image_dsc_t screensaver_fallback;
-extern uint8_t screensaver_fallback_map[];
+extern const lv_image_dsc_t home_icon_fallback;
+extern uint8_t home_icon_fallback_map[];
 
 #ifdef __cplusplus
 }
