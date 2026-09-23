@@ -180,7 +180,14 @@ public:
                 {"nmcli", "-t", "--escape", "no", "-f", "UUID,TYPE,NAME", "con", "show"},
                 profiles_output, kScanCommandTimeoutMs) == 0) {
             for (const auto &profile : cp0::network::parse_connection_profiles(profiles_output)) {
-                if (profile.type == "802-11-wireless") saved_profiles.insert(profile.name);
+                if (profile.type != "802-11-wireless") continue;
+                std::string profile_ssid;
+                if (read_profile_ssid(profile.uuid, profile_ssid))
+                    saved_profiles.insert(profile_ssid);
+                else
+                    // Older or externally-created profiles may not expose the
+                    // SSID property. Keep the old name fallback in that case.
+                    saved_profiles.insert(profile.name);
             }
         }
 
@@ -378,13 +385,34 @@ public:
         int deleted = 0;
         std::string output;
         for (const auto &profile : cp0::network::parse_connection_profiles(profiles_output)) {
-            if (profile.type != "802-11-wireless" || profile.name != ssid) continue;
+            if (profile.type != "802-11-wireless") continue;
+            std::string profile_ssid;
+            const bool has_profile_ssid = read_profile_ssid(profile.uuid, profile_ssid);
+            if ((has_profile_ssid && profile_ssid != ssid) ||
+                (!has_profile_ssid && profile.name != ssid))
+                continue;
             const int delete_result = cp0_process_commands::capture_argv_with_timeout(
                 {"nmcli", "con", "delete", "uuid", profile.uuid}, output, 5000);
             if (delete_result != 0) return delete_result;
             ++deleted;
         }
         return deleted > 0 ? 0 : CP0_WIFI_ERROR_NOT_FOUND;
+    }
+
+    static bool read_profile_ssid(const std::string &uuid, std::string &ssid)
+    {
+        ssid.clear();
+        std::string output;
+        if (uuid.empty() || cp0_process_commands::capture_argv_with_timeout(
+                {"nmcli", "-t", "--escape", "no", "-g", "802-11-wireless.ssid",
+                 "con", "show", "uuid", uuid},
+                output, 5000) != 0)
+            return false;
+        while (!output.empty() && (output.back() == '\n' || output.back() == '\r'))
+            output.pop_back();
+        if (output.empty()) return false;
+        ssid = std::move(output);
+        return true;
     }
 
     int profile_exists(const char *ssid)
@@ -397,7 +425,10 @@ public:
                 output, 5000) != 0)
             return 0;
         for (const auto &profile : cp0::network::parse_connection_profiles(output)) {
-            if (profile.type == "802-11-wireless" && profile.name == ssid)
+            if (profile.type != "802-11-wireless") continue;
+            std::string profile_ssid;
+            if ((read_profile_ssid(profile.uuid, profile_ssid) && profile_ssid == ssid) ||
+                (profile_ssid.empty() && profile.name == ssid))
                 return 1;
         }
         return 0;
