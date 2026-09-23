@@ -208,7 +208,7 @@ static void test_hold_gesture_enters_lock()
     assert(!s_model.hold_pending());
     // Entering the lock clears the persistent announcement.
     assert(hold_hint_hides == 1);
-    assert(s_block && lv_obj_has_flag(s_block, LV_OBJ_FLAG_HIDDEN));
+    assert(lv_obj_get_child_count(s_overlay) == 0);
     assert(s_hint && lv_obj_has_flag(s_hint, LV_OBJ_FLAG_HIDDEN));
     assert_sound("lock.mp3");
 
@@ -261,7 +261,7 @@ static void test_screensaver_panel()
     assert(backlight_raw == 0 && backlight_suspends == 1);
     assert(s_screen_off_backlight_raw == 128);
     // No artwork is painted, and no frames are driven for a static panel.
-    assert(s_block && lv_obj_has_flag(s_block, LV_OBJ_FLAG_HIDDEN));
+    assert(lv_obj_get_child_count(s_overlay) == 0);
     assert(s_hint && lv_obj_has_flag(s_hint, LV_OBJ_FLAG_HIDDEN));
     assert_sound("lock.mp3");
 
@@ -310,11 +310,11 @@ static void test_screensaver_panel()
     key(KEY_TAB, KBD_KEY_RELEASED, true);
 
     // A key that is not the confirmation steps back to (2).
-    key(KEY_ESC, KBD_KEY_PRESSED, true);
+    key(KEY_TAB, KBD_KEY_PRESSED, true);
     assert(s_lock.state() == LockscreenState::PendingUnlock);
     assert(std::strcmp(lv_label_get_text(s_hint), "Press TAB to unlock") == 0);
     assert_sound("blocked.mp3");
-    key(KEY_ESC, KBD_KEY_RELEASED, true);
+    key(KEY_TAB, KBD_KEY_RELEASED, true);
 
     /* The 10 s timeout drops the visible state back to the black screen and puts
      * the backlight down again. */
@@ -338,8 +338,8 @@ static void test_screensaver_panel()
     key(KEY_ESC, KBD_KEY_RELEASED, true);
     advance(5000);
     ::timer_cb(s_timer);
-    key(KEY_ESC, KBD_KEY_PRESSED, true);
-    key(KEY_ESC, KBD_KEY_RELEASED, true);
+    key(KEY_ENTER, KBD_KEY_PRESSED, true);
+    key(KEY_ENTER, KBD_KEY_RELEASED, true);
     advance(9999);
     ::timer_cb(s_timer);
     assert(s_lock.state() == LockscreenState::PendingUnlock);

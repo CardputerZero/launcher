@@ -43,31 +43,15 @@ int main()
     assert(!model.should_activate(31000, 0, true));
     assert(!model.should_activate(31000, 30000, false));
 
-    ScreensaverFrame frame = model.activate(240, 135, 31000);
+    model.activate();
     assert(model.active());
-    assert(frame.x == 47);
-    assert(frame.y == 28);
-    assert(frame.color_index == 0);
-
-    frame = model.advance(240, 135, 31040);
-    assert(frame.x == 48);
-    assert(frame.y == 29);
-    assert(!frame.color_changed);
-
-    for (int index = 0; index < 200 && !frame.color_changed; ++index)
-        frame = model.advance(240, 135, 31080 + static_cast<uint32_t>(index) * 40);
-    assert(frame.color_changed);
-    assert(frame.color_index == 1);
+    assert(!model.should_activate(61000, 30000, true));
 
     // While the screensaver is up the model only records activity; the lock
     // screen owns every key, so nothing here clears the active flag.
     model.note_activity(40020);
     assert(model.last_activity_tick() == 40020);
     assert(model.active());
-
-    model.activate(10, 10, 50000);
-    frame = model.advance(10, 10, 50040);
-    assert(frame.x == 0 && frame.y == 0);
 
     model.set_foreground(false, 60000);
     assert(!model.foreground());
@@ -105,7 +89,7 @@ int main()
     assert(decision.fire && !decision.show_hint);
     // The threshold reports once per hold, and entering the lock clears it.
     assert(!hold.poll_hold(9000).fire);
-    hold.activate(240, 135, 5000);
+    hold.activate();
     assert(hold.active() && !hold.hold_pending() && !hold.hold_hint_visible());
 
     // A short tap never requests anything and never shows the hint.

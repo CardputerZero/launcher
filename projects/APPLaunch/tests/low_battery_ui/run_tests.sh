@@ -91,7 +91,7 @@ for name in cp0_keyboard_queue cp0_keyboard_text cp0_esc_state; do
     objects+=("$object")
     compile "$component/src/$name.c" "$object"
 done
-for name in model/screensaver_model.cpp screensaver_fallback.c \
+for name in model/screensaver_model.cpp \
             launcher_media_controls.cpp model/launcher_media_model.cpp \
             model/setup_value_policy.cpp; do
     object="$build_dir/ui/$name.o"

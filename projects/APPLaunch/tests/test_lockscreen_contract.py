@@ -100,8 +100,10 @@ assert "panel.black ? nullptr : s_background_cache.image()" in SOURCE
 assert "lv_anim_set_values(&animation, s_panel.y, -s_panel.height)" in SOURCE
 assert "release_screen_off_backlight();" in SOURCE
 
-# The legacy icon stays hidden and the wallpaper is static.
-assert "lv_obj_add_flag(s_block, LV_OBJ_FLAG_HIDDEN)" in SOURCE
+# The removed bouncing-image screensaver must not be loaded or recreated.
+assert "s_block" not in SOURCE
+assert "ScreensaverImageCache" not in SOURCE
+assert '"screensaver.png"' not in SOURCE
 assert "kAnimationFrameMs" not in SOURCE
 
 # The sounds ride the platform's system-sound player, which decodes each sound

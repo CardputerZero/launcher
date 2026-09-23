@@ -53,6 +53,18 @@ def test_screen_remains_the_initial_selection():
     assert "selected_index = 2;" not in SETTINGS_ROLLER
 
 
+def test_screen_keeps_lock_timeout_options():
+    builder = settings_tree_builder()
+    screen_entries = re.findall(
+        r'append_child\(\s*screen,\s*SettingEntry\{"([^"]+)"', builder
+    )
+    assert screen_entries == ["Brightness", "DarkTime"]
+    timeouts = re.findall(
+        r'append_child\(\s*dark_time,\s*SettingEntry\{"([^"]+)"', builder
+    )
+    assert timeouts == ["Never", "10S", "30S", "60S", "300S"]
+
+
 def test_volume_opens_the_volume_editor_directly():
     builder = settings_tree_builder()
     assert re.search(
@@ -135,6 +147,7 @@ def test_system_replaces_about_with_requested_entries():
 if __name__ == "__main__":
     test_root_menu_matches_product_order()
     test_screen_remains_the_initial_selection()
+    test_screen_keeps_lock_timeout_options()
     test_volume_opens_the_volume_editor_directly()
     test_wifi_menu_uses_product_labels_without_changing_actions()
     test_ethernet_is_a_submenu_with_enable_and_existing_info_page()
