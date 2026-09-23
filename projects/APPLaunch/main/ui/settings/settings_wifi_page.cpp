@@ -1355,26 +1355,6 @@ void LvSettingWifiScanPage3::stop_connection(){
         ++generation_;
     }
 
-void LvSettingWifiScanPage3::cancel_connection(){
-        if (!connection_pending_) return;
-        const bool hidden = connection_state_ && connection_state_->origin == ConnectionOrigin::HiddenPasswordEntry;
-        stop_connection();
-        if (hidden) {
-            clear_password();
-            password_error_ = "Connection cancelled";
-            view_           = View::HiddenSsid;
-            render();
-            return;
-        }
-        password_ssid_.clear();
-        password_security_.clear();
-        password_error_.clear();
-        view_ = View::List;
-        scan_error_.clear();
-        render();
-        start_scan();
-    }
-
 void LvSettingWifiScanPage3::process_connection_result(const ConnectionResult &result){
         if (!result.state) return;
         auto lifetime = result.state->lifetime.lock();
@@ -1544,7 +1524,6 @@ void LvSettingWifiScanPage3::keyboard_event_cb(lv_event_t *event){
 
         if (self->view_ == View::HiddenSsid) {
             if (self->connection_pending_) {
-                if (item->key_code == KEY_ESC) self->cancel_connection();
                 lv_event_stop_processing(event);
                 return;
             }
@@ -1790,9 +1769,7 @@ void LvSettingWifiScanPage3::handle_key_event(lv_event_t *event){
         }
 
         if (view_ == View::HiddenSsid) {
-            if (connection_pending_) {
-                if (key == LV_KEY_ESC) cancel_connection();
-            } else {
+            if (!connection_pending_) {
                 if (key == LV_KEY_ESC) {
                     leave_hidden_ssid_prompt();
                 } else if (key == LV_KEY_UP || key == LV_KEY_DOWN) {
