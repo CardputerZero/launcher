@@ -293,6 +293,35 @@ bool parse_timestamp_value(std::string_view timestamp, RtcStateModel::Values &va
         parse_fixed_decimal(timestamp.substr(17, 2), values[5]);
 }
 
+#define SETTINGS_RTC_STRINGIFY_IMPL(value) #value
+#define SETTINGS_RTC_STRINGIFY(value) SETTINGS_RTC_STRINGIFY_IMPL(value)
+
+std::string_view factory_build_date() noexcept
+{
+#ifdef LAUNCHER_BUILD_DATE
+    return LAUNCHER_BUILD_DATE;
+#elif defined(LAUNCHER_BUILD_DATE_RAW)
+    return SETTINGS_RTC_STRINGIFY(LAUNCHER_BUILD_DATE_RAW);
+#else
+    return {};
+#endif
+}
+
+bool timestamp_before_factory_date(std::string_view timestamp) noexcept
+{
+    const std::string_view build_date = factory_build_date();
+    if (timestamp.size() < 10 || build_date.size() != 10) return false;
+    if (build_date[4] != '-' || build_date[7] != '-') return false;
+    static constexpr std::size_t kDateDigitIndexes[] = {0, 1, 2, 3, 5, 6, 8, 9};
+    for (const std::size_t index : kDateDigitIndexes) {
+        if (build_date[index] < '0' || build_date[index] > '9') return false;
+    }
+    return timestamp.substr(0, 10) < build_date;
+}
+
+#undef SETTINGS_RTC_STRINGIFY
+#undef SETTINGS_RTC_STRINGIFY_IMPL
+
 } // namespace
 
 RtcConfirmAction RtcWriteConfirmModel::handle(RtcConfirmInput input) noexcept
@@ -1061,6 +1090,12 @@ struct LvSettingRtcConfirmPage3::Impl {
     std::function<void()> back_callback;
     std::vector<ActionBackup> actions;
     std::shared_ptr<RequestState> request_state;
+    LvSettingValuePage3Base::ActivationSink factory_warning_sink;
+    lv_obj_t *factory_warning_overlay = nullptr;
+    lv_obj_t *factory_warning_dialog = nullptr;
+    lv_obj_t *factory_warning_cancel = nullptr;
+    lv_obj_t *factory_warning_confirm = nullptr;
+    bool factory_warning_confirm_selected = false;
     lv_obj_t *status_label = nullptr;
     std::string last_error;
 
@@ -1262,11 +1297,22 @@ LvSettingRtcConfirmPage3::LvSettingRtcConfirmPage3(lv_obj_t *parent,
     LeaveSelfPage = [this] { leave_page(); };
     install_actions();
     initialize(parent);
+    if (ComponensObj) {
+        // PREPROCESS lets the warning own the key before the base value-page
+        // handler can move the page or activate the selected entry.
+        DComponens::lvgl_bind_event(
+            ComponensObj,
+            static_cast<lv_event_code_t>(static_cast<uint32_t>(LV_EVENT_KEY) |
+                                          static_cast<uint32_t>(LV_EVENT_PREPROCESS)),
+            nullptr,
+            [this](lv_event_t *event) { handle_factory_time_warning_key(event); });
+    }
     create_status_label();
 }
 
 LvSettingRtcConfirmPage3::~LvSettingRtcConfirmPage3()
 {
+    close_factory_time_warning();
     cancel_backend_request();
     cancel_async_tasks();
     restore_actions();
@@ -1317,7 +1363,195 @@ SettingApiResult LvSettingRtcConfirmPage3::discard_and_leave()
     return SettingApiResult::Success;
 }
 
+void LvSettingRtcConfirmPage3::show_factory_time_warning(const ActivationSink &sink)
+{
+    if (!ComponensObj || impl_->factory_warning_overlay) return;
+
+    impl_->factory_warning_sink = sink;
+    impl_->factory_warning_confirm_selected = false;
+    impl_->factory_warning_overlay = lv_obj_create(ComponensObj);
+    if (!impl_->factory_warning_overlay) return;
+
+    lv_obj_remove_style_all(impl_->factory_warning_overlay);
+    lv_obj_set_size(impl_->factory_warning_overlay,
+                    static_cast<int>(LayoutMetric::ScreenW),
+                    static_cast<int>(LayoutMetric::ScreenH));
+    lv_obj_set_pos(impl_->factory_warning_overlay, 0, 0);
+    lv_obj_set_style_bg_color(impl_->factory_warning_overlay, lv_color_black(), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(impl_->factory_warning_overlay, LV_OPA_70, LV_PART_MAIN);
+    lv_obj_clear_flag(impl_->factory_warning_overlay, LV_OBJ_FLAG_SCROLLABLE);
+
+    impl_->factory_warning_dialog = lv_msgbox_create(impl_->factory_warning_overlay);
+    if (!impl_->factory_warning_dialog) {
+        close_factory_time_warning();
+        return;
+    }
+    lv_obj_set_size(impl_->factory_warning_dialog, 280, 96);
+    lv_obj_center(impl_->factory_warning_dialog);
+    lv_obj_set_style_radius(impl_->factory_warning_dialog, 4, LV_PART_MAIN);
+    lv_obj_set_style_border_width(impl_->factory_warning_dialog, 1, LV_PART_MAIN);
+    lv_obj_set_style_border_color(impl_->factory_warning_dialog, lv_color_hex(0xFFAA00), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(impl_->factory_warning_dialog, lv_color_hex(0x171717), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(impl_->factory_warning_dialog, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(impl_->factory_warning_dialog, 0, LV_PART_MAIN);
+    lv_obj_clear_flag(impl_->factory_warning_dialog, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t *title = lv_msgbox_add_title(impl_->factory_warning_dialog, "Warning");
+    lv_obj_t *message = lv_msgbox_add_text(
+        impl_->factory_warning_dialog, "Can't set before factory time");
+    impl_->factory_warning_cancel =
+        lv_msgbox_add_footer_button(impl_->factory_warning_dialog, "Cancel");
+    impl_->factory_warning_confirm =
+        lv_msgbox_add_footer_button(impl_->factory_warning_dialog, "Confirm");
+
+    lv_obj_t *header = lv_msgbox_get_header(impl_->factory_warning_dialog);
+    lv_obj_t *content = lv_msgbox_get_content(impl_->factory_warning_dialog);
+    lv_obj_t *footer = lv_msgbox_get_footer(impl_->factory_warning_dialog);
+    if (header) {
+        lv_obj_set_height(header, 26);
+        lv_obj_set_style_bg_opa(header, LV_OPA_TRANSP, LV_PART_MAIN);
+        lv_obj_set_style_border_width(header, 0, LV_PART_MAIN);
+        lv_obj_set_style_pad_left(header, 12, LV_PART_MAIN);
+        lv_obj_set_style_pad_right(header, 12, LV_PART_MAIN);
+        lv_obj_set_style_pad_top(header, 0, LV_PART_MAIN);
+        lv_obj_set_style_pad_bottom(header, 0, LV_PART_MAIN);
+    }
+    if (title) {
+        lv_obj_set_style_text_color(title, lv_color_hex(0xFFAA00), LV_PART_MAIN);
+        lv_obj_set_style_text_font(
+            title, settings_fonts::sans(13, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN);
+    }
+    if (content) {
+        lv_obj_set_style_bg_opa(content, LV_OPA_TRANSP, LV_PART_MAIN);
+        lv_obj_set_style_border_width(content, 0, LV_PART_MAIN);
+        lv_obj_set_style_pad_left(content, 12, LV_PART_MAIN);
+        lv_obj_set_style_pad_right(content, 12, LV_PART_MAIN);
+        lv_obj_set_style_pad_top(content, 0, LV_PART_MAIN);
+        lv_obj_set_style_pad_bottom(content, 0, LV_PART_MAIN);
+    }
+    if (message) {
+        lv_obj_set_style_text_color(message, lv_color_hex(0xCCCCCC), LV_PART_MAIN);
+        lv_obj_set_style_text_font(message, settings_fonts::sans(12), LV_PART_MAIN);
+    }
+    if (footer) {
+        lv_obj_set_height(footer, 30);
+        lv_obj_set_style_bg_opa(footer, LV_OPA_TRANSP, LV_PART_MAIN);
+        lv_obj_set_style_border_width(footer, 0, LV_PART_MAIN);
+        lv_obj_set_style_pad_left(footer, 12, LV_PART_MAIN);
+        lv_obj_set_style_pad_right(footer, 12, LV_PART_MAIN);
+        lv_obj_set_style_pad_top(footer, 0, LV_PART_MAIN);
+        lv_obj_set_style_pad_bottom(footer, 0, LV_PART_MAIN);
+        lv_obj_set_flex_align(footer, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_CENTER,
+                              LV_FLEX_ALIGN_CENTER);
+    }
+
+    for (lv_obj_t *button : {impl_->factory_warning_cancel, impl_->factory_warning_confirm}) {
+        if (!button) continue;
+        lv_obj_set_height(button, 26);
+        lv_obj_set_style_pad_all(button, 0, LV_PART_MAIN);
+        lv_obj_t *label = lv_obj_get_child(button, 0);
+        if (label) lv_obj_set_style_text_font(label, settings_fonts::sans(12), LV_PART_MAIN);
+        if (lv_obj_get_group(button)) lv_group_remove_obj(button);
+        DComponens::lvgl_bind_event(
+            button, LV_EVENT_CLICKED, nullptr,
+            [this](lv_event_t *event) { handle_factory_time_warning_click(event); });
+    }
+
+    const auto style_button = [](lv_obj_t *button, bool selected) {
+        if (!button) return;
+        lv_obj_set_style_bg_color(button, lv_color_hex(selected ? 0x2878C8 : 0x333333), LV_PART_MAIN);
+        lv_obj_set_style_border_width(button, selected ? 2 : 0, LV_PART_MAIN);
+        lv_obj_set_style_border_color(button, lv_color_hex(0x8FCBFF), LV_PART_MAIN);
+    };
+    style_button(impl_->factory_warning_cancel, true);
+    style_button(impl_->factory_warning_confirm, false);
+
+    lv_obj_move_foreground(impl_->factory_warning_overlay);
+    if (lv_group_t *group = lv_obj_get_group(ComponensObj)) lv_group_focus_obj(ComponensObj);
+    lv_obj_update_layout(impl_->factory_warning_dialog);
+}
+
+void LvSettingRtcConfirmPage3::close_factory_time_warning() noexcept
+{
+    if (impl_->factory_warning_overlay) lv_obj_delete(impl_->factory_warning_overlay);
+    impl_->factory_warning_overlay = nullptr;
+    impl_->factory_warning_dialog = nullptr;
+    impl_->factory_warning_cancel = nullptr;
+    impl_->factory_warning_confirm = nullptr;
+    impl_->factory_warning_sink = {};
+    impl_->factory_warning_confirm_selected = false;
+}
+
+void LvSettingRtcConfirmPage3::resolve_factory_time_warning(bool confirm)
+{
+    if (!impl_->factory_warning_overlay) return;
+
+    const auto sink = impl_->factory_warning_sink;
+    close_factory_time_warning();
+    if (!sink.valid()) return;
+
+    if (!confirm) {
+        finish_activation(sink, SettingApiResult::Cancelled);
+        return;
+    }
+
+    // The warning is a deliberate confirmation step: Confirm acknowledges the
+    // older timestamp and continues through the normal privileged RTC write.
+    const SettingApiResult result = begin_save(true);
+    if (result != SettingApiResult::Pending) finish_activation(sink, result);
+}
+
+void LvSettingRtcConfirmPage3::handle_factory_time_warning_key(lv_event_t *event)
+{
+    if (!event || lv_event_get_code(event) != LV_EVENT_KEY ||
+        !impl_->factory_warning_overlay)
+        return;
+
+    const uint32_t key = lv_event_get_key(event);
+    if (key == LV_KEY_LEFT || key == LV_KEY_UP) {
+        impl_->factory_warning_confirm_selected = false;
+        if (impl_->factory_warning_cancel) {
+            lv_obj_set_style_bg_color(impl_->factory_warning_cancel, lv_color_hex(0x2878C8), LV_PART_MAIN);
+            lv_obj_set_style_border_width(impl_->factory_warning_cancel, 2, LV_PART_MAIN);
+        }
+        if (impl_->factory_warning_confirm) {
+            lv_obj_set_style_bg_color(impl_->factory_warning_confirm, lv_color_hex(0x333333), LV_PART_MAIN);
+            lv_obj_set_style_border_width(impl_->factory_warning_confirm, 0, LV_PART_MAIN);
+        }
+    } else if (key == LV_KEY_RIGHT || key == LV_KEY_DOWN) {
+        impl_->factory_warning_confirm_selected = true;
+        if (impl_->factory_warning_cancel) {
+            lv_obj_set_style_bg_color(impl_->factory_warning_cancel, lv_color_hex(0x333333), LV_PART_MAIN);
+            lv_obj_set_style_border_width(impl_->factory_warning_cancel, 0, LV_PART_MAIN);
+        }
+        if (impl_->factory_warning_confirm) {
+            lv_obj_set_style_bg_color(impl_->factory_warning_confirm, lv_color_hex(0x2878C8), LV_PART_MAIN);
+            lv_obj_set_style_border_width(impl_->factory_warning_confirm, 2, LV_PART_MAIN);
+        }
+    } else if (key == LV_KEY_ENTER) {
+        resolve_factory_time_warning(impl_->factory_warning_confirm_selected);
+    } else if (key == LV_KEY_ESC) {
+        resolve_factory_time_warning(false);
+    }
+    lv_event_stop_processing(event);
+}
+
+void LvSettingRtcConfirmPage3::handle_factory_time_warning_click(lv_event_t *event)
+{
+    if (!event || !impl_->factory_warning_overlay) return;
+    const lv_obj_t *target = lv_event_get_target(event);
+    if (target == impl_->factory_warning_cancel)
+        resolve_factory_time_warning(false);
+    else if (target == impl_->factory_warning_confirm)
+        resolve_factory_time_warning(true);
+}
+
 SettingApiResult LvSettingRtcConfirmPage3::begin_save()
+{
+    return begin_save(false);
+}
+
+SettingApiResult LvSettingRtcConfirmPage3::begin_save(bool allow_before_factory_time)
 {
     auto &workflow = settings_rtc::session();
     const auto eligibility = workflow.commit_eligibility();
@@ -1329,6 +1563,13 @@ SettingApiResult LvSettingRtcConfirmPage3::begin_save()
         set_error("No time changes to save");
         return SettingApiResult::Failure;
     }
+
+    const std::string timestamp = workflow.state().timestamp();
+    if (!allow_before_factory_time && setting::timestamp_before_factory_date(timestamp)) {
+        show_factory_time_warning(activation_sink());
+        return SettingApiResult::Pending;
+    }
+
     if (!workflow.begin_time_commit()) {
         set_error("RTC write is already pending");
         return SettingApiResult::Failure;
@@ -1337,7 +1578,6 @@ SettingApiResult LvSettingRtcConfirmPage3::begin_save()
     auto request = std::make_shared<Impl::RequestState>();
     impl_->request_state = request;
     const auto sink = activation_sink();
-    const std::string timestamp = workflow.state().timestamp();
     const int start_result = settings_rtc::set_time_async(
         timestamp,
         [sink, request](settings_rtc::PrivilegedResult result) {
