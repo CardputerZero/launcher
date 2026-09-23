@@ -1274,32 +1274,33 @@ bool LvSettingWifiScanPage3::start_network_operation(NetworkOperation operation,
                     WifiStatus status;
                     bool status_valid = false;
                     if (state->operation == NetworkOperation::Forget) {
-                        result = settings_wifi_com::profile_forget(state->ssid);
-                        // A profile can disappear between the scan and the D
-                        // key. Still disconnect the matching active Wi-Fi;
-                        // treating NOT_FOUND as a hard stop leaves stale state
-                        // on screen and skips the required refresh.
-                        if (result == 0 || result == CP0_WIFI_ERROR_NOT_FOUND) {
-                            const int forget_result = result;
-                            WifiStatus before_disconnect;
-                            const bool read_ok           = settings_wifi_com::read_status(before_disconnect) == 0;
-                            const bool should_disconnect = read_ok
-                                                               ? status_matches_network(before_disconnect, state->ssid)
-                                                               : state->disconnect_active;
-                            if (should_disconnect) {
-                                int disconnect_result = settings_wifi_com::profile_disconnect_active();
-                                if (disconnect_result != 0) {
-                                    WifiStatus after_disconnect;
-                                    if (settings_wifi_com::read_status(after_disconnect) == 0 &&
-                                        !after_disconnect.connected)
-                                        disconnect_result = 0;
-                                }
-                                if (disconnect_result != 0) {
-                                    result = disconnect_result;
-                                } else if (forget_result == CP0_WIFI_ERROR_NOT_FOUND) {
-                                    result = 0;
-                                }
+                        // Disconnect an active target before deleting its profile.
+                        // This avoids NetworkManager racing profile deletion with
+                        // the active connection teardown, especially for the last
+                        // remaining Wi-Fi profile.
+                        WifiStatus before_disconnect;
+                        const bool read_ok           = settings_wifi_com::read_status(before_disconnect) == 0;
+                        const bool should_disconnect = read_ok
+                                                           ? status_matches_network(before_disconnect, state->ssid)
+                                                           : state->disconnect_active;
+                        int disconnect_result = 0;
+                        if (should_disconnect) {
+                            disconnect_result = settings_wifi_com::profile_disconnect_active();
+                            if (disconnect_result != 0) {
+                                WifiStatus after_disconnect;
+                                if (settings_wifi_com::read_status(after_disconnect) == 0 &&
+                                    !after_disconnect.connected)
+                                    disconnect_result = 0;
                             }
+                        }
+                        if (disconnect_result != 0) {
+                            result = disconnect_result;
+                        } else {
+                            result = settings_wifi_com::profile_forget(state->ssid);
+                            // A profile can disappear between the scan and the D
+                            // key; that already satisfies the user's request.
+                            if (result == CP0_WIFI_ERROR_NOT_FOUND)
+                                result = 0;
                         }
                     } else if (state->origin == ConnectionOrigin::HiddenPasswordEntry) {
                         result = settings_wifi_com::connect_hidden(state->ssid, state->password);

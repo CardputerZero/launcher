@@ -56,9 +56,13 @@ int cp0_process_commands::capture_argv_with_timeout(
             commands.device = "wlan0:wifi:disconnected:--\n";
         return commands.disconnect_result;
     } else if (args == std::vector<std::string>{"nmcli", "-t", "--escape", "no", "-f", "UUID,TYPE,NAME", "con", "show"}) {
-        output = "test-uuid:802-11-wireless:NewNetwork\n"
+        output = "test-uuid:802-11-wireless:netplan-wlan0-NewNetwork\n"
                  "old-uuid:802-11-wireless:OldNetwork\n"
                  "wired-uuid:802-3-ethernet:Wired connection 1\n";
+    } else if (args == std::vector<std::string>{"nmcli", "-t", "--escape", "no", "-g", "802-11-wireless.ssid", "con", "show", "uuid", "test-uuid"}) {
+        output = "NewNetwork\n";
+    } else if (args == std::vector<std::string>{"nmcli", "-t", "--escape", "no", "-g", "802-11-wireless.ssid", "con", "show", "uuid", "old-uuid"}) {
+        output = "OldNetwork\n";
     } else if (args == std::vector<std::string>{"nmcli", "con", "delete", "uuid", "test-uuid"}) {
         ++commands.deletions;
         commands.operations.push_back("delete-target");
