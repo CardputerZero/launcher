@@ -41,6 +41,7 @@
 #include "model/global_hint_policy.hpp"
 
 #include <atomic>
+#include <cstdlib>
 
 #include "input_keys.h"
 
@@ -104,6 +105,7 @@ void on_key(const struct key_item *elm) noexcept
         elm->key_state == KBD_KEY_REPEATED,
         (elm->mods & KBD_MOD_CTRL) != 0,
         (elm->mods & KBD_MOD_ALT) != 0,
+        (elm->mods & KBD_MOD_SHIFT) != 0,
     });
 
     switch (action) {
@@ -128,6 +130,9 @@ void on_key(const struct key_item *elm) noexcept
         }
         case GlobalHintAction::TOGGLE_MUTE:
             launcher_media_osd().show_mute(launcher_media_controls::toggle_mute());
+            return;
+        case GlobalHintAction::RESET_LCD:
+            std::system("echo 1 > /sys/class/graphics/fb0/device/reset");
             return;
         case GlobalHintAction::TAKE_SCREENSHOT: {
             const std::string pictures_dir = launcher_platform::path("home_dir") + "/Pictures";

@@ -59,6 +59,18 @@ int main()
            GlobalHintAction::TAKE_SCREENSHOT);
     assert(policy.action_for({KEY_SYSRQ, "Print", false}) == GlobalHintAction::NONE);
 
+    assert(policy.action_for({KEY_F10, nullptr, true, false, false, false, true}) ==
+           GlobalHintAction::RESET_LCD);
+    assert(policy.action_for({KEY_F10, nullptr, true}) == GlobalHintAction::NONE);
+    assert(policy.action_for({KEY_F10, nullptr, false, true, false, false, true}) ==
+           GlobalHintAction::NONE);
+    assert(policy.action_for({KEY_F10, nullptr, false, false, false, false, true}) ==
+           GlobalHintAction::NONE);
+    assert(policy.action_for({KEY_F10, nullptr, true, false, true, false, true}) ==
+           GlobalHintAction::NONE);
+    assert(policy.action_for({KEY_F10, nullptr, true, false, false, true, true}) ==
+           GlobalHintAction::NONE);
+
     assert(policy.action_for({KEY_LEFTSHIFT, nullptr, true}) == GlobalHintAction::NONE);
     assert(policy.action_for({KEY_RIGHTSHIFT, nullptr, true}) == GlobalHintAction::NONE);
     assert(policy.action_for({KEY_COMPOSE, nullptr, true}) ==
