@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "cp0_font_service.hpp"
+#include "cp0_enum_cast.h"
 
 namespace {
 
@@ -1249,6 +1250,9 @@ bool LvSettingWifiScanPage3::start_network_operation(NetworkOperation operation,
         state->password          = password;
         state->security          = security;
         state->generation        = ++generation_;
+        std::fprintf(stderr, "[wifi-connect] stage=ui-submit generation=%llu operation=%d hidden=%d\n",
+                     static_cast<unsigned long long>(state->generation),
+                     CP0_ENUM_CAST_INT(operation), origin == ConnectionOrigin::HiddenPasswordEntry);
         connection_state_        = state;
         connection_pending_      = true;
         password_ssid_           = ssid;
@@ -1389,6 +1393,12 @@ void LvSettingWifiScanPage3::process_connection_result(const ConnectionResult &r
             (!result.status_valid || !status_matches_network(result.status, state->ssid))) {
             operation_result = result.status_valid ? CP0_WIFI_ERROR_IP_CONFIG : CP0_WIFI_ERROR_SERVICE;
         }
+        std::fprintf(stderr,
+                     "[wifi-connect] stage=ui-result generation=%llu backend_rc=%d ui_rc=%d "
+                     "status_valid=%d connected=%d target_matches=%d\n",
+                     static_cast<unsigned long long>(state->generation), result.result, operation_result,
+                     result.status_valid, result.status.connected,
+                     status_matches_network(result.status, state->ssid));
 
         if (state->origin == ConnectionOrigin::HiddenPasswordEntry) {
             if (operation_result == 0) {

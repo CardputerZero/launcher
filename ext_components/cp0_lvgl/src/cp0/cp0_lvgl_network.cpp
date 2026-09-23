@@ -20,6 +20,7 @@
 #include <cctype>
 #include <chrono>
 #include <condition_variable>
+#include <cstdio>
 #include <cstring>
 #include <functional>
 #include <list>
@@ -206,21 +207,60 @@ public:
 
     int connect(const char *ssid, const char *password, bool hidden = false)
     {
+        static std::atomic<unsigned long long> next_attempt{0};
+        const auto attempt = ++next_attempt;
+        const auto started = std::chrono::steady_clock::now();
+        const std::string secret = password ? password : "";
+        // Redact before escaping so even credentials echoed by nmcli stay private.
+        const auto log = [&](const char *stage, int result, std::string detail) {
+            if (!secret.empty()) {
+                for (std::size_t pos = 0; (pos = detail.find(secret, pos)) != std::string::npos;) {
+                    detail.replace(pos, secret.size(), "<redacted>");
+                    pos += sizeof("<redacted>") - 1;
+                }
+            }
+            std::string line;
+            for (const unsigned char ch : detail) {
+                if (ch == '\n') line += "\\n";
+                else if (ch == '\r') line += "\\r";
+                else if (ch < 0x20 || ch == 0x7f) line += '?';
+                else line += static_cast<char>(ch);
+            }
+            const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - started).count();
+            std::fprintf(stderr, "[wifi-connect] id=%llu stage=%s rc=%d elapsed_ms=%lld %s\n",
+                         attempt, stage, result, static_cast<long long>(elapsed), line.c_str());
+        };
+        const auto log_status = [&](const char *stage, const cp0_wifi_status_t &status) {
+            log(stage, 0, "connected=" + std::to_string(status.connected) +
+                " ssid=\"" + status.ssid + "\" ip=\"" + status.ip + "\"");
+        };
+        const auto finish = [&](int result) {
+            log("complete", result, "");
+            return result;
+        };
+        log("begin", 0, "target=\"" + std::string(ssid ? ssid : "") +
+            "\" hidden=" + std::to_string(hidden) + " password_supplied=" +
+            std::to_string(!secret.empty()));
         if (!ssid || !ssid[0])
-            return -1;
+            return finish(-1);
 
         update_status_cache();
         const cp0_wifi_status_t current_status = get_status();
+        log_status("before", current_status);
         if (current_status.connected && std::string(current_status.ssid) == ssid) {
             // A submitted password must be checked by a fresh activation.
+            log("disconnect-begin", 0, "same target already active");
             const int disconnect_result = disconnect();
+            log("disconnect-end", disconnect_result, "");
             if (disconnect_result != 0)
-                return disconnect_result;
+                return finish(disconnect_result);
             // Remove the active profile so NetworkManager cannot silently
             // reuse its previous credentials during the next activation.
             const int forget_result = profile_forget(ssid);
+            log("forget-before-connect", forget_result, "");
             if (forget_result != 0 && forget_result != CP0_WIFI_ERROR_NOT_FOUND)
-                return forget_result;
+                return finish(forget_result);
         }
 
         constexpr const char *kActivationTimeoutSeconds = "20";
@@ -228,15 +268,32 @@ public:
         std::string output;
         int command_result = -1;
         auto run_connect = [&](std::vector<std::string> args) {
-            return cp0_process_commands::capture_argv_with_timeout(
+            log("activate-begin", 0, "mode=" + args[3] + " nmcli_wait_s=20 process_timeout_ms=25000");
+            const auto command_started = std::chrono::steady_clock::now();
+            const int result = cp0_process_commands::capture_argv_with_timeout(
                 args, output, 25000);
+            const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - command_started).count();
+            log("activate-end", result, "command_ms=" + std::to_string(elapsed) +
+                " output=\"" + output + "\"");
+            return result;
         };
-        if (with_password && hidden) {
-            command_result = run_connect({"nmcli", "--wait", kActivationTimeoutSeconds,
-                "dev", "wifi", "connect", ssid, "password", password, "hidden", "yes"});
-        } else if (with_password) {
-            command_result = run_connect({"nmcli", "--wait", kActivationTimeoutSeconds,
-                "dev", "wifi", "connect", ssid, "password", password});
+        if (with_password) {
+            std::vector<std::string> args{"nmcli", "--wait", kActivationTimeoutSeconds,
+                "dev", "wifi", "connect", ssid, "password", password};
+            if (hidden) args.insert(args.end(), {"hidden", "yes"});
+            command_result = run_connect(args);
+            if (command_result != 0 && cp0::wifi::is_missing_key_management(output)) {
+                // nmcli may fail while updating an existing profile's security settings.
+                // Recreate it once, only when this request supplied fresh credentials.
+                log("recover-profile-begin", command_result, "missing key-mgmt; recreate target profile");
+                const int forget_result = profile_forget(ssid);
+                log("recover-profile-end", forget_result, "");
+                if (forget_result != 0 && forget_result != CP0_WIFI_ERROR_NOT_FOUND)
+                    return finish(forget_result);
+                log("retry", 0, "attempt=2 max_attempts=2");
+                command_result = run_connect(args);
+            }
         } else if (hidden) {
             command_result = run_connect({"nmcli", "--wait", kActivationTimeoutSeconds,
                 "dev", "wifi", "connect", ssid, "hidden", "yes"});
@@ -253,11 +310,21 @@ public:
         // still completing. Keep the IPv4 success requirement, but allow the
         // address a short time to appear before declaring the connection bad.
         if (command_result == 0) {
+            log("wait-ip-begin", 0, "timeout_ms=5000");
             const auto deadline = std::chrono::steady_clock::now() +
                                   std::chrono::seconds(5);
+            cp0_wifi_status_t previous{};
+            bool have_previous = false;
             for (;;) {
                 update_status_cache();
                 const cp0_wifi_status_t pending = get_status();
+                if (!have_previous || pending.connected != previous.connected ||
+                    std::strcmp(pending.ssid, previous.ssid) != 0 ||
+                    std::strcmp(pending.ip, previous.ip) != 0) {
+                    log_status("wait-ip-state", pending);
+                    previous = pending;
+                    have_previous = true;
+                }
                 if (pending.connected && std::string(pending.ssid) == ssid &&
                     pending.ip[0] != '\0')
                     break;
@@ -268,24 +335,27 @@ public:
         }
         update_status_cache();
         const cp0_wifi_status_t status = get_status();
+        log_status("after-activation", status);
         // NetworkManager may report an activated Wi-Fi link before DHCP has
         // completed. Treat that intermediate state as a failed connection so
         // callers never surface a connected screen without a usable address.
         const bool same_active_network =
             command_result == 0 && status.connected && std::string(status.ssid) == ssid;
         if (same_active_network && status.ip[0] != '\0')
-            return 0;
+            return finish(0);
 
         // Failed. When the user just entered a password, nmcli may have saved a
         // profile with that wrong password (named after the SSID). Delete it so the
         // password is never persisted and the next attempt must re-enter it (#69).
         if (with_password) {
-            profile_forget(ssid);
+            log("cleanup-begin", 0, "forget target profile after failed connection");
+            const int cleanup_result = profile_forget(ssid);
+            log("cleanup-end", cleanup_result, "");
         }
         if (same_active_network)
-            return CP0_WIFI_ERROR_IP_CONFIG;
-        if (command_result == -ETIMEDOUT) return CP0_WIFI_ERROR_TIMEOUT;
-        return cp0::wifi::classify_command_failure(output);
+            return finish(CP0_WIFI_ERROR_IP_CONFIG);
+        if (command_result == -ETIMEDOUT) return finish(CP0_WIFI_ERROR_TIMEOUT);
+        return finish(cp0::wifi::classify_command_failure(output));
     }
 
     int disconnect()
