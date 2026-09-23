@@ -294,7 +294,7 @@ cp0_signal_config_api({"Save"}, save_callback);
 | --- | --- | --- |
 | `brightness` | `UISetupPage`, `ext_components/cp0_lvgl/src/commount.cpp` | バックライト輝度値。起動時に復元され、設定ページから書き込まれる |
 | `volume` | `UISetupPage`, `commount.cpp` | システム音量。起動時に復元され、設定ページから書き込まれる |
-| `dark_time` | `UISetupPage` | 画面オフタイムアウト。選択肢は `0/10/30/60/300` 秒 |
+| `dark_time` | `settings_screen_timeout_page.*`, `ui_screensaver.cpp` | 自動ロックまでの待機時間：`0/10/30/60/300` 秒、既定値 `30`。`0` は自動ロックだけを無効にする |
 | `bt_named_only` | Bluetooth 設定 | 名前のある Bluetooth デバイスだけを表示するか。既定値は `1` |
 | `run_as_user` | `cp0_process_commands.cpp`, `cp0_sudo_async.cpp` | 外部プロセス / PTY コマンドで権限を下げる際のユーザー設定 |
 
@@ -314,7 +314,8 @@ cp0_signal_config_api({"Save"}, save_callback);
 
 - `menu_init()`: 各設定 controller を通じて設定メニューを構築します。
 - `launcher_app_registry_set_enabled()`: 設定可能な `app_*` を保存し、失敗時は以前の値を復元します。
-- `Screen::apply_value()`: 輝度と画面オフタイムアウトを適用、保存します。
+- `settings_brightness_com::write()`: 輝度を適用、保存します。
+- `settings_screen_timeout_page.cpp` の `settings_dark_time_com::write()`: `SetInt` と `Save` で `dark_time` を保存し、失敗時は以前の値に戻します。`ui_screensaver.cpp` が自動ロック用に読み取ります。Never でも TAB 長押しによる手動ロックは有効です。
 - `Speaker::apply_value()`: システム音量を書き込み、`volume` を保存します。
 - `Bluetooth::toggle_named_only()`: `bt_named_only` を保存します。
 

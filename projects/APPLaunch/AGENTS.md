@@ -160,62 +160,9 @@ the mapped key to LVGL, which can produce `LV_EVENT_KEY` and related widget
 events. Do not bind the same action to both paths unless ownership and duplicate
 suppression are explicit. Calling `lv_event_stop_processing()` in the custom
 callback stops only that event's propagation; it does not cancel the later
-native LVGL path. A key consumed by the screensaver filter is delivered to
-neither business path.
-
-The screensaver filter also observes one key it does not own: while idle it
-tracks the press and release of the long-press gesture that enters the lock and
-reports them as *not* consumed, so the page underneath keeps the short-press
-meaning of that key. The gesture is TAB held for 3000 ms; the model announces it
-with `Hold TAB for 3s to lock` on the shared launcher toast from its hint delay (500 ms)
-until the hold ends. Clear that toast on release, on a different key, and when
-the lock is entered or left. Once the gesture matures the lock takes every key over, and
-because only a fresh press changes lock state, the held key's repeats and its
-release cannot walk the machine. Do not make the idle observation path consume a
-key, and keep every observed press paired with its release.
-
-The screensaver panel is an `lv_layer_top()` overlay, not a page, and it is a lock
-screen. While it is up the lock owns every key, so page-level shortcuts never see
-them. The states live in `model/lockscreen_state_model.hpp`: (1) locked paints
-pure black over the whole display, (2) any fresh press shows the cached Lofoten
-wallpaper below the page's own top bar and asks for the next step, (3) TAB
-arms the unlock and ENTER confirms it. Any state with no input for 10 s falls back
-to (1), and any press restarts that countdown. Only a fresh press changes state —
-a repeat is activity and a release does nothing — which is what keeps the held TAB
-that entered the lock from walking the machine on its own release.
-
-Because (1) paints black itself, the black screen never depends on the backlight:
-the simulator, web and win32 backends accept `BacklightWrite 0` and dim nothing,
-so a panel that relied on it would be fully visible there. Driving the backlight
-down is a power optimisation, and the visible states restore it before showing the
-wallpaper. The 320x150 wallpaper starts at
-`AppPageRoot::kTopBarHeightPx`, which leaves the page's top bar visible. Unlocking
-slides the wallpaper away; idle lock states do not drive animation frames. Drive the
-exit animation from the stored panel rectangle instead of
-`lv_obj_get_height()`/`lv_obj_get_y()`: an object that has not been through a
-layout pass reports zero geometry, which silently skips the animation.
-
-The unlock hint is a black-backed yellow label covering the top bar's title,
-leaving its network, clock and battery visible. It is a sibling on `lv_layer_top()`
-so the wallpaper's bounds cannot clip it. Move it above the wallpaper on wake,
-hide it on sleep/exit, and delete it when the wallpaper overlay is deleted.
-Use `Press TAB to unlock` and `Press ENTER to unlock` for the two visible states.
-The supplied JPEG is packaged as `lockscreen.png` for the existing PNG
-decoder; own its decoded draw buffer until teardown and reuse it on every wake.
-
-The lock screen has four sounds under `share/audio/` (MP3, because the built-in
-decoders cover WAV/MP3/FLAC but not OGG): `lock.mp3` whenever the panel enters the
-black state, `select.mp3` when a press advances the lock, `blocked.mp3` when a
-press does neither — the model reports that as `blocked` — and `unlock.mp3` on the
-confirmation. They are registered once with `RegisterSystemSounds` and then played
-by name with `cp0_signal_system_play`, which puts them on the platform's
-system-sound player: it decodes each sound once, keeps the decoded PCM and a warm
-engine, and plays on its own worker thread. Do not route them through the
-unregistered per-file fallback — that re-opens the audio device on every play and
-swallows the start of a short sound while the sink settles — and do not hand-roll a
-second player. Registration appends after the platform's three indexed slots, so
-the launcher's startup/switch/enter sounds keep their indices, and the indexed
-`SystemSoundPlay` contract stays limited to 0..2.
+native LVGL path. The lock-screen filter runs before the configurable key filter,
+custom screen events, global shortcuts, and native keypad delivery. A key it
+consumes reaches none of those paths, including during the unlock animation.
 
 Text-entry and other custom-input modes should suppress the native group path
 while retaining `LV_EVENT_KEYBOARD`:
@@ -249,3 +196,52 @@ The implementation sources of truth are
 `ext_components/cp0_lvgl/src/sdl/sdl_lvgl_keyboard.c` for SDL builds, and
 `ext_components/cp0_lvgl/include/keyboard_input.h` for the custom event
 contract.
+
+## Lock Screen (Not the Removed Bouncing Screensaver)
+
+`ui_screensaver.*`, `model/screensaver_model.*`, and the `ui_screensaver_*`
+entry points retain their legacy names, but only implement the lock screen.
+Do not remove them or the keyboard backend hooks when cleaning up the removed
+bouncing-image screensaver. `home_icon_fallback.*` is an independent embedded
+home icon; the lock screen uses its own cached `share/images/lockscreen.png`.
+
+Initialize the lock screen after `launcher_ui::init()` and deinitialize it in
+`launcher_ui::deinit()`. `Launch::launch_Exec()` calls
+`ui_screensaver_set_foreground(0)` before handing off input/timers to an external
+process and `ui_screensaver_set_foreground(1)` after restoring home. This clears
+the lock and restarts the idle interval; it does not resume a previous lock state.
+
+`settings/settings_screen_timeout_page.*` implements Screen -> DarkTime.
+It reads and saves `dark_time` through `GetInt`, `SetInt`, and `Save`, with
+rollback on write/save failure. Never/10S/30S/60S/300S map to 0/10/30/60/300
+seconds. The default is 30 seconds; 0 disables automatic locking only.
+The lock-screen runtime reads this setting during its idle checks.
+
+While unlocked, the filter observes TAB without consuming its press/release,
+so the page retains the short-tap behavior. After 500 ms it shows the persistent
+`Hold TAB for 3s to lock` toast; at 3000 ms it enters the lock. Release, another
+key, or a lock transition clears the hold hint. Repeats must not restart the hold.
+
+`model/lockscreen_state_model.hpp` owns the three states: full-screen black,
+visible wallpaper waiting for TAB, and armed waiting for ENTER (or keypad ENTER).
+Only a fresh press changes state. Any fresh press wakes black to the wallpaper;
+TAB then arms and ENTER confirms. ESC from either visible state returns to black;
+another key in the armed state returns to waiting for TAB. Press/repeat activity
+resets the 10-second visible-state timeout; release does not. All lock-state
+events and the 350 ms exit animation consume keys. Low-battery UI remains hidden
+until `ui_screensaver_is_active()` becomes false, including that animation.
+
+The lock is an `lv_layer_top()` overlay, not a page. Paint the black state over
+the whole display even on backends whose backlight write is a no-op. Backlight
+suspension/restoration uses `launcher_media_controls` without persisting zero
+as the working brightness. The static wallpaper sits below the 20 px top bar;
+its black-backed yellow unlock hint is a top-layer sibling over the title.
+Cache and own the decoded wallpaper buffer until teardown. Animate exit using
+the stored panel rectangle, not potentially stale LVGL layout geometry.
+
+Keep `lock.mp3`, `select.mp3`, `blocked.mp3`, and `unlock.mp3` in `share/audio/`.
+Register them with `RegisterSystemSounds` and play them via
+`cp0_signal_system_play`, preserving the platform's startup/switch/enter slots.
+Use `lock` on entering black, `select` on advancing, `blocked` on invalid input,
+and `unlock` on confirmation. Lock entry suspends the system sound player;
+exit prepares it asynchronously and completes cleanup before exposing the working screen.

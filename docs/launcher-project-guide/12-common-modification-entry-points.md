@@ -13,7 +13,8 @@ Use this index to start from the current owner of each behavior.
 | Change application visibility | `main/ui/app_registry.*`, `main/ui/page_app/ui_app_setup*` | Toggle, reload, and restart preserve the setting |
 | Change `.desktop` discovery | `main/ui/desktop_app_loader.*`, `main/ui/app_directory_watcher.*` | Add, edit, and remove a desktop file |
 | Change internal page launch/return | `main/ui/launch.h`, `main/ui/launch.cpp` | Repeated Enter/ESC cannot overlap transitions |
-| Change external process handoff | `main/ui/launch.cpp`, shared process service | Timers, input, home, and screen saver recover after exit |
+| Change external process handoff | `main/ui/launch.cpp`, shared process service | Timers, input, home, and lock-screen idle timing recover after exit |
+| Change idle lock timeout | `main/ui/settings/settings_screen_timeout_page.*`, `main/ui/model/setup_value_policy.*`, `main/ui/ui_screensaver.cpp` | Screen -> DarkTime saves `dark_time`; Never disables automatic locking, not manual TAB hold |
 | Add an internal page | `main/ui/page_app/`, `main/ui/builtin_app_registry.cpp` | Build, open, interact, and return home |
 | Change standard page chrome | `ext_components/cp0_lvgl/include/ui_app_page.hpp`, `ext_components/cp0_lvgl/src/ui_app_page.cpp` | Title, status information, and input group remain correct |
 

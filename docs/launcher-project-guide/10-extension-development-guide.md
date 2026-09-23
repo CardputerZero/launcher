@@ -190,7 +190,7 @@ Minimal example:
 Name=Vim
 Exec=vim
 Terminal=true
-Icon=share/images/email.png
+Icon=share/images/cli_100.png
 Type=Application
 ```
 
@@ -364,7 +364,7 @@ cp0_signal_config_api({"GetInt", "my_option", "1"}, [](int code, std::string val
 For second-level or third-level pages that choose values, refer to these existing implementations:
 
 - `enter_brightness_adjust()`: brightness selection.
-- `enter_darktime_adjust()`: screen-off timeout selection.
+- `LvSettingDarkTimePage3` in `main/ui/settings/settings_screen_timeout_page.*`: Screen -> DarkTime selection, asynchronous configuration writes, and failure rollback; automatic idle locking is handled by `ui_screensaver.cpp`.
 - `enter_volume_adjust()` and `apply_volume()`: volume saving and application.
 - `enter_camera_resolution()`: camera resolution.
 - `enter_startup_mode()`: startup mode.

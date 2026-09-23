@@ -214,7 +214,7 @@ main/ui/page_app/
 main.cpp
 └── cp0_lvgl_run(options)
     ├── lv_init() / cp0_lvgl_init() / LVGL loop
-    ├── setup -> launcher_ui::init() / ui_screensaver_init()
+    ├── setup -> launcher_ui::init() / ui_screensaver_init() (lock screen)
     └── teardown -> launcher_ui::deinit()
 
 ui_init()

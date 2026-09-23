@@ -86,13 +86,13 @@ begin_page_launch()
 
 ```text
 home active
-  -> disable foreground screen saver behavior
+  -> ui_screensaver_set_foreground(0): clear and pause lock screen
   -> clear input group
   -> disable LVGL timers
   -> ExecBlocking
   -> restore timers and home input group
   -> show and refresh home
-  -> restore foreground state
+  -> ui_screensaver_set_foreground(1): restart lock-screen idle interval
 ```
 
 The root-retention flag is passed to the shared process service. ESC state is exchanged through the atomic `cp0_esc_state_*` C ABI rather than a shared variable address. Process execution details therefore belong to `cp0_lvgl`; APPLaunch owns only UI suspension and restoration.

@@ -104,7 +104,7 @@ Common configuration keys:
 - `app_Game`, `app_Math`, `app_File`, `app_Camera`, etc.: Launcher page visibility toggles.
 - `brightness`: brightness.
 - `volume`: volume.
-- `dark_time`: screen-off timeout.
+- `dark_time`: idle lock timeout, default `30` seconds; `0`/Never disables automatic locking, not the manual TAB hold. The lock screen remains; only the bouncing-image screensaver was removed.
 - `cam_resolution`: camera resolution.
 - `startup_mode`: startup mode.
 - `extport_usb`, `extport_5vout`: extension port settings.

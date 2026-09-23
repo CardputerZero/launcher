@@ -85,7 +85,7 @@ Name=Vim
 TryExec=vim
 Exec=vim
 Terminal=true
-Icon=share/images/email.png
+Icon=share/images/cli_100.png
 Type=Application
 ```
 
@@ -108,7 +108,7 @@ Name=MyScript
 Exec=/home/pi/my_script.sh
 Terminal=true
 Sysplause=false
-Icon=share/images/hack.png
+Icon=share/images/cli_100.png
 Type=Application
 ```
 
@@ -145,7 +145,7 @@ sudo tee /usr/share/APPLaunch/applications/myapp.desktop > /dev/null << 'EOF'
 Name=MyApp
 Exec=/home/pi/myapp
 Terminal=false
-Icon=share/images/email.png
+Icon=share/images/cli_100.png
 Type=Application
 EOF
 
@@ -217,7 +217,7 @@ Description: M5CardputerZero APPLaunch
 | `Section` | 分类，填 `APPLaunch` |
 
 > `WorkingDirectory=/usr/share/APPLaunch` 决定了 `.desktop` 文件中
-> 相对路径（如 `share/images/email.png`）的基准目录。
+> 相对路径（如 `share/images/cli_100.png`）的基准目录。
 
 #### `usr/share/APPLaunch/applications/<name>.desktop`
 
@@ -330,7 +330,7 @@ sudo tee /usr/share/APPLaunch/applications/myapp.desktop > /dev/null << 'EOF'
 Name=MyApp
 Exec=/home/pi/myapp
 Terminal=false
-Icon=share/images/email.png
+Icon=share/images/cli_100.png
 Type=Application
 EOF
 

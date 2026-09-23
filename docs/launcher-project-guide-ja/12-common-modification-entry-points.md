@@ -131,7 +131,7 @@ Type=Application
 | --- | --- | --- | --- |
 | App visibility toggle | SETTING -> Launcher | `AppDescriptor.config_key` | `ui_app_setup.hpp` の `save_app_toggle()`、`launch.cpp` の `launcher_app_registry_is_enabled()` |
 | Brightness | SETTING -> Screen -> Brightness | `brightness` | `ui_app_setup.hpp`, `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_settings.cpp` |
-| Screen-off timeout | SETTING -> Screen -> DarkTime | `dark_time` | `ui_app_setup.hpp` |
+| 自動ロック待機時間 | SETTING -> Screen -> DarkTime | `dark_time` | `settings/settings_screen_timeout_page.*`, `model/setup_value_policy.*`, `ui_screensaver.cpp`。Never は自動ロックだけを無効にする |
 | Volume | SETTING -> Speaker -> Volume | `volume` | `ui_app_setup.hpp`, `cp0_volume_read/write()` |
 | Camera resolution | SETTING -> Camera -> Resolution | `cam_resolution` | `ui_app_setup.hpp`。camera page が読み取る |
 | Startup mode | Settings page の関連選択 | `startup_mode` | `ui_app_setup.hpp` |

@@ -7,7 +7,7 @@
 #include "home_icon_buffer_pool.hpp"
 
 #include "lvgl/src/draw/lv_image_decoder_private.h"
-#include "screensaver_fallback.h"
+#include "home_icon_fallback.h"
 #include "sample_log.h"
 
 #include <algorithm>
@@ -98,7 +98,7 @@ void HomeIconBufferPool::rebuild(const std::vector<std::string> &icon_paths)
 const lv_image_dsc_t *HomeIconBufferPool::find(const std::string &path) const
 {
     const auto found = icons_.find(path);
-    return found == icons_.end() ? &screensaver_fallback : as_image(found->second);
+    return found == icons_.end() ? &home_icon_fallback : as_image(found->second);
 }
 
 const lv_image_dsc_t *HomeIconBufferPool::find(const std::string &path, uint32_t size)
@@ -108,7 +108,7 @@ const lv_image_dsc_t *HomeIconBufferPool::find(const std::string &path, uint32_t
 
     const auto found = icons_.find(path);
     if (found == icons_.end())
-        return &screensaver_fallback;
+        return &home_icon_fallback;
 
     const std::string key = path + "\n" + std::to_string(size);
     const auto resized = resized_icons_.find(key);

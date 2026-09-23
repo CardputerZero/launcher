@@ -105,8 +105,7 @@ class AppPageRoot
 {
 public:
     /** Height in pixels of the standard top bar region. Layout consumers that
-     *  must stay clear of the bar (such as the screensaver panel) use this
-     *  instead of repeating the value. */
+     *  must stay clear of the bar use this instead of repeating the value. */
     static constexpr int kTopBarHeightPx = 20;
 
     AppPageRoot();

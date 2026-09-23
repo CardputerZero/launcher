@@ -104,7 +104,7 @@ sudo cat /var/lib/applaunch/settings
 - `app_Game`, `app_Math`, `app_File`, `app_Camera` など: Launcher ページ表示トグル。
 - `brightness`: 輝度。
 - `volume`: 音量。
-- `dark_time`: 画面オフタイムアウト。
+- `dark_time`: 自動ロックまでの待機時間。既定値は `30` 秒。`0`/Never は自動ロックだけを無効にし、TAB 長押しは有効です。ロック画面は残り、画像が跳ね回るスクリーンセーバーだけが削除されました。
 - `cam_resolution`: カメラ解像度。
 - `startup_mode`: 起動モード。
 - `extport_usb`, `extport_5vout`: 拡張ポート設定。

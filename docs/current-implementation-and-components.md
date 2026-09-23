@@ -24,8 +24,19 @@ screen and application UI
 
 The main APPLaunch entry point is `projects/APPLaunch/main/src/main.cpp`. It
 creates `Cp0LvglRunOptions`, applies the backlight setting through the shared
-signal API, initializes `launcher_ui` and the screensaver, and delegates the
+signal API, restores working backlight brightness, initializes `launcher_ui`
+and the lock screen through `ui_screensaver_init()`, and delegates the
 main loop and teardown to `cp0_lvgl_run()`.
+
+The bouncing-image screensaver has been removed, but the lock screen remains.
+The legacy `ui_screensaver_*` API names now refer only to the lock screen.
+Settings -> Screen -> DarkTime controls its idle timeout (`0/10/30/60/300`
+seconds, default `30`); `0` disables automatic locking, not the manual TAB hold.
+Holding TAB for 3 seconds also locks. A fresh key press wakes the black screen,
+then TAB and ENTER unlock it. The wallpaper `lockscreen.png` and four lock
+sounds remain required assets. External process handoff pauses lock-screen
+activity and restarts the idle interval on return; UI teardown calls
+`ui_screensaver_deinit()`.
 
 `projects/APPLaunch/main/SConstruct` compiles `main/src`, `main/ui`, and
 `main/ui/settings`, generates `build/generated/include/generated/page_app.h`,
