@@ -7,6 +7,7 @@
 #pragma once
 
 #include "lvgl/lvgl.h"
+#include "keyboard_input.h"
 #include "zclaw_input_model.h"
 
 #include <string>
@@ -55,6 +56,10 @@ private:
     bool cursor_style_initialized_ = false;
     bool secret_ = false;
     bool secret_revealed_ = false;
+    bool input_context_saved_ = false;
+    cp0_keyboard_input_context_t previous_input_context_ =
+        KBD_INPUT_CONTEXT_NAVIGATION;
+    int previous_lvgl_keypad_intercept_ = 0;
     InputMode mode_ = InputMode::Chat;
 };
 
