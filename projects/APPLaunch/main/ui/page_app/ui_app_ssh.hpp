@@ -9,6 +9,7 @@
 #include "../model/async_operation_lifecycle.hpp"
 #include "../model/ssh_connection_model.hpp"
 #include "../model/ssh_view_build_contract.hpp"
+#include "keyboard_input.h"
 #include <memory>
 #include <string>
 
@@ -42,6 +43,9 @@ private:
     ViewState view_state_ = ViewState::INPUT;
     std::shared_ptr<UISTPage> terminal_page_;
     bool terminal_return_pending_ = false;
+    bool input_context_saved_ = false;
+    cp0_keyboard_input_context_t previous_input_context_ = KBD_INPUT_CONTEXT_NAVIGATION;
+    int previous_keypad_intercept_ = 0;
     setting::AsyncOperationLifecycle restore_operation_;
     setting::AsyncOperationLifecycle::Token restore_token_;
     std::string status_message_;
@@ -64,6 +68,8 @@ private:
     void set_status(std::string message, bool error);
 
     void restore_input_view();
+    void enter_text_input_mode();
+    void restore_text_input_mode();
 
     // ==================== event binding ====================
     void event_handler_init();

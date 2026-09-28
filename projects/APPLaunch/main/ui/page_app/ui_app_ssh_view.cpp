@@ -121,7 +121,10 @@ bool UISSHPage::build_help_view()
 void UISSHPage::show_help()
 {
     if (view_state_ != ViewState::INPUT) return;
-    if (build_help_view()) view_state_ = ViewState::HELP;
+    if (build_help_view()) {
+        restore_text_input_mode();
+        view_state_ = ViewState::HELP;
+    }
 }
 
 void UISSHPage::close_help()
@@ -129,6 +132,7 @@ void UISSHPage::close_help()
     if (view_state_ != ViewState::HELP) return;
     if (help_container_) lv_obj_delete(help_container_);
     view_state_ = ViewState::INPUT;
+    enter_text_input_mode();
 }
 
 bool UISSHPage::build_input_fields()
