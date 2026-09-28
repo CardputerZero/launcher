@@ -21,11 +21,15 @@ UISSHPage::UISSHPage() : AppPage()
     set_page_title("SSH");
     load_profile();
     create_ui();
-    if (root_screen_ && form_container_) event_handler_init();
+    if (root_screen_ && form_container_) {
+        event_handler_init();
+        enter_text_input_mode();
+    }
 }
 
 UISSHPage::~UISSHPage()
 {
+    restore_text_input_mode();
     restore_operation_.shutdown();
     detach_delete_callbacks();
     if (root_screen_)
@@ -109,6 +113,7 @@ void UISSHPage::do_connect()
     }
 
     view_state_ = ViewState::TERMINAL;
+    restore_text_input_mode();
     terminal_return_pending_ = false;
     lv_disp_load_scr(terminal_page_->screen());
     if (lv_indev_t *input = lv_indev_get_next(nullptr)) {
@@ -171,7 +176,27 @@ void UISSHPage::restore_input_view()
         terminal_page_->navigate_home = nullptr;
     terminal_page_.reset();
     view_state_ = ViewState::INPUT;
+    enter_text_input_mode();
     terminal_return_pending_ = false;
+}
+
+void UISSHPage::enter_text_input_mode()
+{
+    if (!input_context_saved_) {
+        previous_input_context_ = cp0_keyboard_get_input_context();
+        previous_keypad_intercept_ = cp0_keyboard_get_lvgl_keypad_intercept();
+        input_context_saved_ = true;
+    }
+    cp0_keyboard_set_input_context(KBD_INPUT_CONTEXT_TEXT);
+    cp0_keyboard_set_lvgl_keypad_intercept(1);
+}
+
+void UISSHPage::restore_text_input_mode()
+{
+    if (!input_context_saved_) return;
+    cp0_keyboard_set_input_context(previous_input_context_);
+    cp0_keyboard_set_lvgl_keypad_intercept(previous_keypad_intercept_);
+    input_context_saved_ = false;
 }
 
 void UISSHPage::event_handler_init()
@@ -206,6 +231,7 @@ void UISSHPage::event_handler(lv_event_t *event)
 {
     if (lv_event_get_code(event) == LV_EVENT_DELETE &&
         lv_event_get_target(event) == lv_event_get_current_target(event)) {
+        restore_text_input_mode();
         restore_operation_.shutdown();
         if (terminal_page_)
             terminal_page_->navigate_home = nullptr;
