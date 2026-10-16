@@ -6,11 +6,19 @@
 
 #pragma once
 
+#include <string>
+
 class Cp0AudioMixerControl
 {
 public:
     static bool parse_volume_line(const char *line, int &percent);
+    // "auto_null" is PipeWire's placeholder sink. A volume written to it is
+    // discarded when the real hardware sink appears, so callers that must
+    // reach the speaker have to tell the two apart.
+    static bool is_hardware_sink_name(const char *name);
     int read_volume() const;
+    // Empty when the default sink cannot be resolved.
+    std::string default_sink_name() const;
     int write_volume(int percent) const;
     int read_mute() const;
     int toggle_mute() const;

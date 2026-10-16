@@ -10,13 +10,15 @@
 #include "cp0_network_api_contract.hpp"
 #include "cp0_integer_codec.hpp"
 #include "cp0_sync_signal.hpp"
+#include "cp0/cp0_audio_mixer_control.hpp"
 #include "lvgl/lvgl.h"
 #include <algorithm>
-#include <cstdlib>
 #include <atomic>
-#include <thread>
-#include <string>
+#include <chrono>
 #include <cstdio>
+#include <cstdlib>
+#include <string>
+#include <thread>
 
 #define def_hal_fun(arg, name) eventpp::CallbackList<arg> name;
 #include "signal_register_plan.h"
@@ -137,11 +139,44 @@ static int config_get_int(const char *key, int default_val)
     return val;
 }
 
-static void saved_volume_write(int val)
+// The ES8389 card is probed by the kernel after userspace is already running,
+// and until it appears PipeWire exposes only its "auto_null" placeholder sink.
+// A volume written there is thrown away when the hardware sink is created, so
+// the write has to be repeated until a read-back shows it stuck on a real sink.
+// The deadline covers a cold boot, where the card can show up seconds later.
+// Retries run off the init thread: the display must not wait on the sound card.
+static void saved_volume_restore(int val)
 {
-    cp0::signal::invoke_noexcept([&] {
-        cp0_signal_audio_api({"VolumeWrite", std::to_string(val)}, nullptr);
-    });
+    std::thread([val] {
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(20);
+        const std::string requested = std::to_string(val);
+        for (;;) {
+            int written = -1;
+            cp0::signal::invoke_noexcept([&] {
+                cp0_signal_audio_api({"VolumeWrite", requested},
+                                     [&](int code, std::string data) {
+                                         int parsed = 0;
+                                         if (code == 0 &&
+                                             cp0_integer_codec::parse_int(data, parsed))
+                                             written = parsed;
+                                     });
+            });
+
+            std::string sink;
+            cp0::signal::invoke_noexcept([&] {
+                cp0_signal_audio_api({"DefaultSink"}, [&](int code, std::string data) {
+                    if (code == 0)
+                        sink = std::move(data);
+                });
+            });
+            if (written == val &&
+                Cp0AudioMixerControl::is_hardware_sink_name(sink.c_str()))
+                return;
+            if (std::chrono::steady_clock::now() >= deadline)
+                return;
+            std::this_thread::sleep_for(std::chrono::milliseconds(250));
+        }
+    }).detach();
 }
 
 static void saved_gpio_write(const char *name)
@@ -162,7 +197,7 @@ extern "C" void init_lvgl_saved_settings()
 
     int saved_vol = config_get_int("volume", -1);
     if (saved_vol >= 0)
-        saved_volume_write(saved_vol);
+        saved_volume_restore(saved_vol);
 
     saved_gpio_write("extport_usb");
     saved_gpio_write("extport_5vout");

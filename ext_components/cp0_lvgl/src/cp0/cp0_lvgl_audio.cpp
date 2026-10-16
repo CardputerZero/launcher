@@ -497,6 +497,13 @@ public:
         report(callback, val >= 0 ? 0 : -1, std::to_string(val));
     }
 
+    void DefaultSink(arg_t arg, callback_t callback)
+    {
+        (void)arg;
+        const std::string sink = mixer_.default_sink_name();
+        report(callback, sink.empty() ? -1 : 0, sink);
+    }
+
     void VolumeWrite(int val, callback_t callback)
     {
         int ret = mixer_.write_volume(val);
@@ -539,6 +546,7 @@ public:
             map_fun(CapFileSave),
             map_fun(SetCallback),
             map_fun(VolumeRead),
+            map_fun(DefaultSink),
             map_fun(MuteRead),
             map_fun(MuteToggle),
             map_fun(SetSystemSoundNames),

@@ -87,7 +87,7 @@ int cp0_file_read_first_line(const char *path, char *out, int out_size);
 - `cp0_signal_audio_cap(bool enable)`: 録音の開始/停止。
 - `cp0_signal_system_play(std::string name)`: システム音を名前で再生。追加名は `RegisterSystemSounds` で登録します。
 - `cp0_signal_audio_setup`: `{"set_callback"}`、`{"set_waveform"}` または `{"set_waveform","0"}`、`{"stop_play"}`。
-- `cp0_signal_audio_api`: `PlayFile path`、`Play asset`、`PlayPause`、`PlayContinue`、`PlayEnd`、`Cap`、`CapPause`、`CapContinue`、`CapEnd`、`CapFileSave path`、`SetCallback`、`VolumeRead`、`VolumeWrite 0..100`、`MuteRead`、`MuteToggle`、`SetSystemSoundNames [最大3名]`、`RegisterSystemSounds [1..32名]`、`SystemSoundPlay 0..2`、`SystemSoundSuspend`、`SystemSoundPrepare`、`SystemSoundEnable [0/1 または on/off]`。`Play` は区切り文字のない名前を resource として解決し、`PlayFile` は指定パスを使います。
+- `cp0_signal_audio_api`: `PlayFile path`、`Play asset`、`PlayPause`、`PlayContinue`、`PlayEnd`、`Cap`、`CapPause`、`CapContinue`、`CapEnd`、`CapFileSave path`、`SetCallback`、`VolumeRead`、`VolumeWrite 0..100`、`DefaultSink`、`MuteRead`、`MuteToggle`、`SetSystemSoundNames [最大3名]`、`RegisterSystemSounds [1..32名]`、`SystemSoundPlay 0..2`、`SystemSoundSuspend`、`SystemSoundPrepare`、`SystemSoundEnable [0/1 または on/off]`。`Play` は区切り文字のない名前を resource として解決し、`PlayFile` は指定パスを使います。
 
 ### PTY
 

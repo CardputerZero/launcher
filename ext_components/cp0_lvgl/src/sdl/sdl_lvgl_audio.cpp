@@ -90,6 +90,7 @@ public:
             map_fun(CapFileSave),
             map_fun(SetCallback),
             map_fun(VolumeRead),
+            map_fun(DefaultSink),
             map_fun(MuteRead),
             map_fun(MuteToggle),
             map_fun(SetSystemSoundNames),
@@ -319,6 +320,12 @@ private:
     {
         (void)arg;
         report(callback, 0, std::to_string(volume_));
+    }
+
+    void DefaultSink(arg_t arg, callback_t callback)
+    {
+        (void)arg;
+        report(callback, 0, "sdl-sink");
     }
 
     void VolumeWrite(int value, callback_t callback)
