@@ -7,11 +7,13 @@
 #include "ui_launch_page.h"
 
 #include "animation/launcher_carousel_layout.h"
+#include "animation/ui_launcher_animation.h"
 #include "cp0_enum_cast.h"
 #include "launcher_platform.hpp"
 
 #include <algorithm>
 #include <cstdint>
+#include <cstring>
 #include <string>
 
 namespace {
@@ -126,16 +128,18 @@ lv_obj_t *create_carousel_title(lv_obj_t *parent, const Slot &slot,
 {
     lv_obj_t *title = lv_label_create(parent);
     if (!title) return nullptr;
-    lv_obj_set_size(title, width, LV_SIZE_CONTENT);
+    lv_obj_set_width(title, width);
+    lv_obj_set_height(title, LV_SIZE_CONTENT);
     lv_obj_set_pos(title, slot.x, slot.y);
     lv_obj_set_align(title, LV_ALIGN_CENTER);
-    lv_label_set_long_mode(title, LV_LABEL_LONG_SCROLL_CIRCULAR);
     lv_label_set_text(title, text);
     lv_obj_set_style_text_align(title, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_font(
         title,
         launcher_fonts().get("Montserrat-Bold.ttf", 16, LV_FREETYPE_FONT_STYLE_BOLD),
         LV_PART_MAIN | LV_STATE_DEFAULT);
+    // Font first: DOT needs a one-line height, which comes from the font.
+    launcher_home_animation::apply_title_overflow(title, false);
     lv_obj_set_style_text_color(title, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(title, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_DEFAULT);
     if (slot.hidden)
@@ -249,8 +253,14 @@ void UILaunchPage::update_carousel_slot(size_t slot, const char *title, const st
 void UILaunchPage::update_carousel_item(lv_obj_t *panel, lv_obj_t *label,
                                         const char *title, const std::string &icon)
 {
-    if (label)
-        lv_label_set_text(label, title ? title : "");
+    if (label) {
+        const char *next = title ? title : "";
+        const char *current = lv_label_get_text(label);
+        // DOT mode rewrites the widget text with "...". Only restart the
+        // selected bounce when the source name itself changed.
+        if (!current || std::strcmp(current, next) != 0)
+            lv_label_set_text(label, next);
+    }
     set_panel_icon(panel, icon);
 }
 
@@ -335,6 +345,7 @@ void UILaunchPage::create_app_container(lv_obj_t *parent)
         lv_obj_add_event_cb(element, on_owned_obj_deleted, LV_EVENT_DELETE, this);
     lv_obj_add_event_cb(left_arrow_button_, on_owned_obj_deleted, LV_EVENT_DELETE, this);
     lv_obj_add_event_cb(right_arrow_button_, on_owned_obj_deleted, LV_EVENT_DELETE, this);
+    launcher_home_animation::apply_title_overflow(carousel_elements_[kTitleCenter], true);
     if (!home_key_registered_ && screen()) {
         lv_obj_add_event_cb(screen(), on_home_key, (lv_event_code_t)LV_EVENT_KEYBOARD, this);
         home_key_registered_ = true;
