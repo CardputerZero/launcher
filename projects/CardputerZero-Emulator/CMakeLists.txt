@@ -311,6 +311,9 @@ endif()
 if(APPLE OR (UNIX AND NOT EMSCRIPTEN))
     set_target_properties(cardputer-zero-emu PROPERTIES ENABLE_EXPORTS ON)
 endif()
+if(APPLE)
+    target_link_libraries(cardputer-zero-emu PRIVATE util)
+endif()
 # The SDL keyboard implementation depends on Linux headers (linux/input.h).
 # Some MinGW/MSYS environments report UNIX-like properties even when the
 # target compiler is Windows, so use the system name as an additional guard.
