@@ -20,7 +20,7 @@
 #include "lvgl/src/drivers/sdl/lv_sdl_private.h"
 #include "lvgl/src/drivers/sdl/lv_sdl_window.h"
 
-#include <linux/input.h>
+#include "input_keys.h"
 #include <stdint.h>
 #include <stdatomic.h>
 #include <stdio.h>
