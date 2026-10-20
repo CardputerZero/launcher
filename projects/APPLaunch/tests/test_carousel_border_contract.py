@@ -8,6 +8,10 @@ SOURCE = (
     Path(__file__).resolve().parents[1]
     / "main/ui/ui_launch_page_carousel_view.cpp"
 ).read_text(encoding="utf-8")
+ANIMATION = (
+    Path(__file__).resolve().parents[1]
+    / "main/ui/animation/ui_launcher_animation.cpp"
+).read_text(encoding="utf-8")
 HEADER = (
     Path(__file__).resolve().parents[1]
     / "main/ui/ui_launch_page.h"
@@ -82,6 +86,26 @@ def test_icon_scale_rounds_up_during_carousel_animation():
     assert "compensate_image_scale(obj);" in animation
 
 
+def test_selected_title_bounces_and_inactive_titles_use_dots():
+    factory_start = SOURCE.index("lv_obj_t *create_carousel_title")
+    factory_end = SOURCE.index("lv_obj_t *create_carousel_arrow", factory_start)
+    factory = SOURCE[factory_start:factory_end]
+    assert "apply_title_overflow(title, false)" in factory
+    assert "LV_LABEL_LONG_SCROLL_CIRCULAR" not in factory
+    assert "LV_LABEL_LONG_SCROLL_CIRCULAR" not in LAUNCH_PAGE
+
+    assert "kTitleScrollPauseMs = 2000" in ANIMATION
+    assert "lv_anim_set_delay(&anim, kTitleScrollPauseMs)" in ANIMATION
+    assert "lv_anim_set_reverse_delay(&anim, kTitleScrollPauseMs)" in ANIMATION
+    assert "lv_anim_set_repeat_delay(&anim, kTitleScrollPauseMs)" in ANIMATION
+    assert "selected ? LV_LABEL_LONG_SCROLL : LV_LABEL_LONG_DOT" in ANIMATION
+    assert "lv_obj_set_height(label, line)" in ANIMATION
+    assert "apply_title_overflow(carousel_elements_[kTitleCenter], true)" in SOURCE
+    assert LAUNCH_PAGE.count("apply_title_overflow(label(kCardCenter), true)") == 3
+    assert LAUNCH_PAGE.count(
+        "apply_title_overflow(carousel_elements_[i], i == kTitleCenter)") == 1
+
+
 def test_carousel_refresh_clears_slots_when_the_app_list_is_empty():
     refresh_start = LAUNCH_PAGE.index("void UILaunchPage::refresh_carousel()")
     refresh_end = LAUNCH_PAGE.index("void UILaunchPage::reload_home_icons", refresh_start)
@@ -102,4 +126,5 @@ if __name__ == "__main__":
     test_icon_pool_rebuilds_with_the_app_list()
     test_icons_are_clipped_by_their_card_content_geometry()
     test_icon_scale_rounds_up_during_carousel_animation()
+    test_selected_title_bounces_and_inactive_titles_use_dots()
     test_carousel_refresh_clears_slots_when_the_app_list_is_empty()

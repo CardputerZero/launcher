@@ -84,7 +84,9 @@ static void snap_label_to_slot(lv_obj_t *label, int slot)
     // Label slots are 5..9; corresponding card slots are 0..4.
     const int card_w = kSlots[slot - launcher_carousel_layout::kTitleOffset].width;
     lv_obj_set_width(label, card_w > 0 ? card_w : LV_SIZE_CONTENT);
-    lv_label_set_long_mode(label, LV_LABEL_LONG_SCROLL_CIRCULAR);
+    // Width follows the destination slot immediately, but the bounce belongs
+    // to whichever widget ends up selected after the carousel rotates.
+    launcher_home_animation::apply_title_overflow(label, false);
     lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN | LV_STATE_DEFAULT);
 
     if (layout.hidden)
@@ -314,6 +316,7 @@ void UILaunchPage::refresh_carousel()
         else
             update_carousel_slot(slot, "", {});
     }
+    launcher_home_animation::apply_title_overflow(label(kCardCenter), true);
 }
 
 void UILaunchPage::reload_home_icons(const std::vector<std::string> &icon_paths)
@@ -351,7 +354,8 @@ void UILaunchPage::finish_switch_animation()
     for (size_t i = launcher_carousel_layout::kTitleOffset;
          i < launcher_carousel_layout::kElementCount; ++i)
     {
-        snap_label_to_slot(carousel_elements_[i], i);
+        snap_label_to_slot(carousel_elements_[i], static_cast<int>(i));
+        launcher_home_animation::apply_title_overflow(carousel_elements_[i], i == kTitleCenter);
     }
 
     navigation_.finish_navigation();
@@ -416,6 +420,7 @@ void UILaunchPage::switch_right()
     set_carousel_element_clickable(kCardCenter, true);
 
     rotate_carousel_right(5, 9);
+    launcher_home_animation::apply_title_overflow(label(kCardCenter), true);
 
     set_page_slider_position(launch_ ? launch_->current_app_index() : 0);
 }
@@ -456,6 +461,7 @@ void UILaunchPage::switch_left()
     set_carousel_element_clickable(kCardCenter, true);
 
     rotate_carousel_left(5, 9);
+    launcher_home_animation::apply_title_overflow(label(kCardCenter), true);
 
     set_page_slider_position(launch_ ? launch_->current_app_index() : 0);
 }

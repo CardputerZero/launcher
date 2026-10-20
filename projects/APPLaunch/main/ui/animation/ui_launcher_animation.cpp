@@ -203,4 +203,47 @@ void animate_left(lv_obj_t **items, ReadyCallback ready_cb, AliveCallback alive_
     launcher_home_animate(items, false, std::move(ready_cb), std::move(alive_cb));
 }
 
+namespace {
+
+// Hold at each end before LONG_SCROLL moves left, then back right.
+// LVGL only waits LV_LABEL_SCROLL_DELAY (300ms) unless this template is set.
+constexpr uint32_t kTitleScrollPauseMs = 2000;
+
+const lv_anim_t *title_scroll_anim()
+{
+    static lv_anim_t anim;
+    static bool ready = false;
+    if (!ready) {
+        lv_anim_init(&anim);
+        lv_anim_set_delay(&anim, kTitleScrollPauseMs);
+        lv_anim_set_reverse_delay(&anim, kTitleScrollPauseMs);
+        lv_anim_set_repeat_delay(&anim, kTitleScrollPauseMs);
+        lv_anim_set_repeat_count(&anim, LV_ANIM_REPEAT_INFINITE);
+        ready = true;
+    }
+    return &anim;
+}
+
+} // namespace
+
+void apply_title_overflow(lv_obj_t *label, bool selected)
+{
+    if (!label) return;
+    // DOT only replaces overflow when the text is taller than the label.
+    // A content-sized label grows instead, so a long name wraps onto line 2
+    // and the dots never appear. Keep every title to one font line.
+    const lv_font_t *font = lv_obj_get_style_text_font(label, LV_PART_MAIN);
+    const int32_t line = font ? lv_font_get_line_height(font) : 0;
+    if (line > 0 && lv_obj_get_height(label) != line)
+        lv_obj_set_height(label, line);
+
+    const auto mode = selected ? LV_LABEL_LONG_SCROLL : LV_LABEL_LONG_DOT;
+    if (selected && lv_obj_get_style_anim(label, LV_PART_MAIN) != title_scroll_anim())
+        lv_obj_set_style_anim(label, title_scroll_anim(), LV_PART_MAIN);
+    // Reapplying the mode restarts the hold. Skip it when the label already
+    // has the right mode so a refresh does not interrupt the bounce.
+    if (lv_label_get_long_mode(label) != mode)
+        lv_label_set_long_mode(label, mode);
+}
+
 } // namespace launcher_home_animation
