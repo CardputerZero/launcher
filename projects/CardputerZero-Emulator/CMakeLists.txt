@@ -8,6 +8,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
+include(CTest)
 
 # Paths — same repo, sibling projects
 set(REPO_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../..)
@@ -106,6 +107,14 @@ endif()
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/lib/lvgl ${CMAKE_CURRENT_BINARY_DIR}/lvgl)
+
+# The native cp0 backend supplies the SDL keyboard entry points on Darwin.
+# ld64 rejects duplicate definitions rather than selecting one as ELF does.
+if(APPLE AND NOT EMSCRIPTEN)
+    get_target_property(LVGL_SRCS lvgl SOURCES)
+    list(FILTER LVGL_SRCS EXCLUDE REGEX ".*/src/drivers/sdl/lv_sdl_keyboard\\.c$")
+    set_property(TARGET lvgl PROPERTY SOURCES ${LVGL_SRCS})
+endif()
 
 file(GLOB APPLAUNCH_LVGL_FREETYPE_SRCS CONFIGURE_DEPENDS
     ${APPLAUNCH_LVGL_OVERRIDE}/lv_freetype*.c
@@ -313,6 +322,8 @@ if(APPLE OR (UNIX AND NOT EMSCRIPTEN))
 endif()
 if(APPLE)
     target_link_libraries(cardputer-zero-emu PRIVATE util)
+    target_sources(cardputer-zero-emu PRIVATE ${CP0_LVGL_SDL_SRCS})
+    target_compile_definitions(cardputer-zero-emu PRIVATE HAL_PLATFORM_SDL=1)
 endif()
 # The SDL keyboard implementation depends on Linux headers (linux/input.h).
 # Some MinGW/MSYS environments report UNIX-like properties even when the
@@ -438,6 +449,24 @@ if(TARGET APPLaunch)
         COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:APPLaunch> ${CMAKE_CURRENT_BINARY_DIR}/apps/
         COMMENT "Copying APPLaunch"
     )
+endif()
+
+if(APPLE AND BUILD_TESTING AND TARGET APPLaunch)
+    target_compile_definitions(cardputer-zero-emu PRIVATE EMU_ENABLE_INPUT_TESTS=1)
+    add_test(NAME emulator-macos-runtime
+        COMMAND ${CMAKE_COMMAND} -E env
+            SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy
+            EMU_TEST_CLICK_FRAME=10 EMU_TEST_NAVIGATE_FRAME=20
+            EMU_TEST_RESET_FRAME=40 EMU_TEST_QUIT_FRAME=60
+            $<TARGET_FILE:cardputer-zero-emu>)
+    add_test(NAME emulator-macos-lock-screen
+        COMMAND ${CMAKE_COMMAND} -E env
+            SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy
+            EMU_TEST_LOCK_FRAME=10 EMU_TEST_QUIT_FRAME=850
+            $<TARGET_FILE:cardputer-zero-emu>)
+    set_tests_properties(emulator-macos-runtime emulator-macos-lock-screen PROPERTIES
+        WORKING_DIRECTORY $<TARGET_FILE_DIR:cardputer-zero-emu>
+        TIMEOUT 30)
 endif()
 
 endif() # NOT EMSCRIPTEN
