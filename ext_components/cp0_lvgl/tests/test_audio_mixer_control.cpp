@@ -26,6 +26,8 @@ int main()
     assert(!Cp0AudioMixerControl::is_hardware_sink_name(""));
     // PipeWire's placeholder sink; volume written here never reaches the speaker.
     assert(!Cp0AudioMixerControl::is_hardware_sink_name("auto_null"));
+    // pipewire-pulse reports this special name while no sink exists.
+    assert(!Cp0AudioMixerControl::is_hardware_sink_name("@DEFAULT_SINK@"));
     assert(Cp0AudioMixerControl::is_hardware_sink_name(
         "alsa_output.platform-sound.stereo-fallback"));
 }

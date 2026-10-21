@@ -139,29 +139,25 @@ static int config_get_int(const char *key, int default_val)
     return val;
 }
 
-// The ES8389 card is probed by the kernel after userspace is already running,
-// and until it appears PipeWire exposes only its "auto_null" placeholder sink.
-// A volume written there is thrown away when the hardware sink is created, so
-// the write has to be repeated until a read-back shows it stuck on a real sink.
-// The deadline covers a cold boot, where the card can show up seconds later.
+// PipeWire starts alongside the launcher, so at boot the speaker sink may not
+// exist yet or may still sit behind the "auto_null" placeholder, whose volume
+// is thrown away when the hardware sink is created. Once the sink appears,
+// WirePlumber also reapplies the volume it stored for the speaker port, which
+// can land after an early write. So the saved volume is rewritten until it
+// reads back from a hardware sink and has held there for the settle period.
+// The saved value is re-read on every pass so a change made in the UI wins.
+// The deadline covers a cold boot, where the sink can show up seconds later.
 // Retries run off the init thread: the display must not wait on the sound card.
 static void saved_volume_restore(int val)
 {
     std::thread([val] {
-        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(20);
-        const std::string requested = std::to_string(val);
-        for (;;) {
-            int written = -1;
-            cp0::signal::invoke_noexcept([&] {
-                cp0_signal_audio_api({"VolumeWrite", requested},
-                                     [&](int code, std::string data) {
-                                         int parsed = 0;
-                                         if (code == 0 &&
-                                             cp0_integer_codec::parse_int(data, parsed))
-                                             written = parsed;
-                                     });
-            });
-
+        using clock = std::chrono::steady_clock;
+        const auto deadline = clock::now() + std::chrono::seconds(20);
+        const auto settle = std::chrono::seconds(2);
+        int target = val;
+        bool holding = false;
+        clock::time_point holding_since{};
+        while (clock::now() < deadline) {
             std::string sink;
             cp0::signal::invoke_noexcept([&] {
                 cp0_signal_audio_api({"DefaultSink"}, [&](int code, std::string data) {
@@ -169,11 +165,35 @@ static void saved_volume_restore(int val)
                         sink = std::move(data);
                 });
             });
-            if (written == val &&
-                Cp0AudioMixerControl::is_hardware_sink_name(sink.c_str()))
-                return;
-            if (std::chrono::steady_clock::now() >= deadline)
-                return;
+
+            if (!Cp0AudioMixerControl::is_hardware_sink_name(sink.c_str())) {
+                holding = false;
+            } else {
+                const int saved = config_get_int("volume", target);
+                if (saved >= 0)
+                    target = saved;
+
+                int current = -1;
+                cp0::signal::invoke_noexcept([&] {
+                    cp0_signal_audio_api({"VolumeRead"}, [&](int code, std::string data) {
+                        int parsed = 0;
+                        if (code == 0 && cp0_integer_codec::parse_int(data, parsed))
+                            current = parsed;
+                    });
+                });
+
+                if (current != target) {
+                    holding = false;
+                    cp0::signal::invoke_noexcept([&] {
+                        cp0_signal_audio_api({"VolumeWrite", std::to_string(target)}, nullptr);
+                    });
+                } else if (!holding) {
+                    holding = true;
+                    holding_since = clock::now();
+                } else if (clock::now() - holding_since >= settle) {
+                    return;
+                }
+            }
             std::this_thread::sleep_for(std::chrono::milliseconds(250));
         }
     }).detach();
