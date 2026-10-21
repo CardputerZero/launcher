@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstring>
 #include <string>
 
 class Cp0AudioMixerControl
@@ -15,7 +16,15 @@ public:
     // "auto_null" is PipeWire's placeholder sink. A volume written to it is
     // discarded when the real hardware sink appears, so callers that must
     // reach the speaker have to tell the two apart.
-    static bool is_hardware_sink_name(const char *name);
+    // Defined inline because shared callers such as commount.cpp are also built
+    // by the emulator and AppStore targets, which do not compile the pactl
+    // implementation in cp0_audio_mixer_control.cpp.
+    static bool is_hardware_sink_name(const char *name)
+    {
+        if (!name || !name[0])
+            return false;
+        return std::strcmp(name, "auto_null") != 0;
+    }
     int read_volume() const;
     // Empty when the default sink cannot be resolved.
     std::string default_sink_name() const;

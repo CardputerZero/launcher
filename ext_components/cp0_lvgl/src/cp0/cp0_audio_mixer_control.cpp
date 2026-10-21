@@ -36,16 +36,6 @@ bool Cp0AudioMixerControl::parse_volume_line(const char *line, int &percent)
     return true;
 }
 
-bool Cp0AudioMixerControl::is_hardware_sink_name(const char *name)
-{
-    if (!name || !name[0])
-        return false;
-    // PipeWire inserts this null sink while no playback device exists and
-    // removes it again once the hardware sink is created. Volume stored on it
-    // does not move to the hardware sink.
-    return std::strcmp(name, "auto_null") != 0;
-}
-
 std::string Cp0AudioMixerControl::default_sink_name() const
 {
     FILE *pipe = popen("pactl get-default-sink 2>/dev/null", "r");
