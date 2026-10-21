@@ -121,20 +121,11 @@ static float g_dpi_scale = 1.0f;  // renderer_pixels / window_points
 
 static int g_side_pr = -1;  // pressed side key index
 
-// Convert mouse window coords → skin coords (1280x840)
+// SDL_RenderSetLogicalSize translates mouse events into skin coordinates.
 static void mouse_to_skin(int mx, int my, int *sx, int *sy)
 {
-    int rw, rh;
-    SDL_GetRendererOutputSize(g_ren, &rw, &rh);
-    *sx = mx * SKIN_W / (rw > 0 ? rw : SKIN_W);
-    *sy = my * SKIN_H / (rh > 0 ? rh : SKIN_H);
-    // On Retina: rw=1280, mouse is in 640 logical → sx = mx*1280/1280 wrong
-    // Actually SDL mouse coords are always in window logical points
-    // We need: sx = mx * SKIN_W / window_w
-    int ww, wh;
-    SDL_GetWindowSize(g_win, &ww, &wh);
-    *sx = mx * SKIN_W / (ww > 0 ? ww : 1);
-    *sy = my * SKIN_H / (wh > 0 ? wh : 1);
+    *sx = mx;
+    *sy = my;
 }
 
 static bool hit_key(int mx, int my, int *r, int *c)
