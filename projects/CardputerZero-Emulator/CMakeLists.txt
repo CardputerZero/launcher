@@ -8,6 +8,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
+include(CTest)
 
 # Paths — same repo, sibling projects
 set(REPO_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../..)
@@ -311,6 +312,9 @@ endif()
 if(APPLE OR (UNIX AND NOT EMSCRIPTEN))
     set_target_properties(cardputer-zero-emu PROPERTIES ENABLE_EXPORTS ON)
 endif()
+if(APPLE)
+    target_link_libraries(cardputer-zero-emu PRIVATE util)
+endif()
 # The SDL keyboard implementation depends on Linux headers (linux/input.h).
 # Some MinGW/MSYS environments report UNIX-like properties even when the
 # target compiler is Windows, so use the system name as an additional guard.
@@ -435,6 +439,17 @@ if(TARGET APPLaunch)
         COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:APPLaunch> ${CMAKE_CURRENT_BINARY_DIR}/apps/
         COMMENT "Copying APPLaunch"
     )
+endif()
+
+if(BUILD_TESTING AND NOT WIN32)
+    add_executable(emulator-app-input-filter-test
+        tests/test_app_input_filter.cpp ${APPLAUNCH_EMU_ENTRY})
+    target_include_directories(emulator-app-input-filter-test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/lib
+        ${CP0_LVGL}/include
+        ${APPLAUNCH}/ui)
+    add_test(NAME emulator-app-input-filter COMMAND emulator-app-input-filter-test)
 endif()
 
 endif() # NOT EMSCRIPTEN

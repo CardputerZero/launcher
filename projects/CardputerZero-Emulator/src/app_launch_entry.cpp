@@ -14,10 +14,11 @@ cp0_keyboard_key_filter_t previous_key_filter;
 
 int app_key_filter(const struct key_item *item)
 {
-    // Keep the lock screen ahead of the app's other input consumers. Calling
-    // it from this library also avoids the host's weak stub on Darwin.
+    // Darwin's two-level namespace binds this call to the app's definition.
+    // This shim is Apple-only: the host's weak symbol can preempt it on ELF.
     const int consumed = ui_screensaver_filter_key(item);
-    return consumed ? consumed : previous_key_filter ? previous_key_filter(item) : 0;
+    if (consumed) return consumed;
+    return previous_key_filter ? previous_key_filter(item) : 0;
 }
 }
 #endif
@@ -42,7 +43,10 @@ extern "C" void ui_init(void)
 extern "C" void ui_deinit(void)
 {
 #if defined(__APPLE__)
-    // Restore the app's filter before its teardown removes that filter.
+    // Unwind in reverse installation order. launcher_ui::init() installed the
+    // low-battery filter before this shim. Restore it first, then let
+    // launcher_ui::deinit() -> shutdown_warning() restore its predecessor.
+    // A filter installed by another owner must remain untouched by both guards.
     if (cp0_keyboard_get_key_filter() == app_key_filter)
         cp0_keyboard_set_key_filter(previous_key_filter);
     previous_key_filter = nullptr;

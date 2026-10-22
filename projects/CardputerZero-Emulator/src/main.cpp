@@ -5,7 +5,6 @@
  */
 
 #include "lvgl/lvgl.h"
-#include "keyboard_input.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #include <cstdio>
@@ -117,26 +116,16 @@ static uint32_t     *g_lcd_buf = nullptr;
 typedef void (*sdl_kbd_handler_fn)(SDL_Event *);
 typedef void *(*sdl_kbd_create_fn)(void);
 static sdl_kbd_handler_fn g_kbd_handler = nullptr;
-static cp0_keyboard_key_filter_t g_app_key_filter = nullptr;
 
 static float g_dpi_scale = 1.0f;  // renderer_pixels / window_points
 
 static int g_side_pr = -1;  // pressed side key index
 
-// Convert mouse window coords → skin coords (1280x840)
+// SDL_RenderSetLogicalSize translates mouse events into skin coordinates.
 static void mouse_to_skin(int mx, int my, int *sx, int *sy)
 {
-    int rw, rh;
-    SDL_GetRendererOutputSize(g_ren, &rw, &rh);
-    *sx = mx * SKIN_W / (rw > 0 ? rw : SKIN_W);
-    *sy = my * SKIN_H / (rh > 0 ? rh : SKIN_H);
-    // On Retina: rw=1280, mouse is in 640 logical → sx = mx*1280/1280 wrong
-    // Actually SDL mouse coords are always in window logical points
-    // We need: sx = mx * SKIN_W / window_w
-    int ww, wh;
-    SDL_GetWindowSize(g_win, &ww, &wh);
-    *sx = mx * SKIN_W / (ww > 0 ? ww : 1);
-    *sy = my * SKIN_H / (wh > 0 ? wh : 1);
+    *sx = mx;
+    *sy = my;
 }
 
 static bool hit_key(int mx, int my, int *r, int *c)
@@ -459,8 +448,6 @@ int main(int argc, char *argv[])
     if (!app) { fprintf(stderr, "[EMU] dlopen: %s\n", emu_dlerror()); return 1; }
     printf("[EMU] Loaded: %s\n", app_path);
 
-    g_app_key_filter = reinterpret_cast<cp0_keyboard_key_filter_t>(
-        emu_dlsym(app, "ui_screensaver_filter_key"));
     auto kbd_create = (sdl_kbd_create_fn)emu_dlsym(app, "lv_sdl_keyboard_create");
     g_kbd_handler = (sdl_kbd_handler_fn)emu_dlsym(app, "lv_sdl_keyboard_handler");
     if (!g_kbd_handler)
@@ -495,11 +482,6 @@ int main(int argc, char *argv[])
             if (ev.type == SDL_QUIT) goto done;
 
             if (ev.type == SDL_MOUSEBUTTONDOWN) {
-                if (g_app_key_filter) {
-                    struct key_item activity = {};
-                    activity.key_state = KBD_KEY_PRESSED;
-                    if (g_app_key_filter(&activity)) continue;
-                }
                 int r, c;
                 int side = hit_side_key(ev.button.x, ev.button.y);
                 if (side == SIDE_POWER) {
