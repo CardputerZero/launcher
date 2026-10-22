@@ -2,6 +2,8 @@
  * SPDX-License-Identifier: MIT */
 #pragma once
 
+#include "keyboard_input.h"
+
 // Compiled only when BUILD_TESTING is enabled. Tests report state and fail via
 // the process exit status; diagnostic keyboard logs are not part of the contract.
 class EmulatorInputTest {

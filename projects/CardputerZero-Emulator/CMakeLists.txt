@@ -451,6 +451,17 @@ if(TARGET APPLaunch)
     )
 endif()
 
+if(BUILD_TESTING AND NOT WIN32)
+    add_executable(emulator-app-input-filter-test
+        tests/test_app_input_filter.cpp ${APPLAUNCH_EMU_ENTRY})
+    target_include_directories(emulator-app-input-filter-test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/lib
+        ${CP0_LVGL}/include
+        ${APPLAUNCH}/ui)
+    add_test(NAME emulator-app-input-filter COMMAND emulator-app-input-filter-test)
+endif()
+
 if(APPLE AND BUILD_TESTING AND TARGET APPLaunch)
     target_compile_definitions(cardputer-zero-emu PRIVATE EMU_ENABLE_INPUT_TESTS=1)
     add_test(NAME emulator-macos-runtime

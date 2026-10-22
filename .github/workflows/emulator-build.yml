@@ -85,6 +85,8 @@ jobs:
         mkdir build && cd build
         cmake .. -DCMAKE_BUILD_TYPE=Release
         make -j$(nproc)
+    - name: Test
+      run: ctest --test-dir projects/CardputerZero-Emulator/build --output-on-failure
     - name: Package
       run: |
         cd projects/CardputerZero-Emulator
