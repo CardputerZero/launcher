@@ -15,8 +15,10 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cstdio>
 #include <cstdlib>
+#include <mutex>
 #include <string>
 #include <thread>
 
@@ -148,16 +150,79 @@ static int config_get_int(const char *key, int default_val)
 // The saved value is re-read on every pass so a change made in the UI wins.
 // The deadline covers a cold boot, where the sink can show up seconds later.
 // Retries run off the init thread: the display must not wait on the sound card.
-static void saved_volume_restore(int val)
+//
+// The worker is joinable. A launcher restart can install a new audio backend
+// while an old restore is still inside its 20 s window, and that old worker
+// must not write the volume it captured over the new session.
+namespace {
+
+struct SavedVolumeRestore
 {
-    std::thread([val] {
+    std::mutex mutex;
+    std::condition_variable wake;
+    bool stop = false;
+    std::thread worker;
+
+    // Hosts that never call deinit_audio (the emulator does not) would reach
+    // static destruction with a joinable thread, which terminates the process.
+    // The audio callback lists live in this file and outlive this object, so
+    // joining here is safe.
+    ~SavedVolumeRestore()
+    {
+        try {
+            join();
+        } catch (...) {
+        }
+    }
+
+    void request_stop()
+    {
+        {
+            std::lock_guard<std::mutex> lock(mutex);
+            stop = true;
+        }
+        wake.notify_one();
+    }
+
+    void join()
+    {
+        request_stop();
+        if (worker.joinable())
+            worker.join();
+    }
+
+    void start(int volume)
+    {
+        join();
+        {
+            std::lock_guard<std::mutex> lock(mutex);
+            stop = false;
+        }
+        worker = std::thread([this, volume] { run(volume); });
+    }
+
+    bool wait_for_next_pass()
+    {
+        std::unique_lock<std::mutex> lock(mutex);
+        wake.wait_for(lock, std::chrono::milliseconds(500), [this] { return stop; });
+        return stop;
+    }
+
+    void run(int volume)
+    {
         using clock = std::chrono::steady_clock;
         const auto deadline = clock::now() + std::chrono::seconds(20);
         const auto settle = std::chrono::seconds(2);
-        int target = val;
-        bool holding = false;
-        clock::time_point holding_since{};
+        Cp0VolumeRestoreStep state;
+        state.target = volume;
+
         while (clock::now() < deadline) {
+            {
+                std::lock_guard<std::mutex> lock(mutex);
+                if (stop)
+                    return;
+            }
+
             std::string sink;
             cp0::signal::invoke_noexcept([&] {
                 cp0_signal_audio_api({"DefaultSink"}, [&](int code, std::string data) {
@@ -166,14 +231,9 @@ static void saved_volume_restore(int val)
                 });
             });
 
-            if (!Cp0AudioMixerControl::is_hardware_sink_name(sink.c_str())) {
-                holding = false;
-            } else {
-                const int saved = config_get_int("volume", target);
-                if (saved >= 0)
-                    target = saved;
-
-                int current = -1;
+            const int saved = config_get_int("volume", state.target);
+            int current = -1;
+            if (Cp0AudioMixerControl::is_hardware_sink_name(sink.c_str())) {
                 cp0::signal::invoke_noexcept([&] {
                     cp0_signal_audio_api({"VolumeRead"}, [&](int code, std::string data) {
                         int parsed = 0;
@@ -181,22 +241,39 @@ static void saved_volume_restore(int val)
                             current = parsed;
                     });
                 });
-
-                if (current != target) {
-                    holding = false;
-                    cp0::signal::invoke_noexcept([&] {
-                        cp0_signal_audio_api({"VolumeWrite", std::to_string(target)}, nullptr);
-                    });
-                } else if (!holding) {
-                    holding = true;
-                    holding_since = clock::now();
-                } else if (clock::now() - holding_since >= settle) {
-                    return;
-                }
             }
-            std::this_thread::sleep_for(std::chrono::milliseconds(250));
+
+            state = cp0_volume_restore_step(state, sink.c_str(), saved, current,
+                                             clock::now(), settle);
+            if (state.action == Cp0VolumeRestoreStep::Action::Done)
+                return;
+            if (state.action == Cp0VolumeRestoreStep::Action::Write) {
+                const std::string written = std::to_string(state.target);
+                cp0::signal::invoke_noexcept([&] {
+                    cp0_signal_audio_api({"VolumeWrite", written}, nullptr);
+                });
+            }
+            if (wait_for_next_pass())
+                return;
         }
-    }).detach();
+    }
+};
+
+SavedVolumeRestore g_saved_volume_restore;
+
+} // namespace
+
+static void saved_volume_restore(int val)
+{
+    g_saved_volume_restore.start(val);
+}
+
+extern "C" void cp0_saved_volume_restore_stop(void) noexcept
+{
+    try {
+        g_saved_volume_restore.join();
+    } catch (...) {
+    }
 }
 
 static void saved_gpio_write(const char *name)

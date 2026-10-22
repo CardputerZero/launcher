@@ -5,6 +5,7 @@
  */
 
 #include "hal_lvgl_bsp.h"
+#include "cp0_lvgl.h"
 #include "../cp0_audio_api_contract.hpp"
 #include "cp0_audio_capture.hpp"
 #include "cp0_audio_mixer_control.hpp"
@@ -652,6 +653,9 @@ extern "C" void init_audio(void)
 
 extern "C" void deinit_audio(void) noexcept
 {
+    // Join before dropping the audio signal. Otherwise a restore still inside
+    // its deadline can write into the next AudioSystem after a restart.
+    cp0_saved_volume_restore_stop();
     std::shared_ptr<AudioSystem> audio;
     try {
         std::lock_guard<std::mutex> lock(g_audio_mutex);

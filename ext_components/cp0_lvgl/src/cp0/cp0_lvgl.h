@@ -17,8 +17,10 @@ void init_filesystem(void);
 void init_audio();
 #ifdef __cplusplus
 void deinit_audio(void) noexcept;
+void cp0_saved_volume_restore_stop(void) noexcept;
 #else
 void deinit_audio(void);
+void cp0_saved_volume_restore_stop(void);
 #endif
 void init_pty(void);
 #ifdef __cplusplus

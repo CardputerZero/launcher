@@ -275,6 +275,7 @@ void init_osinfo(void);
 void init_bq27220(void);
 void init_battery(void);
 void init_lvgl_saved_settings(void);
+void cp0_saved_volume_restore_stop(void) noexcept;
 void init_camera(void);
 void init_input(void);
 void lv_sdl_keyboard_handler(SDL_Event *event);
@@ -605,6 +606,11 @@ done:
     SDL_DestroyRenderer(g_ren);
     SDL_DestroyWindow(g_win);
     IMG_Quit();
+#if !defined(_WIN32) && !defined(__APPLE__)
+    // The saved-settings init starts a volume restore worker; join it before
+    // the audio backend's statics go away. This host never calls deinit_audio.
+    cp0_saved_volume_restore_stop();
+#endif
     SDL_Quit();
     return 0;
 }

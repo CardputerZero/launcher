@@ -5,6 +5,7 @@
  */
 
 #include "hal_lvgl_bsp.h"
+#include "sdl_lvgl.h"
 #include "../cp0_audio_api_contract.hpp"
 #include "../cp0_audio_runtime_lifecycle.hpp"
 #include "../cp0_signal_registration.hpp"
@@ -478,6 +479,9 @@ extern "C" void init_audio(void)
 
 extern "C" void deinit_audio(void) noexcept
 {
+    // Same stop as the device backend: the restore worker is shared, and a
+    // restart must not inherit a thread still writing the previous volume.
+    cp0_saved_volume_restore_stop();
     try {
         std::lock_guard<std::mutex> lock(g_audio_mutex);
         if (!g_audio_lifecycle.begin_shutdown()) return;
