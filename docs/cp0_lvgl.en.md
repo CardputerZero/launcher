@@ -106,7 +106,7 @@ All `args` below are `std::list<std::string>` with the command at element zero. 
 - `cp0_signal_audio_cap(bool enable)`: one-way start/stop capture.
 - `cp0_signal_system_play(std::string name)`: play a system sound name. Register extra names first with `RegisterSystemSounds`.
 - `cp0_signal_audio_setup`: `{"set_callback"}`, `{"set_waveform"}` or `{"set_waveform","0"}`, and `{"stop_play"}` set status callbacks, waveform reporting, and stop playback.
-- `cp0_signal_audio_api`: `PlayFile path`, `Play asset`, `PlayPause`, `PlayContinue`, `PlayEnd`, `Cap`, `CapPause`, `CapContinue`, `CapEnd`, `CapFileSave path`, `SetCallback`, `VolumeRead`, `VolumeWrite 0..100`, `DefaultSink`, `MuteRead`, `MuteToggle`, `SetSystemSoundNames [up to 3 names]`, `RegisterSystemSounds [1..32 names]`, `SystemSoundPlay 0..2`, `SystemSoundSuspend`, `SystemSoundPrepare`, and `SystemSoundEnable [0|1/on/off...]`. `Play` resolves a separator-free name as a resource; `PlayFile` uses the supplied path. Errors are negative codes with text.
+- `cp0_signal_audio_api`: `PlayFile path`, `Play asset`, `PlayPause`, `PlayContinue`, `PlayEnd`, `Cap`, `CapPause`, `CapContinue`, `CapEnd`, `CapFileSave path`, `SetCallback`, `VolumeRead`, `VolumeWrite 0..100`, `DefaultSink` (sink name, or code -1 with empty data when the backend has no real sink), `MuteRead`, `MuteToggle`, `SetSystemSoundNames [up to 3 names]`, `RegisterSystemSounds [1..32 names]`, `SystemSoundPlay 0..2`, `SystemSoundSuspend`, `SystemSoundPrepare`, and `SystemSoundEnable [0|1/on/off...]`. `Play` resolves a separator-free name as a resource; `PlayFile` uses the supplied path. Errors are negative codes with text.
 
 ### PTY
 

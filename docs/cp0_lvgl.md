@@ -185,7 +185,7 @@ int cp0_time_ntp_set(int enable);
 | `CapFileSave` | 输出文件 | 保存录音 |
 | `SetCallback` | 无 | 设置状态回调 |
 | `VolumeRead` | 无 | data 为 0..100 音量 |
-| `DefaultSink` | 无 | data 为默认 sink 名称 |
+| `DefaultSink` | 无 | 成功时 data 为默认 sink 名称；SDL 后端没有真实 sink，返回 code=-1 且 data 为空 |
 | `VolumeWrite` | 0..100 | data 为实际值 |
 | `MuteRead` | 无 | data 为 0/1 |
 | `MuteToggle` | 无 | data 为切换后的 0/1 |

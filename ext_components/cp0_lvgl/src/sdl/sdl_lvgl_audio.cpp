@@ -325,7 +325,9 @@ private:
     void DefaultSink(arg_t arg, callback_t callback)
     {
         (void)arg;
-        report(callback, 0, "sdl-sink");
+        // No PulseAudio sink exists here. An empty failure keeps the startup
+        // volume restore from treating this stub as a hardware speaker.
+        report(callback, -1, "");
     }
 
     void VolumeWrite(int value, callback_t callback)
