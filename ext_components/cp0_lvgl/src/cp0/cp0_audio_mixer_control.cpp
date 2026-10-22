@@ -7,10 +7,11 @@
 #include "cp0_audio_mixer_control.hpp"
 
 #include <algorithm>
-#include <charconv>
 #include <cctype>
+#include <charconv>
 #include <cstdio>
 #include <cstring>
+#include <string>
 
 bool Cp0AudioMixerControl::parse_volume_line(const char *line, int &percent)
 {
@@ -33,6 +34,24 @@ bool Cp0AudioMixerControl::parse_volume_line(const char *line, int &percent)
         return false;
     percent = parsed;
     return true;
+}
+
+std::string Cp0AudioMixerControl::default_sink_name() const
+{
+    FILE *pipe = popen("pactl get-default-sink 2>/dev/null", "r");
+    if (!pipe)
+        return {};
+
+    char buffer[256] = {};
+    std::string name;
+    if (fgets(buffer, sizeof(buffer), pipe)) {
+        name = buffer;
+        while (!name.empty() &&
+               std::isspace(static_cast<unsigned char>(name.back())))
+            name.pop_back();
+    }
+    pclose(pipe);
+    return name;
 }
 
 int Cp0AudioMixerControl::read_volume() const
