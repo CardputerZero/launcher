@@ -107,8 +107,19 @@ void signal_request_complete(cp0_sudo_result_t result, int exit_code, void *user
     if (context->complete) context->complete(static_cast<int>(result), exit_code);
 }
 
+constexpr uint32_t kPromptBackground = 0x1C1C1E;
+constexpr uint32_t kPromptBorder = 0x2C2C2E;
+constexpr uint32_t kPromptField = 0x2C2C2E;
+constexpr uint32_t kPromptBlue = 0x0A84FF;
+constexpr uint32_t kPromptSecondary = 0x8E8E93;
+constexpr uint32_t kPromptError = 0xFF453A;
+
 lv_obj_t *g_overlay = nullptr;
 lv_obj_t *g_box = nullptr;
+lv_obj_t *g_title_label = nullptr;
+lv_obj_t *g_subtitle_label = nullptr;
+lv_obj_t *g_input_box = nullptr;
+lv_obj_t *g_auth_spinner = nullptr;
 lv_obj_t *g_password_label = nullptr;
 lv_obj_t *g_hint_label = nullptr;
 lv_obj_t *g_key_hook = nullptr;
@@ -244,6 +255,10 @@ void destroy_prompt()
     if (g_prompt_group) { lv_group_delete(g_prompt_group); g_prompt_group = nullptr; }
     if (g_box) { lv_obj_del(g_box); g_box = nullptr; }
     if (g_overlay) { lv_obj_del(g_overlay); g_overlay = nullptr; }
+    g_title_label = nullptr;
+    g_subtitle_label = nullptr;
+    g_input_box = nullptr;
+    g_auth_spinner = nullptr;
     g_password_label = nullptr;
     g_hint_label = nullptr;
     g_prompt_request.reset();
@@ -259,6 +274,10 @@ void prompt_object_delete_cb(lv_event_t *event)
         g_saved_group = nullptr;
     cp0::clear_if_deleted(g_overlay, deleted);
     cp0::clear_if_deleted(g_box, deleted);
+    cp0::clear_if_deleted(g_title_label, deleted);
+    cp0::clear_if_deleted(g_subtitle_label, deleted);
+    cp0::clear_if_deleted(g_input_box, deleted);
+    cp0::clear_if_deleted(g_auth_spinner, deleted);
     cp0::clear_if_deleted(g_password_label, deleted);
     cp0::clear_if_deleted(g_hint_label, deleted);
 }
@@ -272,9 +291,37 @@ void fail_prompt_creation()
 void update_password_label()
 {
     if (!g_password_label) return;
+    if (g_password.empty()) {
+        lv_label_set_text(g_password_label, "Password");
+        lv_obj_set_style_text_color(g_password_label, lv_color_hex(kPromptSecondary), 0);
+        return;
+    }
     std::string masked(g_password.size(), '*');
     masked.push_back('_');
     lv_label_set_text(g_password_label, masked.c_str());
+    lv_obj_set_style_text_color(g_password_label, lv_color_hex(0xFFFFFF), 0);
+}
+
+void set_authenticating(bool authenticating)
+{
+    if (g_input_box) {
+        if (authenticating) lv_obj_add_flag(g_input_box, LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_clear_flag(g_input_box, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (g_auth_spinner) {
+        if (authenticating) lv_obj_clear_flag(g_auth_spinner, LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_add_flag(g_auth_spinner, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (g_subtitle_label) {
+        lv_label_set_text(g_subtitle_label, authenticating ? "Verifying your password..."
+                                                          : "Enter your password to continue.");
+        lv_obj_set_style_text_color(g_subtitle_label, lv_color_hex(kPromptSecondary), 0);
+    }
+    if (g_hint_label) {
+        lv_label_set_text(g_hint_label, authenticating ? "Esc: Cancel"
+                                                       : "Enter: Confirm   Esc: Cancel");
+        lv_obj_set_style_text_color(g_hint_label, lv_color_hex(kPromptSecondary), 0);
+    }
 }
 
 void create_prompt(const std::shared_ptr<Request> &request)
@@ -305,25 +352,53 @@ void create_prompt(const std::shared_ptr<Request> &request)
     }
     lv_obj_add_event_cb(g_box, prompt_object_delete_cb, LV_EVENT_DELETE, nullptr);
     lv_obj_remove_style_all(g_box);
-    lv_obj_set_size(g_box, 240, 116);
+    lv_obj_set_size(g_box, 260, 150);
     lv_obj_align(g_box, LV_ALIGN_CENTER, 0, 0);
-    lv_obj_set_style_bg_color(g_box, lv_color_hex(0x1A1A2E), 0);
+    lv_obj_set_style_bg_color(g_box, lv_color_hex(kPromptBackground), 0);
     lv_obj_set_style_bg_opa(g_box, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(g_box, lv_color_hex(0x4A9EFF), 0);
+    lv_obj_set_style_border_color(g_box, lv_color_hex(kPromptBorder), 0);
     lv_obj_set_style_border_width(g_box, 1, 0);
-    lv_obj_set_style_radius(g_box, 6, 0);
+    lv_obj_set_style_radius(g_box, 14, 0);
     lv_obj_set_style_pad_all(g_box, 0, 0);
     lv_obj_clear_flag(g_box, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_t *title = lv_label_create(g_box);
-    if (!title) {
+    g_title_label = lv_label_create(g_box);
+    if (!g_title_label) {
         fail_prompt_creation();
         return;
     }
-    lv_label_set_text(title, "Sudo Password");
-    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 14);
-    lv_obj_set_style_text_color(title, lv_color_hex(0x4A9EFF), 0);
-    lv_obj_set_style_text_font(title, &lv_font_montserrat_14, 0);
-    g_password_label = lv_label_create(g_box);
+    lv_obj_add_event_cb(g_title_label, prompt_object_delete_cb, LV_EVENT_DELETE, nullptr);
+    lv_label_set_text(g_title_label, "Authentication");
+    lv_obj_align(g_title_label, LV_ALIGN_TOP_MID, 0, 14);
+    lv_obj_set_style_text_color(g_title_label, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_set_style_text_font(g_title_label, &lv_font_montserrat_14, 0);
+    g_subtitle_label = lv_label_create(g_box);
+    if (!g_subtitle_label) {
+        fail_prompt_creation();
+        return;
+    }
+    lv_obj_add_event_cb(g_subtitle_label, prompt_object_delete_cb, LV_EVENT_DELETE, nullptr);
+    lv_obj_set_width(g_subtitle_label, 220);
+    lv_obj_set_style_text_align(g_subtitle_label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_long_mode(g_subtitle_label, LV_LABEL_LONG_WRAP);
+    lv_obj_set_style_text_font(g_subtitle_label, &lv_font_montserrat_10, 0);
+    lv_obj_align(g_subtitle_label, LV_ALIGN_TOP_MID, 0, 36);
+    g_input_box = lv_obj_create(g_box);
+    if (!g_input_box) {
+        fail_prompt_creation();
+        return;
+    }
+    lv_obj_add_event_cb(g_input_box, prompt_object_delete_cb, LV_EVENT_DELETE, nullptr);
+    lv_obj_remove_style_all(g_input_box);
+    lv_obj_set_size(g_input_box, 220, 34);
+    lv_obj_align(g_input_box, LV_ALIGN_TOP_MID, 0, 58);
+    lv_obj_set_style_bg_color(g_input_box, lv_color_hex(kPromptField), 0);
+    lv_obj_set_style_bg_opa(g_input_box, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(g_input_box, lv_color_hex(0x3A3A3C), 0);
+    lv_obj_set_style_border_width(g_input_box, 1, 0);
+    lv_obj_set_style_radius(g_input_box, 9, 0);
+    lv_obj_set_style_pad_all(g_input_box, 0, 0);
+    lv_obj_clear_flag(g_input_box, LV_OBJ_FLAG_SCROLLABLE);
+    g_password_label = lv_label_create(g_input_box);
     if (!g_password_label) {
         fail_prompt_creation();
         return;
@@ -331,22 +406,32 @@ void create_prompt(const std::shared_ptr<Request> &request)
     lv_obj_add_event_cb(g_password_label, prompt_object_delete_cb, LV_EVENT_DELETE, nullptr);
     lv_obj_set_width(g_password_label, 200);
     lv_obj_set_style_text_align(g_password_label, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_style_text_color(g_password_label, lv_color_hex(0xFFFFFF), 0);
     lv_obj_set_style_text_font(g_password_label, &lv_font_montserrat_14, 0);
-    lv_obj_align(g_password_label, LV_ALIGN_CENTER, 0, -1);
-    update_password_label();
+    lv_obj_align(g_password_label, LV_ALIGN_CENTER, 0, 0);
+    g_auth_spinner = lv_spinner_create(g_box);
+    if (!g_auth_spinner) {
+        fail_prompt_creation();
+        return;
+    }
+    lv_obj_add_event_cb(g_auth_spinner, prompt_object_delete_cb, LV_EVENT_DELETE, nullptr);
+    lv_obj_set_size(g_auth_spinner, 28, 28);
+    lv_obj_align(g_auth_spinner, LV_ALIGN_TOP_MID, 0, 61);
+    lv_obj_set_style_arc_width(g_auth_spinner, 3, LV_PART_MAIN);
+    lv_obj_set_style_arc_width(g_auth_spinner, 3, LV_PART_INDICATOR);
+    lv_obj_set_style_arc_color(g_auth_spinner, lv_color_hex(0x3A3A3C), LV_PART_MAIN);
+    lv_obj_set_style_arc_color(g_auth_spinner, lv_color_hex(kPromptBlue), LV_PART_INDICATOR);
     g_hint_label = lv_label_create(g_box);
     if (!g_hint_label) {
         fail_prompt_creation();
         return;
     }
     lv_obj_add_event_cb(g_hint_label, prompt_object_delete_cb, LV_EVENT_DELETE, nullptr);
-    lv_label_set_text(g_hint_label, "Enter:OK  ESC:Cancel");
     lv_obj_set_width(g_hint_label, 220);
     lv_obj_set_style_text_align(g_hint_label, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_style_text_color(g_hint_label, lv_color_hex(0x808090), 0);
     lv_obj_set_style_text_font(g_hint_label, &lv_font_montserrat_10, 0);
-    lv_obj_align(g_hint_label, LV_ALIGN_BOTTOM_MID, 0, -12);
+    lv_obj_align(g_hint_label, LV_ALIGN_BOTTOM_MID, 0, -14);
+    update_password_label();
+    set_authenticating(false);
     g_key_hook = lv_screen_active();
     if (g_key_hook) {
         lv_obj_add_event_cb(g_key_hook, key_event_cb,
@@ -370,11 +455,13 @@ void create_prompt(const std::shared_ptr<Request> &request)
 void show_auth_error(const std::shared_ptr<Request> &request)
 {
     g_prompt_request = request;
-    if (g_hint_label) {
+    set_authenticating(false);
+    if (g_subtitle_label) {
         char text[64];
-        std::snprintf(text, sizeof(text), "Wrong password (%d/3). Try again.", request->auth_attempts);
-        lv_label_set_text(g_hint_label, text);
-        lv_obj_set_style_text_color(g_hint_label, lv_color_hex(0xFF5555), 0);
+        std::snprintf(text, sizeof(text), "Wrong password (%d/3). Try again.",
+                      request->auth_attempts);
+        lv_label_set_text(g_subtitle_label, text);
+        lv_obj_set_style_text_color(g_subtitle_label, lv_color_hex(kPromptError), 0);
     }
     secure_clear(g_password);
     update_password_label();
@@ -592,7 +679,7 @@ void execute_actions(std::vector<Action> actions)
             }
             secure_clear(g_password);
             update_password_label();
-            if (g_hint_label) lv_label_set_text(g_hint_label, "Authenticating...");
+            set_authenticating(true);
             if (!password || !g_workers || !g_workers->start(
                     [request = action.request] { request->cancel_requested.store(true); },
                     [request = action.request, password]() mutable {
