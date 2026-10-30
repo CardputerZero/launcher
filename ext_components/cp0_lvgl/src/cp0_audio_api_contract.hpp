@@ -28,6 +28,7 @@ enum class ApiCommand {
     SetCallback,
     VolumeRead,
     VolumeWrite,
+    DefaultSink,
     MuteRead,
     MuteToggle,
     SetSystemSoundNames,
