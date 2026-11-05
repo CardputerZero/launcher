@@ -7,7 +7,7 @@ the MIT license used for M5Stack-authored wrapper code.
 | Wrapper | Upstream source | License record |
 | --- | --- | --- |
 | `Miniaudio` | `https://github.com/mackron/miniaudio` | The complete public-domain/MIT-0 notice is embedded at the end of `Miniaudio/include/miniaudio.h`. |
-| `RadioLib` | `https://github.com/jgromes/RadioLib` | MIT text in `RadioLib/LICENSE`; SConstruct fetches a URL without pinning a commit. |
+| `RadioLib` | `https://github.com/jgromes/RadioLib` | MIT text in `RadioLib/LICENSE`; SConstruct pins release 7.8.1 by commit. |
 | `Sigslot` | `https://github.com/palacaze/sigslot` | Fetched at the commit pinned by `Sigslot/SConstruct`; retain the upstream MIT notice. |
 | `SmoothUI` | `https://github.com/Forairaaaaa/smooth_ui_toolkit` | MIT text in `SmoothUI/LICENSE`; commit pinned by SConstruct. |
 | `Spdlog` | `https://github.com/gabime/spdlog` | Fetched at the commit pinned by `Spdlog/SConstruct`; retain the upstream MIT notice. |

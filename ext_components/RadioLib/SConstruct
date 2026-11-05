@@ -9,7 +9,14 @@ with open(env["PROJECT_TOOL_S"]) as f:
     exec(f.read())
 
 if "CONFIG_RADIOLIB_COMPONENT_ENABLED" in os.environ:
-    radiolib = wget_github("https://github.com/jgromes/RadioLib.git")
+    # RadioLib 7.8.1 still provides the void SPI HAL and positional SX1262::begin
+    # used by cp0. Use a revision-specific cache so an older master download
+    # cannot override the pin.
+    revision = "2325a38a89dd0f0e402c19f67fe910111da1e246"
+    archive = f"RadioLib-{revision}"
+    extracted = wget_zip(f"https://github.com/jgromes/RadioLib/archive/{revision}.zip",
+                         f"{archive}.zip")
+    radiolib = os.path.join(extracted, archive)
 
     SRCS = [
         os.path.join(radiolib, "src", "Hal.cpp"),
