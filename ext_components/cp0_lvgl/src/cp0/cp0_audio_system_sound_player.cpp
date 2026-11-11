@@ -27,7 +27,6 @@ namespace {
 /* Slots 0..2 are the platform's own startup/switch/enter sounds.  Applications
  * can register further short sounds by name, which lands them on the same cached,
  * asynchronous playback path instead of the uncached per-file player. */
-constexpr std::size_t kDefaultSoundCount = 3;
 constexpr ma_uint32 kChannels = 2;
 constexpr ma_uint32 kSampleRate = 48000;
 constexpr ma_uint32 kPeriodMilliseconds = 20;
