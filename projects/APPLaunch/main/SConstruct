@@ -21,7 +21,9 @@ rootfs_path=Path(os.environ.get("CONFIG_TOOLCHAIN_SYSROOT", ""))
 SRCS = []
 INCLUDE = []
 PRIVATE_INCLUDE = []
-REQUIREMENTS = ['cp0_lvgl', 'eventpp', 'utilities', 'lvgl_component', 'freetype', 'pthread', 'RadioLib']
+REQUIREMENTS = ['cp0_lvgl', 'eventpp', 'utilities', 'lvgl_component', 'freetype', 'pthread']
+if 'CONFIG_CP0_LVGL_INIT_LORA' in os.environ:
+    REQUIREMENTS += ['RadioLib']
 # REQUIREMENTS = []
 STATIC_LIB = []
 DYNAMIC_LIB = []

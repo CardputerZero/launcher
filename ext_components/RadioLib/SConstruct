@@ -9,7 +9,7 @@ with open(env["PROJECT_TOOL_S"]) as f:
     exec(f.read())
 
 if "CONFIG_RADIOLIB_COMPONENT_ENABLED" in os.environ:
-    radiolib = wget_github("https://github.com/jgromes/RadioLib.git")
+    radiolib = wget_github_commit("https://github.com/jgromes/RadioLib.git", "72dd4f55979094dab3f9e2759e33e35019d21978", True)
 
     SRCS = [
         os.path.join(radiolib, "src", "Hal.cpp"),
