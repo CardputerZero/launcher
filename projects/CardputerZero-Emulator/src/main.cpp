@@ -59,6 +59,7 @@ static KeyRect g_keys[4][11] = {
 };
 
 // ── Side buttons + POWER ────────────────────────────────────────
+static constexpr int SIDE_NEXT = 3;
 static constexpr int SIDE_POWER = 4; // index of POWER in g_side_keys
 static constexpr int NUM_SIDE_KEYS = 5;
 static KeyRect g_side_keys[NUM_SIDE_KEYS] = {
@@ -248,7 +249,7 @@ static void render()
 typedef void (*ui_init_fn)(void);
 typedef void (*ui_deinit_fn)(void);
 
-#if !defined(_WIN32) && !defined(__APPLE__)
+#if !defined(_WIN32)
 extern "C" {
 void init_lvgl_env(void);
 void init_lvgl_event(void);
@@ -349,6 +350,10 @@ static unsigned emu_test_frame(const char *name)
     return static_cast<unsigned>(frame);
 }
 
+#ifdef EMU_ENABLE_INPUT_TESTS
+#include "emu_input_test.hpp"
+#endif
+
 int main(int argc, char *argv[])
 {
     set_exe_dir();
@@ -432,7 +437,7 @@ int main(int argc, char *argv[])
                            LV_DISPLAY_RENDER_MODE_PARTIAL);
     lv_display_set_color_format(disp, LV_COLOR_FORMAT_RGB565);
 
-#if !defined(_WIN32) && !defined(__APPLE__)
+#if !defined(_WIN32)
     emu_init_cp0_runtime();
     g_kbd_handler = lv_sdl_keyboard_handler;
 #endif
@@ -474,6 +479,13 @@ int main(int argc, char *argv[])
 #endif
     printf("[EMU] Running.\n");
 
+#ifdef EMU_ENABLE_INPUT_TESTS
+    const auto &next = g_side_keys[SIDE_NEXT];
+    const EmulatorInputTest::Target target = {{next.x, next.y, next.w, next.h}, KEY_TAB};
+    EmulatorInputTest input_test(g_win, g_ren, target,
+        emu_test_frame("EMU_TEST_CLICK_FRAME"), emu_test_frame("EMU_TEST_KEY_FRAME"), lv_screen_active());
+    bool tests_passed = true;
+#endif
     unsigned frame_count = 0;
     bool test_reset_done = false;
     bool test_navigate_done = false;
@@ -481,6 +493,9 @@ int main(int argc, char *argv[])
         SDL_Event ev;
         while (SDL_PollEvent(&ev)) {
             if (ev.type == SDL_QUIT) goto done;
+#ifdef EMU_ENABLE_INPUT_TESTS
+            if (input_test.observe_event(ev)) continue;
+#endif
 
             if (ev.type == SDL_MOUSEBUTTONDOWN) {
                 int r, c;
@@ -548,6 +563,9 @@ int main(int argc, char *argv[])
         lv_timer_handler();
         render();
         ++frame_count;
+#ifdef EMU_ENABLE_INPUT_TESTS
+        input_test.advance(frame_count);
+#endif
         if (!test_navigate_done && test_navigate_frame && frame_count >= test_navigate_frame) {
             printf("[EMU] TEST navigate at frame %u\n", frame_count);
             inject_sdl_key(SDLK_RIGHT, true);
@@ -579,6 +597,9 @@ int main(int argc, char *argv[])
     }
 
 done:
+#ifdef EMU_ENABLE_INPUT_TESTS
+    tests_passed = input_test.finish();
+#endif
 #ifdef EMU_STATIC_APP
     ui_deinit();
     printf("[EMU] App deinitialized\n");
@@ -597,11 +618,15 @@ done:
     SDL_DestroyRenderer(g_ren);
     SDL_DestroyWindow(g_win);
     IMG_Quit();
-#if !defined(_WIN32) && !defined(__APPLE__)
+#if !defined(_WIN32)
     // The saved-settings init starts a volume restore worker; join it before
     // the audio backend's statics go away. This host never calls deinit_audio.
     cp0_saved_volume_restore_stop();
 #endif
     SDL_Quit();
+#ifdef EMU_ENABLE_INPUT_TESTS
+    return tests_passed ? 0 : 1;
+#else
     return 0;
+#endif
 }
