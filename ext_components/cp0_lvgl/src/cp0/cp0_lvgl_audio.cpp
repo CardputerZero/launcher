@@ -5,6 +5,7 @@
  */
 
 #include "hal_lvgl_bsp.h"
+#include "cp0_lvgl.h"
 #include "../cp0_audio_api_contract.hpp"
 #include "cp0_audio_capture.hpp"
 #include "cp0_audio_mixer_control.hpp"
@@ -497,6 +498,13 @@ public:
         report(callback, val >= 0 ? 0 : -1, std::to_string(val));
     }
 
+    void DefaultSink(arg_t arg, callback_t callback)
+    {
+        (void)arg;
+        const std::string sink = mixer_.default_sink_name();
+        report(callback, sink.empty() ? -1 : 0, sink);
+    }
+
     void VolumeWrite(int val, callback_t callback)
     {
         int ret = mixer_.write_volume(val);
@@ -539,6 +547,7 @@ public:
             map_fun(CapFileSave),
             map_fun(SetCallback),
             map_fun(VolumeRead),
+            map_fun(DefaultSink),
             map_fun(MuteRead),
             map_fun(MuteToggle),
             map_fun(SetSystemSoundNames),
@@ -644,6 +653,9 @@ extern "C" void init_audio(void)
 
 extern "C" void deinit_audio(void) noexcept
 {
+    // Join before dropping the audio signal. Otherwise a restore still inside
+    // its deadline can write into the next AudioSystem after a restart.
+    cp0_saved_volume_restore_stop();
     std::shared_ptr<AudioSystem> audio;
     try {
         std::lock_guard<std::mutex> lock(g_audio_mutex);

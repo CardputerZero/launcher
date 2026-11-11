@@ -43,6 +43,9 @@ void test_path_and_no_argument_commands()
     assert(request.command == ApiCommand::SystemSoundSuspend);
     assert(cp0::audio::parse_api_request({"SystemSoundPrepare"}, request));
     assert(request.command == ApiCommand::SystemSoundPrepare);
+    assert(cp0::audio::parse_api_request({"DefaultSink"}, request));
+    assert(request.command == ApiCommand::DefaultSink);
+    assert(!cp0::audio::parse_api_request({"DefaultSink", "extra"}, request));
     assert(!cp0::audio::parse_api_request({"SystemSoundPrepare", "junk"}, request));
 }
 
