@@ -23,20 +23,39 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version (for example 0.7.0 or v0.7.0); leave empty to increment the latest release patch"
+        description: "Build version for the artifact (for example 0.7.0); leave empty to increment the latest release patch. This workflow never publishes."
         required: false
         type: string
+  # Reused by launcher-release.yml, the only manual, reviewed path that publishes
+  # a GitHub release and refreshes the launcher-latest channel. Pushes, pull
+  # requests and ad-hoc dispatches only build and upload artifacts.
+  workflow_call:
+    inputs:
+      publish:
+        description: "Create a GitHub release and refresh the launcher-latest channel"
+        required: false
+        type: boolean
+        default: false
+      version:
+        description: "Release version (X.Y.Z); required when publish is true"
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: read
 
+# Keep CI builds and manual releases in separate queues: a pending release run
+# must never be cancelled by a new push or pull request run. The mode is derived
+# from the publish input so the group does not depend on the caller's name.
 concurrency:
-  group: launcher-release
+  group: launcher-package-${{ inputs.publish && 'release' || 'ci' }}
   cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     env:
       GH_TOKEN: ${{ github.token }}
     outputs:
@@ -46,45 +65,102 @@ jobs:
     - uses: actions/checkout@v4
       with:
         fetch-depth: 0
+        persist-credentials: false
 
     - name: Resolve release version
       id: version
       shell: bash
       env:
-        REQUESTED_VERSION: ${{ github.event.inputs.version || '' }}
+        REQUESTED_VERSION: ${{ inputs.version || '' }}
+        PUBLISH: ${{ inputs.publish }}
+        # Admin-set repository variable, for versions that no longer exist as a
+        # release or tag (for example builds that already reached devices).
+        FLOOR: ${{ vars.LAUNCHER_RELEASE_FLOOR || '' }}
       run: |
         set -euo pipefail
 
+        publish="${PUBLISH:-false}"
         version="${REQUESTED_VERSION#v}"
-        if [[ -z "${version}" ]]; then
-          baseline="$(sed -nE 's/^DEFAULT_VERSION = "([0-9]+\.[0-9]+\.[0-9]+)"$/\1/p' scripts/debian_packager.py | head -n1)"
-          latest="$({
-            printf '%s\n' "${baseline}"
-            gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" --jq \
-              '.[].tag_name | select(test("^launcher-v[0-9]+\\.[0-9]+\\.[0-9]+$"))' 2>/dev/null \
-              | sed -E 's/^launcher-v//'
-          } | sed '/^$/d' | sort -V | tail -n1)"
-          if [[ ! "${latest}" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
-            echo "Unable to determine a semantic version from releases or packager default: ${latest:-<none>}" >&2
-            exit 1
-          fi
-          version="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.$((BASH_REMATCH[3] + 1))"
+        floor="${FLOOR:-}"
+
+        if [[ "${publish}" == "true" && -z "${version}" ]]; then
+          echo "Publishing requires an explicit version; refusing to auto-increment a release." >&2
+          exit 1
         fi
 
-        if [[ ! "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-          echo "Version must use MAJOR.MINOR.PATCH format, got: ${version}" >&2
+        version_re='^(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})$'
+
+        baseline="$(sed -nE 's/^DEFAULT_VERSION = "([0-9]+\.[0-9]+\.[0-9]+)"$/\1/p' scripts/debian_packager.py | head -n1)"
+
+        # Read the release list only when the version has to be derived or when a
+        # release is about to be published (the guard needs the current maximum).
+        # A CI-only build with an explicit version must not depend on the API.
+        release_tags=""
+        if [[ -z "${version}" || "${publish}" == "true" ]]; then
+          if ! release_tags="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" --jq \
+                '.[].tag_name | select(test("^launcher-v[0-9]+\\.[0-9]+\\.[0-9]+$"))')"; then
+            if [[ "${publish}" == "true" ]]; then
+              echo "Unable to query existing releases from GitHub; refusing to publish." >&2
+              exit 1
+            fi
+            echo "warning: unable to query existing releases; using the packager default for this build" >&2
+            release_tags=""
+          fi
+        fi
+
+        # A deleted release can still be installed on a device, and its tag can
+        # survive the deletion, so the lower bound is the maximum of the release
+        # list, the repository tags, the packager default and the admin floor.
+        git_tags="$(git tag -l 'launcher-v[0-9]*' 2>/dev/null || true)"
+        latest="$(printf '%s\n%s\n%s\n%s\n' "${baseline}" "${release_tags}" "${git_tags}" "${floor}" \
+          | sed -E 's/^launcher-v//' | sed '/^$/d' \
+          | { grep -E "${version_re}" || true; } | sort -V | tail -n1)"
+
+        if [[ -z "${version}" ]]; then
+          if [[ ! "${latest}" =~ ${version_re} ]]; then
+            echo "Unable to determine a semantic version from releases, tags or the packager default: ${latest:-<none>}" >&2
+            exit 1
+          fi
+          # 10# keeps bash from treating a leading zero as octal (the regex
+          # rejects them anyway, but this makes the arithmetic explicit).
+          version="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.$((10#${BASH_REMATCH[3]} + 1))"
+        fi
+
+        if [[ ! "${version}" =~ ${version_re} ]]; then
+          echo "Version must use MAJOR.MINOR.PATCH without leading zeros, got: ${version}" >&2
           exit 1
         fi
 
         tag="launcher-v${version}"
-        if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${tag}" >/dev/null 2>&1; then
-          echo "Tag ${tag} already exists; choose a different manual version." >&2
-          exit 1
+
+        if [[ "${publish}" == "true" ]]; then
+          # Devices only accept a strictly newer deb Version (see the updater's
+          # dpkg --compare-versions check), so a release must never reuse or
+          # downgrade a version that may already be installed.
+          if [[ ! "${latest}" =~ ${version_re} ]]; then
+            echo "No known release, tag or floor version to compare against; refusing to publish ${version}." >&2
+            exit 1
+          fi
+          if ! dpkg --compare-versions "${version}" gt "${latest}"; then
+            echo "Requested version ${version} must be greater than the latest known version ${latest}." >&2
+            exit 1
+          fi
+          # Only a real 404 means the tag is free. Any other failure must abort
+          # so an existing release is never overwritten by accident.
+          if tag_probe="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${tag}" 2>&1)"; then
+            echo "Tag ${tag} already exists; choose a different version." >&2
+            exit 1
+          elif [[ "${tag_probe}" != *"404"* && "${tag_probe}" != *"Not Found"* ]]; then
+            echo "Unable to check whether tag ${tag} exists: ${tag_probe}" >&2
+            exit 1
+          fi
+        else
+          echo "Publishing is disabled for this run; building artifacts only."
         fi
 
         echo "version=${version}" >> "${GITHUB_OUTPUT}"
         echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
-        echo "Building APPLauncher ${version}"
+        echo "Building APPLauncher ${version} (lower bound: ${latest:-<none>})"
 
     - name: Initialize submodules (SDK + AppStore + Calculator)
       run: |
@@ -104,7 +180,10 @@ jobs:
     - name: Extract SDK BSP version
       id: sdk-version
       run: |
-        VER=$(grep '^version' projects/APPLaunch/SConstruct | head -1 | sed 's/.*"\(.*\)"/\1/')
+        # Read the version file the SConstruct actually consumes; grepping
+        # SConstruct matched "version_file = ..." and produced "sdk_version.txt",
+        # so the cache path never existed and every build re-downloaded the BSP.
+        VER=$(tr -d '[:space:]' < ext_components/cp0_lvgl/sdk_version.txt)
         echo "ver=$VER" >> "$GITHUB_OUTPUT"
         echo "SDK BSP version: $VER"
 
@@ -134,7 +213,9 @@ jobs:
         export CardputerZero=y
         export CONFIG_REPO_AUTOMATION=y
         export APPLAUNCH_VERSION="${{ steps.version.outputs.version }}"
-        export APPLAUNCH_CHANNEL=prerelease
+        # Build -DLAUNCHER_CHANNEL_RAW: "release" for reviewed releases,
+        # "prerelease" for CI builds. Display only, the updater ignores it.
+        export APPLAUNCH_CHANNEL="${{ inputs.publish && 'release' || 'prerelease' }}"
         export SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)"
         scons -j$(nproc)
 
@@ -195,7 +276,7 @@ jobs:
       run: |
         SCONS=scons \
           OUTPUT_DIR="$GITHUB_WORKSPACE/projects/APPLaunch/tools" \
-          APPLAUNCH_CHANNEL=prerelease \
+          APPLAUNCH_CHANNEL=${{ inputs.publish && 'release' || 'prerelease' }} \
           scripts/build_cardputerzero_release_local.sh \
             "${{ steps.version.outputs.version }}" m5stack1
 
@@ -210,6 +291,11 @@ jobs:
         (cd artifacts && sha256sum applaunch_arm64.deb > applaunch_arm64.deb.sha256)
         printf '1\n' > artifacts/applaunch_arm64.deb.update-abi
         package_version="$(dpkg-deb -f artifacts/applaunch_arm64.deb Version)"
+        test "${package_version}" = "${{ steps.version.outputs.version }}"
+        # Older updaters fall back to applaunch_<installed>_arm64.deb under the
+        # installed version's tag when no local rollback package is cached, so
+        # every release also carries that alias next to the versioned filename.
+        cp "${package}" "artifacts/applaunch_${{ steps.version.outputs.version }}_arm64.deb"
         {
           printf 'format=1\n'
           printf 'version=%s\n' "${{ steps.version.outputs.version }}"
@@ -221,11 +307,15 @@ jobs:
       with:
         name: applaunch-arm64
         path: artifacts/
+        if-no-files-found: error
 
   unit-tests:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
     - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
 
     - name: Initialize submodules (SDK)
       run: git submodule update --init --depth=1 SDK
@@ -260,25 +350,96 @@ jobs:
     - name: Run cp0_lvgl unit tests
       run: sh ext_components/cp0_lvgl/tests/run_tests.sh
 
-  prerelease:
+    - name: Run APPLaunch packaging tests
+      # Guards the release workflow contract (publish gate, tag/version rules,
+      # channel assets, rollback alias) on every CI run.
+      run: python3 projects/APPLaunch/tests/test_updater_packaging.py
+
+  # Publishing is manual on purpose: launcher-release.yml calls this workflow with
+  # publish=true after the merged change has been reviewed. Pushes, pull requests
+  # and ad-hoc dispatches leave this job skipped and only keep the artifacts.
+  #
+  # Recovery: if the channel step fails after the versioned release was created,
+  # use "Re-run failed jobs" on the same run. It re-runs only this job and
+  # overwrites the channel assets; "Re-run all jobs" would bump the version.
+  #
+  # Restoring auto-publishing needs more than changing the condition below: the
+  # version/tag guards only run when publish is true, so the guards would have to
+  # be updated too, and every push would then publish a release.
+  publish:
+    name: Publish release
     needs: [build, unit-tests]
-    if: github.ref == 'refs/heads/master'
+    if: ${{ inputs.publish == true && github.ref == 'refs/heads/master' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Configure required reviewers on this environment to turn the manual
+    # trigger into a real approval gate. Without protection rules it only
+    # records a deployment and does not block anything.
+    environment: release
     permissions:
       contents: write
     steps:
+    - name: Verify release preconditions
+      env:
+        GH_TOKEN: ${{ github.token }}
+        VERSION: ${{ needs.build.outputs.version }}
+        TAG: ${{ needs.build.outputs.tag }}
+      run: |
+        set -euo pipefail
+
+        # The tag is created from github.sha at the end of the build. If master
+        # moved in the meantime this SHA no longer has a ref, and GitHub requires
+        # the unreachable workflows:write scope to create the tag, which the
+        # workflow token does not have. Fail before anything is published.
+        if ! head="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/master" --jq .object.sha)"; then
+          echo "Unable to read the master head from GitHub before publishing." >&2
+          exit 1
+        fi
+        if [ "${head}" != "${GITHUB_SHA}" ]; then
+          echo "master advanced to ${head} while this release was building (built ${GITHUB_SHA})." >&2
+          echo "Nothing was published; re-dispatch the release on the current master head." >&2
+          exit 1
+        fi
+
+        # Re-check after the long build so a concurrent manual release never
+        # gets overwritten by this run.
+        if tag_probe="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" 2>&1)"; then
+          echo "Tag ${TAG} appeared while this release was building; refusing to overwrite it." >&2
+          exit 1
+        elif [[ "${tag_probe}" != *"404"* && "${tag_probe}" != *"Not Found"* ]]; then
+          echo "Unable to check whether tag ${TAG} exists: ${tag_probe}" >&2
+          exit 1
+        fi
+
+        if ! latest="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" --jq \
+              '.[].tag_name | select(test("^launcher-v[0-9]+\\.[0-9]+\\.[0-9]+$"))' \
+              | sed -E 's/^launcher-v//' | sort -V | tail -n1)"; then
+          echo "Unable to re-read the release list before publishing." >&2
+          exit 1
+        fi
+        if [ -n "${latest}" ] && ! dpkg --compare-versions "${VERSION}" gt "${latest}"; then
+          echo "A newer release (${latest}) appeared while this release was building; refusing to publish ${VERSION}." >&2
+          exit 1
+        fi
+        echo "Preconditions OK: master=${head}, version=${VERSION}"
+
     - uses: actions/download-artifact@v4
       with:
         name: applaunch-arm64
         path: artifacts/
 
-    - name: Create prerelease
+    - name: Create release
       uses: softprops/action-gh-release@v2
       with:
         tag_name: ${{ needs.build.outputs.tag }}
-        name: "APPLauncher Prerelease v${{ needs.build.outputs.version }}"
-        prerelease: true
+        # Pin the tag to the commit that was actually built instead of letting
+        # GitHub default to the current default-branch head.
+        target_commitish: ${{ github.sha }}
+        name: "APPLauncher ${{ inputs.publish && 'Release' || 'Prerelease' }} v${{ needs.build.outputs.version }}"
+        prerelease: ${{ !inputs.publish }}
         generate_release_notes: true
+        fail_on_unmatched_files: true
+        overwrite_files: true
         files: |
           artifacts/*.deb
           artifacts/*.sha256
@@ -286,15 +447,31 @@ jobs:
           artifacts/*.update-info
           artifacts/M5CardputerZero-APPLaunch
 
-    - name: Publish launcher update channel
+    - name: Publish launcher update channel (payload)
       uses: softprops/action-gh-release@v2
       with:
         tag_name: launcher-latest
         name: "APPLauncher Update Channel"
+        # The channel pointer stays a pre-release on purpose: it must not take
+        # the repository's "Latest release" badge. Devices download these assets
+        # by tag name and ignore the flag.
         prerelease: true
         overwrite_files: true
+        preserve_order: true
+        fail_on_unmatched_files: true
         files: |
+          artifacts/applaunch_arm64.deb.update-abi
           artifacts/applaunch_arm64.deb
           artifacts/applaunch_arm64.deb.sha256
-          artifacts/applaunch_arm64.deb.update-abi
+
+    - name: Publish launcher update channel (metadata)
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: launcher-latest
+        prerelease: true
+        overwrite_files: true
+        fail_on_unmatched_files: true
+        # Written last: the update check reads this file, so devices only see a
+        # new version after the payload above is fully uploaded.
+        files: |
           artifacts/applaunch_arm64.deb.update-info

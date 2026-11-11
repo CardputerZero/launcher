@@ -1,0 +1,67 @@
+name: Publish APPLauncher release
+
+run-name: Publish APPLauncher ${{ inputs.version }}
+
+# Reviewed release gate. Merges only build artifacts (launcher-build.yml); this
+# workflow is the single path that publishes a GitHub Release and refreshes the
+# launcher-latest update channel, and it can only be started by hand, on master,
+# after the change has been reviewed and merged.
+#
+# The publish job in launcher-build.yml runs in the `release` environment. Add
+# required reviewers to that environment in the repository settings to make it
+# a real approval gate.
+#
+# Recovery: if the channel update fails after the versioned release was created,
+# use "Re-run failed jobs" on that run. It re-runs only the publish job and
+# overwrites the channel assets; re-running all jobs would bump the version.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (X.Y.Z). Must be greater than every version installed on devices; check the launcher-latest update channel first."
+        required: true
+        type: string
+      confirm:
+        description: "I reviewed the merged change and want to publish this release"
+        required: true
+        type: boolean
+
+permissions:
+  contents: read
+
+# Only one release at a time. CI builds use their own concurrency group, so they
+# can neither queue ahead of a release nor cancel a pending one.
+concurrency:
+  group: launcher-release
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    name: Verify release preconditions
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+    - name: Require master and explicit confirmation
+      env:
+        CONFIRM: ${{ inputs.confirm }}
+      run: |
+        set -euo pipefail
+        if [ "${GITHUB_REF}" != "refs/heads/master" ]; then
+          echo "::error::This workflow must be dispatched on master; got ${GITHUB_REF}." >&2
+          exit 1
+        fi
+        if [ "${CONFIRM}" != "true" ]; then
+          echo "::error::Tick the confirm input after reviewing the merged change." >&2
+          exit 1
+        fi
+        echo "Publishing ${GITHUB_SHA} from master"
+
+  release:
+    name: Build and publish release
+    needs: guard
+    permissions:
+      contents: write
+    uses: ./.github/workflows/launcher-build.yml
+    with:
+      publish: true
+      version: ${{ inputs.version }}

@@ -290,14 +290,55 @@ workflow = (repo / ".github" / "workflows" / "launcher-build.yml").read_text(
     encoding="utf-8"
 )
 assert "branches: [master, ci/**]" in workflow
-assert "if: github.ref == 'refs/heads/master'" in workflow
+assert "if: ${{ inputs.publish == true && github.ref == 'refs/heads/master' }}" in workflow
 assert "startsWith(github.ref, 'refs/heads/ci/')" not in workflow
-assert workflow.count("tag_name: launcher-latest") == 1
+assert workflow.count("tag_name: launcher-latest") == 2
 assert "scripts/build_cardputerzero_release_local.sh" in workflow
 assert "python3 scripts/debian_packager.py --version" not in workflow
 assert "artifacts/applaunch_arm64.deb.update-info" in workflow
 assert "${{ steps.version.outputs.version }}" in workflow
 assert "${GITHUB_SHA:0:12}" in workflow
+# The release tag is pinned to the commit that was actually built.
+assert "target_commitish: ${{ github.sha }}" in workflow
+# A manual release is a normal GitHub Release; CI runs stay pre-releases.
+assert "prerelease: ${{ !inputs.publish }}" in workflow
+# The versioned release and both channel uploads reject missing assets.
+assert workflow.count("fail_on_unmatched_files: true") == 3
+assert "preserve_order: true" in workflow
+assert "overwrite_files: true" in workflow
+# The update metadata is uploaded after the payload it describes.
+assert workflow.index("Publish launcher update channel (payload)") < workflow.index(
+    "Publish launcher update channel (metadata)"
+)
+# Older updaters need the revision-free rollback alias asset.
+assert 'cp "${package}" "artifacts/applaunch_${{ steps.version.outputs.version }}_arm64.deb"' in workflow
+# Deleted releases and installed versions can still raise the version floor.
+assert "LAUNCHER_RELEASE_FLOOR" in workflow
+assert "git tag -l 'launcher-v[0-9]*'" in workflow
+assert "10#${BASH_REMATCH[3]}" in workflow
+assert "Publishing requires an explicit version" in workflow
+assert "Verify release preconditions" in workflow
+assert "environment: release" in workflow
+# The SDK BSP cache key must come from the version file, not a SConstruct grep.
+assert "tr -d '[:space:]' < ext_components/cp0_lvgl/sdk_version.txt" in workflow
+assert "grep '^version' projects/APPLaunch/SConstruct" not in workflow
+assert "persist-credentials: false" in workflow
+assert "if-no-files-found: error" in workflow
+
+release_workflow = (repo / ".github" / "workflows" / "launcher-release.yml").read_text(
+    encoding="utf-8"
+)
+assert "workflow_dispatch:" in release_workflow
+for trigger in ("push:", "pull_request:", "schedule:", "workflow_run:"):
+    assert trigger not in release_workflow
+assert "required: true" in release_workflow
+assert "uses: ./.github/workflows/launcher-build.yml" in release_workflow
+assert "publish: true" in release_workflow
+assert "version: ${{ inputs.version }}" in release_workflow
+assert "needs: guard" in release_workflow
+assert "refs/heads/master" in release_workflow
+assert "CONFIRM" in release_workflow
+assert "timeout-minutes:" in release_workflow
 
 release_builder = (repo / "scripts" / "build_cardputerzero_release_local.sh").read_text(
     encoding="utf-8"
