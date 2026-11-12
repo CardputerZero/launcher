@@ -33,6 +33,10 @@ constexpr ma_uint32 kPeriodMilliseconds = 20;
 // The first output frames after a PulseAudio stream is opened can be swallowed
 // while the sink settles. Let the device warm up before starting short sounds.
 constexpr auto kDeviceWarmupDuration = std::chrono::milliseconds(300);
+// Close the output stream once no system sound has played for this long. An open
+// engine keeps a playback stream running in the sound server, so the codec, the
+// sound server and this process keep processing silence while the device idles.
+constexpr auto kIdleCloseAfter = std::chrono::seconds(10);
 
 std::string resolve_asset(const std::string &name)
 {
@@ -244,6 +248,7 @@ private:
         for (;;) {
             Command command;
             bool have_command = false;
+            bool idle_close = false;
             {
                 std::unique_lock<std::mutex> lock(mutex_);
                 for (;;) {
@@ -255,11 +260,23 @@ private:
                         break;
                     }
 
-                    wake_.wait(lock);
+                    if (!engine_initialized_) {
+                        wake_.wait(lock);
+                        continue;
+                    }
+                    if (wake_.wait_for(lock, kIdleCloseAfter) == std::cv_status::timeout &&
+                        commands_.empty() && !stopping_ && !any_sound_playing()) {
+                        idle_close = true;
+                        break;
+                    }
                 }
                 if (stopping_) break;
             }
 
+            if (idle_close) {
+                close_engine();
+                continue;
+            }
             if (!have_command) continue;
 
             switch (command.type) {
@@ -415,6 +432,14 @@ private:
         if (ma_sound_seek_to_pcm_frame(&sound, 0) == MA_SUCCESS &&
             ma_sound_start(&sound) == MA_SUCCESS) {
             return true;
+        }
+        return false;
+    }
+
+    bool any_sound_playing()
+    {
+        for (std::size_t i = 0; i < sounds_.size(); ++i) {
+            if (sound_initialized_[i] && ma_sound_is_playing(&sounds_[i])) return true;
         }
         return false;
     }
