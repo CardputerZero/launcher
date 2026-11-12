@@ -5,6 +5,7 @@
  */
 
 #include "cp0_lvgl_app.h"
+#include "keyboard_input.h"  // LVGL_RUN_FLAGE
 #include "hal_lvgl_bsp.h"
 #include "../cp0_app_internal_utils.h"
 #include "../cp0_network_api_contract.hpp"
@@ -480,12 +481,35 @@ private:
     std::condition_variable wake_;
     std::mutex wake_mutex_;
 
+    // Each refresh starts two nmcli processes (~0.2 s of CPU on the device, plus work in
+    // NetworkManager and the system bus). Refresh every 3 s only while the status can be
+    // seen: the launcher in the foreground and the backlight on. Otherwise every 60 s.
+    static constexpr auto kVisiblePollInterval = std::chrono::seconds(3);
+    static constexpr auto kHiddenPollInterval = std::chrono::seconds(60);
+
+    static bool status_visible()
+    {
+        if (LVGL_RUN_FLAGE != 1) return false;  // another app owns the screen
+        FILE *fp = std::fopen("/sys/class/backlight/backlight/brightness", "r");
+        if (!fp) return true;
+        int level = 1;
+        if (std::fscanf(fp, "%d", &level) != 1) level = 1;
+        std::fclose(fp);
+        return level > 0;
+    }
+
     void poll_loop()
     {
+        auto last_refresh = std::chrono::steady_clock::time_point{};
         while (running_.load()) {
-            update_status_cache();
+            const auto now = std::chrono::steady_clock::now();
+            if (last_refresh == std::chrono::steady_clock::time_point{} || status_visible() ||
+                now - last_refresh >= kHiddenPollInterval) {
+                update_status_cache();
+                last_refresh = std::chrono::steady_clock::now();
+            }
             std::unique_lock<std::mutex> lock(wake_mutex_);
-            wake_.wait_for(lock, std::chrono::seconds(3),
+            wake_.wait_for(lock, kVisiblePollInterval,
                            [this] { return !running_.load(); });
         }
     }
