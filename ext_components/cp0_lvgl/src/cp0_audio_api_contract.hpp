@@ -26,6 +26,8 @@ enum class ApiCommand {
     CapEnd,
     CapFileSave,
     SetCallback,
+    /* Load the audio mixer client ahead of the first volume action. */
+    Preload,
     VolumeRead,
     VolumeWrite,
     DefaultSink,

@@ -22,7 +22,7 @@ Paths in the evidence column are relative to the repository root.
 | smooth_ui_toolkit | `ext_components/SmoothUI/SConstruct`, pinned optional UI helper | [MIT](../ext_components/SmoothUI/LICENSE) |
 | spdlog | `ext_components/Spdlog/SConstruct`, pinned optional logging component | [MIT](../ext_components/Spdlog/LICENSE); bundled fmt notice also retained |
 | eventpp | cp0_lvgl, APPLaunch, AppStore and ZClaw requirements; SDK eventpp component | [Apache-2.0](../LICENSES/eventpp-Apache-2.0.txt) |
-| libhv | AppStore and ZClaw `main/SConstruct` requirement `hv` | [BSD-3-Clause](../LICENSES/libhv-BSD-3-Clause.txt) |
+| libhv | ZClaw `main/SConstruct` requirement `hv` | [BSD-3-Clause](../LICENSES/libhv-BSD-3-Clause.txt) |
 | fmt | `SDK/components/utilities/SConstruct`, `party/fmt` | [MIT with optional compiled-object exception](../LICENSES/fmt-MIT.txt) |
 | nlohmann/json 3.11.3 | `projects/CardputerZero-Emulator/vendor/nlohmann/json.hpp` | [MIT](../LICENSES/nlohmann-json-MIT.txt), Niels Lohmann; original SPDX preserved |
 | tinyalsa | Calculator `main/SConstruct` requirement `tinyalsa_component` | [BSD-3-Clause](../LICENSES/tinyalsa-BSD-3-Clause.txt), copied from upstream `NOTICE` (`LICENSE` points there) |
@@ -52,6 +52,7 @@ Component SConstruct files and application SConstruct/CMake files resolve these 
 | SDL2, optional SDL2_mixer | Simulator/emulator display, input and audio | zlib; mixer codecs have separate terms |
 | GLib, GObject, GIO | Native service/event integration | LGPL-2.1-or-later |
 | libdbus; BlueZ daemon | Bluetooth IPC | D-Bus AFL/GPL dual terms; BlueZ GPL/LGPL per component |
+| libpulse.so.0; pipewire-pulse daemon | Speaker volume/mute through the PulseAudio-compatible server (`dlopen`, no build-time dependency) | libpulse LGPL-2.1-or-later; PipeWire MIT (Expat) with LGPL-2.1+ parts |
 | libnm; NetworkManager daemon | Wi-Fi | libnm LGPL-2.1-or-later; NetworkManager GPL-2.0-or-later |
 | libinput, xkbcommon, udev | Native input/device discovery | MIT for libinput/xkbcommon; udev LGPL terms |
 | libcamera, libcamera-base | Camera | LGPL-2.1-or-later library; separate tool terms |

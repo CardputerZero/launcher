@@ -57,31 +57,12 @@ env = SConscript(
     duplicate=0,
 )
 
+# static_lib is only needed for cross-compilation, skip in SDL mode.
 if cross_package_enabled:
-    update = False
-    if not static_lib_path.exists():
-        update = True
-    else:
-        try:
-            with open(str(static_lib_path / "version"), "r") as f:
-                if version != f.read().strip():
-                    update = True
-        except Exception:
-            update = True
-
-    if update:
-        with open(env["PROJECT_TOOL_S"]) as f:
-            exec(f.read())
-        try:
-            import tarfile
-
-            tarfile.TarFile.extraction_filter = staticmethod(
-                tarfile.fully_trusted_filter
-            )
-        except AttributeError:
-            pass
-        down_url = (
-            "https://github.com/CardputerZero/M5CardputerZero-UserDemo/"
-            "releases/download/{}/sdk_bsp.tar.gz"
-        ).format(version)
-        check_wget_down(down_url, "static_lib_{}.tar.gz".format(version))
+    tools = {}
+    exec(Path(env["PROJECT_TOOL_S"]).read_text(), tools)
+    tools["ensure_static_lib_version"](
+        f"https://github.com/CardputerZero/launcher/releases/download/{version}/sdk_bsp.tar.gz",
+        version,
+        static_lib_path / "version"
+    )

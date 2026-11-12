@@ -33,6 +33,9 @@ LDFLAGS = []
 LINK_SEARCH_PATH = []
 STATIC_FILES = []
 
+REQUIREMENTS += [':libcurl.so.4']
+DEFINITIONS += ['-DAPPLAUNCH_USE_LIBCURL=1']
+
 # Generate page_app includes into build output so builds do not rewrite source files.
 def run_python_script(script_rel_path, args=None):
     script_path = script_rel_path.get_abspath()
@@ -130,6 +133,7 @@ lvgl_component['PRIVATE_INCLUDE'] = [
     ADir('lvgl'),
     ADir('../../../SDK/github_source/lvgl/lvgl_9_5/lvgl/src/libs/freetype'),
 ] + lvgl_component['PRIVATE_INCLUDE']
+
 
 
 if 'CONFIG_APPLAUNCH_CROSS' in os.environ:

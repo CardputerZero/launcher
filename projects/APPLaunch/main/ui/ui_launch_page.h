@@ -89,6 +89,7 @@ private:
     void handle_home_key(lv_event_t *event);
     void handle_startup_gif_event(lv_event_t *event);
     void play_startup_sound_with_retry();
+    void warm_up_audio_mixer();
     void handle_startup_sound_result(int code);
     void stop_startup_presentation();
     void stop_startup_sound_timer();

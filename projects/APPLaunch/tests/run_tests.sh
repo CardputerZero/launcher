@@ -12,8 +12,10 @@ python3 "$test_root/test_settings_menu_order.py"
 python3 "$test_root/test_settings_wifi_enable_copy_contract.py"
 python3 "$test_root/test_settings_ethernet_layout_contract.py"
 python3 "$test_root/test_settings_rtc_layout_contract.py"
+python3 "$test_root/test_settings_volume_initial_selection.py"
 python3 "$test_root/test_preinstalled_app_packaging.py"
 python3 "$test_root/test_settings_storage_build_contract.py"
+python3 "$test_root/test_settings_software_page_contract.py"
 python3 "$test_root/test_static_resource_staging.py"
 python3 "$test_root/test_lockscreen_contract.py"
 python3 "$test_root/test_home_icon_fallback_contract.py"
@@ -34,6 +36,15 @@ ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror -pthread \
     "$test_root/test_page_timer_lifecycle.cpp" \
     -o "$build_dir/test_page_timer_lifecycle"
 "$build_dir/test_page_timer_lifecycle"
+${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
+    "$test_root/test_settings_software_model.cpp" \
+    "$settings_ui_root/settings_software_model.cpp" \
+    -o "$build_dir/test_settings_software_model"
+${CXX:-g++} -std=c++17 -Wall -Wextra -Werror -pthread \
+    "$test_root/test_settings_software_updater.cpp" \
+    -o "$build_dir/test_settings_software_updater"
+"$build_dir/test_settings_software_updater"
+"$build_dir/test_settings_software_model"
 python3 "$test_root/test_updater_packaging.py"
 python3 "$test_root/test_appstore_packaging.py"
 ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \

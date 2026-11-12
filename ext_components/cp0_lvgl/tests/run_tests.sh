@@ -59,7 +59,8 @@ trap 'rm -f "$binary" "$init_plan_object" "$esc_state_object"' EXIT HUP INT TERM
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror \
     -I"$root/src/cp0" \
     "$root/src/cp0/cp0_audio_mixer_control.cpp" \
-    "$root/tests/test_audio_mixer_control.cpp" -o "$binary"
+    "$root/src/cp0/cp0_pulse_client.cpp" \
+    "$root/tests/test_audio_mixer_control.cpp" -ldl -o "$binary"
 "$binary"
 
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror \
