@@ -49,6 +49,7 @@ bool is_no_argument_command(const std::string &command, ApiCommand &parsed)
     else if (command == "CapContinue") parsed = ApiCommand::CapContinue;
     else if (command == "CapEnd") parsed = ApiCommand::CapEnd;
     else if (command == "SetCallback") parsed = ApiCommand::SetCallback;
+    else if (command == "Preload") parsed = ApiCommand::Preload;
     else if (command == "VolumeRead") parsed = ApiCommand::VolumeRead;
     else if (command == "DefaultSink") parsed = ApiCommand::DefaultSink;
     else if (command == "MuteRead") parsed = ApiCommand::MuteRead;

@@ -84,6 +84,9 @@ void UILaunchPage::load_home_screen()
             finish_startup_delay();
         }
     }
+    // The one second logo delay is running now; use it to load the audio mixer
+    // client instead of waiting for the first volume key.
+    warm_up_audio_mixer();
 }
 
 void UILaunchPage::finish_startup_delay()
@@ -210,6 +213,17 @@ void UILaunchPage::start_startup_gif()
     lv_obj_center(startup_gif_);
     lv_obj_add_event_cb(startup_gif_, on_startup_gif_event, LV_EVENT_ALL, this);
     lv_disp_load_scr(startup_gif_);
+    warm_up_audio_mixer();
+}
+
+void UILaunchPage::warm_up_audio_mixer()
+{
+    // The splash stays on screen for about a second; load the audio mixer
+    // client now so the first volume key or Settings -> Speaker does not block
+    // on the loader. The request is a no-op on backends without a client
+    // library (SDL), and idempotent after the startup volume restore already
+    // loaded it.
+    cp0_signal_audio_api({"Preload"}, nullptr);
 }
 
 void UILaunchPage::handle_startup_gif_event(lv_event_t *event)

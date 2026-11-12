@@ -5,25 +5,33 @@
  */
 
 #include "cp0_audio_mixer_control.hpp"
+#include "cp0_pulse_client.hpp"
 
 #include <cassert>
 #include <chrono>
+#include <cstdint>
 
 namespace {
 
-void test_volume_lines()
+void test_volume_scale_conversions()
 {
-    int value = 77;
-    assert(!Cp0AudioMixerControl::parse_volume_line(nullptr, value) && value == 77);
-    assert(!Cp0AudioMixerControl::parse_volume_line("", value) && value == 77);
-    assert(!Cp0AudioMixerControl::parse_volume_line("Volume: junk%", value) && value == 77);
-    assert(!Cp0AudioMixerControl::parse_volume_line("Volume: -1%", value) && value == 77);
-    assert(!Cp0AudioMixerControl::parse_volume_line("Volume: junk42%", value) && value == 77);
-    assert(!Cp0AudioMixerControl::parse_volume_line("Volume: 101%", value) && value == 77);
-    assert(!Cp0AudioMixerControl::parse_volume_line("Volume: 999999999999999999999%", value) && value == 77);
-    assert(Cp0AudioMixerControl::parse_volume_line("Volume: 0%", value) && value == 0);
-    assert(Cp0AudioMixerControl::parse_volume_line("Volume: 100%", value) && value == 100);
-    assert(Cp0AudioMixerControl::parse_volume_line("Volume: 42% / 42%", value) && value == 42);
+    // PulseAudio rounds the percentage like pa_cvolume_snprint(); a value
+    // written by the launcher must read back unchanged.
+    assert(cp0::pulse::percent_from_volume_scale(0) == 0);
+    assert(cp0::pulse::percent_from_volume_scale(1) == 0);
+    assert(cp0::pulse::percent_from_volume_scale(32767) == 50);
+    assert(cp0::pulse::percent_from_volume_scale(32768) == 50);
+    assert(cp0::pulse::percent_from_volume_scale(26214) == 40);
+    assert(cp0::pulse::percent_from_volume_scale(65535) == 100);
+    assert(cp0::pulse::percent_from_volume_scale(65536) == 100);
+    assert(cp0::pulse::percent_from_volume_scale(131072) == 200);
+
+    for (int percent = 0; percent <= 100; ++percent) {
+        const std::uint32_t scale = cp0::pulse::volume_scale_from_percent(percent);
+        assert(cp0::pulse::percent_from_volume_scale(scale) == percent);
+    }
+    assert(cp0::pulse::volume_scale_from_percent(-20) == 0);
+    assert(cp0::pulse::volume_scale_from_percent(140) == cp0::pulse::volume_scale_from_percent(100));
 }
 
 void test_sink_names()
@@ -98,7 +106,7 @@ void test_volume_restore_steps()
 
 int main()
 {
-    test_volume_lines();
+    test_volume_scale_conversions();
     test_sink_names();
     test_volume_restore_steps();
 }

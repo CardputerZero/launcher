@@ -90,6 +90,7 @@ public:
             map_fun(CapEnd),
             map_fun(CapFileSave),
             map_fun(SetCallback),
+            map_fun(Preload),
             map_fun(VolumeRead),
             map_fun(DefaultSink),
             map_fun(MuteRead),
@@ -315,6 +316,14 @@ private:
     {
         (void)arg;
         status_callback_ = std::move(callback);
+    }
+
+    void Preload(arg_t arg, callback_t callback)
+    {
+        (void)arg;
+        // The SDL backend keeps the volume in memory; there is no client
+        // library to load, so the request is always satisfied.
+        report(callback, 0, "ok\n");
     }
 
     void VolumeRead(arg_t arg, callback_t callback)

@@ -491,6 +491,13 @@ public:
         capture_.set_status_callback(callback);
     }
 
+    void Preload(arg_t arg, callback_t callback)
+    {
+        (void)arg;
+        const bool ready = mixer_.preload();
+        report(callback, ready ? 0 : -1, ready ? "ok\n" : "pulse unavailable\n");
+    }
+
     void VolumeRead(arg_t arg, callback_t callback)
     {
         (void)arg;
@@ -546,6 +553,7 @@ public:
             map_fun(CapEnd),
             map_fun(CapFileSave),
             map_fun(SetCallback),
+            map_fun(Preload),
             map_fun(VolumeRead),
             map_fun(DefaultSink),
             map_fun(MuteRead),

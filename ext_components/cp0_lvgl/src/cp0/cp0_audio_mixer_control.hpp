@@ -13,14 +13,17 @@
 class Cp0AudioMixerControl
 {
 public:
-    static bool parse_volume_line(const char *line, int &percent);
+    // The device implementation talks to the PulseAudio-compatible server
+    // (pipewire-pulse) in process through libpulse.so.0; see
+    // cp0_pulse_client.cpp. It never spawns a process, so a missing library or
+    // server simply makes every call return an error.
     // "auto_null" is PipeWire's placeholder sink. A volume written to it is
     // discarded when the real hardware sink appears, so callers that must
     // reach the speaker have to tell the two apart. While no sink exists at
     // all, pipewire-pulse reports the special name "@DEFAULT_SINK@" instead.
     // Defined inline because shared callers such as commount.cpp are also built
-    // by the emulator and AppStore targets, which do not compile the pactl
-    // implementation in cp0_audio_mixer_control.cpp.
+    // by the emulator and AppStore targets, which do not compile the
+    // libpulse-backed implementation in cp0_audio_mixer_control.cpp.
     static bool is_hardware_sink_name(const char *name)
     {
         if (!name || !name[0] || name[0] == '@')
@@ -33,17 +36,17 @@ public:
     int write_volume(int percent) const;
     int read_mute() const;
     int toggle_mute() const;
-
-private:
-    static int clamp_percent(int percent);
+    // Loads the PulseAudio client library ahead of the first use. Idempotent;
+    // returns false when the client library is unavailable.
+    bool preload() const;
 };
 
 // Decides one pass of the startup volume restore. The loop itself lives in
 // the launcher, but the transitions are the part that usually breaks, so they
-// stay pure: no clock, no pactl, no signals.
+// stay pure: no clock, no audio server, no signals.
 // Defined inline for the same reason as is_hardware_sink_name: commount.cpp is
-// built by the emulator and AppStore targets, which do not compile the pactl
-// implementation in cp0_audio_mixer_control.cpp.
+// built by the emulator and AppStore targets, which do not compile the
+// libpulse-backed implementation in cp0_audio_mixer_control.cpp.
 struct Cp0VolumeRestoreStep
 {
     enum class Action

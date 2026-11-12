@@ -158,6 +158,16 @@ public:
         return saved.code == 0 ? saved : backend;
     }
 
+    // The persisted key is what the startup restore writes to the mixer, so it
+    // is the best value the page can show before the asynchronous mixer read
+    // returns. A missing or invalid entry keeps the supplied fallback.
+    static int read_saved_volume(int fallback)
+    {
+        const auto saved = decode_volume(invoke_config_default(
+            {"GetInt", "volume", std::to_string(fallback)}, std::chrono::milliseconds(3000)));
+        return saved.code == 0 ? saved.value : fallback;
+    }
+
     static bool save_volume_config(int value)
     {
         const auto previous = decode_volume(
@@ -256,7 +266,9 @@ const std::string &LvSettingVolumePage3::last_error() const
 
 int LvSettingVolumePage3::initial_selection() const
 {
-    return 0;
+    // The persisted volume is seeded before the value list is built, so the
+    // first frame already shows the real level instead of the 100% default.
+    return selection_for_volume(backend_volume_);
 }
 
 SettingApiResult LvSettingVolumePage3::activate_selected()
@@ -298,6 +310,16 @@ void LvSettingVolumePage3::initialize_page(lv_obj_t *parent, std::function<void(
 {
     back_callback_ = std::move(back_callback);
     LeaveSelfPage = [this] { request_back(); };
+    // The mixer read runs off the LVGL thread, so creating the list with the
+    // default selection would show 100% until the result arrives. Seed the
+    // page with the persisted volume first; every commit saves that key and
+    // the startup restore writes it back to the mixer.
+    const int saved = settings_audio_com::read_saved_volume(metric(LayoutMetric::MaxVolume));
+    original_volume_        = saved;
+    backend_volume_         = saved;
+    last_preview_requested_ = saved;
+    last_preview_actual_    = saved;
+    locked_selection_       = selection_for_volume(saved);
     initialize(parent);
     if (ComponensObj) start_read_request();
 }
@@ -518,11 +540,11 @@ void LvSettingVolumePage3::handle_volume_result(const ActiveRequest &request,
             last_error_.clear();
             select_volume(selection_for_volume(result.value));
         } else {
-            original_volume_ = metric(LayoutMetric::MaxVolume);
-            backend_volume_  = original_volume_;
-            ready_            = true;
-            last_error_       = result.data.empty() ? "unable to read volume" : result.data;
-            select_volume(0);
+            // Keep the persisted value seeded at page open: a failed mixer
+            // read must not drag the selection back to the 100% default.
+            ready_      = true;
+            last_error_ = result.data.empty() ? "unable to read volume" : result.data;
+            select_volume(selection_for_volume(backend_volume_));
         }
         if (back_requested_) finish_back();
         return;

@@ -35,6 +35,9 @@ void test_path_and_no_argument_commands()
     assert(cp0::audio::parse_api_request({"PlayPause"}, request));
     assert(request.command == ApiCommand::PlayPause);
     assert(!cp0::audio::parse_api_request({"PlayPause", "junk"}, request));
+    assert(cp0::audio::parse_api_request({"Preload"}, request));
+    assert(request.command == ApiCommand::Preload);
+    assert(!cp0::audio::parse_api_request({"Preload", "junk"}, request));
     assert(cp0::audio::parse_api_request({"CapEnd"}, request));
     assert(request.command == ApiCommand::CapEnd);
     assert(cp0::audio::parse_api_request({"MuteToggle"}, request));
