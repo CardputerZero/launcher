@@ -259,7 +259,7 @@ Screen geometry: **320×170**, a 20px top bar plus a 320×150 content area.
 | Toast styling | `main/ui/launcher_toast.cpp` | `kShowDurationMs` |
 | Loading overlay | `main/ui/ui_loading.cpp` | `show` / `hide` |
 | Lock screen (timeout/unlock/wallpaper) | `main/ui/ui_screensaver.cpp` + `model/lockscreen_state_model.hpp`, `model/screensaver_model.hpp` | constrained by `tests/test_lockscreen_contract.py` |
-| Low-battery policy / appearance | `main/ui/low_battery_flow.hpp` / `ui_low_battery.cpp` | the policy is pure logic and unit-tested |
+| Low-battery policy / appearance / sound cues | `main/ui/low_battery_flow.hpp` / `ui_low_battery.cpp` | the policy is pure logic and unit-tested; cues register with `RegisterSystemSounds` and play via `cp0_signal_system_play` |
 | Settings menu structure | `main/ui/settings/settings_page.cpp` | `create_page_detail` (node order = menu order), `UISettingTreePage` |
 | Settings entry policy/gating | `main/ui/settings/settings_tree_types.hpp` | `SettingEntry`, `SettingActivationPolicy`, `activation_gate` |
 | Add a settings sub-page | new `*_page.{hpp,cpp}` in `main/ui/settings/` + a factory and tree node in `settings_page.cpp` | three-level value pages derive from `LvSettingValuePage3Base` |
