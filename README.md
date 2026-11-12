@@ -119,6 +119,7 @@ The project is mainly developed in a Linux environment and is also compatible wi
 ```bash
 sudo apt update
 sudo apt install python3 python3-pip build-essential pkg-config libffi-dev libsdl2-dev libfreetype6-dev
+sudo apt install libcurl4-openssl-dev
 
 pip3 install parse scons requests tqdm
 pip3 install setuptools-rust paramiko scp

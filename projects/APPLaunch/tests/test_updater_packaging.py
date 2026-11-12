@@ -285,6 +285,18 @@ assert 'action.lookup("verb") == "stop"' in packager._updater_polkit_text()
 assert "status downloading:5" in packager._updater_script_text()
 assert "status installing:85" in packager._updater_script_text()
 assert "status restarting:95" in packager._updater_script_text()
+assert "applaunch-apps-updater.service" in packager._updater_polkit_text()
+assert "TimeoutStartSec=30min" in packager._apps_updater_service_text()
+assert "TimeoutStopSec=5min" in packager._apps_updater_service_text()
+assert "apt-get install" in packager._apps_updater_script_text()
+assert "m5cardputerzero-recorder" in packager._apps_updater_script_text()
+assert "m5cardputerzero-keyboard-guide" in packager._apps_updater_script_text()
+assert "/usr/libexec/applaunch-apps-updater" in packager._apps_updater_service_text()
+assert subprocess.run(
+    ["sh", "-n"], input=packager._apps_updater_script_text(), text=True,
+    capture_output=True, check=False,
+).returncode == 0
+assert len(packager.APP_UPDATE_SPECS) == 14
 
 workflow = (repo / ".github" / "workflows" / "launcher-build.yml").read_text(
     encoding="utf-8"
@@ -348,3 +360,138 @@ assert '"$ROOT/projects/$project/main/build"' in release_builder
 assert "applaunch_arm64.deb.update-info" in release_builder
 assert "printf 'format=1\\n'" in release_builder
 assert "printf 'commit=%s\\n'" in release_builder
+
+
+def run_apps_update(fail_install_for: str = "",
+                    install_latest: bool = False) -> tuple[subprocess.CompletedProcess[str], str]:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        root = Path(temp_dir)
+        fake_bin = root / "bin"
+        releases = root / "releases"
+        json_dir = root / "json"
+        installed = root / "installed"
+        state = root / "state"
+        cache = root / "cache"
+        for directory in (fake_bin, releases, json_dir, installed):
+            directory.mkdir()
+
+        installed_versions = {
+            "m5cardputerzero-recorder": "0.1.9" if install_latest else "0.1.8",
+            "m5cardputerzero-compass": "0.2.4",
+            "m5cardputerzero-files": "1.0.2" if install_latest else "1.0.0",
+        }
+        for package, version in installed_versions.items():
+            (installed / package).write_text(version + "\n", encoding="ascii")
+
+        assets = {
+            "m5cardputerzero-recorder": (
+                "m5cardputerzero-recorder", "0.1.9", "Recorder"),
+            "m5cardputerzero-compass": (
+                "m5cardputerzero-compass", "0.2.4", "Compass"),
+            "m5cardputerzero-files": (
+                "m5cardputerzero-files", "1.0.2", "Files"),
+        }
+        for package, (prefix, version, repo) in assets.items():
+            asset = f"{prefix}_{version}_m5stack1_arm64.deb"
+            (releases / asset).write_text(
+                f"Package={package}\nArchitecture=arm64\nVersion={version}\n",
+                encoding="ascii",
+            )
+            (json_dir / f"{repo}.json").write_text(
+                '{"tag_name":"v1.0.0","assets":[{"name":"'
+                + asset + '"}]}',
+                encoding="ascii",
+            )
+
+        log = root / "commands.log"
+        executable(
+            fake_bin / "curl",
+            'url=""; dest=""; prev=""\n'
+            'for arg in "$@"; do\n'
+            '  [ "$prev" = "-o" ] && dest=$arg\n'
+            '  case "$arg" in http*) url=$arg;; esac\n'
+            '  prev=$arg\n'
+            'done\n'
+            'repo=$(printf "%s" "$url" | sed "s#.*/CardputerZero/##; s#/releases/latest##")\n'
+            'cp "$TEST_JSON_DIR/$repo.json" "$dest"\n',
+        )
+        executable(
+            fake_bin / "wget",
+            'url=""; dest=""; prev=""\n'
+            'for arg in "$@"; do\n'
+            '  [ "$prev" = "-O" ] && dest=$arg\n'
+            '  case "$arg" in http*) url=$arg;; esac\n'
+            '  prev=$arg\n'
+            'done\n'
+            'cp "$TEST_RELEASES/${url##*/}" "$dest"\n',
+        )
+        executable(
+            fake_bin / "dpkg-query",
+            'package=$3\n'
+            'if [ -f "$TEST_INSTALLED/$package" ]; then cat "$TEST_INSTALLED/$package"; '
+            'else exit 1; fi\n',
+        )
+        executable(
+            fake_bin / "dpkg",
+            'if [ "$1" = "--compare-versions" ]; then\n'
+            '  higher=$(printf "%s\\n%s\\n" "$2" "$4" | sort -V | tail -1)\n'
+            '  [ "$higher" = "$2" ] && [ "$2" != "$4" ]\n'
+            '  exit $?\n'
+            'fi\n'
+            'exit 0\n',
+        )
+        executable(
+            fake_bin / "dpkg-deb",
+            'field=$3\n'
+            'sed -n "s/^${field}=//p" "$2"\n',
+        )
+        executable(
+            fake_bin / "apt-get",
+            'case "$1" in update) exit 0;; esac\n'
+            'deb=""; for arg in "$@"; do deb=$arg; done\n'
+            'package=$(sed -n "s/^Package=//p" "$deb")\n'
+            'version=$(sed -n "s/^Version=//p" "$deb")\n'
+            'echo "apt-get install $package $version" >> "$TEST_LOG"\n'
+            'if [ -n "$TEST_FAIL_INSTALL" ] && [ "$package" = "$TEST_FAIL_INSTALL" ]; then exit 1; fi\n'
+            'printf "%s\\n" "$version" > "$TEST_INSTALLED/$package"\n',
+        )
+        env = os.environ.copy()
+        env.update(
+            {
+                "PATH": f"{fake_bin}:{env['PATH']}",
+                "APPLAUNCH_UPDATE_STATE_DIR": str(state),
+                "APPLAUNCH_APPS_UPDATE_CACHE_DIR": str(cache),
+                "APPLAUNCH_APPS_UPDATE_API_ROOT": "https://example.invalid/CardputerZero",
+                "APPLAUNCH_APPS_UPDATE_DOWNLOAD_ROOT": "https://example.invalid/dl",
+                "TEST_JSON_DIR": str(json_dir),
+                "TEST_RELEASES": str(releases),
+                "TEST_INSTALLED": str(installed),
+                "TEST_LOG": str(log),
+                "TEST_FAIL_INSTALL": fail_install_for,
+            }
+        )
+        result = subprocess.run(
+            ["sh"], input=packager._apps_updater_script_text(), text=True,
+            env=env, capture_output=True, check=False,
+        )
+        status = (state / "apps-status").read_text(encoding="utf-8").strip()
+        return result, status
+
+
+success, status = run_apps_update()
+assert success.returncode == 0, (success.stderr, success.stdout, status)
+assert status == (
+    "succeeded:updated=m5cardputerzero-recorder:0.1.9,"
+    "m5cardputerzero-files:1.0.2|failed="
+), status
+
+current, status = run_apps_update(install_latest=True)
+assert current.returncode == 0
+assert status == "succeeded:updated=|failed=", status
+
+partial, status = run_apps_update(fail_install_for="m5cardputerzero-files")
+assert partial.returncode == 0
+assert status == (
+    "succeeded:updated=m5cardputerzero-recorder:0.1.9|"
+    "failed=m5cardputerzero-files:install"
+), status

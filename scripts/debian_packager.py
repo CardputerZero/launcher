@@ -48,6 +48,33 @@ OPTIONAL_BINARIES = (
 )
 
 
+# Application packages installed by pi-gen/stage2/05-cardputerzero/03-run.sh.
+# (Debian package, GitHub repository, release asset prefix)
+APP_UPDATE_SPECS = (
+    ("m5cardputerzero-recorder", "Recorder", "m5cardputerzero-recorder_"),
+    ("m5cardputerzero-compass", "Compass", "m5cardputerzero-compass_"),
+    ("camera", "CameraApp", "Camera_"),
+    ("factorytest", "FactoryTest", "FactoryTest_"),
+    ("m5cardputerzero-files", "Files", "m5cardputerzero-files_"),
+    ("m5cardputerzero-music", "Music", "m5cardputerzero-music_"),
+    ("m5cardputerzero-ir-chat", "IR-Chat", "m5cardputerzero-ir-chat_"),
+    ("m5cardputerzero-piano", "Piano", "m5cardputerzero-piano_"),
+    ("m5cardputerzero-ir-remote", "IR-Remote", "m5cardputerzero-ir-remote_"),
+    ("m5cardputerzero-cap-cc1101-subg-chat", "Cap-CC1101-SubG-Chat",
+     "m5cardputerzero-cap-cc1101-subg-chat_"),
+    ("m5cardputerzero-cap-cc1101-nfc", "Cap-CC1101-NFC",
+     "m5cardputerzero-cap-cc1101-nfc_"),
+    ("m5cardputerzero-cap-lora-1262", "Cap-LoRa-1262",
+     "m5cardputerzero-cap-lora-1262_"),
+    ("m5cardputerzero-cap-lora-1262-gps", "Cap-LoRa-1262-GPS",
+     "m5cardputerzero-cap-lora-1262-gps_"),
+    ("m5cardputerzero-keyboard-guide", "Keyboard-Guide",
+     "m5cardputerzero-keyboard-guide_"),
+)
+
+APP_UPDATE_ASSET_SUFFIX = "_m5stack1_arm64.deb"
+
+
 class PackError(RuntimeError):
     """Raised when the package cannot be assembled."""
 
@@ -406,11 +433,13 @@ def _updater_polkit_text() -> str:
 polkit.addRule(function(action, subject) {
     if (action.id == "org.freedesktop.systemd1.manage-units" &&
         (action.lookup("unit") == "applaunch-updater.service" ||
-         action.lookup("unit") == "applaunch-apt-update.service") &&
+         action.lookup("unit") == "applaunch-apt-update.service" ||
+         action.lookup("unit") == "applaunch-apps-updater.service") &&
         (action.lookup("verb") == "start" ||
          (action.lookup("verb") == "stop" &&
           (action.lookup("unit") == "applaunch-updater.service" ||
-           action.lookup("unit") == "applaunch-apt-update.service"))) &&
+           action.lookup("unit") == "applaunch-apt-update.service" ||
+           action.lookup("unit") == "applaunch-apps-updater.service"))) &&
         subject.isInGroup("sudo")) {
         return polkit.Result.YES;
     }
@@ -641,6 +670,195 @@ status "succeeded:$candidate"
 """
 
 
+def _apps_updater_service_text() -> str:
+    return """[Unit]
+Description=APPLaunch application package updater
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/applaunch-apps-updater
+TimeoutStartSec=30min
+TimeoutStopSec=5min
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+"""
+
+
+def _apps_updater_script_text() -> str:
+    apps = "\n".join("|".join(spec) for spec in APP_UPDATE_SPECS)
+    script = r"""#!/bin/sh
+set -eu
+
+# Update the application packages installed by the CardputerZero image stage.
+# The package/repository/asset allowlist below is fixed so the unprivileged
+# launcher can only trigger installations from trusted CardputerZero releases.
+STATE_DIR=${APPLAUNCH_UPDATE_STATE_DIR:-/var/lib/applaunch-updater}
+STATUS_FILE=$STATE_DIR/apps-status
+CACHE_DIR=${APPLAUNCH_APPS_UPDATE_CACHE_DIR:-/var/cache/APPLaunch/app-updates}
+LOG_FILE=$STATE_DIR/apps-update.log
+ARCHITECTURE=arm64
+ASSET_SUFFIX=__ASSET_SUFFIX__
+API_ROOT=${APPLAUNCH_APPS_UPDATE_API_ROOT:-https://api.github.com/repos/CardputerZero}
+DOWNLOAD_ROOT=${APPLAUNCH_APPS_UPDATE_DOWNLOAD_ROOT:-https://github.com/CardputerZero}
+
+status() {
+    printf '%s\n' "$1" >"$STATUS_FILE.tmp"
+    chmod 0644 "$STATUS_FILE.tmp"
+    mv -f "$STATUS_FILE.tmp" "$STATUS_FILE"
+}
+fail() {
+    finished=1
+    status "failed:$1"
+    exit 1
+}
+
+mkdir -p "$STATE_DIR" "$CACHE_DIR"
+chmod 0755 "$STATE_DIR"
+chmod 0700 "$CACHE_DIR"
+: >"$LOG_FILE"
+chmod 0644 "$LOG_FILE"
+exec 9>"$STATE_DIR/apps.lock"
+flock -n 9 || exit 0
+
+tmp_dir=$(mktemp -d "$STATE_DIR/apps-run.XXXXXX")
+finished=0
+cleanup() {
+    if [ "$finished" -eq 0 ]; then
+        status "failed:unexpected"
+    fi
+    rm -rf "$tmp_dir"
+}
+cancelled() {
+    finished=1
+    status cancelled
+    exit 0
+}
+trap cleanup EXIT
+trap cancelled HUP INT TERM
+
+APPS='__APP_UPDATE_SPECS__'
+count=$(printf '%s\n' "$APPS" | sed '/^$/d' | wc -l)
+index=0
+updated=
+failed=
+dpkg --configure -a >>"$LOG_FILE" 2>&1 || true
+# App dependencies (for example factorytest -> libcamera) can be newer than
+# the image's package indexes.  Refresh them once before installing.
+timeout 300 env DEBIAN_FRONTEND=noninteractive apt-get update >>"$LOG_FILE" 2>&1 || true
+
+while IFS='|' read -r package repo prefix; do
+    [ -n "$package" ] || continue
+    index=$((index + 1))
+    status "checking:$index:$count:"
+    installed=$(dpkg-query -W -f='${Version}' "$package" 2>/dev/null || true)
+    [ -n "$installed" ] || continue
+
+    cache_file=$CACHE_DIR/$repo.json
+    tag=
+    asset=
+    refresh=1
+    if [ -f "$cache_file" ] && [ -z "$(find "$cache_file" -mmin +5 2>/dev/null)" ]; then
+        refresh=0
+    fi
+    if [ "$refresh" -eq 1 ]; then
+        if curl -fsSL --max-time 15 --connect-timeout 5 \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'User-Agent: APPLaunch-App-Updater' \
+            "$API_ROOT/$repo/releases/latest" -o "$cache_file.tmp" \
+            >>"$LOG_FILE" 2>&1; then
+            mv -f "$cache_file.tmp" "$cache_file"
+        elif [ ! -f "$cache_file" ]; then
+            # The API is rate limited for the unauthenticated device.  Fall
+            # back to the public release page, which is not API-rate-limited.
+            effective_url=$(curl -fsSL --max-time 15 --connect-timeout 5 \
+                -o /dev/null -w '%{url_effective}' \
+                "https://github.com/CardputerZero/$repo/releases/latest" \
+                2>>"$LOG_FILE" || true)
+            tag=${effective_url##*/tag/}
+            if [ -n "$tag" ]; then
+                html=$(curl -fsSL --max-time 15 --connect-timeout 5 \
+                    "https://github.com/CardputerZero/$repo/releases/expanded_assets/$tag" \
+                    2>>"$LOG_FILE" || true)
+                asset=$(printf '%s' "$html" | \
+                    grep -o "${prefix}[^\"]*${ASSET_SUFFIX}" | head -n 1)
+            fi
+            if [ -z "$tag" ] || [ -z "$asset" ]; then
+                failed="$failed$package:release,"
+                continue
+            fi
+        fi
+    fi
+
+    if [ -z "$tag" ] || [ -z "$asset" ]; then
+        tag=$(sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$cache_file" | head -n 1)
+        asset=$(grep -o "\"name\"[[:space:]]*:[[:space:]]*\"${prefix}[^\"]*${ASSET_SUFFIX}\"" "$cache_file" | head -n 1 | sed 's/.*"\([^"]*\)"$/\1/')
+    fi
+    if [ -z "$tag" ] || [ -z "$asset" ]; then
+        failed="$failed$package:metadata,"
+        continue
+    fi
+    version=${asset#"$prefix"}
+    version=${version%"$ASSET_SUFFIX"}
+    if [ -z "$version" ]; then
+        failed="$failed$package:version,"
+        continue
+    fi
+    if ! dpkg --compare-versions "$version" gt "$installed" 2>/dev/null; then
+        continue
+    fi
+
+    status "downloading:$index:$count:$package"
+    deb=$tmp_dir/$package.deb
+    if ! timeout 120 wget -q --https-only --timeout=30 --tries=3 \
+        "$DOWNLOAD_ROOT/$repo/releases/download/$tag/$asset" -O "$deb" \
+        >>"$LOG_FILE" 2>&1; then
+        failed="$failed$package:download,"
+        rm -f "$deb"
+        continue
+    fi
+    deb_package=$(dpkg-deb -f "$deb" Package 2>/dev/null || true)
+    deb_arch=$(dpkg-deb -f "$deb" Architecture 2>/dev/null || true)
+    deb_version=$(dpkg-deb -f "$deb" Version 2>/dev/null || true)
+    if [ "$deb_package" != "$package" ] ||
+       [ "$deb_arch" != "$ARCHITECTURE" ] ||
+       [ -z "$deb_version" ] ||
+       ! dpkg --compare-versions "$deb_version" gt "$installed" 2>/dev/null; then
+        failed="$failed$package:invalid-package,"
+        rm -f "$deb"
+        continue
+    fi
+
+    status "installing:$index:$count:$package"
+    if ! timeout 300 env DEBIAN_FRONTEND=noninteractive apt-get install -y \
+        --no-install-recommends "$deb" >>"$LOG_FILE" 2>&1; then
+        failed="$failed$package:install,"
+        rm -f "$deb"
+        continue
+    fi
+    active=$(dpkg-query -W -f='${Version}' "$package" 2>/dev/null || true)
+    if [ "$active" != "$deb_version" ]; then
+        failed="$failed$package:verify,"
+        rm -f "$deb"
+        continue
+    fi
+    updated="$updated$package:$deb_version,"
+    rm -f "$deb"
+done <<EOF
+$APPS
+EOF
+
+updated=${updated%,}
+failed=${failed%,}
+status "succeeded:updated=$updated|failed=$failed"
+finished=1
+"""
+    script = script.replace("__ASSET_SUFFIX__", APP_UPDATE_ASSET_SUFFIX)
+    return script.replace("__APP_UPDATE_SPECS__", apps)
+
+
 def _service_text(config: PackageConfig) -> str:
     if config.service_scope == "system":
         return f"""[Unit]
@@ -773,6 +991,16 @@ def prepare_package_tree(
         _write_text(
             paths.package_root / Path(*LIBEXEC_PATH.parts) / "applaunch-updater",
             _updater_script_text(), mode=0o755,
+        )
+        _write_text(
+            paths.package_root / Path(*SYSTEM_SERVICE_PATH.parts) /
+            "applaunch-apps-updater.service",
+            _apps_updater_service_text(),
+        )
+        _write_text(
+            paths.package_root / Path(*LIBEXEC_PATH.parts) /
+            "applaunch-apps-updater",
+            _apps_updater_script_text(), mode=0o755,
         )
 
     print(f"Staged package tree: {paths.package_root}")
