@@ -32,20 +32,36 @@ jobs:
         git clone --depth 1 --branch v9.5.0 https://github.com/lvgl/lvgl.git projects/CardputerZero-Emulator/lib/lvgl
     - name: Install dependencies
       run: brew install sdl2 sdl2_image freetype pkg-config nlohmann-json
-    - name: Build
+    - name: Build production package
       run: |
         cd projects/CardputerZero-Emulator
-        mkdir build && cd build
-        cmake .. -DCMAKE_BUILD_TYPE=Release
-        make -j$(sysctl -n hw.ncpu)
+        cmake -S . -B build-package -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
+        cmake --build build-package --parallel "$(sysctl -n hw.ncpu)"
+    - name: Build test binary
+      run: |
+        cd projects/CardputerZero-Emulator
+        cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
+        cmake --build build --parallel "$(sysctl -n hw.ncpu)"
+    - name: Test
+      run: ctest --test-dir projects/CardputerZero-Emulator/build --output-on-failure --no-tests=error
+    - name: Check production instrumentation
+      run: |
+        cd projects/CardputerZero-Emulator
+        grep -q '^BUILD_TESTING:BOOL=OFF$' build-package/CMakeCache.txt
+        strings build-package/cardputer-zero-emu > build-package/emulator-strings.txt
+        if grep -Eq 'EMU_TEST_CLICK_FRAME|EMU_TEST_KEY_FRAME|click_delivered=' build-package/emulator-strings.txt; then
+          echo "Input test instrumentation found in the production binary" >&2
+          exit 1
+        fi
     - name: Package
       run: |
         cd projects/CardputerZero-Emulator
         mkdir -p dist/CardputerZero-Emulator
-        cp build/cardputer-zero-emu dist/CardputerZero-Emulator/
-        cp -r build/apps dist/CardputerZero-Emulator/
-        cp -r build/assets dist/CardputerZero-Emulator/
-        cp -r build/images dist/CardputerZero-Emulator/
+        cp build-package/cardputer-zero-emu dist/CardputerZero-Emulator/
+        cp -r build-package/apps dist/CardputerZero-Emulator/
+        cp -r build-package/assets dist/CardputerZero-Emulator/
+        cp -r build-package/images dist/CardputerZero-Emulator/
+        cp -r build-package/APPLaunch dist/CardputerZero-Emulator/
         cd dist && tar czf ../CardputerZero-Emulator-macOS.tar.gz CardputerZero-Emulator
     - uses: actions/upload-artifact@v4
       with:
@@ -72,20 +88,36 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y libsdl2-dev libsdl2-image-dev libfreetype-dev libinput-dev libxkbcommon-dev libudev-dev pkg-config nlohmann-json3-dev
-    - name: Build
+    - name: Build production package
       run: |
         cd projects/CardputerZero-Emulator
-        mkdir build && cd build
-        cmake .. -DCMAKE_BUILD_TYPE=Release
-        make -j$(nproc)
+        cmake -S . -B build-package -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
+        cmake --build build-package --parallel "$(nproc)"
+    - name: Build test binary
+      run: |
+        cd projects/CardputerZero-Emulator
+        cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
+        cmake --build build --parallel "$(nproc)"
+    - name: Test
+      run: ctest --test-dir projects/CardputerZero-Emulator/build --output-on-failure --no-tests=error
+    - name: Check production instrumentation
+      run: |
+        cd projects/CardputerZero-Emulator
+        grep -q '^BUILD_TESTING:BOOL=OFF$' build-package/CMakeCache.txt
+        strings build-package/cardputer-zero-emu > build-package/emulator-strings.txt
+        if grep -Eq 'EMU_TEST_CLICK_FRAME|EMU_TEST_KEY_FRAME|click_delivered=' build-package/emulator-strings.txt; then
+          echo "Input test instrumentation found in the production binary" >&2
+          exit 1
+        fi
     - name: Package
       run: |
         cd projects/CardputerZero-Emulator
         mkdir -p dist/CardputerZero-Emulator
-        cp build/cardputer-zero-emu dist/CardputerZero-Emulator/
-        cp -r build/apps dist/CardputerZero-Emulator/
-        cp -r build/assets dist/CardputerZero-Emulator/
-        cp -r build/images dist/CardputerZero-Emulator/
+        cp build-package/cardputer-zero-emu dist/CardputerZero-Emulator/
+        cp -r build-package/apps dist/CardputerZero-Emulator/
+        cp -r build-package/assets dist/CardputerZero-Emulator/
+        cp -r build-package/images dist/CardputerZero-Emulator/
+        cp -r build-package/APPLaunch dist/CardputerZero-Emulator/
         cd dist && tar czf ../CardputerZero-Emulator-Linux.tar.gz CardputerZero-Emulator
     - uses: actions/upload-artifact@v4
       with:
