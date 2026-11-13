@@ -240,7 +240,7 @@ ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     -o "$build_dir/test_launcher_media_model"
 "$build_dir/test_launcher_media_model"
 
-${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
+${CXX:-g++} -std=c++17 -Wall -Wextra -Werror -pthread \
     -I"$(dirname "$0")/../../../ext_components/cp0_lvgl/include" \
     -I"$(dirname "$0")/../../../SDK/github_source/eventpp/include" \
     "$(dirname "$0")/test_launcher_media_controls.cpp" \

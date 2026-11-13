@@ -13,6 +13,21 @@ namespace launcher_media_controls {
 constexpr int VOLUME_STEP_PERCENT =
     setup_values::volume_metric(setup_values::VolumeMetric::StepPercent);
 
+/* Volume cached for the lifetime of the launcher process. The launcher reads
+ * the system mixer once at startup and keeps this value in sync with every
+ * volume write it performs, so the shortcut OSD and Settings -> Speaker render
+ * the same number instead of querying the mixer at different times.
+ * cached_volume() returns -1 until the startup read produced a value. */
+bool has_cached_volume();
+int cached_volume();
+/* Read the mixer once, off the LVGL thread, and publish the settled value.
+ * Safe to call once at launcher startup; a later call restarts the read. */
+void start_volume_cache();
+/* Join the startup reader so teardown cannot race a signal call. */
+void stop_volume_cache();
+/* Record a value that was just written to the mixer, or read back from it. */
+void update_cached_volume(int percent);
+
 int adjust_volume(int delta_percent);
 int adjust_brightness(int delta_percent);
 bool toggle_mute();
