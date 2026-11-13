@@ -8,11 +8,15 @@
 
 #include "hal_lvgl_bsp.h"
 
+#include <algorithm>
 #include <cassert>
+#include <chrono>
+#include <cstddef>
 #include <functional>
 #include <iterator>
 #include <list>
 #include <string>
+#include <thread>
 #include <vector>
 
 eventpp::CallbackList<void(std::list<std::string>, std::function<void(int, std::string)>)>
@@ -35,6 +39,23 @@ int config_writes = 0;
 bool sink_muted = true;
 int mute_toggles = 0;
 std::vector<std::string> audio_commands;
+
+std::size_t count_commands(const std::string &command)
+{
+    return static_cast<std::size_t>(
+        std::count(audio_commands.begin(), audio_commands.end(), command));
+}
+
+bool wait_for_cached_volume(int expected, int timeout_ms = 3000)
+{
+    const auto deadline =
+        std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
+    while (launcher_media_controls::cached_volume() != expected) {
+        if (std::chrono::steady_clock::now() >= deadline) return false;
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    return true;
+}
 
 void reply(const std::function<void(int, std::string)> &callback,
            int code, const std::string &data)
@@ -124,37 +145,61 @@ int main()
         });
 
     assert(launcher_media_controls::VOLUME_STEP_PERCENT == 10);
+
+    // The launcher reads the mixer once at startup and caches it. The worker
+    // waits for two equal readings so a pre-settle level cannot be captured.
+    sink_volume = 63;
+    launcher_media_controls::start_volume_cache();
+    assert(wait_for_cached_volume(63));
+    launcher_media_controls::stop_volume_cache();
+    assert(launcher_media_controls::has_cached_volume());
+    const std::size_t startup_reads = count_commands("VolumeRead");
+    assert(startup_reads >= 2);
+
+    // A shortcut steps from the cached value; it must not issue a fresh read.
     assert(launcher_media_controls::adjust_volume(-10) == 50);
     assert(!sink_muted);
     assert(sink_volume == 50);
     assert(configured_volume == 50);
+    assert(launcher_media_controls::cached_volume() == 50);
     assert(mute_toggles == 1);
-    assert(audio_commands.size() >= 4);
-    assert(audio_commands[0] == "MuteRead");
-    assert(audio_commands[1] == "MuteToggle");
-    assert(audio_commands[2] == "VolumeRead");
-    assert(audio_commands[3] == "VolumeWrite");
+    assert(count_commands("VolumeRead") == startup_reads);
+    assert(audio_commands[0] == "VolumeRead");
+    assert(audio_commands[1] == "VolumeRead");
+    assert(audio_commands[2] == "MuteRead");
+    assert(audio_commands[3] == "MuteToggle");
+    assert(audio_commands[4] == "VolumeWrite");
 
+    // An external mixer change does not reach the shortcut until something
+    // publishes it (the Settings read or a write does).
+    sink_volume = 90;
     sink_muted = true;
-    sink_volume = 63;
-    assert(launcher_media_controls::adjust_volume(10) == 70);
+    assert(launcher_media_controls::adjust_volume(10) == 60);
     assert(!sink_muted);
-    assert(sink_volume == 70);
-    assert(configured_volume == 70);
+    assert(sink_volume == 60);
+    assert(configured_volume == 60);
+    assert(launcher_media_controls::cached_volume() == 60);
     assert(mute_toggles == 2);
+    assert(count_commands("VolumeRead") == startup_reads);
 
-    sink_volume = 71;
-    assert(launcher_media_controls::adjust_volume(10) == 80);
-    assert(!sink_muted);
-    assert(sink_volume == 80);
-    assert(configured_volume == 80);
-    assert(mute_toggles == 2);
-
-    sink_volume = 82;
+    launcher_media_controls::update_cached_volume(82);
+    assert(launcher_media_controls::cached_volume() == 82);
     assert(launcher_media_controls::adjust_volume(-10) == 70);
     assert(sink_volume == 70);
     assert(configured_volume == 70);
-    assert(mute_toggles == 2);
+    assert(launcher_media_controls::cached_volume() == 70);
+
+    launcher_media_controls::update_cached_volume(150);
+    assert(launcher_media_controls::cached_volume() == 100);
+    launcher_media_controls::update_cached_volume(-10);
+    assert(launcher_media_controls::cached_volume() == 0);
+
+    // A launcher restart re-reads the mixer and replaces the cache.
+    sink_volume = 63;
+    launcher_media_controls::start_volume_cache();
+    assert(wait_for_cached_volume(63));
+    launcher_media_controls::stop_volume_cache();
+    assert(launcher_media_controls::cached_volume() == 63);
 
     assert(launcher_media_controls::adjust_brightness(-10) == 30);
     assert(backlight_value == 76);

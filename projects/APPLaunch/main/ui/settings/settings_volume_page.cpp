@@ -7,6 +7,7 @@
 #include "settings_volume_page.hpp"
 
 #include "hal_lvgl_bsp.h"
+#include "../launcher_media_controls.h"
 
 #include <charconv>
 #include <chrono>
@@ -158,9 +159,10 @@ public:
         return saved.code == 0 ? saved : backend;
     }
 
-    // The persisted key is what the startup restore writes to the mixer, so it
-    // is the best value the page can show before the asynchronous mixer read
-    // returns. A missing or invalid entry keeps the supplied fallback.
+    // The persisted key is only a fallback: the launcher caches the mixer
+    // volume at startup, and that cache is what the shortcut OSD and this page
+    // must both render. A page opened before the startup read completed keeps
+    // the persisted value and the asynchronous read below refreshes both.
     static int read_saved_volume(int fallback)
     {
         const auto saved = decode_volume(invoke_config_default(
@@ -310,11 +312,13 @@ void LvSettingVolumePage3::initialize_page(lv_obj_t *parent, std::function<void(
 {
     back_callback_ = std::move(back_callback);
     LeaveSelfPage = [this] { request_back(); };
-    // The mixer read runs off the LVGL thread, so creating the list with the
-    // default selection would show 100% until the result arrives. Seed the
-    // page with the persisted volume first; every commit saves that key and
-    // the startup restore writes it back to the mixer.
-    const int saved = settings_audio_com::read_saved_volume(metric(LayoutMetric::MaxVolume));
+    // The first frame must show the volume the launcher cached at startup, so
+    // Settings -> Speaker and the shortcut OSD agree. The persisted key is
+    // only used when the startup read has not produced a value yet; the
+    // asynchronous mixer read below refreshes both when it returns.
+    const int saved = launcher_media_controls::has_cached_volume()
+                          ? launcher_media_controls::cached_volume()
+                          : settings_audio_com::read_saved_volume(metric(LayoutMetric::MaxVolume));
     original_volume_        = saved;
     backend_volume_         = saved;
     last_preview_requested_ = saved;
@@ -532,6 +536,9 @@ void LvSettingVolumePage3::handle_volume_result(const ActiveRequest &request,
     const bool valid = result.code == 0 && settings_audio_com::volume_value_valid(result.value);
     if (request.kind == RequestKind::Read) {
         if (valid) {
+            /* The mixer is authoritative; publish what it reports so the
+             * shortcut OSD and every later render share this value. */
+            launcher_media_controls::update_cached_volume(result.value);
             original_volume_       = result.value;
             backend_volume_        = result.value;
             last_preview_requested_ = result.value;
@@ -554,10 +561,12 @@ void LvSettingVolumePage3::handle_volume_result(const ActiveRequest &request,
         rollback_pending_ = false;
         commit_requested_ = false;
         commit_leave_requested_ = false;
-        if (valid)
+        if (valid) {
             backend_volume_ = result.value;
-        else
+            launcher_media_controls::update_cached_volume(result.value);
+        } else {
             last_error_ = result.data.empty() ? "unable to restore volume" : result.data;
+        }
         select_volume(selection_for_volume(original_volume_));
         preview_touched_        = false;
         last_preview_requested_ = backend_volume_;
@@ -574,6 +583,9 @@ void LvSettingVolumePage3::handle_volume_result(const ActiveRequest &request,
     }
 
     backend_volume_ = result.value;
+    /* Preview and commit writes already changed the mixer; keep the shared
+     * cache in step so leaving this page cannot expose a stale value. */
+    launcher_media_controls::update_cached_volume(result.value);
     last_error_.clear();
     if (request.kind == RequestKind::PreviewWrite) {
         handle_preview_success(request);
