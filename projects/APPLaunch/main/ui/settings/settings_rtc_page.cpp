@@ -1766,15 +1766,9 @@ std::string settings_rtc_local_time_text()
     if (localtime_r(&now, &local) == nullptr) return {};
 #endif
     char buffer[32] = {};
-    std::snprintf(buffer,
-                  sizeof(buffer),
-                  "%04d-%02d-%02d %02d:%02d:%02d",
-                  local.tm_year + 1900,
-                  local.tm_mon + 1,
-                  local.tm_mday,
-                  local.tm_hour,
-                  local.tm_min,
-                  local.tm_sec);
+    // No truncation check needed: with an int tm_year the longest possible
+    // "%Y-%m-%d %H:%M:%S" is 25 characters, which always fits in 32 bytes.
+    std::strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", &local);
     return buffer;
 }
 
