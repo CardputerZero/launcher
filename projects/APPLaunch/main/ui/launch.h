@@ -89,6 +89,7 @@ private:
 
     static void lv_go_back_home(void *arg) noexcept;
     static void esc_force_home_cb(void *user_data) noexcept;
+    static void esc_home_hold_cb(void *user_data) noexcept;
     static void app_registry_changed_cb(void *user_data) noexcept;
 
     std::weak_ptr<UILaunchPage> launch_page_;

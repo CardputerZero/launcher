@@ -24,8 +24,10 @@ bool EscHoldHintController::handle(const key_item *item)
         return false;
 
     if (item->key_state == KBD_KEY_PRESSED) {
-        if (!return_home_enabled_) return true;
+        const bool home_hold = home_hold_available();
+        if (!return_home_enabled_ && !home_hold) return true;
         if (!model_.press(lv_tick_get())) return true;
+        hold_is_home_ = home_hold;
         if (!poll_timer_)
             poll_timer_ = lv_timer_create(poll_timer_cb, kPollPeriodMs, this);
         if (poll_timer_) {
@@ -66,6 +68,21 @@ void EscHoldHintController::set_force_home_callback(ForceHomeCallback callback, 
     }
 }
 
+void EscHoldHintController::set_home_hold_callback(HomeHoldCallback callback, void *user_data)
+{
+    home_hold_callback_ = callback;
+    home_hold_user_data_ = user_data;
+    if (!callback && hold_is_home_) {
+        if (poll_timer_) lv_timer_pause(poll_timer_);
+        if (model_.cancel()) launcher_toast().hide();
+    }
+}
+
+bool EscHoldHintController::home_hold_available() const
+{
+    return !return_home_enabled_ && home_hold_callback_ != nullptr;
+}
+
 void EscHoldHintController::shutdown()
 {
     if (poll_timer_) {
@@ -75,18 +92,31 @@ void EscHoldHintController::shutdown()
     if (model_.cancel()) launcher_toast().hide();
     force_home_callback_ = nullptr;
     force_home_user_data_ = nullptr;
+    home_hold_callback_ = nullptr;
+    home_hold_user_data_ = nullptr;
 }
 
 void EscHoldHintController::poll(lv_timer_t *timer)
 {
     if (!esc_hold_timer_is_current(timer, poll_timer_)) return;
+    /* A hold started on the home screen ends if an app takes over, and vice versa. */
+    const bool hold_still_valid = hold_is_home_ ? home_hold_available() : return_home_enabled_;
+    const bool callback_available =
+        hold_is_home_ ? home_hold_callback_ != nullptr : force_home_callback_ != nullptr;
     const EscHoldPollDecision decision = model_.poll(
-        lv_tick_get(), cp0_esc_state_read() != 0, force_home_callback_ != nullptr,
-        return_home_enabled_);
+        lv_tick_get(), cp0_esc_state_read() != 0, callback_available, hold_still_valid);
     if (decision.hide_hint) launcher_toast().hide();
     if (decision.show_hint)
-        launcher_toast().show_persistent("Hold ESC 3s to return home");
-    if (decision.force_home) {
+        launcher_toast().show_persistent(hold_is_home_ ? "Hold ESC 3s for power menu"
+                                                       : "Hold ESC 3s to return home");
+    if (decision.force_home && hold_is_home_) {
+        HomeHoldCallback callback = home_hold_callback_;
+        void *user_data = home_hold_user_data_;
+        /* The menu takes over input and swallows this ESC's release, so end the
+         * hold here or the next press would be ignored. */
+        if (model_.cancel()) launcher_toast().hide();
+        if (callback) callback(user_data);
+    } else if (decision.force_home) {
         ForceHomeCallback callback = force_home_callback_;
         void *user_data = force_home_user_data_;
         if (callback) callback(user_data);

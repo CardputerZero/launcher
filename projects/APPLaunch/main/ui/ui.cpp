@@ -15,6 +15,7 @@
 #include "ui_global_hint.h"
 #include "ui_loading.h"
 #include "ui_screensaver.h"
+#include "ui_power_menu.h"
 #include <stdio.h>
 #include <cstdlib>
 #include "lvgl/src/widgets/gif/lv_gif.h"
@@ -40,6 +41,9 @@ void init()
     cp0_keyboard_set_global_key_handler(ui_global_hint::on_key);
     home = std::make_unique<LauncherUiRuntime>();
     home->start();
+    /* Before the low-battery warning, so its filter chains to this one and
+     * keeps priority over the menu. */
+    ui_power_menu::init();
     launcher_battery_ui::init_warning();
 }
 
@@ -48,6 +52,7 @@ void deinit()
     cp0_keyboard_set_global_key_handler(nullptr);
     ui_global_hint::shutdown();
     launcher_battery_ui::shutdown_warning();
+    ui_power_menu::shutdown();
     ui_loading::shutdown();
     ui_screensaver_deinit();
     home.reset();

@@ -20,6 +20,8 @@ int ui_screensaver_filter_key(const struct key_item *item);
 /* Includes the exit animation, until the working screen is fully visible. */
 int ui_screensaver_is_active(void);
 void ui_screensaver_set_foreground(int foreground);
+/* Lock immediately (black screen, backlight down), as the idle timeout would. */
+void ui_screensaver_lock_now(void);
 
 #ifdef __cplusplus
 }

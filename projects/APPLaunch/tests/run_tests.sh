@@ -207,6 +207,11 @@ ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     -o "$build_dir/test_esc_hold_lifecycle_model"
 "$build_dir/test_esc_hold_lifecycle_model"
 ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
+    "$test_root/test_power_menu_model.cpp" \
+    "$test_root/../main/ui/model/power_menu_model.cpp" \
+    -o "$build_dir/test_power_menu_model"
+"$build_dir/test_power_menu_model"
+${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     "$(dirname "$0")/test_esc_ui_watchdog.cpp" \
     -o "$build_dir/test_esc_ui_watchdog"
 "$build_dir/test_esc_ui_watchdog"

@@ -14,6 +14,7 @@
 #include "generated/page_app.h"
 #include "ui_launch_page.h"
 #include "ui_screensaver.h"
+#include "ui_power_menu.h"
 #include "ui_loading.h"
 #include "cp0_lvgl_app.h"
 #include "sample_log.h"
@@ -49,6 +50,7 @@ void Launch::bind_ui()
     app_directory_watcher_.start([this] { applications_reload(); });
     esc_ui_watchdog_.start();
     esc_hold_hint_controller().set_force_home_callback(esc_force_home_cb, this);
+    esc_hold_hint_controller().set_home_hold_callback(esc_home_hold_cb, this);
 }
 
 void Launch::launch_app()
@@ -274,11 +276,25 @@ void Launch::esc_force_home_cb(void *user_data) noexcept
     }
 }
 
+void Launch::esc_home_hold_cb(void *user_data) noexcept
+{
+    auto *self = static_cast<Launch *>(user_data);
+    if (!self || self->app_Page || LVGL_RUN_FLAGE == 0) return;
+    if (self->page_lifecycle_.state() != LauncherPageState::HOME) return;
+    if (ui_screensaver_is_active()) return;
+    try {
+        SLOGI("[HOME] ESC held for 3000 ms on home, opening power menu");
+        ui_power_menu::open();
+    } catch (...) {
+    }
+}
+
 
 Launch::~Launch()
 {
     launcher_app_registry_clear_changed_callback(app_registry_changed_cb, this);
     esc_hold_hint_controller().set_force_home_callback(nullptr, nullptr);
+    esc_hold_hint_controller().set_home_hold_callback(nullptr, nullptr);
     esc_hold_hint_controller().set_return_home_enabled(false);
     esc_ui_watchdog_.shutdown();
     app_directory_watcher_.stop();

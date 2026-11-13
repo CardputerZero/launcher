@@ -636,6 +636,17 @@ extern "C" int ui_screensaver_is_active(void)
     return s_model.active() || s_exiting;
 }
 
+extern "C" void ui_screensaver_lock_now(void)
+{
+    try {
+    if (!s_timer || !s_model.foreground() || s_model.active() || s_exiting)
+        return;
+    enter_lockscreen();
+    } catch (...) {
+        stop_screensaver();
+    }
+}
+
 extern "C" void ui_screensaver_set_foreground(int foreground)
 {
     try {
