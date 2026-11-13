@@ -47,6 +47,7 @@ static int backlight_suspends;
 static int backlight_restores;
 static bool fail_backlight_write;
 static std::string screensaver_timeout = "0";
+static std::string lock_screen = "1";
 
 decltype(cp0_signal_config_api) cp0_signal_config_api;
 decltype(cp0_signal_audio_api) cp0_signal_audio_api;
@@ -447,6 +448,48 @@ static void test_unlock_restarts_idle_timeout()
     screensaver_timeout = "0";
 }
 
+/* Settings > Screen > Lock Screen off: the idle timeout still blacks the panel and
+ * turns the backlight off, but without the lock sound, and the first fresh key
+ * wakes straight back (consumed, so it does not also act on the page). */
+static void test_lock_screen_off_wakes_on_any_key()
+{
+    set_battery(80);
+    advance(3000);
+    assert(!visible());
+    screensaver_timeout = "10";
+    lock_screen = "0";
+    backlight_raw = 128;
+    s_last_sound_asset = "";
+
+    key(KEY_ESC, KBD_KEY_PRESSED, false);
+    key(KEY_ESC, KBD_KEY_RELEASED, false);
+    advance(10000);
+    ::timer_cb(s_timer);
+    assert(ui_screensaver_is_active() && s_panel.black);
+    assert(backlight_raw == 0);
+    assert_sound("");
+
+    key(KEY_A, KBD_KEY_PRESSED, true);
+    assert(s_exiting && ui_screensaver_is_active());
+    key(KEY_A, KBD_KEY_RELEASED, true);
+    advance(400);
+    lv_anim_refr_now();
+    assert(!ui_screensaver_is_active());
+    assert(backlight_raw == 128);
+    assert_sound("");
+
+    // The setting is read on each lock: back on, the next lock asks for TAB, ENTER.
+    lock_screen = "1";
+    advance(10000);
+    ::timer_cb(s_timer);
+    assert(ui_screensaver_is_active() && s_panel.black);
+    assert_sound("lock.mp3");
+    unlock_screensaver();
+    key(KEY_ESC, KBD_KEY_PRESSED, false);
+    key(KEY_ESC, KBD_KEY_RELEASED, false);
+    screensaver_timeout = "0";
+}
+
 static void test_screensaver_black_is_independent_of_backlight()
 {
     set_battery(80);
@@ -693,8 +736,9 @@ int main()
                        static_cast<lv_event_code_t>(LV_EVENT_KEYBOARD), nullptr);
     cp0_keyboard_set_global_key_handler([](const key_item *) { ++global_events; });
     cp0_keyboard_set_key_filter(previous_filter);
-    cp0_signal_config_api.append([](std::list<std::string>, std::function<void(int, std::string)> reply) {
-        if (reply) reply(0, screensaver_timeout);
+    cp0_signal_config_api.append([](std::list<std::string> arguments, std::function<void(int, std::string)> reply) {
+        const bool lock_key = arguments.size() > 1 && *std::next(arguments.begin()) == "lock_screen";
+        if (reply) reply(0, lock_key ? lock_screen : screensaver_timeout);
     });
     cp0_signal_audio_api.append([](std::list<std::string>, std::function<void(int, std::string)> reply) {
         if (reply) reply(0, "");
@@ -836,6 +880,7 @@ int main()
     test_hold_gesture_enters_lock();
     test_screensaver_panel();
     test_unlock_restarts_idle_timeout();
+    test_lock_screen_off_wakes_on_any_key();
     test_screensaver_black_is_independent_of_backlight();
     shutdown_warning();
     assert(!overlay && !warning_timer);

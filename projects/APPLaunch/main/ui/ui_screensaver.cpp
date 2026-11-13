@@ -88,6 +88,8 @@ LockscreenBackgroundCache s_background_cache;
 /* Raw backlight value captured when the panel is forced dark, or -1 while the
  * backlight is under normal control. */
 int s_screen_off_backlight_raw = -1;
+/* Read from "lock_screen" on every lock: when off, any key wakes straight back. */
+bool s_lock_enabled = true;
 
 struct ScreensaverPanel
 {
@@ -360,6 +362,20 @@ void hint_delete_cb(lv_event_t *event) noexcept
     }
 }
 
+bool lock_screen_enabled() noexcept
+{
+    int value = 1;
+    try {
+        cp0_signal_config_api({"GetInt", "lock_screen", "1"},
+                              [&](int code, std::string data) {
+                                  if (code == 0 && (data == "0" || data == "1"))
+                                      value = data == "1" ? 1 : 0;
+                              });
+    } catch (...) {
+    }
+    return value != 0;
+}
+
 int timeout_seconds() noexcept
 {
     try {
@@ -482,9 +498,11 @@ void enter_lockscreen()
     s_lock.reset(now);
     launcher_battery_ui::refresh_visibility();
 
+    s_lock_enabled = lock_screen_enabled();
     suspend_system_sound();
     suspend_screen_off_backlight();
-    play_lockscreen_sound("lock.mp3");
+    if (s_lock_enabled)
+        play_lockscreen_sound("lock.mp3");
 
     lv_obj_move_foreground(s_overlay);
     lv_obj_clear_flag(s_overlay, LV_OBJ_FLAG_HIDDEN);
@@ -598,6 +616,12 @@ extern "C" int ui_screensaver_filter_key(const struct key_item *item)
         return 1;
 
     if (s_model.active()) {
+        if (!s_lock_enabled) {
+            /* Lock screen off: the first key only wakes the screen, without a sound. */
+            if (pressed)
+                stop_screensaver(true, true);
+            return 1;
+        }
         /* The lock screen owns every key while it is up. */
         const LockscreenDecision decision =
             s_lock.handle_key(item->key_code, pressed, released, now);

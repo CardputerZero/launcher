@@ -578,6 +578,71 @@ void bluetooth_named_only_api(int cmd, void *data)
     bluetooth_named_only_state = previous;
 }
 
+// "lock_screen" (1 = on, the default): when off, the idle timeout still turns the
+// screen black and the backlight off, but any key wakes straight back to the launcher
+// instead of asking for TAB then ENTER. Read by ui_screensaver.cpp on each lock.
+constexpr const char *kLockScreenConfigKey = "lock_screen";
+bool lock_screen_state = true;
+std::mutex lock_screen_mutex;
+
+bool read_lock_screen_config(bool fallback)
+{
+    int value = fallback ? 1 : 0;
+    try {
+        cp0_signal_config_api(
+            {"GetInt", kLockScreenConfigKey, "1"},
+            [&](int code, std::string data) {
+                int parsed = 0;
+                const char *begin = data.data();
+                const char *end = begin + data.size();
+                const auto result = std::from_chars(begin, end, parsed);
+                if (code == 0 && result.ec == std::errc{} && result.ptr == end &&
+                    (parsed == 0 || parsed == 1))
+                    value = parsed;
+            });
+    } catch (...) {
+    }
+    return value != 0;
+}
+
+bool write_lock_screen_config(bool enabled)
+{
+    bool succeeded = false;
+    try {
+        cp0_signal_config_api({"SetInt", kLockScreenConfigKey, enabled ? "1" : "0"},
+                              [&](int code, std::string) { succeeded = code == 0; });
+    } catch (...) {
+    }
+    return succeeded;
+}
+
+void lock_screen_api(int cmd, void *data)
+{
+    std::lock_guard<std::mutex> state_lock(lock_screen_mutex);
+    if ((cmd == SettingApiReadFlag || cmd == SettingApiReadFlagTimeStart) && data) {
+        lock_screen_state = read_lock_screen_config(lock_screen_state);
+        if (cmd == SettingApiReadFlag)
+            *static_cast<bool *>(data) = lock_screen_state;
+        else
+            std::get<0>(*static_cast<SettingApiReadFlagTimeStartData *>(data)) = lock_screen_state;
+        return;
+    }
+    if (cmd != SettingApiActivate) return;
+
+    const bool previous = read_lock_screen_config(lock_screen_state);
+    const bool desired = !previous;
+    if (!write_lock_screen_config(desired)) {
+        lock_screen_state = previous;
+        return;
+    }
+    if (save_bluetooth_config()) {  // "Save" persists the whole config file
+        lock_screen_state = desired;
+        return;
+    }
+    if (write_lock_screen_config(previous)) (void)save_bluetooth_config();
+    lock_screen_state = previous;
+}
+
 static void append_numeric_options(Tree &tree, const NodeIter &parent, int first, int last)
 {
     for (int value = first; value <= last; ++value) tree.append_child(parent, SettingEntry{std::to_string(value)});
@@ -621,6 +686,7 @@ void UISettingTreePage::create_page_detail()
             mode_tree.append_child(dark_time, SettingEntry{"60S"});
             mode_tree.append_child(dark_time, SettingEntry{"300S"});
         }
+        mode_tree.append_child(screen, SettingEntry{"Lock Screen", lock_screen_api, true});
     }
 
     {
