@@ -10,6 +10,10 @@
 #include <iostream>
 #include <unistd.h>
 
+// Normally defined by the keyboard backend; the status poll reads it to tell whether the
+// launcher owns the screen.
+volatile int LVGL_RUN_FLAGE = 1;
+
 decltype(cp0_signal_wifi_api) cp0_signal_wifi_api;
 
 namespace {
