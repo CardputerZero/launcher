@@ -159,6 +159,7 @@ set(CP0_LVGL_APP_COMMON_SRCS
     ${CP0_LVGL}/src/cp0_network_api_contract.cpp
     ${CP0_LVGL}/src/cp0_status_ethernet.c
     ${CP0_LVGL}/src/cp0_status_lifecycle.cpp
+    ${CP0_LVGL}/src/cp0_time_format.cpp
     ${CP0_LVGL}/src/ui_app_page.cpp
 )
 
