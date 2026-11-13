@@ -1,13 +1,17 @@
 # SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD
 # SPDX-License-Identifier: MIT
 
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.20)
 project(cardputer-zero-emu LANGUAGES C CXX)
+
+# Release builds should not include the emulator's input test driver.
+option(BUILD_TESTING "Build emulator tests" OFF)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
+include(CTest)
 
 # Paths — same repo, sibling projects
 set(REPO_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../..)
@@ -48,10 +52,10 @@ if(NOT EMSCRIPTEN)
         endif()
     endif()
 
-    find_package(SDL2 QUIET)
+    find_package(SDL2 2.0.18 QUIET)
     if(NOT SDL2_FOUND)
         find_package(PkgConfig REQUIRED)
-        pkg_check_modules(SDL2 REQUIRED sdl2)
+        pkg_check_modules(SDL2 REQUIRED sdl2>=2.0.18)
     endif()
 
     find_package(PkgConfig QUIET)
@@ -106,6 +110,20 @@ endif()
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/lib/lvgl ${CMAKE_CURRENT_BINARY_DIR}/lvgl)
+
+# The native cp0 backend supplies the SDL keyboard entry points on Darwin.
+# ld64 rejects duplicate definitions rather than selecting one as ELF does.
+if(APPLE AND NOT EMSCRIPTEN)
+    get_target_property(LVGL_SRCS lvgl SOURCES)
+    list(LENGTH LVGL_SRCS _lvgl_sources_before)
+    list(FILTER LVGL_SRCS EXCLUDE REGEX ".*/src/drivers/sdl/lv_sdl_keyboard\\.c$")
+    list(LENGTH LVGL_SRCS _lvgl_sources_after)
+    math(EXPR _lvgl_keyboard_sources_removed "${_lvgl_sources_before} - ${_lvgl_sources_after}")
+    if(NOT _lvgl_keyboard_sources_removed EQUAL 1)
+        message(FATAL_ERROR "Expected to remove exactly one LVGL SDL keyboard source")
+    endif()
+    set_property(TARGET lvgl PROPERTY SOURCES ${LVGL_SRCS})
+endif()
 
 file(GLOB APPLAUNCH_LVGL_FREETYPE_SRCS CONFIGURE_DEPENDS
     ${APPLAUNCH_LVGL_OVERRIDE}/lv_freetype*.c
@@ -313,6 +331,8 @@ if(APPLE OR (UNIX AND NOT EMSCRIPTEN))
 endif()
 if(APPLE)
     target_link_libraries(cardputer-zero-emu PRIVATE util)
+    target_sources(cardputer-zero-emu PRIVATE ${CP0_LVGL_SDL_SRCS})
+    target_compile_definitions(cardputer-zero-emu PRIVATE HAL_PLATFORM_SDL=1)
 endif()
 # The SDL keyboard implementation depends on Linux headers (linux/input.h).
 # Some MinGW/MSYS environments report UNIX-like properties even when the
@@ -321,6 +341,36 @@ if(UNIX AND NOT APPLE AND NOT WIN32 AND NOT CMAKE_SYSTEM_NAME MATCHES "Windows|M
     target_sources(cardputer-zero-emu PRIVATE ${CP0_LVGL_SDL_SRCS})
     target_compile_definitions(cardputer-zero-emu PRIVATE HAL_PLATFORM_SDL=1)
     target_link_options(cardputer-zero-emu PRIVATE -Wl,--allow-multiple-definition)
+endif()
+
+if(UNIX AND NOT WIN32 AND BUILD_TESTING AND TARGET APPLaunch)
+    target_compile_definitions(cardputer-zero-emu PRIVATE EMU_ENABLE_INPUT_TESTS=1)
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/test-config/runtime")
+    add_test(NAME emulator-runtime
+        COMMAND ${CMAKE_COMMAND} -E env
+            SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy
+            "APPLAUNCH_SDL_CONFIG_DIR=${CMAKE_CURRENT_BINARY_DIR}/test-config/runtime"
+            EMU_TEST_CLICK_FRAME=10 EMU_TEST_NAVIGATE_FRAME=20
+            EMU_TEST_KEY_FRAME=25
+            EMU_TEST_RESET_FRAME=40 EMU_TEST_QUIT_FRAME=60
+            $<TARGET_FILE:cardputer-zero-emu>)
+    set_tests_properties(emulator-runtime PROPERTIES
+        WORKING_DIRECTORY $<TARGET_FILE_DIR:cardputer-zero-emu>
+        TIMEOUT 30)
+    # Deliberately start the saved-volume restore worker in an isolated config.
+    # Exiting must join it before the audio backend's static objects are destroyed.
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/test-config/saved-volume")
+    file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/test-config/saved-volume/config.json"
+        "{\"volume\":55}\n")
+    add_test(NAME emulator-saved-volume-exit
+        COMMAND ${CMAKE_COMMAND} -E env
+            SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy
+            "APPLAUNCH_SDL_CONFIG_DIR=${CMAKE_CURRENT_BINARY_DIR}/test-config/saved-volume"
+            EMU_TEST_QUIT_FRAME=20
+            $<TARGET_FILE:cardputer-zero-emu>)
+    set_tests_properties(emulator-saved-volume-exit PROPERTIES
+        WORKING_DIRECTORY $<TARGET_FILE_DIR:cardputer-zero-emu>
+        TIMEOUT 10)
 endif()
 
 target_include_directories(cardputer-zero-emu PRIVATE
