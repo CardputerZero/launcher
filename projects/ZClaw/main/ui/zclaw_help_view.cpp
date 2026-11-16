@@ -88,7 +88,7 @@ void HelpView::create(lv_obj_t *parent, const FontManager *fonts)
     lv_obj_t *description = lv_label_create(content_);
     lv_obj_set_width(description, 270);
     lv_obj_set_style_text_font(description, fonts_->font_10(), 0);
-    lv_obj_set_style_text_color(description, lv_color_hex(theme::kMuted), 0);
+    lv_obj_set_style_text_color(description, lv_color_hex(theme::kText), 0);
     lv_label_set_long_mode(description, LV_LABEL_LONG_WRAP);
     lv_label_set_text(description,
                       "A Personal AI Assistant based on ZeroClaw, supporting multiple "
@@ -108,7 +108,7 @@ void HelpView::create(lv_obj_t *parent, const FontManager *fonts)
 
     widgets::label(panel, "KEY_HELP / ESC  close", 11, 143, 278,
                    lv_font_get_line_height(fonts_->font_10()),
-                   fonts_->font_10(), theme::kMuted);
+                   fonts_->font_10(), theme::kText);
     hide();
 }
 
