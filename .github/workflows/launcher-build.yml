@@ -447,31 +447,35 @@ jobs:
           artifacts/*.update-info
           artifacts/M5CardputerZero-APPLaunch
 
+    # The channel is refreshed by uploading assets only. It must not go through
+    # action-gh-release: that action PATCHes the release (name, draft state,
+    # target commitish) before uploading, and the channel release is anchored on
+    # a tag whose commit has a different .github/workflows tree than the default
+    # branch. GitHub therefore demands the `workflows` scope for the release
+    # call, which GITHUB_TOKEN can never hold, and the step dies with
+    # "Resource not accessible by integration" (#update-a-release). Asset upload
+    # is not subject to that check.
+    #
+    # Side effect: the release title and prerelease flag are no longer maintained
+    # here; they only affect the GitHub web page, and devices resolve the channel
+    # by tag name and ignore both.
     - name: Publish launcher update channel (payload)
-      uses: softprops/action-gh-release@v2
-      with:
-        tag_name: launcher-latest
-        name: "APPLauncher Update Channel"
-        # The channel pointer stays a pre-release on purpose: it must not take
-        # the repository's "Latest release" badge. Devices download these assets
-        # by tag name and ignore the flag.
-        prerelease: true
-        overwrite_files: true
-        preserve_order: true
-        fail_on_unmatched_files: true
-        files: |
-          artifacts/applaunch_arm64.deb.update-abi
-          artifacts/applaunch_arm64.deb
-          artifacts/applaunch_arm64.deb.sha256
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -euo pipefail
+        for asset in \
+          artifacts/applaunch_arm64.deb.update-abi \
+          artifacts/applaunch_arm64.deb \
+          artifacts/applaunch_arm64.deb.sha256; do
+          gh release upload launcher-latest "$asset" --clobber
+        done
 
     - name: Publish launcher update channel (metadata)
-      uses: softprops/action-gh-release@v2
-      with:
-        tag_name: launcher-latest
-        prerelease: true
-        overwrite_files: true
-        fail_on_unmatched_files: true
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -euo pipefail
         # Written last: the update check reads this file, so devices only see a
         # new version after the payload above is fully uploaded.
-        files: |
-          artifacts/applaunch_arm64.deb.update-info
+        gh release upload launcher-latest artifacts/applaunch_arm64.deb.update-info --clobber

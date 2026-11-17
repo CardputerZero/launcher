@@ -147,24 +147,41 @@ int main()
     assert(!parse_check_result("failed:software-check:1", malformed));
 
     AppUpdateState app_state;
+    assert(parse_app_update_status("starting", app_state));
+    assert(app_state.phase == AppUpdateState::Phase::Starting);
     assert(parse_app_update_status("checking:2:7:m5cardputerzero-recorder", app_state));
     assert(app_state.phase == AppUpdateState::Phase::Checking);
     assert(app_state.index == 2);
     assert(app_state.total == 7);
     assert(app_state.package == "m5cardputerzero-recorder");
+    // The live counters are optional so older status files stay readable.
+    assert(parse_app_update_status("checking:2:7:m5cardputerzero-recorder:1:0",
+                                   app_state));
+    assert(app_state.updated_count == 1);
+    assert(app_state.failed_count == 0);
     assert(parse_app_update_status("downloading:3:7:camera", app_state));
     assert(app_state.phase == AppUpdateState::Phase::Downloading);
-    assert(parse_app_update_status("installing:4:7:factorytest", app_state));
+    assert(parse_app_update_status("installing:4:7:factorytest:1:1", app_state));
     assert(app_state.phase == AppUpdateState::Phase::Installing);
+    assert(app_state.updated_count == 1);
+    assert(app_state.failed_count == 1);
     assert(parse_app_update_status(
         "succeeded:updated=m5cardputerzero-recorder:0.1.9,"
         "m5cardputerzero-files:1.0.2|failed=camera:install,", app_state));
     assert(app_state.phase == AppUpdateState::Phase::Succeeded);
     assert(app_state.updated_count == 2);
     assert(app_state.failed_count == 1);
+    assert(app_state.updated.size() == 2);
+    assert(app_state.updated[0].package == "m5cardputerzero-recorder");
+    assert(app_state.updated[0].version == "0.1.9");
+    assert(app_state.failures.size() == 1);
+    assert(app_state.failures[0].package == "camera");
+    assert(app_state.failures[0].reason == "install");
     assert(parse_app_update_status("succeeded:updated=|failed=", app_state));
     assert(app_state.updated_count == 0);
     assert(app_state.failed_count == 0);
+    assert(app_state.updated.empty());
+    assert(app_state.failures.empty());
     assert(parse_app_update_status("failed:unexpected", app_state));
     assert(app_state.phase == AppUpdateState::Phase::Failed);
     assert(app_state.detail == "unexpected");
@@ -173,6 +190,115 @@ int main()
     assert(parse_app_update_status("cancelling:installing", app_state));
     assert(app_state.phase == AppUpdateState::Phase::Cancelling);
     assert(!parse_app_update_status("garbage", app_state));
+
+    AppUpdateFailure warning;
+    assert(parse_app_update_warning("m5cardputerzero-files:download\n", warning));
+    assert(warning.package == "m5cardputerzero-files");
+    assert(warning.reason == "download");
+    assert(!parse_app_update_warning("", warning));
+    assert(!parse_app_update_warning("download", warning));
+    assert(!parse_app_update_warning(":download", warning));
+
+    assert(app_update_failure_label("download") == "download failed");
+    assert(app_update_failure_label("install") == "install failed");
+    assert(app_update_failure_label("verify") == "verification failed");
+    assert(app_update_failure_label("invalid-package") == "invalid package");
+    assert(app_update_failure_label("metadata") == "check failed");
+    assert(app_update_failure_label("release") == "check failed");
+    assert(app_update_failure_label("version") == "check failed");
+    assert(app_update_failure_label("") == "failed");
+    assert(app_update_failure_label("custom") == "custom");
+
+    {
+        char warnings_path[] = "/tmp/settings-software-warnings-XXXXXX";
+        const int warnings_descriptor = mkstemp(warnings_path);
+        assert(warnings_descriptor >= 0);
+        close(warnings_descriptor);
+        {
+            std::ofstream warnings_file(warnings_path);
+            warnings_file << "camera:download\n"
+                             "m5cardputerzero-files:install\n"
+                             "\n";
+        }
+        const std::vector<AppUpdateFailure> warnings =
+            read_app_update_warnings(warnings_path);
+        std::remove(warnings_path);
+        assert(warnings.size() == 2);
+        assert(warnings[0].package == "camera");
+        assert(warnings[0].reason == "download");
+        assert(warnings[1].package == "m5cardputerzero-files");
+        assert(warnings[1].reason == "install");
+    }
+    assert(read_app_update_warnings("/nonexistent/settings-software-warnings").empty());
+
+    {
+        const std::vector<UpdateInfo> expected = {
+            {"m5cardputerzero-recorder", "0.1.8", "0.1.9"},
+            {"m5cardputerzero-compass", "0.2.4", "1.0.1"},
+            {"factorytest", "1.0.2-m5stack1", "1.0.3-m5stack1"},
+        };
+        const std::vector<InstalledPackage> installed = {
+            {"m5cardputerzero-recorder", "0.1.9", true},
+            {"m5cardputerzero-compass", "0.2.4", true},
+            {"factorytest", "--", false},
+        };
+        AppUpdateState backend;
+        backend.phase = AppUpdateState::Phase::Succeeded;
+        backend.updated.push_back({"m5cardputerzero-recorder", "0.1.9"});
+        backend.failures.push_back({"m5cardputerzero-compass", "install"});
+        const std::vector<AppUpdateFailure> warnings = {
+            {"m5cardputerzero-compass", "download"},
+        };
+        const AppUpdateResolution resolution =
+            resolve_app_update(expected, installed, backend, warnings);
+        assert(resolution.updated.size() == 1);
+        assert(resolution.updated[0].package == "m5cardputerzero-recorder");
+        assert(resolution.updated[0].version == "0.1.9");
+        assert(resolution.failed.size() == 2);
+        // Compass still reports the old version: the backend reason wins over
+        // the warning recorded next to it.
+        assert(resolution.failed[0].package == "m5cardputerzero-compass");
+        assert(resolution.failed[0].reason == "install");
+        // A package removed as an apt side effect is a failure, not an update.
+        assert(resolution.failed[1].package == "factorytest");
+        assert(resolution.failed[1].reason == "not installed");
+    }
+
+    {
+        // A package the backend never mentions and that did not change is
+        // reported as "not updated" instead of silently disappearing.
+        const std::vector<UpdateInfo> expected = {
+            {"m5cardputerzero-files", "1.0.2", "1.0.3"},
+        };
+        const std::vector<InstalledPackage> installed = {
+            {"m5cardputerzero-files", "1.0.2", true},
+        };
+        AppUpdateState backend;
+        backend.phase = AppUpdateState::Phase::Succeeded;
+        const AppUpdateResolution resolution =
+            resolve_app_update(expected, installed, backend, {});
+        assert(resolution.updated.empty());
+        assert(resolution.failed.size() == 1);
+        assert(resolution.failed[0].reason == "not updated");
+    }
+
+    {
+        // The installed version is authoritative: a stale backend failure must
+        // not hide a successful install.
+        const std::vector<UpdateInfo> expected = {
+            {"camera", "1.0.3-m5stack1", "1.0.4-m5stack1"},
+        };
+        const std::vector<InstalledPackage> installed = {
+            {"camera", "1.0.4-m5stack1", true},
+        };
+        AppUpdateState backend;
+        backend.failures.push_back({"camera", "install"});
+        const AppUpdateResolution resolution =
+            resolve_app_update(expected, installed, backend, {});
+        assert(resolution.updated.size() == 1);
+        assert(resolution.updated[0].package == "camera");
+        assert(resolution.failed.empty());
+    }
 
     UpdateInfo update{"m5cardputerzero-recorder", "0.1.8", "0.1.9"};
     assert(update_changes_version(update));

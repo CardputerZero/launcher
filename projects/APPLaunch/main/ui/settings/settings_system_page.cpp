@@ -22,12 +22,14 @@
 #include <cstdint>
 #include <cerrno>
 #include <cstdlib>
+#include <ctime>
 #include <functional>
 #include <fstream>
 #include <list>
 #include <map>
 #include <memory>
 #include <string>
+#include <sys/stat.h>
 #include <utility>
 #include <vector>
 
@@ -277,6 +279,21 @@ std::string app_update_status_path()
     const std::string root = configured && configured[0]
         ? configured : "/var/lib/applaunch-updater";
     return root + "/apps-status";
+}
+
+std::string app_update_warnings_path()
+{
+    const char *configured = std::getenv("APPLAUNCH_UPDATE_STATE_DIR");
+    const std::string root = configured && configured[0]
+        ? configured : "/var/lib/applaunch-updater";
+    return root + "/apps-warnings";
+}
+
+std::time_t app_update_status_mtime()
+{
+    struct stat info {};
+    if (::stat(app_update_status_path().c_str(), &info) != 0) return 0;
+    return info.st_mtime;
 }
 
 std::string read_app_update_status()
@@ -977,6 +994,7 @@ enum class SoftwareDialogOption
     Apps,
     Launcher,
     NotNow,
+    Ok,
 };
 
 struct LvSettingUpdatePage3::State
@@ -1012,12 +1030,20 @@ struct LvSettingUpdatePage3::State
         std::string package;
         std::string short_name;
         std::string version = "--";
+        bool installed = false;
     };
     std::vector<AppRow> app_rows;
     settings_software::CheckResult check;
     settings_software::AppUpdateState::Phase app_update_phase =
         settings_software::AppUpdateState::Phase::Unknown;
+    settings_software::AppUpdateState app_update_state;
+    std::vector<settings_software::AppUpdateFailure> app_update_failures;
+    std::string app_update_baseline_status;
+    bool app_update_seen_fresh = false;
+    bool app_update_retried_start = false;
+    std::time_t app_update_started_epoch = 0;
     std::chrono::steady_clock::time_point app_update_started;
+    std::chrono::steady_clock::time_point app_update_wait_started;
     bool scroll_animation_active = false;
     lv_obj_t *keyboard_root = nullptr;
     lv_event_dsc_t *keyboard_event_dsc = nullptr;
@@ -1031,6 +1057,8 @@ struct LvSettingUpdatePage3::State
     lv_obj_t *ok_button = nullptr;
     lv_obj_t *progress_bar = nullptr;
     lv_obj_t *progress_label = nullptr;
+    lv_obj_t *progress_detail = nullptr;
+    lv_obj_t *progress_notice = nullptr;
     std::vector<SoftwareDialogOption> dialog_options;
 };
 
@@ -1094,6 +1122,8 @@ void clear_dialog_state(StateT *state)
     state->ok_button = nullptr;
     state->progress_bar = nullptr;
     state->progress_label = nullptr;
+    state->progress_detail = nullptr;
+    state->progress_notice = nullptr;
     state->dialog_options.clear();
 }
 
@@ -1241,6 +1271,9 @@ void render_dialog_selection(StateT *state)
             break;
         case SoftwareDialogOption::NotNow:
             button = state->skip_button;
+            break;
+        case SoftwareDialogOption::Ok:
+            button = state->ok_button;
             break;
         }
         style_button(button, static_cast<int>(index) == state->dialog_selection);
@@ -1464,11 +1497,16 @@ void show_update_progress(LvSettingUpdatePage3 *page,
     lv_obj_set_flex_flow(content, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_row(
         content, LvSettingUpdatePage3::metric(LvSettingUpdatePage3::LayoutMetric::ContentPadRow), LV_PART_MAIN);
+    lv_obj_clear_flag(content, LV_OBJ_FLAG_SCROLLABLE);
     state->progress_label = lv_label_create(content);
     if (state->progress_label) {
         lv_obj_set_width(state->progress_label, lv_pct(100));
         lv_label_set_long_mode(state->progress_label, LV_LABEL_LONG_SCROLL_CIRCULAR);
         lv_label_set_text(state->progress_label, state->status.c_str());
+        lv_obj_set_style_text_color(
+            state->progress_label, lv_color_hex(0xECECEC), LV_PART_MAIN);
+        lv_obj_set_style_text_font(
+            state->progress_label, settings_fonts::sans(12), LV_PART_MAIN);
     }
     state->progress_bar = lv_bar_create(content);
     if (state->progress_bar) {
@@ -1481,9 +1519,211 @@ void show_update_progress(LvSettingUpdatePage3 *page,
         lv_obj_set_style_bg_color(
             state->progress_bar, lv_color_hex(0x2878C8), LV_PART_INDICATOR);
     }
+    // Live counter line (percent, package index, updated/failed so far).
+    state->progress_detail = lv_label_create(content);
+    if (state->progress_detail) {
+        lv_obj_set_width(state->progress_detail, lv_pct(100));
+        lv_label_set_long_mode(state->progress_detail, LV_LABEL_LONG_CLIP);
+        lv_obj_set_style_text_color(
+            state->progress_detail, lv_color_hex(0xB8C4CE), LV_PART_MAIN);
+        lv_obj_set_style_text_font(
+            state->progress_detail, settings_fonts::sans(12), LV_PART_MAIN);
+    }
+    // Per-package failures (for example "download failed") stay visible while
+    // the remaining packages continue.
+    state->progress_notice = lv_label_create(content);
+    if (state->progress_notice) {
+        lv_obj_set_width(state->progress_notice, lv_pct(100));
+        lv_label_set_long_mode(state->progress_notice, LV_LABEL_LONG_DOT);
+        lv_obj_set_style_text_color(
+            state->progress_notice, lv_color_hex(0xF0A050), LV_PART_MAIN);
+        lv_obj_set_style_text_font(
+            state->progress_notice, settings_fonts::sans(12), LV_PART_MAIN);
+    }
     lv_obj_update_layout(state->dialog);
     state->dialog_open = true;
     keep_update_page_focus(page);
+    render_update_page(page);
+}
+
+int app_update_percent(const settings_software::AppUpdateState &progress)
+{
+    if (progress.phase == settings_software::AppUpdateState::Phase::Succeeded) return 100;
+    if (progress.total <= 0) return 0;
+    const int total = progress.total;
+    const int index = std::max(1, std::min(progress.index, total));
+    int fraction = 0;
+    if (progress.phase == settings_software::AppUpdateState::Phase::Downloading)
+        fraction = 50;
+    else if (progress.phase == settings_software::AppUpdateState::Phase::Installing)
+        fraction = 90;
+    const int base = (index - 1) * 100 / total;
+    const int step = 100 / total;
+    return std::min(100, base + step * fraction / 100);
+}
+
+std::string app_update_phase_status(const settings_software::AppUpdateState &progress)
+{
+    const std::string name = progress.package.empty()
+        ? std::string() : settings_software::short_name(progress.package);
+    std::string counter;
+    if (progress.total > 0) {
+        const int index = std::max(1, std::min(progress.index, progress.total));
+        counter = " (" + std::to_string(index) + "/" +
+                  std::to_string(progress.total) + ")";
+    }
+    switch (progress.phase) {
+    case settings_software::AppUpdateState::Phase::Starting:
+        return "Starting app updates...";
+    case settings_software::AppUpdateState::Phase::Checking:
+        return (name.empty() ? std::string("Checking versions") : "Checking " + name) + counter;
+    case settings_software::AppUpdateState::Phase::Downloading:
+        return "Downloading " + (name.empty() ? std::string("package") : name) + counter;
+    case settings_software::AppUpdateState::Phase::Installing:
+        return "Installing " + (name.empty() ? std::string("package") : name) + counter;
+    case settings_software::AppUpdateState::Phase::Cancelling:
+        return "Cancelling app updates...";
+    default:
+        return "Working...";
+    }
+}
+
+std::string app_update_notice_text(
+    const std::vector<settings_software::AppUpdateFailure> &failures)
+{
+    if (failures.empty()) return {};
+    std::string text;
+    std::size_t shown = 0;
+    // Show the most recent failures; earlier ones are covered by the result
+    // dialog at the end of the run.
+    for (auto it = failures.rbegin(); it != failures.rend() && shown < 2; ++it) {
+        if (shown != 0) text += "; ";
+        text += settings_software::short_name(it->package) + ": " +
+                settings_software::app_update_failure_label(it->reason);
+        ++shown;
+    }
+    if (failures.size() > shown)
+        text += " (+" + std::to_string(failures.size() - shown) + " more)";
+    return text;
+}
+
+void render_app_update_progress(LvSettingUpdatePage3 *page)
+{
+    if (!page || !page->state_) return;
+    auto *state = page->state_.get();
+    const settings_software::AppUpdateState &progress = state->app_update_state;
+    state->status = app_update_phase_status(progress);
+    if (state->cancelling) state->status = "Cancelling app updates...";
+    state->progress = app_update_percent(progress);
+    if (state->progress_detail) {
+        std::string detail = std::to_string(state->progress) + "%";
+        if (progress.total > 0) {
+            const int index = std::max(1, std::min(progress.index, progress.total));
+            detail += "  step " + std::to_string(index) + "/" +
+                      std::to_string(progress.total);
+        }
+        detail += "  updated " + std::to_string(progress.updated_count) +
+                  "  failed " + std::to_string(progress.failed_count);
+        set_label(state->progress_detail, detail);
+    }
+    if (state->progress_notice)
+        set_label(state->progress_notice, app_update_notice_text(state->app_update_failures));
+    render_update_page(page);
+}
+
+template <typename StateT>
+std::string installed_version_for(const StateT &state, const std::string &package)
+{
+    for (const auto &row : state.app_rows) {
+        if (row.package == package) return row.version;
+    }
+    return {};
+}
+
+template <typename StateT>
+settings_software::AppUpdateResolution collect_app_update_outcome(
+    const StateT &state,
+    const settings_software::AppUpdateState &backend)
+{
+    std::vector<settings_software::InstalledPackage> installed;
+    installed.reserve(state.app_rows.size());
+    for (const auto &row : state.app_rows)
+        installed.push_back({row.package, row.version, row.installed});
+    return settings_software::resolve_app_update(
+        state.check.updates, installed, backend, state.app_update_failures);
+}
+
+void show_app_update_result_dialog(
+    LvSettingUpdatePage3 *page,
+    const settings_software::AppUpdateResolution &outcome,
+    bool failed)
+{
+    if (!page || !page->state_ || !page->Get()) return;
+    auto *state = page->state_.get();
+    std::string message;
+    const auto append_line = [&message](const std::string &line) {
+        if (!message.empty()) message.push_back('\n');
+        message += line;
+    };
+    if (!outcome.updated.empty()) {
+        append_line("Updated:");
+        for (const auto &entry : outcome.updated) {
+            std::string line = "  " + settings_software::short_name(entry.package);
+            if (!entry.version.empty()) line += " " + entry.version;
+            append_line(line);
+        }
+    }
+    if (!outcome.failed.empty()) {
+        append_line("Failed:");
+        for (const auto &entry : outcome.failed) {
+            append_line("  " + settings_software::short_name(entry.package) + " - " +
+                        settings_software::app_update_failure_label(entry.reason));
+        }
+    }
+    if (message.empty()) message = "No apps were updated";
+
+    close_dialog(page);
+    state->dialog = lv_msgbox_create(page->Get());
+    if (!state->dialog) return;
+    style_dialog(state->dialog);
+    lv_obj_t *title = lv_msgbox_add_title(
+        state->dialog, failed ? "App update finished with errors" : "App updates complete");
+    if (title) lv_obj_set_style_text_color(title, lv_color_hex(0x58A6FF), LV_PART_MAIN);
+
+    lv_obj_t *content = lv_msgbox_get_content(state->dialog);
+    style_dialog_layout(state->dialog);
+    if (content) {
+        lv_obj_set_height(
+            content, LvSettingUpdatePage3::metric(LvSettingUpdatePage3::LayoutMetric::DialogContentH));
+        lv_obj_set_width(content, lv_pct(100));
+        lv_obj_add_flag(content, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_scroll_dir(content, LV_DIR_VER);
+        lv_obj_set_scrollbar_mode(content, LV_SCROLLBAR_MODE_AUTO);
+        lv_obj_set_flex_flow(content, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_style_pad_row(content, 2, LV_PART_MAIN);
+        state->dialog_content = content;
+        state->dialog_message = lv_label_create(content);
+        if (state->dialog_message) {
+            lv_obj_set_width(state->dialog_message, lv_pct(100));
+            lv_label_set_long_mode(state->dialog_message, LV_LABEL_LONG_WRAP);
+            lv_label_set_text(state->dialog_message, message.c_str());
+            lv_obj_set_style_text_color(
+                state->dialog_message, lv_color_hex(0xECECEC), LV_PART_MAIN);
+            lv_obj_set_style_text_font(
+                state->dialog_message, settings_fonts::sans(12), LV_PART_MAIN);
+        }
+    }
+
+    state->dialog_options.clear();
+    state->ok_button = lv_msgbox_add_footer_button(state->dialog, "OK");
+    state->dialog_options.push_back(SoftwareDialogOption::Ok);
+    if (state->ok_button) lv_obj_set_flex_grow(state->ok_button, 1);
+    style_dialog_layout(state->dialog);
+    lv_obj_update_layout(state->dialog);
+    state->dialog_open = true;
+    state->dialog_selection = 0;
+    keep_update_page_focus(page);
+    render_dialog_selection(state);
     render_update_page(page);
 }
 
@@ -1589,10 +1829,14 @@ void finish_software_check(LvSettingUpdatePage3 *page,
     const int update_count = static_cast<int>(state->check.updates.size()) +
                              (state->check.launcher_available ? 1 : 0);
     if (update_count == 0) {
-        if (state->check.launcher_failed && state->check.checked > 0 &&
-            state->check.failed >= state->check.checked) {
+        // "Up to date" is only honest when every check actually ran.  A check
+        // that failed (network/API error, rate limit) must be reported as a
+        // failure instead of being disguised as a successful empty result.
+        if (state->check.checked > 0 && state->check.failed >= state->check.checked) {
+            state->phase = settings_system::UpdatePhase::Failed;
             state->status = "Unable to check for updates";
         } else if (state->check.failed > 0 || state->check.launcher_failed) {
+            state->phase = settings_system::UpdatePhase::Failed;
             state->status = "Some checks failed; no updates found";
         } else {
             state->status = "All software is up to date";
@@ -1624,12 +1868,11 @@ void refresh_installed_rows(LvSettingUpdatePage3 *page)
             }
         }
         if (!found) continue;
+        row.installed = found->installed;
         row.version = found->version;
         if (row.description)
             lv_label_set_text(row.description, found->description.c_str());
     }
-    state->check.updates.clear();
-    apply_update_marks(page);
 }
 
 void finish_apps_update(LvSettingUpdatePage3 *page,
@@ -1655,39 +1898,75 @@ void finish_apps_update(LvSettingUpdatePage3 *page,
     settings_software::AppUpdateState result;
     const bool parsed = settings_software::parse_app_update_status(payload, result);
     if (parsed) state->app_update_phase = result.phase;
+    const settings_software::AppUpdateResolution outcome =
+        collect_app_update_outcome(
+            *state, parsed ? result : settings_software::AppUpdateState{});
+
+    bool failed = false;
     if (code == -ETIMEDOUT) {
         state->phase = settings_system::UpdatePhase::TimedOut;
         state->status = "App update timed out";
+        failed = true;
     } else if (!parsed) {
         state->phase = settings_system::UpdatePhase::Failed;
         state->status = "Unable to update apps";
+        failed = true;
     } else if (result.phase == settings_software::AppUpdateState::Phase::Succeeded) {
-        state->phase = settings_system::UpdatePhase::Succeeded;
+        const int updated = static_cast<int>(outcome.updated.size());
+        const int failed_count = static_cast<int>(outcome.failed.size());
         state->progress = 100;
-        if (result.updated_count == 0 && result.failed_count == 0) {
+        if (updated == 0 && failed_count == 0) {
+            // Only reachable when the update check found no app update at all;
+            // every package the check promised is accounted for above, so a
+            // failed run can no longer claim "up to date".
+            state->phase = settings_system::UpdatePhase::Succeeded;
             state->status = "Apps are up to date";
-        } else if (result.failed_count > 0) {
-            state->status = std::to_string(result.updated_count) +
-                            " app(s) updated, " +
-                            std::to_string(result.failed_count) + " failed";
+        } else if (failed_count == 0) {
+            state->phase = settings_system::UpdatePhase::Succeeded;
+            state->status = std::to_string(updated) + " app(s) updated";
+        } else if (updated == 0) {
+            state->phase = settings_system::UpdatePhase::Failed;
+            state->status = "App update failed";
+            failed = true;
         } else {
-            state->status = std::to_string(result.updated_count) + " app(s) updated";
+            state->phase = settings_system::UpdatePhase::Failed;
+            state->status = std::to_string(updated) + " app(s) updated, " +
+                            std::to_string(failed_count) + " failed";
+            failed = true;
         }
     } else if (result.phase == settings_software::AppUpdateState::Phase::Cancelled ||
                result.phase == settings_software::AppUpdateState::Phase::Cancelling) {
         state->phase = settings_system::UpdatePhase::Cancelled;
         state->status = "App updates cancelled";
+        if (cancel_backend) schedule_app_update_cancel(page);
+        render_update_page(page);
+        return;
     } else if (result.phase == settings_software::AppUpdateState::Phase::Failed) {
         state->phase = settings_system::UpdatePhase::Failed;
         state->status = result.detail.empty()
             ? "App update failed"
             : "App update failed: " + result.detail;
+        failed = true;
     } else {
         state->phase = settings_system::UpdatePhase::Failed;
         state->status = "App update did not finish";
+        failed = true;
     }
+    // Rows that now report the new version no longer need the "old -> new"
+    // highlight; packages that were not updated stay marked as available.
+    state->check.updates.erase(
+        std::remove_if(state->check.updates.begin(), state->check.updates.end(),
+                       [state](const settings_software::UpdateInfo &update) {
+                           return installed_version_for(*state, update.package) !=
+                                  update.installed;
+                       }),
+        state->check.updates.end());
+    apply_update_marks(page);
     if (cancel_backend) schedule_app_update_cancel(page);
     render_update_page(page);
+    // Always end with the per-package summary (what was updated, what failed
+    // and why); the single OK button closes this dialog.
+    show_app_update_result_dialog(page, outcome, failed);
 }
 
 void poll_apps_update(LvSettingUpdatePage3 *page)
@@ -1703,55 +1982,63 @@ void poll_apps_update(LvSettingUpdatePage3 *page)
     state->poll_pending = false;
 
     const std::string payload = read_app_update_status();
-    if (payload.empty()) {
-        state->status = "Starting app updates...";
+
+    // The status file still holds the previous run's terminal line until the
+    // new run publishes its first status (after dpkg --configure/apt-get
+    // update).  Adopting that line would end the page on stale results.
+    if (!state->app_update_seen_fresh) {
+        const std::time_t mtime = app_update_status_mtime();
+        const bool changed =
+            !payload.empty() && payload != state->app_update_baseline_status;
+        const bool freshly_written =
+            mtime != 0 && mtime >= state->app_update_started_epoch;
+        if (changed || freshly_written) state->app_update_seen_fresh = true;
+    }
+    if (!state->app_update_seen_fresh) {
+        const auto waited =
+            std::chrono::steady_clock::now() - state->app_update_wait_started;
+        if (waited > std::chrono::minutes(3)) {
+            finish_apps_update(page, -ETIMEDOUT, "updater did not start", true);
+            return;
+        }
+        // Cover the narrow race where the previous unit finished between our
+        // start request and this poll: request the start once more (a no-op
+        // while the unit is still active).
+        if (!state->app_update_retried_start && waited > std::chrono::seconds(3)) {
+            state->app_update_retried_start = true;
+            start_process_request(
+                page,
+                {"systemctl", "start", "--no-block",
+                 "applaunch-apps-updater.service"},
+                [](int, std::string) {}, {});
+        }
+        state->status = "Waiting for app updater to start...";
+        state->progress = 0;
         render_update_page(page);
         return;
     }
 
     settings_software::AppUpdateState result;
-    if (!settings_software::parse_app_update_status(payload, result)) {
+    if (payload.empty() ||
+        !settings_software::parse_app_update_status(payload, result)) {
         finish_apps_update(page, -1, payload, false);
         return;
     }
+    state->app_update_state = result;
     state->app_update_phase = result.phase;
-    if (result.phase == settings_software::AppUpdateState::Phase::Checking ||
-        result.phase == settings_software::AppUpdateState::Phase::Downloading ||
-        result.phase == settings_software::AppUpdateState::Phase::Installing ||
-        result.phase == settings_software::AppUpdateState::Phase::Cancelling) {
-        const int total = std::max(1, result.total);
-        const int index = std::max(1, std::min(result.index, total));
-        state->progress = (index - 1) * 100 / total;
-        if (result.phase == settings_software::AppUpdateState::Phase::Checking) {
-            state->status = "Checking app versions... (" +
-                            std::to_string(index) + "/" +
-                            std::to_string(total) + ")";
-        } else if (result.phase ==
-                   settings_software::AppUpdateState::Phase::Downloading) {
-            state->status = "Downloading " +
-                            settings_software::short_name(result.package) +
-                            " (" + std::to_string(index) + "/" +
-                            std::to_string(total) + ")...";
-        } else if (result.phase ==
-                   settings_software::AppUpdateState::Phase::Installing) {
-            state->status = "Installing " +
-                            settings_software::short_name(result.package) +
-                            " (" + std::to_string(index) + "/" +
-                            std::to_string(total) + ")...";
-        } else {
-            state->status = "Cancelling app updates...";
-        }
-        if (state->cancelling)
-            state->status = "Cancelling app updates...";
-        render_update_page(page);
-        return;
-    }
+    state->app_update_failures =
+        settings_software::read_app_update_warnings(app_update_warnings_path());
 
-    if (std::chrono::steady_clock::now() - state->app_update_started <
-        std::chrono::seconds(1)) {
-        state->status = "Starting app updates...";
-        render_update_page(page);
+    switch (result.phase) {
+    case settings_software::AppUpdateState::Phase::Starting:
+    case settings_software::AppUpdateState::Phase::Checking:
+    case settings_software::AppUpdateState::Phase::Downloading:
+    case settings_software::AppUpdateState::Phase::Installing:
+    case settings_software::AppUpdateState::Phase::Cancelling:
+        render_app_update_progress(page);
         return;
+    default:
+        break;
     }
     finish_apps_update(page, 0, payload, false);
 }
@@ -2042,6 +2329,13 @@ void start_apps_update(LvSettingUpdatePage3 *page)
     state->apps_updating = true;
     state->cancelling = false;
     state->app_update_phase = settings_software::AppUpdateState::Phase::Unknown;
+    state->app_update_state = settings_software::AppUpdateState{};
+    state->app_update_failures.clear();
+    state->app_update_baseline_status = read_app_update_status();
+    state->app_update_seen_fresh = false;
+    state->app_update_retried_start = false;
+    state->app_update_started_epoch = std::time(nullptr);
+    state->app_update_wait_started = std::chrono::steady_clock::now();
     state->app_update_started = std::chrono::steady_clock::now();
     state->progress = 0;
     state->phase = settings_system::UpdatePhase::Starting;
@@ -2217,6 +2511,11 @@ void handle_dialog_key(LvSettingUpdatePage3 *page, uint32_t key)
             break;
         case SoftwareDialogOption::NotNow:
             state->status = "Update skipped";
+            render_update_page(page);
+            break;
+        case SoftwareDialogOption::Ok:
+            // The result dialog only acknowledges the summary; keep the final
+            // status line on the page.
             render_update_page(page);
             break;
         }
@@ -2450,6 +2749,7 @@ void LvSettingUpdatePage3::create_ui(lv_obj_t *parent)
             row.package = app.package;
             row.short_name = app.short_name;
             row.version = app.version;
+            row.installed = app.installed;
             row.name = lv_label_create(state_->scroll_body);
             if (row.name) {
                 lv_obj_set_width(row.name, LvSettingUpdatePage3::metric(LayoutMetric::TextW));

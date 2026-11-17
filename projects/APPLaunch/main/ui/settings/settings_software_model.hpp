@@ -79,9 +79,20 @@ struct CheckResult {
  */
 bool parse_check_result(const std::string &payload, CheckResult &result);
 
+struct AppUpdateEntry {
+    std::string package;
+    std::string version;
+};
+
+struct AppUpdateFailure {
+    std::string package;
+    std::string reason;
+};
+
 struct AppUpdateState {
     enum class Phase {
         Unknown,
+        Starting,
         Checking,
         Downloading,
         Installing,
@@ -98,16 +109,60 @@ struct AppUpdateState {
     int updated_count = 0;
     int failed_count = 0;
     std::string detail;
+    std::vector<AppUpdateEntry> updated;
+    std::vector<AppUpdateFailure> failures;
 };
 
 /**
  * Parse one line from `/var/lib/applaunch-updater/apps-status`.
  *
- * Progress lines are `checking|downloading|installing:<index>:<total>:<pkg>`;
- * terminal lines are `succeeded:updated=pkg:ver,...|failed=pkg:reason,...`,
+ * Progress lines are
+ * `starting` and `checking|downloading|installing:<index>:<total>:<pkg>`,
+ * optionally followed by the running `:<updated>:<failed>` counters.  Terminal
+ * lines are `succeeded:updated=pkg:ver,...|failed=pkg:reason,...`,
  * `failed:<detail>`, or `cancelled`.
  */
 bool parse_app_update_status(const std::string &status, AppUpdateState &result);
+
+/**
+ * Parse one line from `/var/lib/applaunch-updater/apps-warnings`.
+ *
+ * The updater appends `package:reason` for every package that failed while the
+ * run continues, so the progress dialog can show (for example) a download
+ * failure before the run finishes.
+ */
+bool parse_app_update_warning(const std::string &line, AppUpdateFailure &failure);
+
+/** Human readable text for a backend failure reason: `download` -> "download failed". */
+std::string app_update_failure_label(const std::string &reason);
+
+/** Read the append-only warnings file; a missing file yields no entries. */
+std::vector<AppUpdateFailure> read_app_update_warnings(const std::string &path);
+
+struct InstalledPackage {
+    std::string package;
+    std::string version;
+    bool installed = false;
+};
+
+struct AppUpdateResolution {
+    std::vector<AppUpdateEntry> updated;
+    std::vector<AppUpdateFailure> failed;
+};
+
+/**
+ * Resolve what an app update run actually achieved.
+ *
+ * `expected` is the update check result, `installed` the versions read after
+ * the run, `backend` the terminal status line and `warnings` the per-package
+ * failure lines.  A package that is no longer installed or still reports the
+ * old version is a failure, never an update.
+ */
+AppUpdateResolution resolve_app_update(
+    const std::vector<UpdateInfo> &expected,
+    const std::vector<InstalledPackage> &installed,
+    const AppUpdateState &backend,
+    const std::vector<AppUpdateFailure> &warnings);
 
 /**
  * Defensive display guard: the backend only reports versions newer than the

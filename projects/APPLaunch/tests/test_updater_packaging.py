@@ -363,7 +363,11 @@ assert "printf 'commit=%s\\n'" in release_builder
 
 
 def run_apps_update(fail_install_for: str = "",
-                    install_latest: bool = False) -> tuple[subprocess.CompletedProcess[str], str]:
+                    fail_download_for: str = "",
+                    install_latest: bool = False,
+                    fail_api: bool = False,
+                    stale_cache: bool = False) -> tuple[
+                        subprocess.CompletedProcess[str], str, str, str]:
     with tempfile.TemporaryDirectory() as temp_dir:
         root = Path(temp_dir)
         fake_bin = root / "bin"
@@ -374,6 +378,7 @@ def run_apps_update(fail_install_for: str = "",
         cache = root / "cache"
         for directory in (fake_bin, releases, json_dir, installed):
             directory.mkdir()
+        cache.mkdir()
 
         installed_versions = {
             "m5cardputerzero-recorder": "0.1.9" if install_latest else "0.1.8",
@@ -402,18 +407,54 @@ def run_apps_update(fail_install_for: str = "",
                 + asset + '"}]}',
                 encoding="ascii",
             )
+            # Public release page used by the HTML fallback.
+            (json_dir / f"{repo}.html").write_text(
+                f'<a href=".../{asset}">{asset}</a>\n', encoding="ascii")
+
+        if stale_cache:
+            # Every repository already has a cache entry that predates the
+            # release the launcher check reports (it names the installed
+            # version).  A stale cache must not be trusted.
+            for _package, (prefix, _version, repo_name) in assets.items():
+                old_version = {
+                    "Recorder": "0.1.8",
+                    "Compass": "0.2.4",
+                    "Files": "1.0.0",
+                }[repo_name]
+                cache_file = cache / f"{repo_name}.json"
+                cache_file.write_text(
+                    '{"tag_name":"v0.9.0","assets":[{"name":"'
+                    f'{prefix}_{old_version}_m5stack1_arm64.deb"'
+                    '}]}', encoding="ascii")
+                old = time.time() - 3600
+                os.utime(cache_file, (old, old))
 
         log = root / "commands.log"
+        starting_log = root / "starting.log"
         executable(
             fake_bin / "curl",
-            'url=""; dest=""; prev=""\n'
+            'url=""; dest=""; prev=""; effective=0\n'
             'for arg in "$@"; do\n'
             '  [ "$prev" = "-o" ] && dest=$arg\n'
+            '  [ "$arg" = "%{url_effective}" ] && effective=1\n'
             '  case "$arg" in http*) url=$arg;; esac\n'
             '  prev=$arg\n'
             'done\n'
-            'repo=$(printf "%s" "$url" | sed "s#.*/CardputerZero/##; s#/releases/latest##")\n'
-            'cp "$TEST_JSON_DIR/$repo.json" "$dest"\n',
+            'case "$url" in\n'
+            '  *example.invalid*/releases/latest)\n'
+            '    [ "${TEST_FAIL_API:-0}" = "1" ] && { echo "curl: (22) 403" >&2; exit 22; }\n'
+            '    repo=$(printf "%s" "$url" | sed "s#.*/CardputerZero/##; s#/releases/latest##")\n'
+            '    cp "$TEST_JSON_DIR/$repo.json" "$dest" ;;\n'
+            '  *github.com*/releases/latest)\n'
+            '    [ "${TEST_FAIL_HTML:-0}" = "1" ] && exit 22\n'
+            '    repo=$(printf "%s" "$url" | sed "s#.*/CardputerZero/##; s#/releases/latest##")\n'
+            '    [ "$effective" = "1" ] || exit 22\n'
+            '    printf "https://github.com/CardputerZero/%s/releases/tag/v1.0.0\\n" "$repo" ;;\n'
+            '  *github.com*/releases/expanded_assets/*)\n'
+            '    repo=$(printf "%s" "$url" | sed "s#.*/CardputerZero/##; s#/releases/expanded_assets/.*##")\n'
+            '    cat "$TEST_JSON_DIR/$repo.html" ;;\n'
+            '  *) exit 22 ;;\n'
+            'esac\n',
         )
         executable(
             fake_bin / "wget",
@@ -423,6 +464,9 @@ def run_apps_update(fail_install_for: str = "",
             '  case "$arg" in http*) url=$arg;; esac\n'
             '  prev=$arg\n'
             'done\n'
+            'case "${url##*/}" in\n'
+            '  *"$TEST_FAIL_DOWNLOAD"*) if [ -n "$TEST_FAIL_DOWNLOAD" ]; then exit 4; fi ;;\n'
+            'esac\n'
             'cp "$TEST_RELEASES/${url##*/}" "$dest"\n',
         )
         executable(
@@ -447,7 +491,11 @@ def run_apps_update(fail_install_for: str = "",
         )
         executable(
             fake_bin / "apt-get",
-            'case "$1" in update) exit 0;; esac\n'
+            'case "$1" in\n'
+            '  update)\n'
+            '    [ -z "$TEST_STARTING_LOG" ] || cat "$APPLAUNCH_UPDATE_STATE_DIR/apps-status" > "$TEST_STARTING_LOG"\n'
+            '    exit 0 ;;\n'
+            'esac\n'
             'deb=""; for arg in "$@"; do deb=$arg; done\n'
             'package=$(sed -n "s/^Package=//p" "$deb")\n'
             'version=$(sed -n "s/^Version=//p" "$deb")\n'
@@ -468,6 +516,9 @@ def run_apps_update(fail_install_for: str = "",
                 "TEST_INSTALLED": str(installed),
                 "TEST_LOG": str(log),
                 "TEST_FAIL_INSTALL": fail_install_for,
+                "TEST_FAIL_DOWNLOAD": fail_download_for,
+                "TEST_FAIL_API": "1" if fail_api else "0",
+                "TEST_STARTING_LOG": str(starting_log),
             }
         )
         result = subprocess.run(
@@ -475,23 +526,70 @@ def run_apps_update(fail_install_for: str = "",
             env=env, capture_output=True, check=False,
         )
         status = (state / "apps-status").read_text(encoding="utf-8").strip()
-        return result, status
+        warnings_path = state / "apps-warnings"
+        warnings = warnings_path.read_text(encoding="utf-8").strip() if warnings_path.exists() else ""
+        starting = starting_log.read_text(encoding="utf-8").strip() if starting_log.exists() else ""
+        return result, status, warnings, starting
 
 
-success, status = run_apps_update()
+def assert_apps_updater_contract() -> None:
+    script = packager._apps_updater_script_text()
+    # The launcher must be able to tell a fresh run apart from the previous
+    # run's terminal status.
+    assert "status starting" in script
+    # Per-package failures survive progress updates.
+    assert 'WARNING_FILE=$STATE_DIR/apps-warnings' in script
+    assert "record_failure" in script
+    # A stale cache must never replace the public release page fallback.
+    assert "elif [ ! -f \"$cache_file\" ]" not in script
+    assert "record_failure \"$package\" download" in script
+
+
+assert_apps_updater_contract()
+
+success, status, warnings, starting = run_apps_update()
 assert success.returncode == 0, (success.stderr, success.stdout, status)
 assert status == (
     "succeeded:updated=m5cardputerzero-recorder:0.1.9,"
     "m5cardputerzero-files:1.0.2|failed="
 ), status
+assert warnings == "", warnings
+# The very first status line appears before the slow apt-get refresh, so the
+# launcher never mistakes the old run's terminal line for this run.
+assert starting == "starting", starting
 
-current, status = run_apps_update(install_latest=True)
+current, status, _warnings, _starting = run_apps_update(install_latest=True)
 assert current.returncode == 0
 assert status == "succeeded:updated=|failed=", status
 
-partial, status = run_apps_update(fail_install_for="m5cardputerzero-files")
+partial, status, warnings, _starting = run_apps_update(
+    fail_install_for="m5cardputerzero-files")
 assert partial.returncode == 0
 assert status == (
     "succeeded:updated=m5cardputerzero-recorder:0.1.9|"
     "failed=m5cardputerzero-files:install"
 ), status
+assert warnings == "m5cardputerzero-files:install", warnings
+
+# GitHub rejects unauthenticated API requests with HTTP 403 once the hourly
+# quota is spent.  The public release page still works, and a stale cache that
+# names the installed version must not mask the update.
+fallback, status, warnings, _starting = run_apps_update(
+    fail_api=True, stale_cache=True)
+assert fallback.returncode == 0, (fallback.stderr, fallback.stdout, status)
+assert status == (
+    "succeeded:updated=m5cardputerzero-recorder:0.1.9,"
+    "m5cardputerzero-files:1.0.2|failed="
+), status
+assert warnings == "", warnings
+
+# A failed download is reported per package while the remaining packages are
+# still installed, and the reason is appended to the warnings file.
+download, status, warnings, _starting = run_apps_update(
+    fail_download_for="_0.1.9_")
+assert download.returncode == 0, (download.stderr, download.stdout, status)
+assert status == (
+    "succeeded:updated=m5cardputerzero-files:1.0.2|"
+    "failed=m5cardputerzero-recorder:download"
+), status
+assert warnings == "m5cardputerzero-recorder:download", warnings
