@@ -48,7 +48,14 @@ assert (ROOT / "main/ui/settings/settings_http_worker.hpp").exists()
 sconstruct = (ROOT / "main/SConstruct").read_text(encoding="utf-8")
 assert "APPLAUNCH_USE_LIBCURL" in sconstruct
 assert ":libcurl.so.4" in sconstruct
-assert "CONFIG_APPLAUNCH_LINUX_X86_CROSS_CP0" in sconstruct
+# The Linux cross profile is the one used for device builds; it is selected by
+# this config symbol (main/SConstruct consumes the resolved config via
+# CONFIG_APPLAUNCH_CROSS, not the profile name itself).
+cross_profile = (ROOT / "linux_x86_cross_cp0_config_defaults.mk").read_text(
+    encoding="utf-8"
+)
+assert "CONFIG_APPLAUNCH_LINUX_X86_CROSS_CP0=y" in cross_profile
+assert "CONFIG_APPLAUNCH_CROSS" in sconstruct
 assert "settings_software::read_installed_apps()" in PAGE
 assert 'lv_msgbox_add_title(state->dialog, "Updates available")' in PAGE
 assert "settings_software::update_line(update)" in PAGE
@@ -71,6 +78,21 @@ for platform_source in (
     assert "AppUpdateCancel" not in text
 assert 'state->status = "All software is up to date"' in PAGE
 assert 'state->status = "Update check cancelled"' in PAGE
+
+# The update page must show live progress, per-package failures and a final
+# summary the user acknowledges with OK; a failed run must never be reported as
+# "up to date".
+assert "apps-warnings" in PAGE
+assert "app_update_failure_label" in PAGE
+assert "Waiting for app updater to start" in PAGE
+assert "App updates complete" in PAGE
+assert "App update finished with errors" in PAGE
+assert 'lv_msgbox_add_footer_button(state->dialog, "OK")' in PAGE
+assert "progress_detail" in PAGE
+assert "progress_notice" in PAGE
+assert "parse_app_update_warning" in MODEL
+assert "read_app_update_warnings" in MODEL
+assert "app_update_failure_label" in MODEL
 
 # The privileged updater keeps the same package allowlist as the page.  A
 # package added to one list but not the other would silently stop updating.

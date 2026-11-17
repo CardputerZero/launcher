@@ -283,12 +283,35 @@ bool parse_app_update_status(const std::string &status, AppUpdateState &result)
     const auto starts_with = [&status](const char *prefix) {
         return status.rfind(prefix, 0) == 0;
     };
-    const auto count_entries = [](const std::string &value) {
-        int count = 0;
-        for (const std::string &entry : split(value, ','))
-            if (!entry.empty()) ++count;
-        return count;
+    const auto parse_entries = [](const std::string &value,
+                                  std::vector<AppUpdateEntry> &entries) {
+        for (const std::string &item : split(value, ',')) {
+            if (item.empty()) continue;
+            const std::size_t separator = item.find(':');
+            if (separator == std::string::npos || separator == 0) continue;
+            AppUpdateEntry entry;
+            entry.package = item.substr(0, separator);
+            entry.version = item.substr(separator + 1);
+            entries.push_back(std::move(entry));
+        }
     };
+    const auto parse_failures = [](const std::string &value,
+                                   std::vector<AppUpdateFailure> &failures) {
+        for (const std::string &item : split(value, ',')) {
+            if (item.empty()) continue;
+            const std::size_t separator = item.find(':');
+            if (separator == std::string::npos || separator == 0) continue;
+            AppUpdateFailure failure;
+            failure.package = item.substr(0, separator);
+            failure.reason = item.substr(separator + 1);
+            failures.push_back(std::move(failure));
+        }
+    };
+
+    if (status == "starting") {
+        result.phase = AppUpdateState::Phase::Starting;
+        return true;
+    }
 
     if (starts_with("checking:") || starts_with("downloading:") ||
         starts_with("installing:")) {
@@ -305,6 +328,14 @@ bool parse_app_update_status(const std::string &status, AppUpdateState &result)
         result.index = index;
         result.total = total;
         result.package = fields[3];
+        int updated = 0;
+        int failed = 0;
+        // Older firmware only writes the three leading fields; the counters are
+        // optional so both formats stay readable.
+        if (fields.size() >= 5 && parse_nonnegative_int(fields[4], updated))
+            result.updated_count = updated;
+        if (fields.size() >= 6 && parse_nonnegative_int(fields[5], failed))
+            result.failed_count = failed;
         return true;
     }
 
@@ -316,10 +347,13 @@ bool parse_app_update_status(const std::string &status, AppUpdateState &result)
             if (separator == std::string::npos) continue;
             const std::string key = token.substr(0, separator);
             const std::string value = token.substr(separator + 1);
-            if (key == "updated")
-                result.updated_count = count_entries(value);
-            else if (key == "failed")
-                result.failed_count = count_entries(value);
+            if (key == "updated") {
+                parse_entries(value, result.updated);
+                result.updated_count = static_cast<int>(result.updated.size());
+            } else if (key == "failed") {
+                parse_failures(value, result.failures);
+                result.failed_count = static_cast<int>(result.failures.size());
+            }
         }
         return true;
     }
@@ -343,6 +377,133 @@ bool parse_app_update_status(const std::string &status, AppUpdateState &result)
 
     return false;
 }
+
+bool parse_app_update_warning(const std::string &line, AppUpdateFailure &failure)
+{
+    failure = AppUpdateFailure{};
+    const std::string text = trim(line);
+    if (text.empty()) return false;
+    const std::size_t separator = text.find(':');
+    if (separator == std::string::npos || separator == 0) return false;
+    failure.package = text.substr(0, separator);
+    failure.reason = text.substr(separator + 1);
+    if (failure.package.empty() || failure.reason.empty()) return false;
+    return true;
+}
+
+std::string app_update_failure_label(const std::string &reason)
+{
+    if (reason == "download") return "download failed";
+    if (reason == "install") return "install failed";
+    if (reason == "verify") return "verification failed";
+    if (reason == "invalid-package") return "invalid package";
+    if (reason == "metadata" || reason == "release" || reason == "version")
+        return "check failed";
+    if (reason == "busy") return "updater busy";
+    if (reason.empty()) return "failed";
+    return reason;
+}
+
+std::vector<AppUpdateFailure> read_app_update_warnings(const std::string &path)
+{
+    std::vector<AppUpdateFailure> failures;
+    if (path.empty()) return failures;
+    std::ifstream input(path);
+    if (!input) return failures;
+    std::string line;
+    while (std::getline(input, line)) {
+        AppUpdateFailure failure;
+        if (parse_app_update_warning(line, failure))
+            failures.push_back(std::move(failure));
+    }
+    return failures;
+}
+
+AppUpdateResolution resolve_app_update(
+    const std::vector<UpdateInfo> &expected,
+    const std::vector<InstalledPackage> &installed,
+    const AppUpdateState &backend,
+    const std::vector<AppUpdateFailure> &warnings)
+{
+    AppUpdateResolution resolution;
+    const auto find_installed = [&installed](const std::string &package)
+        -> const InstalledPackage * {
+        for (const auto &entry : installed)
+            if (entry.package == package) return &entry;
+        return nullptr;
+    };
+    const auto in_updated = [&resolution](const std::string &package) {
+        for (const auto &entry : resolution.updated)
+            if (entry.package == package) return true;
+        return false;
+    };
+    const auto in_failed = [&resolution](const std::string &package) {
+        for (const auto &entry : resolution.failed)
+            if (entry.package == package) return true;
+        return false;
+    };
+    const auto add_updated = [&](const std::string &package,
+                                 const std::string &version) {
+        if (in_updated(package)) return;
+        resolution.updated.push_back({package, version});
+    };
+    const auto add_failed = [&](const std::string &package,
+                                const std::string &reason) {
+        if (in_updated(package) || in_failed(package)) return;
+        resolution.failed.push_back({package, reason});
+    };
+    const auto recorded_reason = [&](const std::string &package,
+                                     const std::string &fallback) {
+        for (const auto &failure : backend.failures)
+            if (failure.package == package && !failure.reason.empty())
+                return failure.reason;
+        for (const auto &failure : warnings)
+            if (failure.package == package && !failure.reason.empty())
+                return failure.reason;
+        return fallback;
+    };
+
+    // The installed state after the run is the ground truth: a package the
+    // check offered but that still reports the old version (or disappeared) is
+    // a failure, never an update.  This is what used to turn a failed run into
+    // "Apps are up to date".
+    for (const auto &update : expected) {
+        const InstalledPackage *current = find_installed(update.package);
+        if (current && current->installed) {
+            const bool changed = !current->version.empty() &&
+                                 current->version != update.installed;
+            if (current->version == update.latest || changed) {
+                add_updated(update.package,
+                            current->version.empty() ? update.latest
+                                                     : current->version);
+                continue;
+            }
+            add_failed(update.package,
+                       recorded_reason(update.package, "not updated"));
+        } else {
+            add_failed(update.package,
+                       recorded_reason(update.package, "not installed"));
+        }
+    }
+
+    for (const auto &entry : backend.updated)
+        add_updated(entry.package, entry.version);
+    for (const auto &failure : backend.failures)
+        add_failed(failure.package, failure.reason);
+    for (const auto &failure : warnings)
+        add_failed(failure.package, failure.reason);
+
+    // A package that now reports the new version is a success even if the
+    // backend recorded an earlier failure for it.
+    resolution.failed.erase(
+        std::remove_if(resolution.failed.begin(), resolution.failed.end(),
+                       [&in_updated](const AppUpdateFailure &failure) {
+                           return in_updated(failure.package);
+                       }),
+        resolution.failed.end());
+    return resolution;
+}
+
 
 bool update_changes_version(const UpdateInfo &update)
 {

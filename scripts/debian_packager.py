@@ -697,6 +697,7 @@ set -eu
 # launcher can only trigger installations from trusted CardputerZero releases.
 STATE_DIR=${APPLAUNCH_UPDATE_STATE_DIR:-/var/lib/applaunch-updater}
 STATUS_FILE=$STATE_DIR/apps-status
+WARNING_FILE=$STATE_DIR/apps-warnings
 CACHE_DIR=${APPLAUNCH_APPS_UPDATE_CACHE_DIR:-/var/cache/APPLaunch/app-updates}
 LOG_FILE=$STATE_DIR/apps-update.log
 ARCHITECTURE=arm64
@@ -709,6 +710,13 @@ status() {
     chmod 0644 "$STATUS_FILE.tmp"
     mv -f "$STATUS_FILE.tmp" "$STATUS_FILE"
 }
+# A failed package must stay visible while the remaining packages continue, so
+# the launcher can render download/install errors before the run finishes.
+record_failure() {
+    failed="$failed$1:$2,"
+    failed_count=$((failed_count + 1))
+    printf '%s:%s\n' "$1" "$2" >>"$WARNING_FILE"
+}
 fail() {
     finished=1
     status "failed:$1"
@@ -718,10 +726,14 @@ fail() {
 mkdir -p "$STATE_DIR" "$CACHE_DIR"
 chmod 0755 "$STATE_DIR"
 chmod 0700 "$CACHE_DIR"
-: >"$LOG_FILE"
-chmod 0644 "$LOG_FILE"
 exec 9>"$STATE_DIR/apps.lock"
 flock -n 9 || exit 0
+# Truncate the shared files only after taking the lock: a second start while
+# a run is active must not wipe the log of that run.
+: >"$LOG_FILE"
+chmod 0644 "$LOG_FILE"
+: >"$WARNING_FILE"
+chmod 0644 "$WARNING_FILE"
 
 tmp_dir=$(mktemp -d "$STATE_DIR/apps-run.XXXXXX")
 finished=0
@@ -739,11 +751,17 @@ cancelled() {
 trap cleanup EXIT
 trap cancelled HUP INT TERM
 
+# Publish a fresh non-terminal line before the slow package index refresh.  The
+# launcher ignores the previous run's terminal line until the status changes.
+status starting
+
 APPS='__APP_UPDATE_SPECS__'
 count=$(printf '%s\n' "$APPS" | sed '/^$/d' | wc -l)
 index=0
 updated=
+updated_count=0
 failed=
+failed_count=0
 dpkg --configure -a >>"$LOG_FILE" 2>&1 || true
 # App dependencies (for example factorytest -> libcamera) can be newer than
 # the image's package indexes.  Refresh them once before installing.
@@ -752,70 +770,67 @@ timeout 300 env DEBIAN_FRONTEND=noninteractive apt-get update >>"$LOG_FILE" 2>&1
 while IFS='|' read -r package repo prefix; do
     [ -n "$package" ] || continue
     index=$((index + 1))
-    status "checking:$index:$count:"
+    status "checking:$index:$count:$package:$updated_count:$failed_count"
     installed=$(dpkg-query -W -f='${Version}' "$package" 2>/dev/null || true)
     [ -n "$installed" ] || continue
 
     cache_file=$CACHE_DIR/$repo.json
     tag=
     asset=
-    refresh=1
     if [ -f "$cache_file" ] && [ -z "$(find "$cache_file" -mmin +5 2>/dev/null)" ]; then
-        refresh=0
-    fi
-    if [ "$refresh" -eq 1 ]; then
-        if curl -fsSL --max-time 15 --connect-timeout 5 \
+        # A fresh cache avoids hammering the rate-limited GitHub API.
+        tag=$(sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$cache_file" | head -n 1)
+        asset=$(grep -o "\"name\"[[:space:]]*:[[:space:]]*\"${prefix}[^\"]*${ASSET_SUFFIX}\"" "$cache_file" | head -n 1 | sed 's/.*"\([^"]*\)"$/\1/')
+    elif curl -fsSL --max-time 15 --connect-timeout 5 \
             -H 'Accept: application/vnd.github+json' \
             -H 'User-Agent: APPLaunch-App-Updater' \
             "$API_ROOT/$repo/releases/latest" -o "$cache_file.tmp" \
             >>"$LOG_FILE" 2>&1; then
-            mv -f "$cache_file.tmp" "$cache_file"
-        elif [ ! -f "$cache_file" ]; then
-            # The API is rate limited for the unauthenticated device.  Fall
-            # back to the public release page, which is not API-rate-limited.
-            effective_url=$(curl -fsSL --max-time 15 --connect-timeout 5 \
-                -o /dev/null -w '%{url_effective}' \
-                "https://github.com/CardputerZero/$repo/releases/latest" \
+        mv -f "$cache_file.tmp" "$cache_file"
+        tag=$(sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$cache_file" | head -n 1)
+        asset=$(grep -o "\"name\"[[:space:]]*:[[:space:]]*\"${prefix}[^\"]*${ASSET_SUFFIX}\"" "$cache_file" | head -n 1 | sed 's/.*"\([^"]*\)"$/\1/')
+    else
+        # The API is rate limited for the unauthenticated device.  Fall back to
+        # the public release page, which is not API-rate-limited.  A stale cache
+        # must not hide a release the launcher check already found via the page.
+        effective_url=$(curl -fsSL --max-time 15 --connect-timeout 5 \
+            -o /dev/null -w '%{url_effective}' \
+            "https://github.com/CardputerZero/$repo/releases/latest" \
+            2>>"$LOG_FILE" || true)
+        tag=${effective_url##*/tag/}
+        if [ -n "$tag" ]; then
+            html=$(curl -fsSL --max-time 15 --connect-timeout 5 \
+                "https://github.com/CardputerZero/$repo/releases/expanded_assets/$tag" \
                 2>>"$LOG_FILE" || true)
-            tag=${effective_url##*/tag/}
-            if [ -n "$tag" ]; then
-                html=$(curl -fsSL --max-time 15 --connect-timeout 5 \
-                    "https://github.com/CardputerZero/$repo/releases/expanded_assets/$tag" \
-                    2>>"$LOG_FILE" || true)
-                asset=$(printf '%s' "$html" | \
-                    grep -o "${prefix}[^\"]*${ASSET_SUFFIX}" | head -n 1)
-            fi
-            if [ -z "$tag" ] || [ -z "$asset" ]; then
-                failed="$failed$package:release,"
-                continue
-            fi
+            asset=$(printf '%s' "$html" | \
+                grep -o "${prefix}[^\"]*${ASSET_SUFFIX}" | head -n 1)
+        fi
+        if [ -z "$tag" ] || [ -z "$asset" ]; then
+            record_failure "$package" release
+            continue
         fi
     fi
 
     if [ -z "$tag" ] || [ -z "$asset" ]; then
-        tag=$(sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$cache_file" | head -n 1)
-        asset=$(grep -o "\"name\"[[:space:]]*:[[:space:]]*\"${prefix}[^\"]*${ASSET_SUFFIX}\"" "$cache_file" | head -n 1 | sed 's/.*"\([^"]*\)"$/\1/')
-    fi
-    if [ -z "$tag" ] || [ -z "$asset" ]; then
-        failed="$failed$package:metadata,"
+        record_failure "$package" metadata
         continue
     fi
     version=${asset#"$prefix"}
     version=${version%"$ASSET_SUFFIX"}
     if [ -z "$version" ]; then
-        failed="$failed$package:version,"
+        record_failure "$package" version
         continue
     fi
     if ! dpkg --compare-versions "$version" gt "$installed" 2>/dev/null; then
         continue
     fi
 
-    status "downloading:$index:$count:$package"
+    status "downloading:$index:$count:$package:$updated_count:$failed_count"
     deb=$tmp_dir/$package.deb
     if ! timeout 120 wget -q --https-only --timeout=30 --tries=3 \
         "$DOWNLOAD_ROOT/$repo/releases/download/$tag/$asset" -O "$deb" \
         >>"$LOG_FILE" 2>&1; then
-        failed="$failed$package:download,"
+        record_failure "$package" download
         rm -f "$deb"
         continue
     fi
@@ -826,25 +841,26 @@ while IFS='|' read -r package repo prefix; do
        [ "$deb_arch" != "$ARCHITECTURE" ] ||
        [ -z "$deb_version" ] ||
        ! dpkg --compare-versions "$deb_version" gt "$installed" 2>/dev/null; then
-        failed="$failed$package:invalid-package,"
+        record_failure "$package" invalid-package
         rm -f "$deb"
         continue
     fi
 
-    status "installing:$index:$count:$package"
+    status "installing:$index:$count:$package:$updated_count:$failed_count"
     if ! timeout 300 env DEBIAN_FRONTEND=noninteractive apt-get install -y \
         --no-install-recommends "$deb" >>"$LOG_FILE" 2>&1; then
-        failed="$failed$package:install,"
+        record_failure "$package" install
         rm -f "$deb"
         continue
     fi
     active=$(dpkg-query -W -f='${Version}' "$package" 2>/dev/null || true)
     if [ "$active" != "$deb_version" ]; then
-        failed="$failed$package:verify,"
+        record_failure "$package" verify
         rm -f "$deb"
         continue
     fi
     updated="$updated$package:$deb_version,"
+    updated_count=$((updated_count + 1))
     rm -f "$deb"
 done <<EOF
 $APPS
