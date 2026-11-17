@@ -304,7 +304,16 @@ workflow = (repo / ".github" / "workflows" / "launcher-build.yml").read_text(
 assert "branches: [master, ci/**]" in workflow
 assert "if: ${{ inputs.publish == true && github.ref == 'refs/heads/master' }}" in workflow
 assert "startsWith(github.ref, 'refs/heads/ci/')" not in workflow
-assert workflow.count("tag_name: launcher-latest") == 2
+# The update channel is refreshed by uploading assets only. PATCHing the
+# release requires the `workflows` scope for a tag whose commit carries a
+# different workflow tree, which GITHUB_TOKEN never has (#update-a-release).
+assert "tag_name: launcher-latest" not in workflow
+assert workflow.count("gh release upload launcher-latest") == 2
+assert 'gh release upload launcher-latest "$asset" --clobber' in workflow
+assert (
+    "gh release upload launcher-latest "
+    "artifacts/applaunch_arm64.deb.update-info --clobber" in workflow
+)
 assert "scripts/build_cardputerzero_release_local.sh" in workflow
 assert "python3 scripts/debian_packager.py --version" not in workflow
 assert "artifacts/applaunch_arm64.deb.update-info" in workflow
@@ -314,9 +323,10 @@ assert "${GITHUB_SHA:0:12}" in workflow
 assert "target_commitish: ${{ github.sha }}" in workflow
 # A manual release is a normal GitHub Release; CI runs stay pre-releases.
 assert "prerelease: ${{ !inputs.publish }}" in workflow
-# The versioned release and both channel uploads reject missing assets.
-assert workflow.count("fail_on_unmatched_files: true") == 3
-assert "preserve_order: true" in workflow
+# Only the versioned (softprops) release rejects unmatched assets; the channel
+# steps upload single files with `gh`, which fails on a missing asset by itself.
+assert "softprops/action-gh-release" in workflow
+assert workflow.count("fail_on_unmatched_files: true") == 1
 assert "overwrite_files: true" in workflow
 # The update metadata is uploaded after the payload it describes.
 assert workflow.index("Publish launcher update channel (payload)") < workflow.index(
