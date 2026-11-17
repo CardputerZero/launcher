@@ -807,15 +807,18 @@ std::string apply_hostname(const std::string &hostname)
     CommandResult result = run_command({"hostnamectl", "set-hostname", hostname});
     if (result.code != 0)
         return result.output.empty() ? "Failed to set hostname" : result.output;
-    const std::string hosts =
-        "127.0.0.1\tlocalhost\n"
-        "127.0.1.1\t" + hostname + "\n";
-    result = run_command({"tee", "/etc/hostname"}, &hostname);
+
+    // hostnamectl updates /etc/hostname but not /etc/hosts; without the
+    // 127.0.1.1 mapping every sudo call warns "unable to resolve host".
+    // $1 is a validated argv element, so it needs no shell escaping.
+    const std::string sync_hosts =
+        R"(if grep -q '^[[:space:]]*127\.0\.1\.1[[:space:]]' /etc/hosts; then )"
+        R"(sed -i "s|^[[:space:]]*127\.0\.1\.1[[:space:]].*|127.0.1.1\t$1|" /etc/hosts; )"
+        R"(else printf '127.0.1.1\t%s\n' "$1" >> /etc/hosts; fi)";
+    result = run_command({"sh", "-c", sync_hosts, "sh", hostname});
     if (result.code != 0)
-        return result.output.empty() ? "Failed to write /etc/hostname" : result.output;
-    result = run_command({"tee", "/etc/hosts.launchwizard"}, &hosts);
-    return result.code == 0 ? std::string() :
-        (result.output.empty() ? "Failed to write hostname hosts file" : result.output);
+        return result.output.empty() ? "Failed to update /etc/hosts" : result.output;
+    return {};
 }
 
 std::string WizardService::set_manual_time(const std::string &date,

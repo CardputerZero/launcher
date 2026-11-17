@@ -88,6 +88,16 @@ compiled using `zic` (provided by `libc-bin` on the Debian device image) into
 and root access; failure stops setup and offers retry. Host timezone tests use
 temporary files and never change the host's timezone.
 
+## Hostname
+
+Applying the hostname writes `/etc/hostname` through `hostnamectl` and updates
+the `127.0.1.1` mapping in `/etc/hosts` in place. Other hosts entries
+(localhost, IPv6 aliases, user additions) are preserved, and a missing mapping
+is appended. Without that mapping, tools such as `sudo` print
+`unable to resolve host <name>` on every invocation. Re-running the wizard from
+APPLaunch's "Run Setup Again" re-applies the hostname step, which repairs
+devices provisioned by older images.
+
 ## Key sound
 
 The wizard uses the same six active cues and per-cue volumes as Keyboard-Guide:
