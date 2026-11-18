@@ -20,6 +20,9 @@ struct SettingsBatterySnapshot {
     int flags = 0;
     int avg_current_ma = 0;
     bool valid = false;
+    int time_to_empty_min = -1;
+    int time_to_full_min = -1;
+    int cycle_count = -1;
 };
 
 enum class SettingsBatteryReadState {
@@ -30,7 +33,7 @@ enum class SettingsBatteryReadState {
 class SettingsBatteryInfoModel {
 public:
     enum class ValueMetric : std::size_t {
-        Count = 6,
+        Count = 8,
     };
 
     enum class LabelMetric : std::size_t {
@@ -53,6 +56,7 @@ public:
     SettingsBatteryReadState state() const { return state_; }
     bool valid() const { return state_ == SettingsBatteryReadState::Valid; }
     const std::string &status_text() const { return status_text_; }
+    std::string charge_state_text() const;
 
     static bool parse_payload(const std::string &response,
                               SettingsBatterySnapshot &snapshot);
@@ -68,10 +72,12 @@ private:
         "Temp: --C",
         "Current: --mA",
         "Voltage: --V",
-        "Remaining: 1750mAh",
-        "Full: 1750mAh",
+        "Remaining: --mAh",
+        "Full: --mAh",
+        "Time: --",
+        "Cycles: --",
     };
     std::array<std::string, static_cast<std::size_t>(ValueMetric::Count)> values_ = {
-        "--%", "-- C", "-- mA", "-- V", "1750 mAh", "1750 mAh",
+        "--%", "-- C", "-- mA", "-- V", "-- mAh", "-- mAh", "--", "--",
     };
 };

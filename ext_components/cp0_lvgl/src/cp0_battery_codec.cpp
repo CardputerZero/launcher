@@ -25,7 +25,10 @@ std::string encode_info(const cp0_battery_info_t &info)
            << info.full_mah << ','
            << info.flags << ','
            << info.avg_current_ma << ','
-           << info.valid;
+           << info.valid << ','
+           << info.time_to_empty_min << ','
+           << info.time_to_full_min << ','
+           << info.cycle_count;
     return output.str();
 }
 
@@ -47,7 +50,10 @@ bool decode_info(const std::string &data, cp0_battery_info_t *info)
         input >> parsed.full_mah && comma() &&
         input >> parsed.flags && comma() &&
         input >> parsed.avg_current_ma && comma() &&
-        input >> parsed.valid && (input >> std::ws).eof()) {
+        input >> parsed.valid && comma() &&
+        input >> parsed.time_to_empty_min && comma() &&
+        input >> parsed.time_to_full_min && comma() &&
+        input >> parsed.cycle_count && (input >> std::ws).eof()) {
         if (!info_is_valid(parsed)) return false;
         *info = parsed;
         return true;
@@ -63,7 +69,8 @@ bool info_is_valid(const cp0_battery_info_t &info)
         info.avg_current_ma < -5000 || info.avg_current_ma > 5000 ||
         info.temperature_c10 < -400 || info.temperature_c10 > 1000 ||
         info.soc < 0 || info.soc > 100 || info.remain_mah < 0 || info.full_mah < 0 ||
-        info.flags < 0)
+        info.flags < 0 || info.time_to_empty_min < -1 ||
+        info.time_to_full_min < -1 || info.cycle_count < -1)
         return false;
     if (info.full_mah > 0 && info.remain_mah > info.full_mah) return false;
     return true;
@@ -94,8 +101,14 @@ cp0_battery_info_t from_power_supply(int present,
     info.current_ma = current_ma;
     info.temperature_c10 = temperature_c10;
     info.soc = capacity_percent;
-    info.flags = std::strcmp(status, "Charging") == 0 ? 1 : 0;
+    /* bit0: charging (kept for existing consumers), bit1: full */
+    info.flags = std::strcmp(status, "Charging") == 0 ? 1
+                 : std::strcmp(status, "Full") == 0   ? 2
+                                                      : 0;
     info.avg_current_ma = current_ma;
+    info.time_to_empty_min = -1;
+    info.time_to_full_min = -1;
+    info.cycle_count = -1;
     info.valid = 1;
     return info;
 }

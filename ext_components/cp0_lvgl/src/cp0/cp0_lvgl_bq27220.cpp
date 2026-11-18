@@ -15,6 +15,7 @@
 #include "../cp0_callback_contract.hpp"
 #include "../cp0_battery_snapshot_cache.hpp"
 
+#include <algorithm>
 #include <cerrno>
 #include <cstdio>
 #include <cstdlib>
@@ -117,9 +118,11 @@ public:
             ok = ok && read_string(path, status, sizeof(status));
 
             if (ok) {
-                return cp0::battery::from_power_supply(
+                info = cp0::battery::from_power_supply(
                     static_cast<int>(present), static_cast<int>(capacity),
                     voltage_uv, current_raw, static_cast<int>(temp_raw), status);
+                if (info.valid == 1) add_gauge_extras(bq_path, info);
+                return info;
             }
         }
 
@@ -210,6 +213,30 @@ private:
         if (ret != 1) return 0;
         *value = v;
         return 1;
+    }
+
+    /* Optional fuel-gauge values; missing or out-of-range ones stay unknown. */
+    static void add_gauge_extras(const char *dir, cp0_battery_info_t &info)
+    {
+        char path[320];
+        long now_uah = -1, full_uah = -1, value = -1;
+        std::snprintf(path, sizeof(path), "%s/charge_now", dir);
+        if (!read_long(path, &now_uah) || now_uah < 0 || now_uah > 100000000L) now_uah = -1;
+        std::snprintf(path, sizeof(path), "%s/charge_full", dir);
+        if (!read_long(path, &full_uah) || full_uah <= 0 || full_uah > 100000000L) full_uah = -1;
+        if (now_uah >= 0 && full_uah > 0) {
+            info.full_mah = static_cast<int>(full_uah / 1000);
+            info.remain_mah = static_cast<int>(std::min(now_uah, full_uah) / 1000);
+        }
+        std::snprintf(path, sizeof(path), "%s/time_to_empty_now", dir);
+        if (read_long(path, &value) && value >= 0 && value < 60L * 60 * 24 * 30)
+            info.time_to_empty_min = static_cast<int>(value / 60);
+        std::snprintf(path, sizeof(path), "%s/time_to_full_now", dir);
+        if (read_long(path, &value) && value >= 0 && value < 60L * 60 * 24 * 30)
+            info.time_to_full_min = static_cast<int>(value / 60);
+        std::snprintf(path, sizeof(path), "%s/cycle_count", dir);
+        if (read_long(path, &value) && value >= 0 && value < 100000)
+            info.cycle_count = static_cast<int>(value);
     }
 
     static int read_current_raw(const char *dir, long *value)

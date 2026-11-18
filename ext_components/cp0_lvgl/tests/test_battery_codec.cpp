@@ -10,9 +10,9 @@
 
 int main()
 {
-    cp0_battery_info_t source{4100, -125, 273, 81, 2430, 3000, 4, -120, 1};
+    cp0_battery_info_t source{4100, -125, 273, 81, 2430, 3000, 4, -120, 1, -1, -1, 3};
     const std::string encoded = cp0::battery::encode_info(source);
-    assert(encoded == "4100,-125,273,81,2430,3000,4,-120,1");
+    assert(encoded == "4100,-125,273,81,2430,3000,4,-120,1,-1,-1,3");
 
     cp0_battery_info_t decoded{};
     assert(cp0::battery::decode_info(encoded, &decoded));
@@ -26,14 +26,14 @@ int main()
     assert(decoded.avg_current_ma == source.avg_current_ma);
     assert(decoded.valid == source.valid);
     assert(!cp0::battery::decode_info("4100,-125,273", &decoded));
-    assert(!cp0::battery::decode_info("4100;-125,273,81,2430,3000,4,-120,1", &decoded));
+    assert(!cp0::battery::decode_info("4100;-125,273,81,2430,3000,4,-120,1,-1,-1,3", &decoded));
     assert(!cp0::battery::decode_info(encoded + ",extra", &decoded));
     assert(cp0::battery::decode_info(encoded + "  \n", &decoded));
     assert(!cp0::battery::decode_info(encoded, nullptr));
-    assert(!cp0::battery::decode_info("4100,-125,273,101,2430,3000,4,-120,1", &decoded));
-    assert(!cp0::battery::decode_info("4100,-125,273,81,3001,3000,4,-120,1", &decoded));
-    assert(!cp0::battery::decode_info("4100,-125,273,81,2430,3000,4,-120,2", &decoded));
-    assert(!cp0::battery::decode_info("-1,-125,273,81,2430,3000,4,-120,1", &decoded));
+    assert(!cp0::battery::decode_info("4100,-125,273,101,2430,3000,4,-120,1,-1,-1,3", &decoded));
+    assert(!cp0::battery::decode_info("4100,-125,273,81,3001,3000,4,-120,1,-1,-1,3", &decoded));
+    assert(!cp0::battery::decode_info("4100,-125,273,81,2430,3000,4,-120,2,-1,-1,3", &decoded));
+    assert(!cp0::battery::decode_info("-1,-125,273,81,2430,3000,4,-120,1,-1,-1,3", &decoded));
 
     const cp0_battery_info_t unavailable{};
     assert(cp0::battery::info_is_valid(unavailable));

@@ -30,6 +30,9 @@ typedef struct {
     int flags;
     int avg_current_ma;
     int valid;
+    int time_to_empty_min; /* -1 when unknown (e.g. while charging) */
+    int time_to_full_min;  /* -1 when unknown (e.g. while discharging) */
+    int cycle_count;       /* -1 when unknown */
 } cp0_battery_info_t;
 
 typedef struct {

@@ -16,10 +16,10 @@ int main()
     assert(!model.valid());
     assert(model.labels()[0] == "Battery: --%");
     assert(model.values()[0] == "--%");
-    assert(model.values()[4] == "1750 mAh");
-    assert(model.values()[5] == "1750 mAh");
+    assert(model.values()[4] == "-- mAh");
+    assert(model.values()[5] == "-- mAh");
 
-    const std::string valid_payload = "3800,-250,250,78,1200,2000,1,-100,1";
+    const std::string valid_payload = "3800,-250,250,78,1200,2000,1,-100,1,-1,76,2";
     assert(model.update(0, valid_payload));
     const auto previous_snapshot = model.snapshot();
     const auto previous_labels = model.labels();
@@ -28,8 +28,11 @@ int main()
     assert(previous_values[1] == "25.0 C");
     assert(previous_values[2] == "-250 mA");
     assert(previous_values[3] == "3.80 V");
-    assert(previous_values[4] == "1750 mAh");
-    assert(previous_values[5] == "1750 mAh");
+    assert(previous_values[4] == "1200 mAh");
+    assert(previous_values[5] == "2000 mAh");
+    assert(previous_values[6] == "1h16m");
+    assert(previous_values[7] == "2");
+    assert(model.charge_state_text() == "Charging - full in 1h16m");
 
     assert(!model.update(-1, "battery api failed"));
     assert(model.valid());
@@ -53,6 +56,6 @@ int main()
     assert(!model.valid());
     assert(model.labels()[0] == "Battery: --%");
     assert(model.values()[0] == "--%");
-    assert(model.values()[4] == "1750 mAh");
-    assert(model.values()[5] == "1750 mAh");
+    assert(model.values()[4] == "-- mAh");
+    assert(model.values()[5] == "-- mAh");
 }

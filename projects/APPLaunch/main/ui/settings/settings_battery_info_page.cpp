@@ -270,6 +270,8 @@ void LvSettingBatteryInfoPage3::create_ui(lv_obj_t *parent)
             {1, 1, 1, "Temp"},
             {4, 2, 0, "Remaining"},
             {5, 2, 1, "Full"},
+            {6, 3, 0, "Time"},
+            {7, 3, 1, "Cycles"},
         }};
     for (const TableCellSpec &cell : cells) {
         state_->value_labels[cell.value_index] =
@@ -440,7 +442,7 @@ void LvSettingBatteryInfoPage3::handle_read_result(int outcome,
 
     if (outcome == static_cast<int>(BatteryOutcome::Success)) {
         if (state_->model.update(code, payload))
-            state_->status_message = "Battery updated";
+            state_->status_message = state_->model.charge_state_text();
         else
             state_->status_message = state_->model.status_text();
     } else if (outcome == static_cast<int>(BatteryOutcome::TimedOut)) {
