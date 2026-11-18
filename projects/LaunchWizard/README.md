@@ -98,6 +98,32 @@ is appended. Without that mapping, tools such as `sudo` print
 APPLaunch's "Run Setup Again" re-applies the hostname step, which repairs
 devices provisioned by older images.
 
+## Root filesystem expansion
+
+On the first boot the wizard grows the root filesystem just before it finishes.
+The expansion is the second-to-last step of the apply pipeline: it runs after
+the timezone, hostname, account, network, and SSH steps and before the final step
+that disables `LaunchWizard.service` and drops the OOBE markers, so it always
+happens before the restart that ends the OOBE. It runs the packaged
+`/usr/bin/raspi-config --expand-rootfs`, which recreates the root partition with
+the card's full length and installs `/etc/init.d/resize2fs_once`; the actual
+`resize2fs` then runs during that reboot.
+
+The step only runs while the OOBE is configuring the device. It is skipped when
+the OOBE was re-armed from APPLaunch's "Run Setup Again" entry, because that card
+is already expanded and its partition table must not be rewritten again; a
+factory marker that is still present always wins, so a re-arm that races an
+unfinished first boot cannot leave the card unexpanded.
+
+Expansion is best effort. `raspi-config` exits 0 even when it refuses to
+repartition (for example when the root partition is not the last one), so the
+wizard verifies that `resize2fs_once` was installed, warns on stderr otherwise,
+and never blocks the rest of the setup. If the apply is interrupted after this
+step, the init script stays armed and the next boot still expands the card; if
+the command itself failed, run it again manually.
+The image must provide the `raspi-config` package with `parted`, `fdisk`, and
+`resize2fs` (`e2fsprogs`).
+
 ## Key sound
 
 The wizard uses the same six active cues and per-cue volumes as Keyboard-Guide:

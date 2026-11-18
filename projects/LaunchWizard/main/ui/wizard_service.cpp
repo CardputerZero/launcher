@@ -85,15 +85,30 @@ constexpr const char *kKeyboardGuideBinary =
 // wizard keeps the display after the first-boot lesson ends, so it opts in; the
 // launcher's own keyboard-guide.desktop entry intentionally does not.
 constexpr const char *kKeyboardGuideExitLogoArgument = "--exit-logo";
+// Packaged raspi-config entry point on the device image. Root expansion is a
+// first-boot only step; see should_expand_rootfs() in first_boot_policy.h.
+constexpr const char *kRaspiConfigPath = "/usr/bin/raspi-config";
+// Installed by `raspi-config --expand-rootfs`; grows the filesystem on the next
+// boot. Its presence is the only reliable success signal, because raspi-config
+// exits 0 even when it refuses to repartition.
+constexpr const char *kResizeOnceInitScript = "/etc/init.d/resize2fs_once";
+
+void print_command(const std::vector<std::string> &args, const std::string *stdin_text);
 
 void remove_oobe_markers(std::string *first_error = nullptr)
 {
     static const char *marker_paths[] = {kRearmOobeMarker, kFactoryOobeMarker};
     for (const char *path : marker_paths) {
+#if LAUNCH_WIZARD_DRY_RUN
+        // The SDL preview must never modify the host; announce the removal a
+        // real run would perform instead of unlinking the markers.
+        print_command({"rm", "-f", path}, nullptr);
+#else
         if (remove(path) != 0 && errno != ENOENT && first_error &&
             first_error->empty())
             *first_error = std::string("Failed to remove OOBE marker: ") +
                            strerror(errno);
+#endif
     }
 }
 
@@ -853,6 +868,46 @@ std::string apply_ssh(bool enabled)
     return {};
 }
 
+// ---------------------------------------------------------------------------
+// Root filesystem expansion (first boot only, runs just before the restart).
+// ---------------------------------------------------------------------------
+bool root_expansion_enabled()
+{
+#if LAUNCH_WIZARD_DRY_RUN
+    // The SDL preview has no card to repartition, but the step still prints the
+    // command it would run so the dry-run log stays representative.
+    return true;
+#else
+    // A settings-driven re-run replays the OOBE on an already-expanded card, so
+    // its partition table must not be rewritten again. A factory marker still
+    // being present means the first boot never completed and always wins.
+    return should_expand_rootfs(access(kFactoryOobeMarker, F_OK) == 0,
+                                access(kRearmOobeMarker, F_OK) == 0);
+#endif
+}
+
+// `raspi-config --expand-rootfs` recreates the root partition with the same
+// start offset but the card's full length, then installs resize2fs_once to grow
+// the filesystem at the next boot. It prints "Please reboot" and exits 0 even
+// when it bails out (for example when the root partition is not the last one),
+// so the installed init script is the only observable proof that the expansion
+// was actually scheduled; the exit code alone proves nothing.
+std::string apply_root_expansion()
+{
+    if (!root_expansion_enabled())
+        return {};
+
+    const CommandResult result = run_command({kRaspiConfigPath, "--expand-rootfs"});
+    if (result.code != 0)
+        return result.output.empty() ? std::string("root expansion failed")
+                                     : result.output;
+#if !LAUNCH_WIZARD_DRY_RUN
+    if (access(kResizeOnceInitScript, F_OK) != 0)
+        return "root expansion was not scheduled";
+#endif
+    return {};
+}
+
 std::string WizardService::connect_wifi(const std::string &ssid, const std::string &password,
                                         std::string *connected_ip, bool hidden)
 {
@@ -1042,6 +1097,12 @@ std::string WizardService::apply(
         {"Enabling APPLaunch service...", [username] {
             return enable_applaunch_service(username, kDefaultUserUid);
         }},
+        // Expansion rewrites the partition table and only takes effect on the
+        // reboot that ends the OOBE, so it runs after every other configuration
+        // step and before the final step disables the service and drops the
+        // markers. It is best effort: an unexpanded card still boots, and the
+        // command can be retried manually (the settings-driven re-run skips it).
+        best_effort("Expanding root filesystem...", apply_root_expansion),
         {"Finalizing configuration...", [] {
             CommandResult disabled =
                 run_command({"systemctl", "disable", "LaunchWizard.service"});

@@ -73,6 +73,7 @@ using launch_wizard::WizardSoundCue;
 using launch_wizard::Timezone;
 using launch_wizard::WifiConnectionStatus;
 using launch_wizard::WifiNetwork;
+using launch_wizard::kApplyStepCount;
 using launch_wizard::kTimezoneCount;
 using launch_wizard::kTimezones;
 constexpr auto kWifiInitialRetryPeriod = std::chrono::seconds(2);
@@ -601,7 +602,7 @@ void render_applying()
 {
     std::string message;
     int step = 0;
-    int total = 9;
+    int total = kApplyStepCount;
     {
         std::lock_guard<std::mutex> lock(g.mutex);
         message = g.worker_message.empty() ? "Configuring..." : g.worker_message;
@@ -727,7 +728,7 @@ void start_apply()
         std::lock_guard<std::mutex> lock(g.mutex);
         g.worker_message = "Configuring...";
         g.worker_step = 0;
-        g.worker_total = 9;
+        g.worker_total = kApplyStepCount;
     }
     go(Screen::Applying);
 

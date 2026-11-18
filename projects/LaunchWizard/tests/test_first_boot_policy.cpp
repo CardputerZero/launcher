@@ -67,6 +67,14 @@ bool test_first_boot_policy()
     state.user_has_password = true;
     passed &= expect_wizard(true, state, "legacy piwiz ignores password");
 
+    // Root expansion runs on the genuine first boot only; a settings-driven
+    // re-run must not rewrite an already-expanded card's partition table, but a
+    // re-arm that races an unfinished first boot must still expand it.
+    passed &= launch_wizard::should_expand_rootfs(false, false);
+    passed &= launch_wizard::should_expand_rootfs(true, false);
+    passed &= launch_wizard::should_expand_rootfs(true, true);
+    passed &= !launch_wizard::should_expand_rootfs(false, true);
+
     // Keyboard guide: both marker and binary are required. In particular, a
     // missing package must not consume the marker.
     passed &= launch_wizard::should_run_keyboard_guide(true, true);

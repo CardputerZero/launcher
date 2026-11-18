@@ -251,8 +251,9 @@ std::string run_apply_steps(
     const std::function<void(int, int, const std::string &)> &progress,
     const std::function<bool()> &cancelled)
 {
-    if (steps.size() != kApplyStepCount)
-        return "Apply runner requires exactly 9 steps";
+    if (steps.size() != static_cast<std::size_t>(kApplyStepCount))
+        return "Apply runner requires exactly " + std::to_string(kApplyStepCount) +
+               " steps";
     for (const ApplyStep &step : steps) {
         if (!step.execute || step.label.empty())
             return "Apply runner contains an invalid step";

@@ -16,7 +16,8 @@
 
 namespace launch_wizard {
 
-inline constexpr int kApplyStepCount = 8;
+// kApplyStepCount lives in wizard_model.h because it also drives the progress
+// screen's "Step n/total" label.
 
 enum class ApplyCheckpointLoad {
     Missing,
