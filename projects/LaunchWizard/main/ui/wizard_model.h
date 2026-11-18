@@ -131,6 +131,12 @@ inline constexpr int kTimezoneCount =
     static_cast<int>(sizeof(kTimezones) / sizeof(kTimezones[0]));
 inline constexpr int kDefaultTimezoneIndex = 25;
 
+// Number of steps in WizardService::apply(). The apply checkpoint validates its
+// stored position against it, run_apply_steps() rejects a sequence of any other
+// length, and the progress screen renders "Step n/total" from it, so all three
+// must come from this single value.
+inline constexpr int kApplyStepCount = 9;
+
 struct WizardModel {
     Screen screen = Screen::Welcome;
     int timezone_index = kDefaultTimezoneIndex;
@@ -195,7 +201,7 @@ struct WizardModel {
     int exit_ticks = 0;
     std::string worker_message;
     int worker_step = 0;
-    int worker_total = 8;
+    int worker_total = kApplyStepCount;
     std::mutex mutex;
 
     const Timezone &current_timezone() const;

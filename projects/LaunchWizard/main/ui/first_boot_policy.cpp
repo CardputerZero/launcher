@@ -18,6 +18,13 @@ bool should_run_wizard(const FirstBootState &state)
     return state.legacy_piwiz_active;
 }
 
+bool should_expand_rootfs(bool factory_marker, bool rearm_marker)
+{
+    if (factory_marker)
+        return true;
+    return !rearm_marker;
+}
+
 bool should_run_keyboard_guide(bool marker_present, bool binary_present)
 {
     return marker_present && binary_present;

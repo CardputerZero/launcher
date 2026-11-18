@@ -75,8 +75,9 @@ bool test_apply_checkpoint()
     manual_time_changed.manual_time = "03:04";
     expect(wizard_configuration_fingerprint(manual_time_changed) == fingerprint,
            "inactive manual time still affected the apply fingerprint");
-    expect(kApplyStepCount == 8,
-           "manual time removal did not reduce the apply sequence to eight steps");
+    // Must stay in sync with the steps WizardService::apply() builds.
+    expect(kApplyStepCount == 9,
+           "apply step count does not match the wizard pipeline");
 
     // A new invocation always starts from the first step, even when a valid
     // checkpoint from an interrupted configuration exists.
