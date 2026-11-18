@@ -307,11 +307,18 @@ assert "startsWith(github.ref, 'refs/heads/ci/')" not in workflow
 # The update channel is refreshed by uploading assets only. PATCHing the
 # release requires the `workflows` scope for a tag whose commit carries a
 # different workflow tree, which GITHUB_TOKEN never has (#update-a-release).
+# The publish job has no checkout either, so `gh` must not rely on a git remote
+# to pick the repository: pin --repo on every channel upload.
 assert "tag_name: launcher-latest" not in workflow
-assert workflow.count("gh release upload launcher-latest") == 2
-assert 'gh release upload launcher-latest "$asset" --clobber' in workflow
+assert workflow.count(
+    'gh release upload --repo "${GITHUB_REPOSITORY}" launcher-latest'
+) == 2
 assert (
-    "gh release upload launcher-latest "
+    'gh release upload --repo "${GITHUB_REPOSITORY}" launcher-latest "$asset" --clobber'
+    in workflow
+)
+assert (
+    'gh release upload --repo "${GITHUB_REPOSITORY}" launcher-latest '
     "artifacts/applaunch_arm64.deb.update-info --clobber" in workflow
 )
 assert "scripts/build_cardputerzero_release_local.sh" in workflow

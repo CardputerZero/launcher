@@ -459,6 +459,10 @@ jobs:
     # Side effect: the release title and prerelease flag are no longer maintained
     # here; they only affect the GitHub web page, and devices resolve the channel
     # by tag name and ignore both.
+    #
+    # This job has no actions/checkout, so `gh` cannot infer the repository from
+    # a git remote ("failed to run git: fatal: not a git repository"). Every gh
+    # call here must pin --repo explicitly.
     - name: Publish launcher update channel (payload)
       env:
         GH_TOKEN: ${{ github.token }}
@@ -468,7 +472,7 @@ jobs:
           artifacts/applaunch_arm64.deb.update-abi \
           artifacts/applaunch_arm64.deb \
           artifacts/applaunch_arm64.deb.sha256; do
-          gh release upload launcher-latest "$asset" --clobber
+          gh release upload --repo "${GITHUB_REPOSITORY}" launcher-latest "$asset" --clobber
         done
 
     - name: Publish launcher update channel (metadata)
@@ -478,4 +482,4 @@ jobs:
         set -euo pipefail
         # Written last: the update check reads this file, so devices only see a
         # new version after the payload above is fully uploaded.
-        gh release upload launcher-latest artifacts/applaunch_arm64.deb.update-info --clobber
+        gh release upload --repo "${GITHUB_REPOSITORY}" launcher-latest artifacts/applaunch_arm64.deb.update-info --clobber
