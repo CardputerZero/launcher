@@ -421,6 +421,12 @@ fi
 
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror \
     -I"$root/src" \
+    "$root/src/cp0_time_format.cpp" \
+    "$root/tests/test_time_format.cpp" -o "$binary"
+"$binary"
+
+"${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror \
+    -I"$root/src" \
     "$root/src/cp0_pty_contract.cpp" \
     "$root/tests/test_pty_contract.cpp" -o "$binary"
 "$binary"

@@ -213,6 +213,10 @@ cp0_battery_info_t cp0_battery_read(void);
 int cp0_backlight_read(void);
 int cp0_backlight_max(void);
 int cp0_backlight_write(int val);
+/* Config key (cp0_signal_config_api GetInt/SetInt) selecting how clock values are
+   presented: 0 = 24-hour "HH:MM" (default), 1 = US 12-hour "h:MM AM/PM".
+   cp0_time_str() itself always returns the documented 24-hour "HH:MM" text. */
+#define CP0_CONFIG_KEY_CLOCK_12H "clock_12h"
 void cp0_time_str(char *buf, int buf_size);
 
 #ifdef __cplusplus

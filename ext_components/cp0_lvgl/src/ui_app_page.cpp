@@ -9,6 +9,11 @@
 #include "cp0_pointer_lifecycle.hpp"
 #include "cp0_status_lifecycle.hpp"
 #include "cp0_status_component_contract.hpp"
+#include "cp0_sync_signal.hpp"
+#include "cp0_time_format.hpp"
+
+#include <charconv>
+#include <system_error>
 
 namespace {
 
@@ -397,10 +402,30 @@ lv_obj_t *create_centered_status_label(lv_obj_t *obj)
     return label;
 }
 
+/* The clock presentation is a user preference stored in the shared config
+   service; an unavailable service keeps the 24-hour default. */
+bool clock_prefers_twelve_hour()
+{
+    int preference = 0;
+    cp0::signal::invoke_noexcept([&preference] {
+        cp0_signal_config_api(
+            {"GetInt", CP0_CONFIG_KEY_CLOCK_12H, "0"},
+            [&preference](int code, std::string data) {
+                int parsed        = 0;
+                const char *end   = data.data() + data.size();
+                const auto result = std::from_chars(data.data(), end, parsed);
+                if (code == 0 && result.ec == std::errc{} && result.ptr == end &&
+                    (parsed == 0 || parsed == 1))
+                    preference = parsed;
+            });
+    });
+    return preference != 0;
+}
+
 } // namespace
 
 AppTopBarTimeComponent::AppTopBarTimeComponent()
-    : AppTopBarComponent("cp0.time", 40)
+    : AppTopBarComponent("cp0.time", kTwentyFourHourWidth)
 {
 }
 
@@ -427,9 +452,33 @@ void AppTopBarTimeComponent::child_delete_cb(lv_event_t *event)
 void AppTopBarTimeComponent::refresh()
 {
     if (!label_) return;
+
+    // cp0_time_str() always yields the documented 24-hour "HH:MM" value; the
+    // preference only changes how the pill presents it.
+    const bool twelve_hour = clock_prefers_twelve_hour();
+    if (!clock_format_applied_ || twelve_hour != twelve_hour_) apply_clock_format(twelve_hour);
+
     char text[16] = "--:--";
     cp0_time_str(text, sizeof(text));
+    if (twelve_hour) {
+        char formatted[16] = {};
+        if (cp0::time::format_12_hour(text, formatted, sizeof(formatted))) {
+            lv_label_set_text(label_, formatted);
+            return;
+        }
+    }
     lv_label_set_text(label_, text[0] ? text : "--:--");
+}
+
+void AppTopBarTimeComponent::apply_clock_format(bool twelve_hour)
+{
+    twelve_hour_          = twelve_hour;
+    clock_format_applied_ = true;
+    if (!obj()) return;
+    set_width(twelve_hour ? kTwelveHourWidth : kTwentyFourHourWidth);
+    configure_status_component(
+        obj(), twelve_hour ? &cp0_status_time_background_wide : &cp0_status_time_background);
+    if (label_) lv_obj_center(label_);
 }
 
 void AppTopBarTimeComponent::on_object_deleted()

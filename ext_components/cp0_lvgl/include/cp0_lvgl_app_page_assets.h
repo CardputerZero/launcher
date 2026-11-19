@@ -9,6 +9,7 @@
 #include "lvgl/lvgl.h"
 
 LV_IMAGE_DECLARE(cp0_status_time_background);
+LV_IMAGE_DECLARE(cp0_status_time_background_wide);
 LV_IMAGE_DECLARE(cp0_status_battery_background);
 LV_IMAGE_DECLARE(cp0_status_ethernet);
 LV_IMAGE_DECLARE(setting_cross);

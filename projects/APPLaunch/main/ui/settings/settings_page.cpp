@@ -578,6 +578,72 @@ void bluetooth_named_only_api(int cmd, void *data)
     bluetooth_named_only_state = previous;
 }
 
+// CP0_CONFIG_KEY_CLOCK_12H is the same key the platform top bar reads, so the
+// setting and its presentation cannot drift apart.
+constexpr const char *kClock12HourConfigKey = CP0_CONFIG_KEY_CLOCK_12H;
+
+bool read_clock_12h_config()
+{
+    int preference = 0;
+    try {
+        cp0_signal_config_api(
+            {"GetInt", kClock12HourConfigKey, "0"},
+            [&preference](int code, std::string data) {
+                int parsed        = 0;
+                const char *end   = data.data() + data.size();
+                const auto result = std::from_chars(data.data(), end, parsed);
+                if (code == 0 && result.ec == std::errc{} && result.ptr == end &&
+                    (parsed == 0 || parsed == 1))
+                    preference = parsed;
+            });
+    } catch (...) {
+    }
+    return preference != 0;
+}
+
+bool write_clock_12h_config(bool twelve_hour)
+{
+    bool succeeded = false;
+    try {
+        cp0_signal_config_api(
+            {"SetInt", kClock12HourConfigKey, twelve_hour ? "1" : "0"},
+            [&succeeded](int code, std::string) { succeeded = code == 0; });
+    } catch (...) {
+    }
+    return succeeded;
+}
+
+bool save_clock_12h_config()
+{
+    bool succeeded = false;
+    try {
+        cp0_signal_config_api({"Save"}, [&succeeded](int code, std::string) { succeeded = code == 0; });
+    } catch (...) {
+    }
+    return succeeded;
+}
+
+void clock_12h_api(int cmd, void *data)
+{
+    if ((cmd == SettingApiReadFlag || cmd == SettingApiReadFlagTimeStart) && data) {
+        const bool twelve_hour = read_clock_12h_config();
+        if (cmd == SettingApiReadFlag)
+            *static_cast<bool *>(data) = twelve_hour;
+        else
+            std::get<0>(*static_cast<SettingApiReadFlagTimeStartData *>(data)) = twelve_hour;
+        return;
+    }
+    if (cmd != SettingApiActivate) return;
+
+    const bool previous = read_clock_12h_config();
+    if (!write_clock_12h_config(!previous)) return;
+    if (save_clock_12h_config()) return;
+
+    // SetInt mutates the live config immediately. Restore it when Save fails so
+    // a later page rebuild cannot observe an unpersisted value.
+    if (write_clock_12h_config(previous)) (void)save_clock_12h_config();
+}
+
 static void append_numeric_options(Tree &tree, const NodeIter &parent, int first, int last)
 {
     for (int value = first; value <= last; ++value) tree.append_child(parent, SettingEntry{std::to_string(value)});
@@ -738,6 +804,11 @@ void UISettingTreePage::create_page_detail()
             mode_tree.append_child(write_rtc, SettingEntry{"Yes"});
             mode_tree.append_child(write_rtc, SettingEntry{"No"});
         }
+        // Presentation only: the stored clock stays 24-hour, the top bar shows
+        // "h:MM AM/PM" once this is on.
+        SettingEntry clock_format{"12H Clock", clock_12h_api, true};
+        clock_format.status_read_policy = SettingStatusReadPolicy::Direct;
+        mode_tree.append_child(date_time, std::move(clock_format));
     }
 
     {
