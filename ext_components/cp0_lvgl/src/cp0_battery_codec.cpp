@@ -8,6 +8,7 @@
 
 #include "cp0_battery_testable.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <sstream>
@@ -25,7 +26,10 @@ std::string encode_info(const cp0_battery_info_t &info)
            << info.full_mah << ','
            << info.flags << ','
            << info.avg_current_ma << ','
-           << info.valid;
+           << info.valid << ','
+           << info.time_to_empty_min << ','
+           << info.time_to_full_min << ','
+           << info.cycle_count;
     return output.str();
 }
 
@@ -34,6 +38,7 @@ bool decode_info(const std::string &data, cp0_battery_info_t *info)
     if (!info) return false;
 
     cp0_battery_info_t parsed{};
+    clear_extras(parsed);
     char separator = '\0';
     std::istringstream input(data);
     const auto comma = [&]() {
@@ -47,8 +52,14 @@ bool decode_info(const std::string &data, cp0_battery_info_t *info)
         input >> parsed.full_mah && comma() &&
         input >> parsed.flags && comma() &&
         input >> parsed.avg_current_ma && comma() &&
-        input >> parsed.valid && (input >> std::ws).eof()) {
-        if (!info_is_valid(parsed)) return false;
+        input >> parsed.valid) {
+        /* 9-field payloads from older backends decode with unknown extras. */
+        const bool complete =
+            (input >> std::ws).eof() ||
+            (comma() && input >> parsed.time_to_empty_min && comma() &&
+             input >> parsed.time_to_full_min && comma() &&
+             input >> parsed.cycle_count && (input >> std::ws).eof());
+        if (!complete || !info_is_valid(parsed)) return false;
         *info = parsed;
         return true;
     }
@@ -63,7 +74,8 @@ bool info_is_valid(const cp0_battery_info_t &info)
         info.avg_current_ma < -5000 || info.avg_current_ma > 5000 ||
         info.temperature_c10 < -400 || info.temperature_c10 > 1000 ||
         info.soc < 0 || info.soc > 100 || info.remain_mah < 0 || info.full_mah < 0 ||
-        info.flags < 0)
+        info.flags < 0 || info.time_to_empty_min < -1 ||
+        info.time_to_full_min < -1 || info.cycle_count < -1)
         return false;
     if (info.full_mah > 0 && info.remain_mah > info.full_mah) return false;
     return true;
@@ -94,10 +106,53 @@ cp0_battery_info_t from_power_supply(int present,
     info.current_ma = current_ma;
     info.temperature_c10 = temperature_c10;
     info.soc = capacity_percent;
-    info.flags = std::strcmp(status, "Charging") == 0 ? 1 : 0;
+    info.flags = std::strcmp(status, "Charging") == 0       ? CP0_BATTERY_FLAG_CHARGING
+                 : std::strcmp(status, "Full") == 0         ? CP0_BATTERY_FLAG_FULL
+                 : std::strcmp(status, "Not charging") == 0 ? CP0_BATTERY_FLAG_NOT_CHARGING
+                                                            : CP0_BATTERY_FLAG_DISCHARGING;
     info.avg_current_ma = current_ma;
+    clear_extras(info);
     info.valid = 1;
     return info;
+}
+
+void clear_extras(cp0_battery_info_t &info)
+{
+    info.time_to_empty_min = -1;
+    info.time_to_full_min = -1;
+    info.cycle_count = -1;
+}
+
+namespace {
+
+constexpr long kMaximumChargeUah = 100000000L;  // 100 Ah
+constexpr long kMaximumTimeS = 60L * 60 * 24 * 30; // 30 days
+constexpr long kMaximumCycleCount = 100000L;
+
+int seconds_to_minutes(long seconds)
+{
+    if (seconds <= 0 || seconds > kMaximumTimeS) return -1;
+    return static_cast<int>((seconds + 59) / 60);
+}
+
+} // namespace
+
+void apply_gauge_extras(cp0_battery_info_t &info, const GaugeExtras &raw)
+{
+    clear_extras(info);
+    if (info.valid != 1) return;
+
+    if (raw.charge_full_uah > 0 && raw.charge_full_uah <= kMaximumChargeUah &&
+        raw.charge_now_uah >= 0 && raw.charge_now_uah <= kMaximumChargeUah) {
+        info.full_mah = static_cast<int>(raw.charge_full_uah / 1000);
+        info.remain_mah = static_cast<int>(std::min(raw.charge_now_uah, raw.charge_full_uah) / 1000);
+    }
+    if (info.flags & CP0_BATTERY_FLAG_DISCHARGING)
+        info.time_to_empty_min = seconds_to_minutes(raw.time_to_empty_s);
+    if (info.flags & CP0_BATTERY_FLAG_CHARGING)
+        info.time_to_full_min = seconds_to_minutes(raw.time_to_full_s);
+    if (raw.cycle_count >= 0 && raw.cycle_count < kMaximumCycleCount)
+        info.cycle_count = static_cast<int>(raw.cycle_count);
 }
 
 } // namespace cp0::battery

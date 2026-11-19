@@ -30,7 +30,18 @@ typedef struct {
     int flags;
     int avg_current_ma;
     int valid;
+    /* Appended fields; -1 = unknown. Producers must set them explicitly. */
+    int time_to_empty_min; /* only while discharging */
+    int time_to_full_min;  /* only while charging */
+    int cycle_count;
 } cp0_battery_info_t;
+
+/* cp0_battery_info_t.flags: charge state reported by the power_supply class.
+ * Bit 0 keeps its historical meaning; flags == 0 means the state is unknown. */
+#define CP0_BATTERY_FLAG_CHARGING     0x1
+#define CP0_BATTERY_FLAG_FULL         0x2
+#define CP0_BATTERY_FLAG_NOT_CHARGING 0x4 /* external power present, not charging */
+#define CP0_BATTERY_FLAG_DISCHARGING  0x8
 
 typedef struct {
     char ssid[CP0_WIFI_SSID_MAX];

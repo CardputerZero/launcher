@@ -47,8 +47,11 @@ cp0_battery_info_t simulated_battery_info()
     info.soc = soc;
     info.remain_mah = soc * 30;
     info.full_mah = 3000;
-    info.flags = soc < 50 ? 1 : 0;
+    info.flags = soc < 50 ? CP0_BATTERY_FLAG_CHARGING : CP0_BATTERY_FLAG_DISCHARGING;
     info.avg_current_ma = info.current_ma;
+    info.time_to_empty_min = soc < 50 ? -1 : soc * 3;
+    info.time_to_full_min = soc < 50 ? (100 - soc) * 2 : -1;
+    info.cycle_count = 7;
     info.valid = 1;
     return info;
 }

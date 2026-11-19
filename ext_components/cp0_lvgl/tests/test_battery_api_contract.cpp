@@ -41,7 +41,7 @@ int main()
     int calibrate_calls = 0;
     auto reader = [&] {
         ++read_calls;
-        return cp0_battery_info_t{4100, -125, 273, 81, 2430, 3000, 4, -120, 1};
+        return cp0_battery_info_t{4100, -125, 273, 81, 2430, 3000, 4, -120, 1, -1, 40, 3};
     };
     auto calibrator = [&](int index) {
         ++calibrate_calls;
@@ -50,7 +50,7 @@ int main()
 
     auto read_reply = dispatch_api_request({"Read"}, reader, calibrator);
     assert(read_reply.code == 0);
-    assert(read_reply.data == "4100,-125,273,81,2430,3000,4,-120,1");
+    assert(read_reply.data == "4100,-125,273,81,2430,3000,4,-120,1,-1,40,3");
     assert(read_calls == 1 && calibrate_calls == 0);
 
     auto calibrate_reply = dispatch_api_request({"Calibrate", "2"}, reader, calibrator);
@@ -62,7 +62,7 @@ int main()
 
     auto invalid_read = dispatch_api_request(
         {"Read"}, [] { return cp0_battery_info_t{}; }, calibrator);
-    assert(invalid_read.code == -1 && invalid_read.data == "0,0,0,0,0,0,0,0,0");
+    assert(invalid_read.code == -1 && invalid_read.data == "0,0,0,0,0,0,0,0,0,0,0,0");
     assert(dispatch_api_request({"Read"}, {}, calibrator).code == -1);
     assert(dispatch_api_request({"Calibrate", "0"}, reader, {}).code == -1);
 

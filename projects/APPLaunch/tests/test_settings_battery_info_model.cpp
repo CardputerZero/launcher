@@ -40,6 +40,19 @@ int main()
 
     assert(!model.update(0, "invalid payload"));
     assert(model.valid());
+
+    // 12-field payloads from the current backend are accepted as well.
+    {
+        SettingsBatteryInfoModel extended;
+        assert(extended.update(0, "3800,-250,250,78,1200,2000,1,-100,1,-1,76,2"));
+        assert(extended.values()[0] == "78%");
+        assert(extended.snapshot().voltage_mv == 3800);
+        assert(!extended.update(0, "3800,-250,250,78,1200,2000,1,-100,1,-2,76,2"));
+        assert(!extended.update(0, "3800,-250,250,78,1200,2000,1,-100,1,-1,76"));
+        assert(!extended.update(0, "3800,-250,250,78,1200,2000,1,-100,1,-1,76,2,0"));
+        assert(!extended.update(0, "3800,-250,250,78,1200,2000,1,-100,1,"));
+    }
+    assert(model.valid());
     assert(model.labels() == previous_labels);
     assert(model.values() == previous_values);
     assert(model.status_text() == "Invalid battery data");

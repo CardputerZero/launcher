@@ -75,7 +75,7 @@ int cp0_file_read_first_line(const char *path, char *out, int out_size);
 
 ### バッテリー、バックライト、時刻
 
-`cp0_battery_read` は最新のバックグラウンド snapshot のみを読み、ハードウェア I/O は行いません。`valid == 1` の場合だけ利用します。`cp0_bq27220_calibrate` の index は 0..3、バックライト書き込みは 0..max に clamp されます。`cp0_time_set` の形式は `YYYY-MM-DD HH:MM:SS` で、RTC を永続化するには NTP を無効にします。Ethernet/account 情報、時刻文字列、背景更新、LoRa 初期化停止 API も提供します。
+`cp0_battery_read` は最新のバックグラウンド snapshot のみを読み、ハードウェア I/O は行いません。`valid == 1` の場合だけ利用します。`flags` は充電状態のビット集合です：`CP0_BATTERY_FLAG_CHARGING`（0x1、意味は従来どおり）、`CP0_BATTERY_FLAG_FULL`（0x2）、`CP0_BATTERY_FLAG_NOT_CHARGING`（0x4、外部給電ありだが充電していない）、`CP0_BATTERY_FLAG_DISCHARGING`（0x8）。`0` は不明を表します。追加フィールド `time_to_empty_min`・`time_to_full_min`・`cycle_count` は不明時 `-1` です。実機では任意の bq27xxx 属性 `time_to_empty_now`・`time_to_full_now`・`cycle_count` から取得し、時間 0 は不明として扱い、残り時間は放電中のみ、満充電までの時間は充電中のみ設定されます。`charge_now`/`charge_full` が両方ある場合に `remain_mah`/`full_mah` を設定し（`remain_mah` は `full_mah` を超えない）、それ以外は 0 のままです。ゲージの値は未校正の場合があるため、診断用として扱ってください。`cp0_battery_info_t` を自前で埋めるコードは、追加の 3 フィールドを明示的に `-1` に設定する必要があります（ゼロ初期化は「0 分」「0 サイクル」を意味します）。`cp0_bq27220_calibrate` の index は 0..3、バックライト書き込みは 0..max に clamp されます。`cp0_time_set` の形式は `YYYY-MM-DD HH:MM:SS` で、RTC を永続化するには NTP を無効にします。Ethernet/account 情報、時刻文字列、背景更新、LoRa 初期化停止 API も提供します。
 
 ## `cp0_signal_*` 完全な使い方
 
@@ -119,7 +119,7 @@ Process のコマンドは `ExecBlocking executable keep_root`、`Spawn executab
 
 ### Battery、screenshot、camera、soundcard
 
-- `cp0_signal_bq27220_api`: `Read` は encoded `cp0_battery_info_t`、`Calibrate index` は 0..3。
+- `cp0_signal_bq27220_api`: `Read` は encoded `cp0_battery_info_t`、`Calibrate index` は 0..3。`Read` のペイロードは構造体の順序でカンマ区切りの整数 12 個です：`voltage_mv,current_ma,temperature_c10,soc,remain_mah,full_mah,flags,avg_current_ma,valid,time_to_empty_min,time_to_full_min,cycle_count`。**互換性：**以前のバージョンは先頭 9 フィールドのみを返していました。リポジトリ内のデコーダ（`cp0_battery_read`）は 9 フィールドのペイロードも受け付け、欠けたフィールドを `-1` とします。ただし、ちょうど 9 フィールドを要求する外部パーサは更新が必要です。bit 0 以外の `flags` 値も新しく追加されたため、`flags == 0` で「充電していない」と判定しているコードは `(flags & CP0_BATTERY_FLAG_CHARGING) == 0` に変更してください。
 - `cp0_signal_screenshot_api`: `Save directory` は BMP を保存し、完全パスを返します。
 - `cp0_signal_battery_pub(std::function<void()>)`: active LVGL screen に一度 battery event を発行します。引数は互換性のためで、subscription 登録ではありません。LVGL スレッドで呼びます。
 - `cp0_signal_camera_api`: `Open [width] [height]`、`Start`、`Close`、`Stop`、`Capture`、`Photo`、`Status`、`SetCallback`、`SetFrameCallback`、`ZoomIn`、`ZoomOut`、`Pan dx dy`。既定は 320x150、libcamera がない場合は -10。frame callback は別スレッドの場合があるため LVGL へ marshal します。
