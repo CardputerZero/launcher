@@ -117,9 +117,11 @@ public:
             ok = ok && read_string(path, status, sizeof(status));
 
             if (ok) {
-                return cp0::battery::from_power_supply(
+                info = cp0::battery::from_power_supply(
                     static_cast<int>(present), static_cast<int>(capacity),
                     voltage_uv, current_raw, static_cast<int>(temp_raw), status);
+                cp0::battery::apply_gauge_extras(info, read_gauge_extras(bq_path));
+                return info;
             }
         }
 
@@ -210,6 +212,28 @@ private:
         if (ret != 1) return 0;
         *value = v;
         return 1;
+    }
+
+    /* Optional bq27xxx attributes; a missing file leaves the value at -1. */
+    static cp0::battery::GaugeExtras read_gauge_extras(const char *dir)
+    {
+        cp0::battery::GaugeExtras raw;
+        const struct {
+            const char *name;
+            long *value;
+        } attributes[] = {
+            {"charge_now", &raw.charge_now_uah},
+            {"charge_full", &raw.charge_full_uah},
+            {"time_to_empty_now", &raw.time_to_empty_s},
+            {"time_to_full_now", &raw.time_to_full_s},
+            {"cycle_count", &raw.cycle_count},
+        };
+        char path[320];
+        for (const auto &attribute : attributes) {
+            std::snprintf(path, sizeof(path), "%s/%s", dir, attribute.name);
+            if (!read_long(path, attribute.value)) *attribute.value = -1;
+        }
+        return raw;
     }
 
     static int read_current_raw(const char *dir, long *value)

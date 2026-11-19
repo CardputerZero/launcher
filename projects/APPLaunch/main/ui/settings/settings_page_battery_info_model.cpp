@@ -6,6 +6,7 @@
 
 #include "settings_battery_info_model.hpp"
 
+#include <algorithm>
 #include <array>
 #include <charconv>
 #include <climits>
@@ -13,7 +14,8 @@
 
 namespace {
 
-bool parse_fields(const std::string &response, std::array<int, 9> &fields)
+template <std::size_t N>
+bool parse_fields(const std::string &response, std::array<int, N> &fields)
 {
     std::size_t begin = 0;
     for (std::size_t index = 0; index < fields.size(); ++index) {
@@ -57,8 +59,16 @@ bool valid_snapshot(const SettingsBatterySnapshot &snapshot)
 bool SettingsBatteryInfoModel::parse_payload(const std::string &response,
                                              SettingsBatterySnapshot &snapshot)
 {
+    // The Read payload has 12 fields; older backends sent only the first 9.
+    // This page does not use the appended fields yet, but they must be sane.
     std::array<int, 9> fields{};
-    if (!parse_fields(response, fields)) return false;
+    std::array<int, 12> extended{};
+    if (parse_fields(response, extended)) {
+        if (extended[9] < -1 || extended[10] < -1 || extended[11] < -1) return false;
+        std::copy_n(extended.begin(), fields.size(), fields.begin());
+    } else if (!parse_fields(response, fields)) {
+        return false;
+    }
 
     SettingsBatterySnapshot parsed;
     parsed.voltage_mv = fields[0];

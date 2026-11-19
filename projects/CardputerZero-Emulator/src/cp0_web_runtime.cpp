@@ -651,6 +651,9 @@ cp0_battery_info_t cp0_battery_read(void)
     cp0_battery_info_t info{};
     info.voltage_mv = 3700;
     info.soc = 100;
+    info.time_to_empty_min = -1;
+    info.time_to_full_min = -1;
+    info.cycle_count = -1;
     info.valid = 1;
     return info;
 }

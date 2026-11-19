@@ -145,7 +145,7 @@ int cp0_time_ntp_get(void);
 int cp0_time_ntp_set(int enable);
 ```
 
-`cp0_battery_read` 只读后台缓存，不触发硬件 I/O；`valid == 1` 才可使用数据。电池字段单位：电压 mV、电流 mA、温度 0.1 C、容量 mAh、`soc` 为百分比。`cp0_time_set` 格式必须为 `YYYY-MM-DD HH:MM:SS`；手动 RTC 设置要在 NTP 关闭时才可持久化。`cp0_backlight_write` 会限制在 0..max。
+`cp0_battery_read` 只读后台缓存，不触发硬件 I/O；`valid == 1` 才可使用数据。电池字段单位：电压 mV、电流 mA、温度 0.1 C、容量 mAh、`soc` 为百分比。`flags` 是充电状态位集合：`CP0_BATTERY_FLAG_CHARGING`（0x1，含义不变）、`CP0_BATTERY_FLAG_FULL`（0x2）、`CP0_BATTERY_FLAG_NOT_CHARGING`（0x4，外部供电但未充电）、`CP0_BATTERY_FLAG_DISCHARGING`（0x8）；`0` 表示未知。新增字段 `time_to_empty_min`、`time_to_full_min`、`cycle_count` 未知时为 `-1`：设备端来自可选的 bq27xxx 属性 `time_to_empty_now`、`time_to_full_now`、`cycle_count`，时间为 0 视为未知，放电时才填写剩余时间，充电时才填写充满时间。`charge_now`/`charge_full` 同时存在时填写 `remain_mah`/`full_mah`（`remain_mah` 不超过 `full_mah`），否则保持 0。电量计数据可能尚未校准，仅作诊断参考。自行填充 `cp0_battery_info_t` 的代码必须显式将三个新增字段设为 `-1`（零初始化表示“0 分钟”/“0 次循环”）。`cp0_time_set` 格式必须为 `YYYY-MM-DD HH:MM:SS`；手动 RTC 设置要在 NTP 关闭时才可持久化。`cp0_backlight_write` 会限制在 0..max。
 
 ### 其他 C 接口
 
@@ -264,7 +264,7 @@ int cp0_time_ntp_set(int enable);
 
 ### 电池和截图
 
-- `cp0_signal_bq27220_api(args, cb)`：`Read` 返回编码后的 `cp0_battery_info_t`；`Calibrate index` 执行校准命令，当前有效索引为 0..3。推荐 `cp0_battery_read` / `cp0_bq27220_calibrate`。
+- `cp0_signal_bq27220_api(args, cb)`：`Read` 返回编码后的 `cp0_battery_info_t`；`Calibrate index` 执行校准命令，当前有效索引为 0..3。推荐 `cp0_battery_read` / `cp0_bq27220_calibrate`。`Read` 负载为按结构体顺序排列的 12 个逗号分隔整数：`voltage_mv,current_ma,temperature_c10,soc,remain_mah,full_mah,flags,avg_current_ma,valid,time_to_empty_min,time_to_full_min,cycle_count`。**兼容性：**旧版本只返回前 9 个字段。仓库内解码器（`cp0_battery_read`）仍接受 9 字段负载，缺失字段报告为 `-1`；但要求恰好 9 个字段的外部解析器必须更新。`flags` 的 bit 0 以外的取值也是新增的：以 `flags == 0` 判断“未充电”的代码应改为 `(flags & CP0_BATTERY_FLAG_CHARGING) == 0`。
 - `cp0_signal_screenshot_api(args, cb)`：`Save directory` 将当前 framebuffer 保存为 BMP，成功 data 为完整文件路径。设备端支持 16/32 bpp；SDL 端可能采用模拟实现。
 - `cp0_signal_battery_pub(std::function<void()> callback)`：触发一次电池发布。当前后端会读取缓存并向活动 LVGL screen 发送电池事件，传入的 callback 参数仅为信号签名兼容而保留，不要把它当作订阅注册接口；调用应发生在 LVGL 线程，避免阻塞。
 
