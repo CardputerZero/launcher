@@ -142,3 +142,13 @@ assert "int suspend_backlight();" in CONTROLS_HEADER
 assert "void restore_backlight(int raw);" in CONTROLS_HEADER
 assert "write_backlight_raw(0)" in CONTROLS
 assert "if (raw <= 0) return;" in CONTROLS
+
+# Settings > Screen > Lock Screen ("lock_screen", default on). Off keeps the idle
+# screen-off but skips the lock: the setting is read on every lock, no lock sound
+# plays, and the first key wakes the screen before the lock model sees it.
+SETTINGS = (ROOT / "main/ui/settings/settings_page.cpp").read_text()
+assert '"lock_screen"' in SETTINGS and '"lock_screen"' in SOURCE
+assert "s_lock_enabled = lock_screen_enabled();" in SOURCE
+assert "if (s_lock_enabled)\n        play_lockscreen_sound(\"lock.mp3\");" in SOURCE
+bypass = SOURCE.index("if (!s_lock_enabled) {")
+assert bypass < SOURCE.index("s_lock.handle_key(item->key_code")
