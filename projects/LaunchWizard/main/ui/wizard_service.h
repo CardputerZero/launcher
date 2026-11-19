@@ -41,6 +41,15 @@ public:
                              const std::function<bool()> &cancelled = {});
     static std::string reboot();
     static bool should_run();
+    // Skip-path first boot: when the OOBE is skipped on a factory card (the
+    // account was configured by Raspberry Pi Imager), the apply pipeline never
+    // runs, so expand the root filesystem here and reboot to let
+    // resize2fs_once grow it. The image gets one attempt only: it is recorded
+    // before raspi-config runs, so a failure or a reboot request that fails is
+    // never retried. Returns true when a reboot was issued and the caller must
+    // exit; false when the caller should continue with the normal APPLaunch
+    // handoff (already expanded, already attempted, or expansion failed).
+    static bool expand_rootfs_for_skipped_boot();
     static int finish_configured_system();
     // Consumes pi-gen's one-shot marker and runs the keyboard tutorial before
     // the OOBE decision. Returns once the guide exits or fails to start.

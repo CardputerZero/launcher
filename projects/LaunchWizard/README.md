@@ -115,12 +115,35 @@ is already expanded and its partition table must not be rewritten again; a
 factory marker that is still present always wins, so a re-arm that races an
 unfinished first boot cannot leave the card unexpanded.
 
+### Skipped first boot
+
+A factory image that was provisioned before its first boot (Raspberry Pi Imager
+renamed the user or set a password) skips the OOBE, so the apply pipeline — and
+with it the expansion step — would never run. After the keyboard guide, the skip
+path therefore expands the root filesystem itself and reboots instead of starting
+APPLaunch: it runs the same `/usr/bin/raspi-config --expand-rootfs`, drops the
+OOBE markers, and issues `systemctl reboot`, so `resize2fs_once` grows the
+filesystem during that reboot. The next boot sees no factory marker and hands off
+to APPLaunch without touching the partition table. If the expansion cannot be
+scheduled, or the marker cannot be dropped, the wizard falls back to the normal
+handoff and warns on stderr rather than rebooting into a repeat expansion.
+
+The image gets exactly one expansion attempt for its whole lifetime. Before
+`raspi-config` runs, the wizard records the attempt in
+`/var/lib/LaunchWizard/rootfs-expansion-attempted` and never removes it, so a
+successful expansion, a failed one, and an interrupted apply or reboot all
+consume the attempt: nothing retries it automatically, neither a re-run of the
+OOBE nor a later boot. To retry a genuinely failed expansion by hand, run
+`sudo raspi-config --expand-rootfs` and reboot (the marker only stops the wizard,
+not the command).
+
 Expansion is best effort. `raspi-config` exits 0 even when it refuses to
 repartition (for example when the root partition is not the last one), so the
 wizard verifies that `resize2fs_once` was installed, warns on stderr otherwise,
 and never blocks the rest of the setup. If the apply is interrupted after this
 step, the init script stays armed and the next boot still expands the card; if
-the command itself failed, run it again manually.
+the command itself failed, the one-shot attempt is already consumed, so the card
+stays unexpanded until the command is run manually.
 The image must provide the `raspi-config` package with `parted`, `fdisk`, and
 `resize2fs` (`e2fsprogs`).
 
