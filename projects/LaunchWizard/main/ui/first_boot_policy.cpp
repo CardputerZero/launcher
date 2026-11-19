@@ -25,6 +25,11 @@ bool should_expand_rootfs(bool factory_marker, bool rearm_marker)
     return !rearm_marker;
 }
 
+bool should_expand_rootfs_on_skip(bool factory_marker)
+{
+    return factory_marker;
+}
+
 bool should_run_keyboard_guide(bool marker_present, bool binary_present)
 {
     return marker_present && binary_present;

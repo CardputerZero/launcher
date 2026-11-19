@@ -34,6 +34,7 @@ std::string make_test_directory()
 void remove_test_directory(const std::string &directory)
 {
     unlink((directory + "/apply.state").c_str());
+    unlink((directory + "/expansion.attempt").c_str());
     unlink((directory + "/commands.log").c_str());
     rmdir(directory.c_str());
 }
@@ -105,9 +106,11 @@ int main()
         return 1;
     }
     const std::string checkpoint_path = directory + "/apply.state";
+    const std::string attempt_path = directory + "/expansion.attempt";
     const std::string log_path = directory + "/commands.log";
-    if (setenv("LAUNCH_WIZARD_APPLY_CHECKPOINT", checkpoint_path.c_str(), 1) != 0) {
-        std::cerr << "could not point the apply checkpoint at the test directory\n";
+    if (setenv("LAUNCH_WIZARD_APPLY_CHECKPOINT", checkpoint_path.c_str(), 1) != 0 ||
+        setenv("LAUNCH_WIZARD_EXPANSION_ATTEMPT", attempt_path.c_str(), 1) != 0) {
+        std::cerr << "could not point the apply state at the test directory\n";
         remove_test_directory(directory);
         return 1;
     }
@@ -130,10 +133,24 @@ int main()
                 labels.push_back(event.label);
             });
     }
-    unsetenv("LAUNCH_WIZARD_APPLY_CHECKPOINT");
-
     const bool checkpoint_cleared = access(checkpoint_path.c_str(), F_OK) != 0;
+    const bool attempt_recorded = access(attempt_path.c_str(), F_OK) == 0;
     const std::string commands = read_file(log_path);
+
+    // A second apply (for example after a settings-driven re-run) must not touch
+    // the partition table again: the image gets one expansion attempt only.
+    std::string second_commands;
+    {
+        StdoutCapture capture(log_path);
+        expect(capture.active(), "could not capture the second dry-run command log");
+        const std::string second_error =
+            WizardService::apply(model, [](const ProgressEvent &) {});
+        capture.stop();
+        expect(second_error.empty(), "second dry-run apply returned an error");
+        second_commands = read_file(log_path);
+    }
+    unsetenv("LAUNCH_WIZARD_APPLY_CHECKPOINT");
+    unsetenv("LAUNCH_WIZARD_EXPANSION_ATTEMPT");
     remove_test_directory(directory);
 
     if (!error.empty())
@@ -176,6 +193,10 @@ int main()
     expect(expansion != std::string::npos && finalization != std::string::npos &&
                expansion < finalization,
            "root expansion was not issued before the wizard disabled its service");
+    expect(attempt_recorded, "root expansion attempt was not recorded");
+    expect(second_commands.find("/usr/bin/raspi-config --expand-rootfs") ==
+               std::string::npos,
+           "a second apply retried the root expansion");
 
     expect(checkpoint_cleared, "successful apply did not clear its checkpoint");
 

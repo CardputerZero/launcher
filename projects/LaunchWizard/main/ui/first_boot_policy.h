@@ -47,6 +47,16 @@ bool should_run_wizard(const FirstBootState &state);
 // first boot must not leave the card permanently unexpanded.
 bool should_expand_rootfs(bool factory_marker, bool rearm_marker);
 
+// The OOBE is skipped altogether when the account was already configured before
+// first boot (Raspberry Pi Imager), so the apply pipeline never runs and its
+// expansion step would never be reached. The skip path expands the card itself,
+// then reboots to let resize2fs_once grow the filesystem. Only a factory marker
+// may trigger that: without it the skip happens on an already-expanded card
+// whose OOBE is simply not active, and its partition table must not be rewritten
+// again. The caller still records the image's single expansion attempt before
+// running raspi-config, so success, failure, and interruption all consume it.
+bool should_expand_rootfs_on_skip(bool factory_marker);
+
 // The keyboard guide runs exactly once per image installation, before and
 // independently of the OOBE. If its package is missing, keep the marker so a
 // later repaired launch can still show it.

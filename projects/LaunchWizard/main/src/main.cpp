@@ -49,7 +49,9 @@ int main(int argc, char *argv[])
         launch_wizard_run_keyboard_guide();
 
     if (!force && !launch_wizard_should_run()) {
-        printf("LaunchWizard: first-boot desktop is not active, starting APPLaunch\n");
+        printf("LaunchWizard: first-boot desktop is not active\n");
+        // On a factory card this expands the root filesystem and reboots; on an
+        // already-expanded card it hands off to APPLaunch.
         const int handoff_result = launch_wizard_finish_configured_system();
         if (handoff_result == 0) return 0;
 
