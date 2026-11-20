@@ -139,6 +139,10 @@ def test_system_replaces_about_with_requested_entries():
     assert "settings_storage_page_factory" in system
     assert "settings_credit_page_factory" in system
     assert "boot_actions::Action::Reboot" in system
+    assert "boot_actions::Action::Shutdown" in system
+    assert system.index("boot_actions::Action::Reboot") < system.index(
+        "boot_actions::Action::Shutdown"
+    )
     for removed in ('SettingEntry{"OS"', 'SettingEntry{"APPLaunch"',
                     'SettingEntry{"Help"', 'SettingEntry{"Boot"'):
         assert removed not in system
