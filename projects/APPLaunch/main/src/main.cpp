@@ -20,7 +20,17 @@
 #include "backward.h"
 #endif
 
-const char *bash_init = "if [ ! -f ~/Downloads/hello.md ] ; then unzip /var/template.zip -d ~/Downloads/ ; sync ; fi";
+// Sample files are copied into ~/Downloads once per user, not whenever hello.md is missing:
+// otherwise deleting the samples brings all of them back at the next boot. A home that
+// already has the samples (from before this marker existed) is only marked, not re-extracted.
+// The marker is written only once the samples are really there, so a missing or failed
+// template.zip is retried at the next boot. unzip -n never overwrites a file.
+const char *bash_init =
+    "m=\"$HOME/.local/state/APPLaunch/samples-installed\"; "
+    "if [ ! -e \"$m\" ] ; then "
+    "if [ -f \"$HOME/Downloads/hello.md\" ] || unzip -nq /var/template.zip -d \"$HOME/Downloads/\" ; then "
+    "mkdir -p \"${m%/*}\" && touch \"$m\" ; "
+    "fi ; sync ; fi";
 
 int main(void)
 {
