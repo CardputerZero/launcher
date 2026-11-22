@@ -8,6 +8,9 @@
 
 #include "animation.hpp"
 #include "launcher_carousel_layout.h"
+#if LV_USE_LINUX_FBDEV
+#include "../../src/launcher_fbdev.h"
+#endif
 
 #include <algorithm>
 #include <memory>
@@ -39,15 +42,17 @@ void set_carousel_refresh_period(uint32_t period)
 
 struct LauncherHomeAnimContext {
 #if LV_USE_LINUX_FBDEV
+    const bool use_stripe_timing = launcher_fbdev_stripes_active();
+
     LauncherHomeAnimContext()
     {
-        if (active_carousel_transitions++ == 0)
+        if (use_stripe_timing && active_carousel_transitions++ == 0)
             set_carousel_refresh_period(kCarouselRefreshPeriodMs);
     }
 
     ~LauncherHomeAnimContext()
     {
-        if (--active_carousel_transitions == 0)
+        if (use_stripe_timing && --active_carousel_transitions == 0)
             set_carousel_refresh_period(LV_DEF_REFR_PERIOD);
     }
 #endif

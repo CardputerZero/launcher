@@ -5,6 +5,7 @@
  */
 
 #include "ui_screensaver.h"
+#include "../src/launcher_fbdev.h"
 #include "ui_low_battery.h"
 
 #include "cp0_lvgl_app.h"
@@ -225,7 +226,7 @@ void update_timer_period()
 void suspend_dark_redraw()
 {
 #if LV_USE_LINUX_FBDEV
-    if (s_dark_display || s_screen_off_backlight_raw < 0) return;
+    if (s_dark_display || s_screen_off_backlight_raw < 0 || !launcher_fbdev_stripes_active()) return;
     lv_display_t *display = lv_display_get_default();
     if (!display) return;
 

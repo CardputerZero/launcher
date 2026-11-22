@@ -303,3 +303,14 @@ ${CXX:-g++} -std=c++17 -fno-access-control -pthread \
     "$test_root/bluetooth_ui/test_bluetooth_ui.cpp" \
     "$@" -lm $sdl_libs -o "$bluetooth_build_dir/test_bluetooth_ui"
 "$bluetooth_build_dir/test_bluetooth_ui"
+
+# Use the same host LVGL build and replace only the fbdev system calls.
+${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
+    -DLV_CONF_INCLUDE_SIMPLE -DLV_KCONFIG_IGNORE -DLV_USE_LINUX_FBDEV=1 -DLV_LINUX_FBDEV_MMAP=0 \
+    -I"$test_root/low_battery_ui" -I"$lvgl_root/.." -I"$lvgl_root" \
+    $sdl_cflags \
+    "$test_root/test_launcher_fbdev.cpp" "$test_root/../main/src/launcher_fbdev.cpp" \
+    "$test_root/../main/ui/animation/ui_launcher_animation.cpp" \
+    "$@" -lm $sdl_libs -Wl,--wrap=open,--wrap=ioctl,--wrap=pwrite,--wrap=close \
+    -o "$build_dir/test_launcher_fbdev"
+"$build_dir/test_launcher_fbdev"
