@@ -38,9 +38,11 @@ public:
     Cp0FontService(const Cp0FontService &) = delete;
     Cp0FontService &operator=(const Cp0FontService &) = delete;
 
+    // The optional glyph fallback must stay alive until release().
     lv_font_t *get(const char *font_name, uint16_t size,
                    lv_freetype_font_style_t style = LV_FREETYPE_FONT_STYLE_NORMAL,
-                   lv_freetype_font_render_mode_t render_mode = LV_FREETYPE_FONT_RENDER_MODE_BITMAP);
+                   lv_freetype_font_render_mode_t render_mode = LV_FREETYPE_FONT_RENDER_MODE_BITMAP,
+                   const lv_font_t *glyph_fallback = nullptr);
     lv_font_t *get_mono(const char *font_name, uint16_t size,
                         lv_freetype_font_style_t style = LV_FREETYPE_FONT_STYLE_NORMAL);
 
@@ -52,7 +54,8 @@ private:
     static std::string resolve_path(const char *font_name);
     static std::string key(const std::string &path, uint16_t size,
                            lv_freetype_font_style_t style,
-                           lv_freetype_font_render_mode_t render_mode);
+                           lv_freetype_font_render_mode_t render_mode,
+                           const lv_font_t *glyph_fallback);
     std::unordered_map<std::string, lv_font_t *> fonts_;
     std::mutex mutex_;
 #endif

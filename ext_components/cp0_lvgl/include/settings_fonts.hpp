@@ -31,12 +31,12 @@ inline const lv_font_t *mono(uint16_t size,
 inline const lv_font_t *cjk_sans(uint16_t size,
                                  lv_freetype_font_style_t style = LV_FREETYPE_FONT_STYLE_NORMAL)
 {
-    const lv_font_t *font = cp0_fonts().get("NotoSansCJK-Regular.ttc", size, style);
-    // Alibaba is already shipped with APPLaunch and keeps Chinese text
-    // visible on installations that predate the Noto font package.
-    if (font == cp0_fonts().fallback(size))
-        font = cp0_fonts().get("AlibabaPuHuiTi-3-55-Regular.ttf", size, style);
-    return font;
+    auto &fonts = cp0_fonts();
+    // Alibaba ships with APPLaunch and covers the Latin glyphs missing from Noto CJK.
+    const lv_font_t *alibaba = fonts.get("AlibabaPuHuiTi-3-55-Regular.ttf", size, style);
+    const lv_font_t *noto = fonts.get("NotoSansCJK-Regular.ttc", size, style,
+                                     LV_FREETYPE_FONT_RENDER_MODE_BITMAP, alibaba);
+    return noto == fonts.fallback(size) ? alibaba : noto;
 }
 
 inline const lv_font_t *cjk_serif(uint16_t size,

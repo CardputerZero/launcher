@@ -280,9 +280,13 @@ mkdir -p "$bluetooth_build_dir"
 sdl_cflags=$(pkg-config --cflags sdl2)
 sdl_libs=$(pkg-config --libs sdl2)
 find "$lvgl_root/src" -type f -name '*.c' -print > "$bluetooth_build_dir/lvgl_sources"
+printf '%s\n' "$repo_root"/ext_components/cp0_lvgl/src/cp0_montserrat_medium_latin_*.c \
+    >> "$bluetooth_build_dir/lvgl_sources"
 set --
 while IFS= read -r source; do
-    object="$bluetooth_build_dir/${source#"$lvgl_root/"}.o"
+    relative_source=${source#"$lvgl_root/"}
+    if [ "$relative_source" = "$source" ]; then relative_source=${source##*/}; fi
+    object="$bluetooth_build_dir/$relative_source.o"
     mkdir -p "$(dirname "$object")"
     ${CC:-gcc} -DLV_CONF_INCLUDE_SIMPLE -DLV_KCONFIG_IGNORE \
         -I"$test_root/low_battery_ui" -I"$lvgl_root/.." -I"$lvgl_root" \

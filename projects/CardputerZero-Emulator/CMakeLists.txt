@@ -155,6 +155,9 @@ set(CP0_LVGL_APP_COMMON_SRCS
     ${CP0_LVGL}/src/commount.cpp
     ${CP0_LVGL}/src/cp0_esc_state.c
     ${CP0_LVGL}/src/cp0_font_service.cpp
+    ${CP0_LVGL}/src/cp0_montserrat_medium_latin_10.c
+    ${CP0_LVGL}/src/cp0_montserrat_medium_latin_12.c
+    ${CP0_LVGL}/src/cp0_montserrat_medium_latin_14.c
     ${CP0_LVGL}/src/cp0_lvgl_app_page_assets.c
     ${CP0_LVGL}/src/cp0_network_api_contract.cpp
     ${CP0_LVGL}/src/cp0_status_ethernet.c
