@@ -21,6 +21,14 @@ pthread_mutex_t keyboard_mutex = PTHREAD_MUTEX_INITIALIZER;
 volatile int LVGL_RUN_FLAGE = 1;
 volatile uint32_t LV_EVENT_KEYBOARD;
 
+static unsigned wake_count;
+
+static void wake_for_keyboard(void)
+{
+    assert(cp0_keyboard_queue_has_data());
+    ++wake_count;
+}
+
 int main(void)
 {
     uint32_t codepoint = 0;
@@ -101,6 +109,20 @@ int main(void)
     assert(!cp0_keyboard_queue_has_data());
     LVGL_RUN_FLAGE = 1;
     assert(cp0_keyboard_queue_push(NULL) == -1);
+    cp0_keyboard_queue_clear();
+
+    cp0_keyboard_queue_set_wake_callback(wake_for_keyboard);
+    assert(cp0_keyboard_queue_push(&source) == 0);
+    assert(wake_count == 1);
+    assert(cp0_keyboard_queue_push(&source) == 0);
+    assert(wake_count == 1);
+    cp0_keyboard_queue_clear();
+    assert(cp0_keyboard_queue_push(&source) == 0);
+    assert(wake_count == 2);
+    cp0_keyboard_queue_clear();
+    cp0_keyboard_queue_set_wake_callback(NULL);
+    assert(cp0_keyboard_queue_push(&source) == 0);
+    assert(wake_count == 2);
     cp0_keyboard_queue_clear();
     return 0;
 }
