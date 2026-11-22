@@ -27,7 +27,6 @@ int main(void)
 {
     system(bash_init);
     Cp0LvglRunOptions options;
-    options.wake_on_keyboard_input = true;
     options.after_resource_init = []() {
         cp0_signal_settings_api({"GpioSet", "BACKLIGHT", "0"}, [](int code, std::string data) {
             if (code == 0)

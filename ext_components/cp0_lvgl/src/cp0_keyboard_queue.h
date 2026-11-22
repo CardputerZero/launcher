@@ -13,7 +13,6 @@ extern "C" {
 #endif
 
 void cp0_keyboard_queue_init(void);
-void cp0_keyboard_queue_set_wake_callback(void (*callback)(void));
 int cp0_keyboard_queue_push(const struct key_item *item);
 struct key_item *cp0_keyboard_queue_pop(void);
 int cp0_keyboard_queue_has_data(void);

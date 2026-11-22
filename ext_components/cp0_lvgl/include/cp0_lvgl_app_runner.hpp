@@ -19,7 +19,6 @@ struct Cp0LvglRunOptions
     std::function<bool()> setup;
     std::function<bool()> should_quit;
     std::function<void()> teardown;
-    bool wake_on_keyboard_input = false;
 };
 
 struct Cp0LvglAppHooks

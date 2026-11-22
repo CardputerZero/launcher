@@ -140,13 +140,6 @@ static void keypad_read(lv_indev_t *indev, lv_indev_data_t *data)
     }
 }
 
-void cp0_keyboard_dispatch_pending(void)
-{
-    lv_indev_t *indev = keypad_lifecycle.handle;
-    if (indev && cp0_keyboard_queue_has_data())
-        lv_indev_read(indev);
-}
-
 void cp0_keyboard_create_lvgl_input_devices(void)
 {
 #if LV_USE_EVDEV

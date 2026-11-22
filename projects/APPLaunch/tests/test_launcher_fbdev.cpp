@@ -9,6 +9,7 @@
 #include "lvgl/lvgl.h"
 #include "lvgl/lvgl_private.h"
 
+#include <algorithm>
 #include <array>
 #include <cerrno>
 #include <cstdarg>
@@ -65,9 +66,9 @@ lv_display_t *new_display(int width = kWidth,
     return display;
 }
 
-void invalidate_band(lv_display_t *display)
+void invalidate_band(lv_display_t *display, int y = 73)
 {
-    const lv_area_t band{14, 73, 25, 79};
+    const lv_area_t band{14, y, 25, y + 6};
     lv_inv_area(display, &band);
 }
 
@@ -104,8 +105,17 @@ void exercise_failure(Fault scenario)
         expect(first_refresh == 1 && writes.size() == 3,
                "permanent EIO stops after exactly two redraws");
         fault = Fault::None;
-        invalidate_band(display);
+        writes.clear();
+        invalidate_band(display, 15);
         turn();
+        expect(writes.size() == 1 && writes[0].offset == 15 * kStride,
+               "write recovery starts with an unrelated band");
+        turn();
+        expect(std::any_of(writes.begin() + (writes.empty() ? 0 : 1), writes.end(), [](const Write &write) {
+                   return write.offset <= offset && write.offset + static_cast<off_t>(write.size) >=
+                       offset + static_cast<off_t>(size);
+               }),
+               "first successful refresh after retry exhaustion recovers the original band");
         writes.clear();
         fault = Fault::Zero;
         invalidate_band(display);
@@ -114,6 +124,27 @@ void exercise_failure(Fault scenario)
         expect(writes.size() == 2, "successful refresh re-arms the retry budget");
     }
     fault = Fault::None;
+    lv_display_delete(display);
+}
+
+void exercise_unsafe_change(void (*change)(lv_display_t *), const char *scenario)
+{
+    auto *display = new_display();
+    launcher_enable_fbdev_stripes();
+    turn();
+    writes.clear();
+    original_flushes = 0;
+    change(display);
+    invalidate_band(display);
+    turn();
+    expect(original_flushes == 0 && writes.empty() && !launcher_fbdev_stripes_active(), scenario);
+    const auto &redraw = display->inv_areas[0];
+    expect(display->inv_p == 1 && redraw.x1 == 0 && redraw.y1 == 0 &&
+               redraw.x2 == kWidth - 1 && redraw.y2 == kHeight - 1,
+           "unsupported runtime change requests one full invalidation");
+    turn();
+    expect(original_flushes == 0 && writes.empty() && display->inv_p == 0,
+           "disabled output acknowledges flushes without repeating invalidation");
     lv_display_delete(display);
 }
 
@@ -247,6 +278,18 @@ int main()
     turn();
     expect(original_flushes > 0 && writes.empty(), "offset change forwards to the original flush");
     lv_display_delete(display);
+
+    exercise_unsafe_change([](lv_display_t *d) {
+        lv_display_set_render_mode(d, LV_DISPLAY_RENDER_MODE_DIRECT);
+    }, "PARTIAL to DIRECT does not forward or write an incompatible buffer");
+    exercise_unsafe_change([](lv_display_t *d) {
+        lv_display_set_color_format(d, LV_COLOR_FORMAT_RGB888);
+    }, "RGB565 to RGB888 does not forward or write an incompatible buffer");
+    exercise_unsafe_change([](lv_display_t *d) {
+        alignas(LV_DRAW_BUF_ALIGN) static std::array<uint8_t, kStride * kHeight> replacement{};
+        lv_display_set_buffers(d, replacement.data(), nullptr, replacement.size(),
+                               LV_DISPLAY_RENDER_MODE_PARTIAL);
+    }, "runtime buffer replacement does not forward or write");
 
     expect(opens == closes, "display deletion closes each opened framebuffer");
     lv_deinit();

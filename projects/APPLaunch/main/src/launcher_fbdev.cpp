@@ -26,24 +26,50 @@ constexpr int32_t kPanelHeight = 170;
 constexpr uint32_t kPanelStride = kPanelWidth * 2;
 constexpr unsigned kMaxRedrawRetries = 2;
 
+struct BufferIdentity {
+    const lv_draw_buf_t *buffer;
+    const void *data = buffer ? buffer->data : nullptr;
+    uint32_t size = buffer ? buffer->data_size : 0;
+
+    bool matches(const lv_draw_buf_t *current) const
+    {
+        return current == buffer && (!current || (current->data == data && current->data_size == size));
+    }
+};
+
 struct StripeOutput {
     int fd;
     lv_display_flush_cb_t original_flush;
-    lv_area_t failed_area{};
+    BufferIdentity buffers[3];
+    lv_area_t damaged_area{};
     unsigned retries = 0;
+    bool has_damage = false;
+    bool retry_queued = false;
     bool wrote_pixels = false;
-    bool failed = false;
+    bool failed_this_refresh = false;
+    bool disabled = false;
+    bool invalidate_after_disable = false;
+
+    bool buffers_match(const lv_display_t *display) const
+    {
+        return buffers[0].matches(display->buf_1) && buffers[1].matches(display->buf_2) &&
+               buffers[2].matches(display->buf_3);
+    }
 };
 
-bool compatible_display(lv_display_t *display)
+bool compatible_layout(lv_display_t *display)
 {
     return lv_display_get_horizontal_resolution(display) == kPanelWidth &&
            lv_display_get_vertical_resolution(display) == kPanelHeight &&
-           lv_display_get_offset_x(display) == 0 && lv_display_get_offset_y(display) == 0 &&
            lv_display_get_render_mode(display) == LV_DISPLAY_RENDER_MODE_PARTIAL &&
            lv_display_get_rotation(display) == LV_DISPLAY_ROTATION_0 &&
            lv_display_get_color_format(display) == LV_COLOR_FORMAT_RGB565 &&
            display->stride_is_auto;
+}
+
+bool has_offset(lv_display_t *display)
+{
+    return lv_display_get_offset_x(display) != 0 || lv_display_get_offset_y(display) != 0;
 }
 
 int write_pixels(int fd, const uint8_t *pixels, size_t bytes, off_t offset)
@@ -63,9 +89,24 @@ int write_pixels(int fd, const uint8_t *pixels, size_t bytes, off_t offset)
 void flush_stripe(lv_display_t *display, const lv_area_t *area, uint8_t *pixels)
 {
     auto *output = static_cast<StripeOutput *>(lv_display_get_user_data(display));
-    if (!compatible_display(display) || area->x1 < 0 || area->x2 >= kPanelWidth ||
-        area->y1 < 0 || area->y2 >= kPanelHeight) {
+    if (!output->disabled && (!compatible_layout(display) || !output->buffers_match(display))) {
+        output->disabled = true;
+        output->invalidate_after_disable = true;
+        std::fprintf(stderr, "APPLaunch: framebuffer output disabled after an unsupported LVGL layout change\n");
+    }
+    if (output->disabled) {
+        lv_display_flush_ready(display);
+        return;
+    }
+
+    if (has_offset(display)) {
+        // The driver can clip the shifted area with the original partial buffer layout.
+        output->retry_queued = false;
         output->original_flush(display, area, pixels);
+        return;
+    }
+    if (area->x1 < 0 || area->x2 >= kPanelWidth || area->y1 < 0 || area->y2 >= kPanelHeight) {
+        lv_display_flush_ready(display);
         return;
     }
 
@@ -88,37 +129,52 @@ void flush_stripe(lv_display_t *display, const lv_area_t *area, uint8_t *pixels)
 
     output->wrote_pixels = true;
     if (error) {
-        if (output->failed) {
-            lv_area_join(&output->failed_area, &output->failed_area, area);
+        if (output->has_damage) {
+            lv_area_join(&output->damaged_area, &output->damaged_area, area);
         } else {
-            output->failed_area = *area;
-            output->failed = true;
-            if (output->retries == 0)
-                std::fprintf(stderr, "APPLaunch: framebuffer write failed (errno %d), scheduling redraw\n",
-                             error);
+            output->damaged_area = *area;
+            output->has_damage = true;
+            std::fprintf(stderr, "APPLaunch: framebuffer write failed (errno %d), scheduling redraw\n",
+                         error);
         }
+        output->failed_this_refresh = true;
     }
     lv_display_flush_ready(display);
 }
 
 void retry_failed_redraw(lv_display_t *display, StripeOutput &output)
 {
-    if (!output.wrote_pixels) return;
+    // REFR_READY comes after LVGL clears the invalidated areas for this frame.
+    if (output.invalidate_after_disable) {
+        output.invalidate_after_disable = false;
+        const lv_area_t full{0, 0, lv_display_get_horizontal_resolution(display) - 1,
+                            lv_display_get_vertical_resolution(display) - 1};
+        lv_inv_area(display, &full);
+    }
+    if (output.disabled || !output.wrote_pixels) return;
     output.wrote_pixels = false;
-    if (!output.failed) {
-        output.retries = 0;
+
+    if (output.failed_this_refresh) {
+        output.failed_this_refresh = false;
+        output.retry_queued = false;
+        if (output.retries < kMaxRedrawRetries) {
+            output.retry_queued = lv_inv_area(display, &output.damaged_area) == LV_RESULT_OK;
+            if (output.retry_queued) ++output.retries;
+        } else if (output.retries == kMaxRedrawRetries) {
+            ++output.retries;
+            std::fprintf(stderr, "APPLaunch: framebuffer redraw retry limit reached\n");
+        }
         return;
     }
-    output.failed = false;
 
-    // REFR_READY comes after LVGL clears the invalidated areas for this frame.
-    // Only a successful refresh with actual writes re-arms the retry budget.
-    if (output.retries < kMaxRedrawRetries) {
-        if (lv_inv_area(display, &output.failed_area) == LV_RESULT_OK)
-            ++output.retries;
-    } else if (output.retries == kMaxRedrawRetries) {
-        ++output.retries;
-        std::fprintf(stderr, "APPLaunch: framebuffer redraw retry limit reached\n");
+    output.retries = 0;
+    if (!output.has_damage) return;
+    if (output.retry_queued) {
+        output.retry_queued = false;
+        output.has_damage = false;
+    } else {
+        // Writes have recovered elsewhere. Redraw the retained damage once.
+        output.retry_queued = lv_inv_area(display, &output.damaged_area) == LV_RESULT_OK;
     }
 }
 
@@ -128,7 +184,8 @@ void on_display_event(lv_event_t *event)
     auto *output = static_cast<StripeOutput *>(lv_event_get_user_data(event));
     switch (lv_event_get_code(event)) {
     case LV_EVENT_INVALIDATE_AREA: {
-        if (!compatible_display(display)) break;
+        if (output->disabled || has_offset(display) || !compatible_layout(display) ||
+            !output->buffers_match(display)) break;
         // Render the full affected rows so we can submit each stripe in one write.
         auto *area = static_cast<lv_area_t *>(lv_event_get_param(event));
         area->x1 = 0;
@@ -156,7 +213,7 @@ void launcher_enable_fbdev_stripes()
     lv_display_t *display = lv_display_get_default();
     const char *device = std::getenv("LV_LINUX_FBDEV_DEVICE");
     if (!display || !device || lv_display_get_user_data(display) ||
-        !display->flush_cb || !compatible_display(display)) return;
+        !display->flush_cb || !display->buf_1 || !compatible_layout(display) || has_offset(display)) return;
 
     const int fd = open(device, O_WRONLY | O_CLOEXEC);
     if (fd < 0) return;
@@ -173,7 +230,7 @@ void launcher_enable_fbdev_stripes()
         return;
     }
 
-    auto *output = new (std::nothrow) StripeOutput{fd, display->flush_cb};
+    auto *output = new (std::nothrow) StripeOutput{fd, display->flush_cb, {{display->buf_1}, {display->buf_2}, {display->buf_3}}};
     if (!output) {
         close(fd);
         return;
@@ -192,7 +249,10 @@ void launcher_enable_fbdev_stripes()
 bool launcher_fbdev_stripes_active()
 {
     auto *display = lv_display_get_default();
-    return display && display->flush_cb == flush_stripe && compatible_display(display);
+    if (!display || display->flush_cb != flush_stripe) return false;
+    const auto *output = static_cast<StripeOutput *>(lv_display_get_user_data(display));
+    return !output->disabled && compatible_layout(display) && !has_offset(display) &&
+           output->buffers_match(display);
 }
 
 #else
