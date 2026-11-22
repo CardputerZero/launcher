@@ -18,6 +18,7 @@
 #include <new>
 #include <sys/ioctl.h>
 #include <unistd.h>
+#include <utility>
 
 namespace {
 
@@ -45,7 +46,7 @@ struct StripeOutput {
     unsigned retries = 0;
     bool has_damage = false;
     bool retry_queued = false;
-    bool wrote_pixels = false;
+    bool succeeded_this_refresh = false;
     bool failed_this_refresh = false;
     bool disabled = false;
     bool invalidate_after_disable = false;
@@ -127,7 +128,6 @@ void flush_stripe(lv_display_t *display, const lv_area_t *area, uint8_t *pixels)
         }
     }
 
-    output->wrote_pixels = true;
     if (error) {
         if (output->has_damage) {
             lv_area_join(&output->damaged_area, &output->damaged_area, area);
@@ -138,6 +138,8 @@ void flush_stripe(lv_display_t *display, const lv_area_t *area, uint8_t *pixels)
                          error);
         }
         output->failed_this_refresh = true;
+    } else {
+        output->succeeded_this_refresh = true;
     }
     lv_display_flush_ready(display);
 }
@@ -151,12 +153,12 @@ void retry_failed_redraw(lv_display_t *display, StripeOutput &output)
                             lv_display_get_vertical_resolution(display) - 1};
         lv_inv_area(display, &full);
     }
-    if (output.disabled || !output.wrote_pixels) return;
-    output.wrote_pixels = false;
+    if (output.disabled) return;
+    const bool succeeded = std::exchange(output.succeeded_this_refresh, false);
 
-    if (output.failed_this_refresh) {
-        output.failed_this_refresh = false;
+    if (std::exchange(output.failed_this_refresh, false)) {
         output.retry_queued = false;
+        if (succeeded && output.retries > kMaxRedrawRetries) output.retries = 0;
         if (output.retries < kMaxRedrawRetries) {
             output.retry_queued = lv_inv_area(display, &output.damaged_area) == LV_RESULT_OK;
             if (output.retry_queued) ++output.retries;
@@ -167,6 +169,7 @@ void retry_failed_redraw(lv_display_t *display, StripeOutput &output)
         return;
     }
 
+    if (!succeeded) return;
     output.retries = 0;
     if (!output.has_damage) return;
     if (output.retry_queued) {
