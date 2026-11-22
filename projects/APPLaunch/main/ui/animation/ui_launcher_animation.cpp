@@ -17,7 +17,41 @@ namespace {
 
 constexpr int kLauncherAnimationTimeMs = 200;
 
+#if LV_USE_LINUX_FBDEV
+// Leave enough time for an RGB565 carousel update on the SPI panel.
+constexpr uint32_t kCarouselRefreshPeriodMs = 24;
+unsigned active_carousel_transitions = 0;
+
+void set_carousel_refresh_period(uint32_t period)
+{
+    if (lv_display_t *display = lv_display_get_default()) {
+        if (lv_timer_t *refresh = lv_display_get_refr_timer(display)) {
+            lv_timer_set_period(refresh, period);
+            if (period == kCarouselRefreshPeriodMs)
+                lv_timer_ready(refresh);
+        }
+    }
+
+    if (lv_timer_t *animation = lv_anim_get_timer())
+        lv_timer_set_period(animation, period);
+}
+#endif
+
 struct LauncherHomeAnimContext {
+#if LV_USE_LINUX_FBDEV
+    LauncherHomeAnimContext()
+    {
+        if (active_carousel_transitions++ == 0)
+            set_carousel_refresh_period(kCarouselRefreshPeriodMs);
+    }
+
+    ~LauncherHomeAnimContext()
+    {
+        if (--active_carousel_transitions == 0)
+            set_carousel_refresh_period(LV_DEF_REFR_PERIOD);
+    }
+#endif
+
     lv_obj_t *items[launcher_carousel_layout::kElementCount];
     bool to_right;
     launcher_home_animation::ReadyCallback ready_cb;

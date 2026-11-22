@@ -5,6 +5,7 @@
  */
 
 #include "cp0_lvgl_app_runner.hpp"
+#include "launcher_fbdev.h"
 #include "sample_log.h"
 #include "ui/launcher_media_controls.h"
 #include "ui/ui.h"
@@ -26,6 +27,7 @@ int main(void)
 {
     system(bash_init);
     Cp0LvglRunOptions options;
+    options.wake_on_keyboard_input = true;
     options.after_resource_init = []() {
         cp0_signal_settings_api({"GpioSet", "BACKLIGHT", "0"}, [](int code, std::string data) {
             if (code == 0)
@@ -40,6 +42,7 @@ int main(void)
     };
     options.setup = []() {
         SLOGI("[BOOT] cp0_lvgl initialized");
+        launcher_enable_fbdev_stripes();
         launcher_ui::init();
         ui_screensaver_init();
         return true;

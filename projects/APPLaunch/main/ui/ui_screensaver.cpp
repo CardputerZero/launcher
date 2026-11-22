@@ -88,6 +88,9 @@ LockscreenBackgroundCache s_background_cache;
 /* Raw backlight value captured when the panel is forced dark, or -1 while the
  * backlight is under normal control. */
 int s_screen_off_backlight_raw = -1;
+#if LV_USE_LINUX_FBDEV
+lv_display_t *s_dark_display = nullptr;
+#endif
 
 struct ScreensaverPanel
 {
@@ -209,6 +212,30 @@ void update_timer_period()
     /* The panel is static in every state, so no animation frames are needed;
      * only a maturing hold is polled faster than the idle check. */
     lv_timer_set_period(s_timer, s_model.hold_pending() ? kHoldPollMs : kIdleCheckMs);
+#if LV_USE_LINUX_FBDEV
+    if (s_dark_display) {
+        lv_timer_pause(s_timer);
+    } else if (lv_timer_get_paused(s_timer)) {
+        lv_timer_reset(s_timer);
+        lv_timer_resume(s_timer);
+    }
+#endif
+}
+
+void suspend_dark_redraw()
+{
+#if LV_USE_LINUX_FBDEV
+    if (s_dark_display || s_screen_off_backlight_raw < 0) return;
+    lv_display_t *display = lv_display_get_default();
+    if (!display) return;
+
+    // Commit the black lock screen before dropping hidden widget invalidations.
+    lv_refr_now(display);
+    lv_display_enable_invalidation(display, false);
+    if (lv_timer_t *refresh = lv_display_get_refr_timer(display))
+        lv_timer_pause(refresh);
+    s_dark_display = display;
+#endif
 }
 
 void suspend_screen_off_backlight() noexcept
@@ -223,6 +250,13 @@ void suspend_screen_off_backlight() noexcept
 
 void release_screen_off_backlight() noexcept
 {
+#if LV_USE_LINUX_FBDEV
+    if (s_dark_display) {
+        lv_display_enable_invalidation(s_dark_display, true);
+        lv_obj_invalidate(lv_display_get_screen_active(s_dark_display));
+        s_dark_display = nullptr;
+    }
+#endif
     if (s_screen_off_backlight_raw < 0) return;
     const int raw = s_screen_off_backlight_raw;
     /* Clear first so a throwing backend cannot latch the panel dark. */
@@ -488,6 +522,7 @@ void enter_lockscreen()
 
     lv_obj_move_foreground(s_overlay);
     lv_obj_clear_flag(s_overlay, LV_OBJ_FLAG_HIDDEN);
+    suspend_dark_redraw();
     update_timer_period();
     if (s_timer) lv_timer_reset(s_timer);
 }
@@ -502,6 +537,7 @@ void show_lockscreen_panel()
     show_hint(s_lock.state() == LockscreenState::Armed
                   ? "Press ENTER to unlock"
                   : "Press TAB to unlock");
+    update_timer_period();
 }
 
 /* Back to (1) after the visible state timed out. */
@@ -511,6 +547,8 @@ void sleep_lockscreen()
     hide_hint();
     suspend_screen_off_backlight();
     play_lockscreen_sound("lock.mp3");
+    suspend_dark_redraw();
+    update_timer_period();
 }
 
 void timer_cb(lv_timer_t *timer) noexcept
