@@ -36,8 +36,10 @@ int configured_brightness = 102;
 bool brightness_config_missing = false;
 bool backlight_write_failed = false;
 int config_writes = 0;
+int config_saves = 0;
 bool sink_muted = true;
 int mute_toggles = 0;
+bool volume_read_failed = false;
 std::vector<std::string> audio_commands;
 
 std::size_t count_commands(const std::string &command)
@@ -82,7 +84,10 @@ int main()
                 ++mute_toggles;
                 reply(callback, 0, sink_muted ? "1" : "0");
             } else if (command == "VolumeRead") {
-                reply(callback, 0, std::to_string(sink_volume));
+                if (volume_read_failed)
+                    reply(callback, -1, "read failed");
+                else
+                    reply(callback, 0, std::to_string(sink_volume));
             } else if (command == "VolumeWrite") {
                 assert(arguments.size() == 2);
                 sink_volume = std::stoi(*std::next(arguments.begin()));
@@ -116,6 +121,7 @@ int main()
                     configured_volume = value;
                 reply(callback, 0, "");
             } else if (command == "Save") {
+                ++config_saves;
                 reply(callback, 0, "");
             } else {
                 assert(false);
@@ -153,41 +159,62 @@ int main()
     assert(wait_for_cached_volume(63));
     launcher_media_controls::stop_volume_cache();
     assert(launcher_media_controls::has_cached_volume());
-    const std::size_t startup_reads = count_commands("VolumeRead");
-    assert(startup_reads >= 2);
+    assert(count_commands("VolumeRead") >= 2);
 
-    // A shortcut steps from the cached value; it must not issue a fresh read.
+    // Fn+S must lower the live volume even when the cache is stale (#264).
+    launcher_media_controls::update_cached_volume(100);
+    sink_volume = 20;
+    sink_muted = false;
+    const int stepped_volume = launcher_media_controls::adjust_volume(-10);
+    assert(stepped_volume == 10);
+    assert(sink_volume == 10);
+    assert(configured_volume == 10);
+    assert(launcher_media_controls::cached_volume() == 10);
+
+    // A failed read leaves both the muted sink and saved volume untouched.
+    sink_volume = 20;
+    sink_muted = true;
+    volume_read_failed = true;
+    audio_commands.clear();
+    const int writes_before_failed_read = config_writes;
+    const int saves_before_failed_read = config_saves;
+    assert(launcher_media_controls::adjust_volume(-10) == 10);
+    assert((audio_commands == std::vector<std::string>{"VolumeRead"}));
+    assert(sink_muted);
+    assert(sink_volume == 20);
+    assert(mute_toggles == 0);
+    assert(config_writes == writes_before_failed_read);
+    assert(config_saves == saves_before_failed_read);
+    assert(configured_volume == 10);
+    assert(launcher_media_controls::cached_volume() == 10);
+    volume_read_failed = false;
+
+    // Fn+D also starts from the live level, not the cache.
+    sink_volume = 20;
+    sink_muted = false;
+    launcher_media_controls::update_cached_volume(100);
+    assert(launcher_media_controls::adjust_volume(10) == 30);
+    assert(sink_volume == 30);
+    assert(configured_volume == 30);
+
+    // A boosted PulseAudio level above 100% can still be lowered.
+    sink_volume = 120;
+    assert(launcher_media_controls::adjust_volume(-10) == 90);
+    assert(sink_volume == 90);
+    assert(configured_volume == 90);
+    sink_muted = true;
+
+    // After a successful read the shortcut still unmutes before writing.
+    sink_volume = 63;
+    audio_commands.clear();
     assert(launcher_media_controls::adjust_volume(-10) == 50);
     assert(!sink_muted);
     assert(sink_volume == 50);
     assert(configured_volume == 50);
     assert(launcher_media_controls::cached_volume() == 50);
     assert(mute_toggles == 1);
-    assert(count_commands("VolumeRead") == startup_reads);
-    assert(audio_commands[0] == "VolumeRead");
-    assert(audio_commands[1] == "VolumeRead");
-    assert(audio_commands[2] == "MuteRead");
-    assert(audio_commands[3] == "MuteToggle");
-    assert(audio_commands[4] == "VolumeWrite");
-
-    // An external mixer change does not reach the shortcut until something
-    // publishes it (the Settings read or a write does).
-    sink_volume = 90;
-    sink_muted = true;
-    assert(launcher_media_controls::adjust_volume(10) == 60);
-    assert(!sink_muted);
-    assert(sink_volume == 60);
-    assert(configured_volume == 60);
-    assert(launcher_media_controls::cached_volume() == 60);
-    assert(mute_toggles == 2);
-    assert(count_commands("VolumeRead") == startup_reads);
-
-    launcher_media_controls::update_cached_volume(82);
-    assert(launcher_media_controls::cached_volume() == 82);
-    assert(launcher_media_controls::adjust_volume(-10) == 70);
-    assert(sink_volume == 70);
-    assert(configured_volume == 70);
-    assert(launcher_media_controls::cached_volume() == 70);
+    assert((audio_commands == std::vector<std::string>{
+        "VolumeRead", "MuteRead", "MuteToggle", "VolumeWrite"}));
 
     launcher_media_controls::update_cached_volume(150);
     assert(launcher_media_controls::cached_volume() == 100);

@@ -23,9 +23,8 @@ namespace {
 
 LauncherMediaControlsModel model;
 
-/* Volume cached at launcher startup. Every successful write (and every
- * authoritative mixer read routed through update_cached_volume()) refreshes
- * it, so shortcuts and Settings render one value instead of racing the mixer. */
+/* Volume cached at launcher startup for Settings and the shortcut OSD.
+ * Successful writes and update_cached_volume() refresh it. */
 std::atomic<int> g_cached_volume{-1};
 
 constexpr int kStartupVolumeReadAttempts = 5;
@@ -38,6 +37,23 @@ int read_mixer_volume()
         cp0_signal_audio_api({"VolumeRead"}, [&](int code, std::string data) {
             int parsed = 0;
             if (code == 0 && LauncherMediaControlsModel::parse_percent(data, parsed)) volume = parsed;
+        });
+    } catch (...) {
+        return -1;
+    }
+    return volume;
+}
+
+/* Shortcut base: PulseAudio may report a boosted level above 100%. Accept
+ * any non-negative level and clamp it, so Fn+S can still lower the output. */
+int read_mixer_volume_for_step()
+{
+    int volume = -1;
+    try {
+        cp0_signal_audio_api({"VolumeRead"}, [&](int code, std::string data) {
+            int parsed = 0;
+            if (code == 0 && LauncherMediaControlsModel::parse_int(data, parsed) && parsed >= 0)
+                volume = LauncherMediaControlsModel::clamp_percent(parsed);
         });
     } catch (...) {
         return -1;
@@ -164,21 +180,6 @@ bool write_config_int(const char *key, int value, int fallback)
 
     if (call_config({"SetInt", key, std::to_string(previous)})) call_config({"Save"});
     return false;
-}
-
-int read_volume()
-{
-    const int cached = g_cached_volume.load();
-    if (cached >= 0) return LauncherMediaControlsModel::clamp_percent(cached);
-
-    int volume = read_mixer_volume();
-    if (volume < 0)
-        volume = read_config_int("volume", model.volume_or(50));
-    volume = LauncherMediaControlsModel::clamp_percent(volume);
-    /* The first authoritative value becomes the cache, so a shortcut pressed
-     * before the startup read completed cannot disagree with Settings. */
-    g_cached_volume.store(volume);
-    return volume;
 }
 
 bool read_mute()
@@ -311,9 +312,14 @@ void update_cached_volume(int percent)
 
 int adjust_volume(int delta_percent)
 {
+    const int current = read_mixer_volume_for_step();
+    if (current < 0) {
+        const int cached = cached_volume();
+        return cached >= 0 ? cached : model.volume_or(50);
+    }
+
     if (read_mute())
         (void)toggle_mute();
-    const int current = read_volume();
     const int base = setup_values::round_volume_percent(current);
     const int delta = delta_percent > 0 ? VOLUME_STEP_PERCENT
                                        : delta_percent < 0 ? -VOLUME_STEP_PERCENT : 0;
