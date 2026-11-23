@@ -13,7 +13,6 @@
 
 #include <algorithm>
 #include <cstdint>
-#include <cstring>
 #include <string>
 
 namespace {
@@ -129,17 +128,14 @@ lv_obj_t *create_carousel_title(lv_obj_t *parent, const Slot &slot,
     lv_obj_t *title = lv_label_create(parent);
     if (!title) return nullptr;
     lv_obj_set_width(title, width);
-    lv_obj_set_height(title, LV_SIZE_CONTENT);
     lv_obj_set_pos(title, slot.x, slot.y);
     lv_obj_set_align(title, LV_ALIGN_CENTER);
-    lv_label_set_text(title, text);
     lv_obj_set_style_text_align(title, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_font(
         title,
         launcher_fonts().get("Montserrat-Bold.ttf", 16, LV_FREETYPE_FONT_STYLE_BOLD),
         LV_PART_MAIN | LV_STATE_DEFAULT);
-    // Font first: DOT needs a one-line height, which comes from the font.
-    launcher_home_animation::apply_title_overflow(title, false);
+    launcher_home_animation::set_title_text(title, text);
     lv_obj_set_style_text_color(title, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(title, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_DEFAULT);
     if (slot.hidden)
@@ -253,14 +249,7 @@ void UILaunchPage::update_carousel_slot(size_t slot, const char *title, const st
 void UILaunchPage::update_carousel_item(lv_obj_t *panel, lv_obj_t *label,
                                         const char *title, const std::string &icon)
 {
-    if (label) {
-        const char *next = title ? title : "";
-        const char *current = lv_label_get_text(label);
-        // DOT mode rewrites the widget text with "...". Only restart the
-        // selected bounce when the source name itself changed.
-        if (!current || std::strcmp(current, next) != 0)
-            lv_label_set_text(label, next);
-    }
+    launcher_home_animation::set_title_text(label, title ? title : "");
     set_panel_icon(panel, icon);
 }
 

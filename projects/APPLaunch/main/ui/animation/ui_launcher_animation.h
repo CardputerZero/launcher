@@ -19,6 +19,7 @@ void animate_right(lv_obj_t **items, ReadyCallback ready_cb, AliveCallback alive
 void animate_left(lv_obj_t **items, ReadyCallback ready_cb, AliveCallback alive_cb);
 
 // Selected titles bounce (pause, left, pause, right). Others end in "...".
+void set_title_text(lv_obj_t *label, const char *text);
 void apply_title_overflow(lv_obj_t *label, bool selected);
 
 } // namespace launcher_home_animation
