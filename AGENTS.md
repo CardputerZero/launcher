@@ -49,7 +49,7 @@ launcher/
 ├── SDK/                       # [submodule] M5Stack_Linux_Libs: component libs + SCons toolchain + 3rd-party source cache
 ├── ext_components/            # vendored external components (cp0_lvgl is the core platform layer)
 │   ├── cp0_lvgl/              #   ★ platform adapter: LVGL runner, AppPage bases, cp0_signal_* service bus
-│   ├── Miniaudio/ RadioLib/ Sigslot/ SmoothUI/ Spdlog/ bluectl/ nmtui/
+│   ├── Miniaudio/ Sigslot/ SmoothUI/ Spdlog/ bluectl/ nmtui/
 │   └── THIRD_PARTY_NOTICES.md
 ├── projects/
 │   ├── APPLaunch/             # ★ core: on-device launcher (carousel home + built-in pages + .desktop app management)
@@ -57,7 +57,7 @@ launcher/
 │   │   ├── *_config_defaults.mk  # 7 build profiles (see §4.1)
 │   │   ├── main/              #   main/{src,ui,ui/{animation,model,page_app,settings},include}/ + main/SConstruct
 │   │   ├── APPLaunch/         #   runtime resource tree (copied wholesale into dist/): bin share lib applications adb
-│   │   ├── tests/             #   43 .cpp unit tests + 15 Python source-contract tests + run_tests.sh (+ low_battery_ui/ runner)
+│   │   ├── tests/             #   42 .cpp unit tests + 17 Python source-contract tests + run_tests.sh (+ low_battery_ui/ runner)
 │   │   └── dist/ build/       #   artifacts (git-ignored, wholly replaced on every build)
 │   ├── ZClaw/                 # ZeroClaw chat/config frontend (SCons, 37 tests)
 │   ├── LaunchWizard/          # OOBE first-boot wizard (SCons for the GUI + CMake for pure-logic tests)
@@ -96,8 +96,8 @@ scons distclean && scons -j$(nproc)
 file dist/M5CardputerZero-APPLaunch            # expect ARM aarch64
 
 # 3. Run tests after changing code (run both; CI only runs the second)
-sh projects/APPLaunch/tests/run_tests.sh          # 42 C++ + 15 Python contracts
-sh ext_components/cp0_lvgl/tests/run_tests.sh     # 85 C++
+sh projects/APPLaunch/tests/run_tests.sh          # 42 C++ + 17 Python contracts
+sh ext_components/cp0_lvgl/tests/run_tests.sh     # 81 C++
 
 # 4. Build the .deb (**does not compile anything** — packages the existing dist/)
 python3 scripts/debian_packager.py
@@ -360,17 +360,17 @@ To make it toggleable under Settings→Launcher: the filename must be listed in 
 
 | Scope | Command | Size (driven by that runner) | CI |
 | --- | --- | --- | --- |
-| APPLaunch | `sh projects/APPLaunch/tests/run_tests.sh` | 42 `.cpp` + 15 Python contract tests | ❌ not run |
+| APPLaunch | `sh projects/APPLaunch/tests/run_tests.sh` | 42 `.cpp` + 17 Python contract tests | ❌ not run |
 | APPLaunch (LVGL UI) | `sh projects/APPLaunch/tests/low_battery_ui/run_tests.sh` | 1 `.cpp` (needs an LVGL build) | ❌ |
-| cp0_lvgl | `sh ext_components/cp0_lvgl/tests/run_tests.sh` | 85 `.cpp` | ✅ run |
+| cp0_lvgl | `sh ext_components/cp0_lvgl/tests/run_tests.sh` | 81 `.cpp` | ✅ run |
 | cp0_lvgl (Bluetooth, on-device) | `run_bluetooth_reset_test.sh`, `build_bluetooth_backend_smoke.sh` | 2 `.cpp` (need real hardware) | ❌ |
 | ZClaw | `sh projects/ZClaw/tests/run_tests.sh` | 37 | ❌ |
 | LaunchWizard | `cmake --preset dev && ctest --preset dev` | 10 | ❌ |
 | Repo-root `tests/` | — | **empty directory, not an entry point** | — |
 
-On-disk file counts are 43 (APPLaunch) and 87 (cp0_lvgl); the difference is exactly the 1 + 2 hardware/LVGL-dependent tests that have their own dedicated runners above.
+On-disk file counts are 42 (APPLaunch) and 83 (cp0_lvgl); the hardware/LVGL-dependent tests have their own dedicated runners above.
 
-**Key insight**: `projects/APPLaunch/tests/` contains **15 Python "source contract" tests** that `read_text()` the `.cpp`/`.h` sources directly and assert on **textual structure, call ordering, and specific strings**. Therefore:
+**Key insight**: `projects/APPLaunch/tests/` contains **17 Python "source contract" tests** that `read_text()` the `.cpp`/`.h` sources directly and assert on **textual structure, call ordering, and specific strings**. Therefore:
 
 - changing UI source code can break a test **without a single compile error**;
 - before refactoring, `grep projects/APPLaunch/tests/` for assertions covering the code you are about to touch;
@@ -388,17 +388,6 @@ On-disk file counts are 43 (APPLaunch) and 87 (cp0_lvgl); the difference is exac
 
 Known **branch-dependent points** (never treat these as fixed facts):
 
-- **LoRa / RadioLib is a three-layer switch** — and how tightly the layers are coupled **differs by branch**, so read the actual files:
-  1. `CONFIG_CP0_LVGL_INIT_LORA` — service sources + signal registration;
-  2. `CONFIG_RADIOLIB_COMPONENT_ENABLED` — component registration;
-  3. the `RadioLib` entry in `REQUIREMENTS` of `main/SConstruct` — linking.
-
-  Two known shapes of layer 3, both live in this repo's history:
-  - **Coupled** (`master`, `fix/radiolib-lora-disabled-by-default`): `REQUIREMENTS += ['RadioLib']` sits inside `if 'CONFIG_CP0_LVGL_INIT_LORA' in os.environ:`, so dropping layer 1 also drops the link flag — no link error, but LoRa silently disappears from the build.
-  - **Uncoupled** (`pr-231`): `RadioLib` is hard-coded in the base `REQUIREMENTS` list, so disabling layer 1 alone leaves a bare `-lRadioLib` → **link failure**.
-
-  Practical rule: after touching LoRa, run one build and grep the link line for `RadioLib`. Which defaults are `=y` versus commented out also varies per branch — **always go by the current branch's actual contents**, never by this document.
-
 - **Whether CI publishes prereleases automatically**, and which workflow files exist, vary by branch.
 - **Whether `.workbuddy/` is git-ignored** varies by branch (some branches lack that line).
 
@@ -409,6 +398,7 @@ Known **branch-dependent points** (never treat these as fixed facts):
 - **A `page_app/*.cpp` missing `#define APP_PAGE_IMPLEMENTATION_UNIT`** pulls in conflicting headers.
 - **There is no `ui_app_page.hpp` in `main/ui/`**: the page base classes live in `ext_components/cp0_lvgl/include/`.
 - **`ui_app_setup.hpp` does not exist**: the settings page is `UISettingTreePage` in `main/ui/settings/settings_page.cpp`.
+- **LoRa moved out of this repo; the feature still exists**: the in-repo LoRa/Mesh pages, the cp0 LoRa service and `ext_components/RadioLib` were removed. LoRa now ships as the standalone `.desktop` apps `CardputerZero/Cap-LoRa-1262` and `CardputerZero/Cap-LoRa-1262-GPS`, which build RadioLib themselves. **Do not delete** the references that support those apps: `"lora"`/`"gps"` in `kBuiltInAppOrder` and `cap-lora-1262*.desktop` in `kManagedDesktopFilenames` (`main/ui/app_display_order.cpp`), the `cap-lora-1262*` package rows in `main/ui/settings/settings_software_model.cpp` and `scripts/debian_packager.py`, the RadioLib entry in the About license list (`main/ui/settings/settings_about_help_model.cpp`), and the tests that assert them.
 
 ### 10.3 Untracked leftover directories — do not `git add`
 
@@ -476,7 +466,7 @@ docs/launcher-project-guide-ja/  # Japanese — parts 02/04/05/12 are old; do no
 docs/launcher工程详细说明.md / launcher-project-guide.md / launcher-project-guide-ja.md  # three index pages
 ```
 
-**All three guide sets were batch-snapshotted on 2026-09-23**; the code has kept refactoring since (settings pages migrated, the LoRa entry point removed, `launcher_platform::path()` replacing the old API). **Treat them as architecture tours, not API references.**
+**All three guide sets were batch-snapshotted on 2026-09-23**; the code has kept refactoring since (settings pages migrated, `launcher_platform::path()` replacing the old API). **Treat them as architecture tours, not API references.**
 
 **Topical docs** (newer than the guides and mostly kept in sync with the code):
 
@@ -514,7 +504,7 @@ docs/launcher工程详细说明.md / launcher-project-guide.md / launcher-projec
 
 ## 13. Collaboration and Commits
 
-- **Commit messages**: Conventional Commits — `type(scope): one-line summary`, with type ∈ `feat|fix|chore|refactor|docs|ci|test|perf|style`; details go in the body as `-` bullets. Examples (from `git log`): `fix(audio): stop the saved-volume restore when audio tears down`, `chore(config): disable RadioLib/LoRa by default and pin RadioLib commit`.
+- **Commit messages**: Conventional Commits — `type(scope): one-line summary`, with type ∈ `feat|fix|chore|refactor|docs|ci|test|perf|style`; details go in the body as `-` bullets. Examples (from `git log`): `fix(audio): stop the saved-volume restore when audio tears down`, `feat(launchwizard): expand the root filesystem on first boot`.
 - **Branches**: prefixes `fix/`, `feat/`, `feature/`, `refactor/`, `ci/`, `codex/`; PRs land on `master` via merge commits; release tags are `launcher-vX.Y.Z`.
 - **There is no CONTRIBUTING file, no PR template, and no issue template.**
 - **Licensing**: the root [`LICENSE`](LICENSE) is MIT (M5Stack code). [`LICENSES/`](LICENSES/) holds verbatim third-party texts plus provenance and **does not relicense this repo**.

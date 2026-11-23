@@ -110,7 +110,7 @@ if (file == "keyboard_device") return "/dev/input/by-path/platform-3f804000.i2c-
 if (file == "keyboard_map") return "/usr/share/keymaps/tca8418_keypad_m5stack_keymap.map";
 ```
 
-注意: SDL モードは、APPLaunch を開発マシンで実行できるようにするためのものです。すべてのデバイスリソースが存在するという意味ではありません。たとえば camera、LoRa、一部の Linux デバイスページは、コンパイル時条件で除外されるか、実行時に利用できない場合があります。
+注意: SDL モードは、APPLaunch を開発マシンで実行できるようにするためのものです。すべてのデバイスリソースが存在するという意味ではありません。たとえば camera、一部の Linux デバイスページは、コンパイル時条件で除外されるか、実行時に利用できない場合があります。
 
 ### 3.3 `cp0_file_path_c()` のキャッシュ
 
@@ -281,7 +281,6 @@ cp0_signal_config_api({"Save"}, save_callback);
 | `app_Game` | `1` | GAME エントリ | 常時有効、無効化不可 |
 | `app_Setting` | `1` | SETTING エントリ | 常時有効、無効化不可 |
 | `app_Math` | `1` | Calculator 外部アプリケーション | 設定可能 |
-| `app_LoRa` | `1` | LORA 組み込みページ | 設定可能。すべてのビルドターゲットで登録 |
 | `app_IP_Panel` | `1` | IP_PANEL 組み込みページ | 設定可能。Linux 非 SDL ビルドのみ登録 |
 | `app_SSH` | `1` | SSH 組み込みページ | 設定可能。Linux 非 SDL ビルドのみ登録 |
 | `app_Tank` | `1` | TANK 組み込みページ | 設定可能。Linux 非 SDL ビルドのみ登録 |
@@ -305,7 +304,6 @@ cp0_signal_config_api({"Save"}, save_callback);
 次のものは主にメモリ上のページ状態で、既定では永続化されません。
 
 - `UISSHPage` の Host/Port/User のデフォルト値はコンストラクタで初期化され、設定には書き込まれません。
-- `UIMeshPage` のメッセージ入力バッファはページメモリ内にだけ存在します。
 - `UIIpPanelPage` のネットワークインターフェース一覧は `cp0_network_list()` から毎秒更新されます。
 
 ## 8. 設定ページの書き込み経路

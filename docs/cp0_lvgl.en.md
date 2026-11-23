@@ -94,7 +94,7 @@ int cp0_wifi_radio_set_enabled(int enabled);
 
 `cp0_battery_read` reads the latest background snapshot and performs no hardware I/O; use it only when `valid == 1`. Battery units are mV, mA, 0.1 C, mAh, and percent SOC. `cp0_bq27220_calibrate` accepts indices 0..3. `cp0_backlight_write` clamps to 0..max. `cp0_time_set` requires `YYYY-MM-DD HH:MM:SS`; manual RTC persistence requires NTP to be disabled. `cp0_time_ntp_get/set` controls NTP.
 
-Other C functions read Ethernet/default network information, account information, time text, desktop execution safety, start background updates, and request/clear LoRa initialization stop.
+Other C functions read Ethernet/default network information, account information, time text, desktop execution safety, and start background updates.
 
 ## Complete `cp0_signal_*` Usage
 
@@ -119,10 +119,6 @@ All `args` below are `std::list<std::string>` with the command at element zero. 
 ### Filesystem signal: `cp0_signal_filesystem_api(args, cb)`
 
 Commands are `Path logical_name`, `DirList path`, `DirListDetail path`, `Exists path`, `ReadFile path [max_bytes]`, `EnsureDirForUser path`, `Touch path`, `Remove path`, `WatchStart path`, `WatchPoll handle`, and `WatchStop handle`. `Exists` returns `1/0`; `WatchStart` returns a handle; directory data is line-encoded. Empty or NUL-containing paths are invalid. Unknown commands return code -2.
-
-### LoRa: `cp0_signal_lora_api(args, cb)`
-
-Commands are `Init`, `Poll`, `Info`, `SendText text`, `StartReceive`, `SetTxMode 0|1`, and `Shutdown`. Text must be nonempty and at most 127 bytes. `Poll` and `Info` return raw `cp0_lora_info_t` bytes; `Poll` performs hardware polling while `Info` only reads state. `cp0_lora_request_stop` and `cp0_lora_clear_stop` control initialization cancellation.
 
 ### Wi-Fi
 

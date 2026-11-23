@@ -41,7 +41,6 @@ The current registry is:
 | GAME | Internal | `UIGamePage` | All builds |
 | SETTING | Internal | `UISetupPage` | All builds |
 | MATH | Standalone | `calculator_exec` platform path | Configurable |
-| LORA | Internal | `UILoraPage` | Configurable |
 | IP_PANEL | Internal | `UIIpPanelPage` | Linux device builds only |
 | SSH | Internal | `UISSHPage` | Linux device builds only |
 | TANK | Internal | `UITankBattlePage` | Linux device builds only |

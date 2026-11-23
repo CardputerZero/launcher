@@ -22,7 +22,7 @@ APPLaunch has two kinds of app sources:
 
 ## 2. Adding a Built-in Page
 
-Built-in pages are suitable for features that run in the same process as Launcher, use LVGL directly, and need to share the input group, top bar, or status bar. Examples include Settings, Game, File, Camera, and LoRa pages.
+Built-in pages are suitable for features that run in the same process as Launcher, use LVGL directly, and need to share the input group, top bar, or status bar. Examples include Settings, Game, File, and Camera pages.
 
 ### 2.1 Create the Page File
 

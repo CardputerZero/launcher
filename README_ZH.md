@@ -6,7 +6,7 @@
 
 仓库包含三个主要项目，并提供若干示例/辅助项目：
 - **HelloWorld** — 基础用户演示程序，展示状态栏和简单 UI
-- **APPLaunch** — 应用启动器，提供多应用导航、LoRa 通信、音频播放等丰富功能
+- **APPLaunch** — 应用启动器，提供多应用导航、音频播放等丰富功能
 - **ZClaw** — 面向键盘操作的 LVGL ZeroClaw Webhook 聊天客户端，支持引导式模型服务配置与工具审批
 
 UI 界面由 **SquareLine Studio 1.5.0** 生成，支持 SDL2 仿真模式（本机调试）和 Linux Framebuffer 模式（设备运行）两种显示后端。
@@ -58,7 +58,7 @@ launcher/
 │   ├── Calculator/             # 计算器
 │   ├── AppStore/               # 应用商店
 │   └── HelloWorld/             # Hello World 示例
-├── ext_components/             # 外部组件（Miniaudio、RadioLib 等）
+├── ext_components/             # 外部组件（Miniaudio 等）
 ├── docs/                       # 工程文档
 ├── scripts/                    # 仓库辅助工具
 ├── README.md
@@ -82,8 +82,7 @@ launcher/
 ### APPLaunch 特性
 
 - 应用启动器界面，支持多应用导航（轮播翻页）
-- 所有构建均注册 Python、Store、CLI/ST 终端、Game、Setting、Math 和 LoRa；Linux 设备构建另外注册 IP Panel、SSH 和 Tank Battle
-- LoRa 通信（基于 RadioLib SX1262）
+- 所有构建均注册 Python、Store、CLI/ST 终端、Game、Setting、Math；Linux 设备构建另外注册 IP Panel、SSH 和 Tank Battle
 - 音频播放（基于 Miniaudio）
 - 电池状态监控与显示
 - 全局快捷键提示（ESC / Shift / SYM）
@@ -350,7 +349,7 @@ export LV_LINUX_KEYBOARD_DEVICE=/dev/input/by-path/platform-3f804000.i2c-event
 | 主内容区 | 应用轮播页面（左右翻页导航） |
 | 全局提示 | ESC / Shift / SYM 快捷键提示覆盖层 |
 
-APPLaunch 在所有构建中注册 Python、Store、CLI/ST 终端、Game、Setting、Math 和 LoRa；Linux 设备构建另外注册 IP Panel、SSH 和 Tank Battle。Python、Store、Math 是命令或外部进程入口，其余为进程内页面。
+APPLaunch 在所有构建中注册 Python、Store、CLI/ST 终端、Game、Setting、Math；Linux 设备构建另外注册 IP Panel、SSH 和 Tank Battle。Python、Store、Math 是命令或外部进程入口，其余为进程内页面。
 
 
 ## 相关资源

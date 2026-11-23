@@ -37,7 +37,6 @@ void deinit_rpc(void) noexcept;
 #else
 void deinit_rpc(void);
 #endif
-void init_lora(void);
 void init_wifi();
 void init_bluetooth(void);
 void init_settings(void);

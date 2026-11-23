@@ -248,7 +248,6 @@ Each page independently binds `LV_EVENT_KEYBOARD` on its `root_screen_`. Common 
 | `UIGamePage` | `ui_app_game.hpp` | uses the common page key handling; ESC returns |
 | `UIIpPanelPage` | `ui_app_ip_panel.hpp` | F/X/Z/C map to LV_KEY_*; UP/DOWN selects; ESC returns |
 | `UISSHPage` | `ui_app_ssh.hpp` | UP/DOWN switches Host/Port/User; character input; BACKSPACE deletes; ENTER connects; ESC returns |
-| `UILoraPage` | `ui_app_lora.hpp` | Converts KEY_UP/DOWN/LEFT/RIGHT/ENTER/ESC/BACKSPACE/DELETE to LV_KEY_* and passes them to business logic |
 | `UITankBattlePage` | `ui_app_tank_battle.hpp` | `33(F)` up, `45(X)` down, `44(Z)` left, `46(C)` right, `57(SPACE)` fire, ESC returns |
 
 ## 8. F/X/Z/C Direction-Key Convention
@@ -273,26 +272,21 @@ New pages should prefer symbolic names such as `KEY_F` and avoid bare numbers. I
 
 ## 9. Text Input
 
-Some pages need character input, such as SSH, Mesh, WiFi passwords, and the terminal.
+Some pages need character input, such as SSH, WiFi passwords, and the terminal.
 
-### 9.1 Simple ASCII Mapping
+### 9.1 SSH Page Input
 
-`UISSHPage` and `UIMeshPage` use `keycode_to_char()` to convert `KEY_1`, `KEY_Q`, and similar keys to lowercase characters:
+`UISSHPage` handles `LV_EVENT_KEYBOARD`, reads `struct key_item`, and appends printable characters to its connection model with `launcher_ui::text_input::key_text(key, item)`; `KEY_BACKSPACE`, `KEY_TAB`, `KEY_ENTER`, and `KEY_ESC` erase, save, connect, and go back.
 
 ```cpp
-static char keycode_to_char(uint32_t key)
-{
-    if (key >= KEY_1 && key <= KEY_9) return '1' + (key - KEY_1);
-    if (key == KEY_0) return '0';
-    if (key >= KEY_Q && key <= KEY_P) return qwerty[key - KEY_Q];
-    if (key == KEY_SPACE) return ' ';
-    if (key == 52) return '.';  // KEY_DOT
-    if (key == 12) return '-';  // KEY_MINUS
-    return 0;
-}
+if (lv_event_get_code(event) != static_cast<lv_event_code_t>(LV_EVENT_KEYBOARD)) return;
+const struct key_item *item = launcher_ui::events::keyboard_item(event);
+if (launcher_ui::events::is_key_released(event)) return;
+const uint32_t key = launcher_ui::events::keyboard_key(event);
+model_.append(launcher_ui::text_input::key_text(key, item));
 ```
 
-This approach is simple, but it does not support Shift uppercase, input methods, or multibyte characters. For full text input capability, read `key_item::utf8` or `codepoint`.
+Character case, Shift, and multibyte input come from `key_item`'s `utf8` / `codepoint` fields; read those fields when full text capability is needed.
 
 ### 9.2 Terminal Input
 
@@ -383,7 +377,7 @@ New pages should follow these rules:
 
 - List and menu pages: handle `KEY_UP/DOWN/LEFT/RIGHT/ENTER/ESC` on `launcher_ui::events::is_key_released(e)`.
 - Game pages: handle continuous actions on `launcher_ui::events::is_key_pressed(e)` and accept repeat if needed.
-- Text input pages: prefer `key_item::utf8`; use `keycode_to_char()` only for simple cases.
+- Text input pages: prefer `key_item::utf8` and reuse `launcher_ui::text_input::key_text()`.
 - Back key: ESC must exit the current page or current popup; for multi-level views, return to the previous level first, then return home.
 - Direction substitute keys: if the device keyboard is supported, consistently support `F/X/Z/C`.
 - Do not save `struct key_item *` pointers; copy `key_code`, `utf8`, and other fields when asynchronous handling is needed.

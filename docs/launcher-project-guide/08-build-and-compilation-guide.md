@@ -280,7 +280,7 @@ Meaning:
 | Variable | Default value | Purpose |
 | --- | --- | --- |
 | `SDK_PATH` | `SDK` under the repository root | Lets the SDK build system find Kconfig, SCons tools, and built-in components |
-| `EXT_COMPONENTS_PATH` | `ext_components` under the repository root | Lets the build system load extension components such as `cp0_lvgl`, `Miniaudio`, `Sigslot`, and `RadioLib` |
+| `EXT_COMPONENTS_PATH` | `ext_components` under the repository root | Lets the build system load extension components such as `cp0_lvgl`, `Miniaudio`, and `Sigslot` |
 
 Usually do not override these variables manually unless you are actually testing an external SDK or component directory.
 
@@ -712,10 +712,9 @@ This file registers the APPLaunch main-program component:
 - Reads the current short git hash and injects compile macro `LAUNCHER_GIT_COMMIT_RAW`.
 - Collects `src/*.c*` and all source files under the `ui` directory.
 - Adds includes: `main`, `main/include`, `ext_components/cp0_lvgl/include`, and `SDK/components/utilities/include`.
-- Depends on components: `cp0_lvgl`, `eventpp`, `lvgl_component`, `pthread`, `Miniaudio`, and `RadioLib`.
+- Depends on components: `cp0_lvgl`, `eventpp`, `utilities`, `lvgl_component`, `freetype`, and `pthread`; `Miniaudio` is pulled in transitively by cp0_lvgl's audio service.
 - Optional dependency: `Backward_cpp`.
 - Adds SDL2, FreeType, libinput, xkbcommon, udev, libcamera, jpeg, and other dependencies according to different configuration files; Windows SDL2 shares the same SDL2/FreeType `pkg-config` flag handling as Linux SDL2.
-- Uses `ext_components/RadioLib` as a static component; the RadioLib component owns the `wget_github('https://github.com/jgromes/RadioLib.git')` source cache and SX1262-related source list.
 - Adds the `../APPLaunch` runtime resource tree to `STATIC_FILES`.
 - Registers project target: `M5CardputerZero-APPLaunch`.
 
@@ -956,16 +955,6 @@ ls /usr/share/APPLaunch/bin/M5CardputerZero-APPLaunch
 ```
 
 For manual deployment, make sure you copied the contents of `dist/APPLaunch`, not only the executable.
-
-### 14.12 RadioLib Download Failure
-
-`ext_components/RadioLib/SConstruct` uses `wget_github('https://github.com/jgromes/RadioLib.git')` to fetch RadioLib when `CONFIG_RADIOLIB_COMPONENT_ENABLED=y`. The first build may need network access.
-
-Fix:
-
-- Confirm that the network can access GitHub.
-- Check whether a RadioLib cache already exists under `SDK/github_source`.
-- Prepare the corresponding source cache in advance for offline environments.
 
 ## 15. Recommended Build Flows
 

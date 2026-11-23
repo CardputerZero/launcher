@@ -280,7 +280,7 @@ os.environ["EXT_COMPONENTS_PATH"] = str(sdk_path.parent / "ext_components")
 | Variable | Default value | Purpose |
 | --- | --- | --- |
 | `SDK_PATH` | リポジトリルート配下の `SDK` | SDK ビルドシステムが Kconfig、SCons ツール、組み込みコンポーネントを見つけるため |
-| `EXT_COMPONENTS_PATH` | リポジトリルート配下の `ext_components` | `cp0_lvgl`、`Miniaudio`、`Sigslot`、`RadioLib` などの拡張コンポーネントを読み込むため |
+| `EXT_COMPONENTS_PATH` | リポジトリルート配下の `ext_components` | `cp0_lvgl`、`Miniaudio`、`Sigslot` などの拡張コンポーネントを読み込むため |
 
 実際に外部 SDK やコンポーネントディレクトリをテストする場合を除き、通常これらの変数を手動で上書きしないでください。
 
@@ -712,10 +712,9 @@ SDK ビルドシステムは次を行います。
 - 現在の短い git hash を読み取り、コンパイルマクロ `LAUNCHER_GIT_COMMIT_RAW` として注入します。
 - `src/*.c*` と `ui` ディレクトリ配下のすべてのソースファイルを収集します。
 - include として `main`、`main/include`、`ext_components/cp0_lvgl/include`、`SDK/components/utilities/include` を追加します。
-- 依存コンポーネント: `cp0_lvgl`、`eventpp`、`lvgl_component`、`pthread`、`Miniaudio`、`RadioLib`。
+- 依存コンポーネント: `cp0_lvgl`、`eventpp`、`utilities`、`lvgl_component`、`freetype`、`pthread`。`Miniaudio` は cp0_lvgl のオーディオサービス経由で推移的に導入されます。
 - オプション依存: `Backward_cpp`。
 - 設定ファイルに応じて SDL2、FreeType、libinput、xkbcommon、udev、libcamera、jpeg などの依存を追加します。Windows SDL2 も Linux SDL2 と同じ SDL2/FreeType `pkg-config` フラグ処理を共有します。
-- `ext_components/RadioLib` を静的コンポーネントとして使います。RadioLib コンポーネントは `wget_github('https://github.com/jgromes/RadioLib.git')` のソースキャッシュと SX1262 関連ソースリストを所有します。
 - `../APPLaunch` 実行時リソースツリーを `STATIC_FILES` に追加します。
 - プロジェクトターゲット `M5CardputerZero-APPLaunch` を登録します。
 
@@ -956,16 +955,6 @@ ls /usr/share/APPLaunch/bin/M5CardputerZero-APPLaunch
 ```
 
 手動配備では、実行ファイルだけでなく `dist/APPLaunch` の内容をコピーしたことを確認してください。
-
-### 14.12 RadioLib ダウンロード失敗
-
-`ext_components/RadioLib/SConstruct` は `CONFIG_RADIOLIB_COMPONENT_ENABLED=y` のとき、`wget_github('https://github.com/jgromes/RadioLib.git')` で RadioLib を取得します。初回ビルドではネットワークアクセスが必要な場合があります。
-
-修正:
-
-- ネットワークから GitHub にアクセスできることを確認します。
-- `SDK/github_source` 配下に RadioLib キャッシュが既に存在するか確認します。
-- オフライン環境では対応するソースキャッシュを事前に用意します。
 
 ## 15. 推奨ビルドフロー
 

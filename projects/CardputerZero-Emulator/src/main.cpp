@@ -259,7 +259,6 @@ void init_pty(void);
 void init_process(void);
 void init_sudo_signals(void);
 void init_screenshot(void);
-void init_lora(void);
 void init_wifi(void);
 void init_settings(void);
 void init_osinfo(void);
@@ -287,7 +286,6 @@ static void emu_init_cp0_runtime()
     init_sudo_signals();
     init_osinfo();
     init_screenshot();
-    init_lora();
     init_wifi();
     init_settings();
     init_bq27220();

@@ -65,8 +65,8 @@ services.
 | Input | Native LVGL key delivery plus the shared `LV_EVENT_KEYBOARD` event and `key_item` contract |
 | Launcher shell | `projects/APPLaunch/main/ui/launcher_ui_runtime.*`, `launch.*`, registry, desktop loader, and page models |
 | Settings | `projects/APPLaunch/main/ui/settings` with policy/model/page files and generated UI component data |
-| Built-in pages | `projects/APPLaunch/main/ui/page_app` for game, IP, LoRa, mesh, SSH, ST terminal, and tank battle pages |
-| External applications | `.desktop` discovery in `desktop_app_loader.*`, process policy in cp0, and process-group cleanup in `cp0_external_app_runner.*` |
+| Built-in pages | `projects/APPLaunch/main/ui/page_app` for game, IP, SSH, ST terminal, and tank battle pages |
+| External applications | `.desktop` discovery in `desktop_app_loader.*`, process policy in cp0, and process-group cleanup in `cp0_external_app_runner.*`. LoRa moved out of this repo and ships this way as the Cap-LoRa-1262 / Cap-LoRa-1262-GPS apps; the launcher keeps only their home ordering, enable toggles, update package rows and About license entry |
 | ZClaw | `projects/ZClaw/main/ui` implements provider setup, webhook/WebSocket transports, approvals, persistence, and chat presentation |
 | Bluetooth | `ext_components/bluectl` provides the C DBus API; cp0 contains the C++ BlueZ bridge |
 | Wi-Fi | `ext_components/nmtui` implements the NetworkManager signal adapter for the cp0 Wi-Fi contract |
@@ -93,10 +93,10 @@ The setup callback does not register another event. Native navigation uses
 ## Optional services
 
 `ext_components/cp0_lvgl/Kconfig` exposes filesystem, configuration, PTY, RPC,
-audio, process, sudo, OS information, screenshot, LoRa, Wi-Fi, Bluetooth,
+audio, process, sudo, OS information, screenshot, Wi-Fi, Bluetooth,
 settings, BQ27220, saved settings, battery, camera, and sound-card services.
 The SConstruct file maps enabled services to compile definitions and links
-Miniaudio for audio and RadioLib for LoRa. Native builds additionally use
+Miniaudio for audio. Native builds additionally use
 DBus/GIO/GLib, NetworkManager, BlueZ, libcamera, udev, xkbcommon, and optional
 ZeroMQ; SDL builds select the SDL platform sources.
 

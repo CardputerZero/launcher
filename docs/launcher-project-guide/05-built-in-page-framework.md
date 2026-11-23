@@ -27,12 +27,9 @@ Timers, worker threads, callbacks, and external handles created by a page must b
 | `UISTPage` | `ui_app_st.*` plus parser, renderer, session, and viewport modules | CLI | Interactive terminal; also hosts terminal-command entries |
 | `UIGamePage` | `ui_app_game.*` and `ui_app_game_view.cpp` | GAME | Game menu |
 | `UISetupPage` | `ui_app_setup.*`, input, layout, and views modules | SETTING | Settings and application visibility |
-| `UILoraPage` | `ui_app_lora.*` and view module | LORA | LoRa UI |
 | `UIIpPanelPage` | `ui_app_ip_panel.*` and view module | IP_PANEL | Device-only network panel |
 | `UISSHPage` | `ui_app_ssh.*` and view module | SSH | Device-only SSH page |
 | `UITankBattlePage` | `ui_app_tank_battle.*` and view module | TANK | Device-only full-screen game |
-
-`ui_app_mesh.*` remains a source module used by LoRa-related UI, but it is not a separately registered home entry.
 
 Python is a terminal command. STORE and MATH are standalone processes. They are fixed launcher entries, but they are not built-in page classes.
 

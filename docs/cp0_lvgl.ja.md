@@ -75,7 +75,7 @@ int cp0_file_read_first_line(const char *path, char *out, int out_size);
 
 ### バッテリー、バックライト、時刻
 
-`cp0_battery_read` は最新のバックグラウンド snapshot のみを読み、ハードウェア I/O は行いません。`valid == 1` の場合だけ利用します。`cp0_bq27220_calibrate` の index は 0..3、バックライト書き込みは 0..max に clamp されます。`cp0_time_set` の形式は `YYYY-MM-DD HH:MM:SS` で、RTC を永続化するには NTP を無効にします。Ethernet/account 情報、時刻文字列、背景更新、LoRa 初期化停止 API も提供します。
+`cp0_battery_read` は最新のバックグラウンド snapshot のみを読み、ハードウェア I/O は行いません。`valid == 1` の場合だけ利用します。`cp0_bq27220_calibrate` の index は 0..3、バックライト書き込みは 0..max に clamp されます。`cp0_time_set` の形式は `YYYY-MM-DD HH:MM:SS` で、RTC を永続化するには NTP を無効にします。Ethernet/account 情報、時刻文字列、背景更新も提供します。
 
 ## `cp0_signal_*` 完全な使い方
 
@@ -99,9 +99,7 @@ int cp0_file_read_first_line(const char *path, char *out, int out_size);
 
 `cp0_signal_filesystem_api` は `Path logical_name`、`DirList path`、`DirListDetail path`、`Exists path`、`ReadFile path [max_bytes]`、`EnsureDirForUser path`、`Touch path`、`Remove path`、`WatchStart path`、`WatchPoll handle`、`WatchStop handle` を提供します。`Exists` は `1/0`、空または NUL を含むパスは無効、未知コマンドは code -2 です。
 
-### LoRa: `cp0_signal_lora_api(args, cb)` と Wi-Fi: `cp0_signal_wifi_api(args, cb)`
-
-LoRa のコマンドは `Init`、`Poll`、`Info`、`SendText text`、`StartReceive`、`SetTxMode 0|1`、`Shutdown`。text は空でなく最大 127 byte、`Poll`/`Info` の data は raw `cp0_lora_info_t` です。`Poll` は hardware poll を実行し、`Info` は状態だけを読みます。
+### Wi-Fi: `cp0_signal_wifi_api(args, cb)`
 
 Wi-Fi のコマンドは `Status`、`Scan [0..32]`、`Connect ssid [password]`、`ConnectHidden ssid [password]`、`Disconnect`、`ProfileForget ssid`、`ProfileExists ssid`、`ProfileDisconnectActive`、`RadioEnabled`、`RadioSetEnabled on|off|1|0|true|false`。Status は `connected:ssid:ip:signal:ethernet`、Scan は 1 行ごとに `ssid:signal:security:in_use:saved` です。backslash、colon、LF、CR は escape されます。
 

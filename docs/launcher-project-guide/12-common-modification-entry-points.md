@@ -20,7 +20,7 @@ Use this index to start from the current owner of each behavior.
 
 ## Fixed Registry
 
-The fixed table is `BUILTIN_APPS` in `builtin_app_registry.cpp`. Current entries are Python, STORE, CLI, GAME, SETTING, MATH, LORA, plus IP_PANEL, SSH, and TANK on Linux device builds.
+The fixed table is `BUILTIN_APPS` in `builtin_app_registry.cpp`. Current entries are Python, STORE, CLI, GAME, SETTING, MATH, plus IP_PANEL, SSH, and TANK on Linux device builds.
 
 Use `append_page_app<PageT>` for internal pages. Use a null appender plus a command for terminal or standalone entries. A command beginning with `@` is resolved through `launcher_platform::path()`.
 
@@ -31,7 +31,6 @@ Use `append_page_app<PageT>` for internal pages. Use a null appender plus a comm
 | Terminal | `page_app/ui_app_st.*`, parser, renderer, session, viewport modules |
 | Game menu | `page_app/ui_app_game.*`, `ui_app_game_view.cpp` |
 | Settings | `page_app/ui_app_setup.*`, input, layout, views modules |
-| LoRa and mesh support | `page_app/ui_app_lora.*`, `page_app/ui_app_mesh.*` |
 | IP panel | `page_app/ui_app_ip_panel.*` |
 | SSH | `page_app/ui_app_ssh.*` |
 | Tank game | `page_app/ui_app_tank_battle.*` |

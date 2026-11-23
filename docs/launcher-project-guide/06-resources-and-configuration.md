@@ -110,7 +110,7 @@ if (file == "keyboard_device") return "/dev/input/by-path/platform-3f804000.i2c-
 if (file == "keyboard_map") return "/usr/share/keymaps/tca8418_keypad_m5stack_keymap.map";
 ```
 
-Note: SDL mode only makes APPLaunch runnable on a development machine. It does not mean every device resource exists. For example, camera, LoRa, and some Linux device pages may be excluded by compile-time conditions or unavailable at runtime.
+Note: SDL mode only makes APPLaunch runnable on a development machine. It does not mean every device resource exists. For example, camera and some Linux device pages may be excluded by compile-time conditions or unavailable at runtime.
 
 ### 3.3 `cp0_file_path_c()` Cache
 
@@ -294,7 +294,6 @@ The `Launcher` menu in `UISetupPage` saves `app_<Name>`:
 | `app_Game` | `1` | GAME entry | always-on, cannot be disabled |
 | `app_Setting` | `1` | SETTING entry | always-on, cannot be disabled |
 | `app_Math` | `1` | Calculator external application | Configurable |
-| `app_LoRa` | `1` | LORA built-in page | Configurable and registered for every build target |
 | `app_IP_Panel` | `1` | IP_PANEL built-in page | Configurable; registered only in Linux non-SDL builds |
 | `app_SSH` | `1` | SSH built-in page | Configurable; registered only in Linux non-SDL builds |
 | `app_Tank` | `1` | TANK built-in page | Configurable; registered only in Linux non-SDL builds |
@@ -318,7 +317,6 @@ These entries come from `BUILTIN_APPS[]` in `projects/APPLaunch/main/ui/builtin_
 The following are mostly in-memory page state and are not persisted by default:
 
 - Host/Port/User defaults in `UISSHPage` are initialized in the constructor and are not written to configuration.
-- The `UIMeshPage` message input buffer only exists in page memory.
 - The network interface list in `UIIpPanelPage` is refreshed every second from `cp0_network_list()`.
 
 ## 8. Settings-Page Configuration Write Paths

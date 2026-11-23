@@ -45,9 +45,6 @@ config CP0_LVGL_INIT_OSINFO
 config CP0_LVGL_INIT_SCREENSHOT
     bool "Initialize screenshot service"
     default n
-config CP0_LVGL_INIT_LORA
-    bool "Initialize LoRa service"
-    default n
 config CP0_LVGL_INIT_WIFI
     bool "Initialize Wi-Fi service"
     select CP0_LVGL_INIT_PROCESS

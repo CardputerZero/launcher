@@ -1,6 +1,6 @@
 # 00 - Overview and Reading Path
 
-`launcher` は M5CardputerZero 向けのアプリケーションプロジェクト群です。中核となるプロジェクトは `projects/APPLaunch` です。APPLaunch はデバイス上で動作するメインランチャーで、起動後に LVGL を初期化し、ホームカルーセルを表示し、ステータスバーを表示し、組み込みページまたは外部アプリケーションを起動します。また、設定、端末、音楽、録音、カメラ、LoRa などの機能も提供します。
+`launcher` は M5CardputerZero 向けのアプリケーションプロジェクト群です。中核となるプロジェクトは `projects/APPLaunch` です。APPLaunch はデバイス上で動作するメインランチャーで、起動後に LVGL を初期化し、ホームカルーセルを表示し、ステータスバーを表示し、組み込みページまたは外部アプリケーションを起動します。また、設定、端末、音楽、録音、カメラなどの機能も提供します。
 
 ## 1. Documentation Goals
 

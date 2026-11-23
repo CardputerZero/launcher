@@ -182,7 +182,6 @@ if (navigate_home)
 | `UISetupPage` | `ui_app_setup.hpp` | `SETTING` | `AppPage` | システム設定、アプリ切り替え、brightness、volume、WiFi、camera resolution など |
 | `UIIpPanelPage` | `ui_app_ip_panel.hpp` | `IP_PANEL` | `AppPage` | ネットワークインターフェース/IP 情報リスト。毎秒更新 |
 | `UISSHPage` | `ui_app_ssh.hpp` | `SSH` | `AppPage` | SSH パラメータ入力。接続後に `UISTPage` を埋め込む |
-| `UILoraPage` | `ui_app_lora.hpp` | `LORA` | `AppPage` | LoRa 業務ページ。内部に C スタイルの create/destroy インターフェースも含む |
 | `UITankBattlePage` | `ui_app_tank_battle.hpp` | `TANK` | `AppPageRoot` | Tank mini-game。フルスクリーン、固定キー mapping |
 
 `Python`、`STORE`、`MATH` は組み込みページではありません。コマンドまたは外部プロセスとして起動されます。
@@ -207,7 +206,7 @@ constexpr BuiltinAppRegistration BUILTIN_APPS[] = {
 規約:
 
 - `Store`、`CLI`、`Game`、`Setting` は settings page で常に有効で、無効化できません。
-- `LORA` は全プラットフォームの toggle 対象です。`IP_PANEL`、`SSH`、`TANK` は Linux 真機ビルドでのみ登録されます。
+- `IP_PANEL`、`SSH`、`TANK` は Linux 真機ビルドでのみ登録されます。
 - 動的 `.desktop` アプリケーションは組み込みページの後にスキャンされ追加されます。ディレクトリ変更は watcher により 3 秒ごとに確認されます。
 
 ## 7. Page Code Skeleton

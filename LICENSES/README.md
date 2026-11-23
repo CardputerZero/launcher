@@ -29,7 +29,7 @@ Package metadata confirms `libv4l-0t64`, version `1.32.0-2ubuntu1`, `arm64`;
 SHA-256 is `9a3a5c89c2b367d04734bc07ce285ed559228373cda1eef038c24da1d9c2098a`.
 The development package's documentation is a symlink to this runtime package.
 
-Wrapper-local LICENSE files for RadioLib, Sigslot, SmoothUI and Spdlog were
+Wrapper-local LICENSE files for Sigslot, SmoothUI and Spdlog were
 copied from their corresponding SDK/github_source trees. Miniaudio/LICENSE
 is the complete dual-license block extracted from its single header.
 APPLaunch's local LVGL directory contains copies of the LVGL and FreeType
