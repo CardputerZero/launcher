@@ -14,6 +14,12 @@
 #include "cp0_runner_shutdown.hpp"
 #include "hal_lvgl_bsp.h"
 
+#if !defined(HAL_PLATFORM_SDL)
+#include "cp0/cp0_keyboard_lvgl_input.h"
+#include "cp0_keyboard_queue.h"
+#include <atomic>
+#endif
+
 #include <chrono>
 #include <cerrno>
 #include <condition_variable>
@@ -47,6 +53,16 @@ void post_lvgl_semaphore()
     sem_post(&lvgl_sem);
 #endif
 }
+
+#if !defined(HAL_PLATFORM_SDL)
+std::atomic<bool> keyboard_pending{false};
+
+void wake_for_keyboard()
+{
+    keyboard_pending.store(true, std::memory_order_release);
+    post_lvgl_semaphore();
+}
+#endif
 
 void resume_cb(void *)
 {
@@ -173,6 +189,10 @@ int cp0_lvgl_run(Cp0LvglRunOptions options)
     auto cleanup = [&](bool teardown) {
         if (cleaned_up) return false;
         cleaned_up = true;
+#if !defined(HAL_PLATFORM_SDL)
+        if (options.wake_on_keyboard_input)
+            cp0_keyboard_queue_set_wake_callback(nullptr);
+#endif
 
         bool teardown_failed = false;
         if (teardown && options.teardown) {
@@ -225,7 +245,19 @@ int cp0_lvgl_run(Cp0LvglRunOptions options)
         lv_obj_invalidate(lv_screen_active());
         lv_refr_now(nullptr);
 
+#if !defined(HAL_PLATFORM_SDL)
+        if (options.wake_on_keyboard_input) {
+            keyboard_pending.store(true, std::memory_order_relaxed);
+            cp0_keyboard_queue_set_wake_callback(wake_for_keyboard);
+        }
+#endif
+
         while (!options.should_quit || !options.should_quit()) {
+#if !defined(HAL_PLATFORM_SDL)
+            if (options.wake_on_keyboard_input &&
+                keyboard_pending.exchange(false, std::memory_order_acquire))
+                cp0_keyboard_dispatch_pending();
+#endif
             uint32_t milliseconds = lv_timer_handler();
             if (options.should_quit && options.should_quit())
                 break;

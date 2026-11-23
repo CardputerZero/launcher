@@ -12,6 +12,7 @@
 #include <stdlib.h>
 
 static pthread_once_t queue_once = PTHREAD_ONCE_INIT;
+static void (*wake_callback)(void);
 
 static void initialize_queue(void)
 {
@@ -21,6 +22,13 @@ static void initialize_queue(void)
 void cp0_keyboard_queue_init(void)
 {
     pthread_once(&queue_once, initialize_queue);
+}
+
+void cp0_keyboard_queue_set_wake_callback(void (*callback)(void))
+{
+    pthread_mutex_lock(&keyboard_mutex);
+    wake_callback = callback;
+    pthread_mutex_unlock(&keyboard_mutex);
 }
 
 int cp0_keyboard_queue_push(const struct key_item *item)
@@ -37,8 +45,10 @@ int cp0_keyboard_queue_push(const struct key_item *item)
         return 0;
     }
     pthread_mutex_lock(&keyboard_mutex);
+    void (*notify)(void) = STAILQ_EMPTY(&keyboard_queue) ? wake_callback : NULL;
     STAILQ_INSERT_TAIL(&keyboard_queue, copy, entries);
     pthread_mutex_unlock(&keyboard_mutex);
+    if (notify) notify();
     return 0;
 }
 
