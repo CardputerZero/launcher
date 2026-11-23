@@ -90,7 +90,7 @@ def test_selected_title_bounces_and_inactive_titles_use_dots():
     factory_start = SOURCE.index("lv_obj_t *create_carousel_title")
     factory_end = SOURCE.index("lv_obj_t *create_carousel_arrow", factory_start)
     factory = SOURCE[factory_start:factory_end]
-    assert "apply_title_overflow(title, false)" in factory
+    assert "set_title_text(title, text)" in factory
     assert "LV_LABEL_LONG_SCROLL_CIRCULAR" not in factory
     assert "LV_LABEL_LONG_SCROLL_CIRCULAR" not in LAUNCH_PAGE
 
@@ -98,12 +98,14 @@ def test_selected_title_bounces_and_inactive_titles_use_dots():
     assert "lv_anim_set_delay(&anim, kTitleScrollPauseMs)" in ANIMATION
     assert "lv_anim_set_reverse_delay(&anim, kTitleScrollPauseMs)" in ANIMATION
     assert "lv_anim_set_repeat_delay(&anim, kTitleScrollPauseMs)" in ANIMATION
-    assert "selected ? LV_LABEL_LONG_SCROLL : LV_LABEL_LONG_DOT" in ANIMATION
+    assert "selected ? LV_LABEL_LONG_MODE_SCROLL : LV_LABEL_LONG_MODE_CLIP" in ANIMATION
+    assert "LV_LABEL_LONG_DOT" not in ANIMATION
+    assert "lv_label_set_text(label, visible.c_str())" in ANIMATION
     assert "lv_obj_set_height(label, line)" in ANIMATION
     assert "apply_title_overflow(carousel_elements_[kTitleCenter], true)" in SOURCE
     assert LAUNCH_PAGE.count("apply_title_overflow(label(kCardCenter), true)") == 3
     assert LAUNCH_PAGE.count(
-        "apply_title_overflow(carousel_elements_[i], i == kTitleCenter)") == 1
+        "snap_label_to_slot(carousel_elements_[i], static_cast<int>(i), i == kTitleCenter)") == 1
 
 
 def test_carousel_refresh_clears_slots_when_the_app_list_is_empty():

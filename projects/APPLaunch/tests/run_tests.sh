@@ -303,3 +303,16 @@ ${CXX:-g++} -std=c++17 -fno-access-control -pthread \
     "$test_root/bluetooth_ui/test_bluetooth_ui.cpp" \
     "$@" -lm $sdl_libs -o "$bluetooth_build_dir/test_bluetooth_ui"
 "$bluetooth_build_dir/test_bluetooth_ui"
+
+# Carousel titles must not rewrite label->text in place (LVGL dots mode).
+title_clip_dir="$build_dir/title_clip_ui"
+mkdir -p "$title_clip_dir"
+${CXX:-g++} -std=c++17 -pthread \
+    -DLV_CONF_INCLUDE_SIMPLE -DLV_KCONFIG_IGNORE \
+    -I"$test_root/low_battery_ui" -I"$lvgl_root/.." -I"$lvgl_root" \
+    -I"$test_root/../main/ui" -I"$test_root/../main/ui/animation" \
+    $sdl_cflags \
+    "$test_root/../main/ui/animation/ui_launcher_animation.cpp" \
+    "$test_root/title_clip_ui/test_title_clip.cpp" \
+    "$@" -lm $sdl_libs -o "$title_clip_dir/test_title_clip"
+"$title_clip_dir/test_title_clip"

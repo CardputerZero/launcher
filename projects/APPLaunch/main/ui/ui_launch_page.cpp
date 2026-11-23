@@ -74,7 +74,7 @@ static void snap_panel_to_slot(lv_obj_t *panel, int slot)
 // Force the label to the specified slot
 // ============================================================
 
-static void snap_label_to_slot(lv_obj_t *label, int slot)
+static void snap_label_to_slot(lv_obj_t *label, int slot, bool selected = false)
 {
     const Slot &layout = kSlots[slot];
     lv_obj_set_x(label, layout.x);
@@ -84,10 +84,7 @@ static void snap_label_to_slot(lv_obj_t *label, int slot)
     // Label slots are 5..9; corresponding card slots are 0..4.
     const int card_w = kSlots[slot - launcher_carousel_layout::kTitleOffset].width;
     lv_obj_set_width(label, card_w > 0 ? card_w : LV_SIZE_CONTENT);
-    // Width follows the destination slot immediately, but the bounce belongs
-    // to whichever widget ends up selected after the carousel rotates.
-    launcher_home_animation::apply_title_overflow(label, false);
-    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN | LV_STATE_DEFAULT);
+    launcher_home_animation::apply_title_overflow(label, selected);
 
     if (layout.hidden)
     {
@@ -354,8 +351,7 @@ void UILaunchPage::finish_switch_animation()
     for (size_t i = launcher_carousel_layout::kTitleOffset;
          i < launcher_carousel_layout::kElementCount; ++i)
     {
-        snap_label_to_slot(carousel_elements_[i], static_cast<int>(i));
-        launcher_home_animation::apply_title_overflow(carousel_elements_[i], i == kTitleCenter);
+        snap_label_to_slot(carousel_elements_[i], static_cast<int>(i), i == kTitleCenter);
     }
 
     navigation_.finish_navigation();
