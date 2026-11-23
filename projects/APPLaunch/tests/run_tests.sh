@@ -19,7 +19,6 @@ python3 "$test_root/test_settings_software_page_contract.py"
 python3 "$test_root/test_static_resource_staging.py"
 python3 "$test_root/test_lockscreen_contract.py"
 python3 "$test_root/test_home_icon_fallback_contract.py"
-python3 "$test_root/test_sample_files_install_once.py"
 PYTHONPATH="$test_root/..${PYTHONPATH:+:$PYTHONPATH}" \
     python3 "$test_root/test_config_default_file.py"
 build_dir="${TMPDIR:-/tmp}/applaunch-tests"

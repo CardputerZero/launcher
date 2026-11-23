@@ -18,6 +18,21 @@ std::string command_error(const char *step, const HandoffCommandResult &result)
 
 }  // namespace
 
+std::string install_sample_files(const std::string &user,
+                                 const HandoffCommandRunner &run)
+{
+    HandoffCommandResult result = run(
+        {"runuser", "-u", user, "--", "sh", "-c",
+         "[ ! -e /var/template.zip ] || "
+         "unzip -nq /var/template.zip -d \"$HOME/Downloads\""});
+    if (result.code != 0)
+        return command_error("Failed to copy the sample files", result);
+    result = run({"rm", "-f", "/var/template.zip"});
+    return result.code == 0
+        ? std::string()
+        : command_error("Failed to remove /var/template.zip", result);
+}
+
 std::string enable_applaunch_after_reboot(const std::string &user,
                                           unsigned int uid,
                                           const HandoffCommandRunner &run)

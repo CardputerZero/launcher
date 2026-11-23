@@ -809,14 +809,23 @@ std::string configure_desktop_startup(const std::string &user)
     return warning;
 }
 
+HandoffCommandResult run_handoff_command(const std::vector<std::string> &args)
+{
+    CommandResult result = run_command(args);
+    return HandoffCommandResult{result.code, result.output};
+}
+
+void install_sample_files_best_effort(const std::string &user)
+{
+    const std::string warning = install_sample_files(user, run_handoff_command);
+    if (!warning.empty())
+        fprintf(stderr, "LaunchWizard: %s\n", warning.c_str());
+}
+
 std::string enable_applaunch_service(const std::string &user, unsigned int uid)
 {
-    return enable_applaunch_after_reboot(
-        user, uid,
-        [](const std::vector<std::string> &args) {
-            CommandResult result = run_command(args);
-            return HandoffCommandResult{result.code, result.output};
-        });
+    install_sample_files_best_effort(user);
+    return enable_applaunch_after_reboot(user, uid, run_handoff_command);
 }
 
 // ---------------------------------------------------------------------------
@@ -1491,11 +1500,9 @@ int launch_wizard::WizardService::finish_configured_system()
         return 1;
     }
 
-    std::string service_warning = handoff_to_applaunch(
-        user, kDefaultUserUid, [](const std::vector<std::string> &args) {
-            CommandResult result = run_command(args);
-            return HandoffCommandResult{result.code, result.output};
-        });
+    install_sample_files_best_effort(user);
+    std::string service_warning =
+        handoff_to_applaunch(user, kDefaultUserUid, run_handoff_command);
     if (!service_warning.empty()) {
         fprintf(stderr, "LaunchWizard: %s\n", service_warning.c_str());
         return 1;

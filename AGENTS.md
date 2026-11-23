@@ -203,7 +203,6 @@ Release pipeline (local equivalent): `scripts/build_cardputerzero_release_local.
 
 ```
 main/src/main.cpp  main()
-  ├─ system(bash_init)                    # unzip /var/template.zip → ~/Downloads, once per user
   ├─ options.after_resource_init          # backlight to 0 → restore previous brightness
   ├─ options.setup   → launcher_ui::init() [ui/ui.cpp:36] + ui_screensaver_init()
   └─ cp0_lvgl_run(options)                # ★ the real main loop
