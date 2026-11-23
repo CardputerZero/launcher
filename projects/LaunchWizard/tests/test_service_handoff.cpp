@@ -116,5 +116,32 @@ bool test_service_handoff()
     expect(error.find("APPLaunch is active") != std::string::npos,
            "Wizard stop failure did not preserve handoff state in its diagnostic");
 
+    calls.clear();
+    error = install_sample_files(
+        "cardputer", [&calls](const std::vector<std::string> &args) {
+            calls.push_back(joined(args));
+            return HandoffCommandResult{};
+        });
+    expect(error.empty(), "sample file install returned an error");
+    expect(calls.size() == 2, "sample file install did not extract and then delete");
+    if (calls.size() == 2) {
+        expect(calls[0].rfind("runuser -u cardputer -- sh -c ", 0) == 0,
+               "samples were not extracted as the configured user");
+        expect(calls[0].find("unzip -nq /var/template.zip") != std::string::npos,
+               "samples were not extracted without overwriting");
+        expect(calls[1] == "rm -f /var/template.zip",
+               "template.zip was not deleted after extraction");
+    }
+
+    calls.clear();
+    error = install_sample_files(
+        "cardputer", [&calls](const std::vector<std::string> &args) {
+            calls.push_back(joined(args));
+            return HandoffCommandResult{1, "injected unzip failure"};
+        });
+    expect(error.find("injected unzip failure") != std::string::npos,
+           "sample extraction failure discarded diagnostics");
+    expect(calls.size() == 1, "template.zip was deleted after a failed extraction");
+
     return passed;
 }

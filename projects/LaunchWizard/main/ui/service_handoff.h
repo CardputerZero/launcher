@@ -32,6 +32,13 @@ std::string enable_applaunch_after_reboot(const std::string &user,
 std::string handoff_to_applaunch(const std::string &user, unsigned int uid,
                                  const HandoffCommandRunner &run);
 
+// Copies the image's sample files into the user's ~/Downloads, then deletes
+// /var/template.zip so this happens exactly once per image. The zip is deleted
+// only after a successful extraction; nothing here blocks the handoff, so the
+// caller only logs a returned warning.
+std::string install_sample_files(const std::string &user,
+                                 const HandoffCommandRunner &run);
+
 }  // namespace launch_wizard
 
 #endif

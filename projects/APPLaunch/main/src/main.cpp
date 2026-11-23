@@ -20,11 +20,8 @@
 #include "backward.h"
 #endif
 
-const char *bash_init = "if [ ! -f ~/Downloads/hello.md ] ; then unzip /var/template.zip -d ~/Downloads/ ; sync ; fi";
-
 int main(void)
 {
-    system(bash_init);
     Cp0LvglRunOptions options;
     options.wake_on_keyboard_input = true;
     options.after_resource_init = []() {
