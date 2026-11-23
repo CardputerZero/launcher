@@ -28,25 +28,32 @@ inline const lv_font_t *mono(uint16_t size,
     return cp0_fonts().get_mono("JetBrainsMono-Regular.ttf", size, style);
 }
 
+inline lv_font_t *cjk(const char *noto_name, const char *dejavu_name, uint16_t size,
+                      lv_freetype_font_style_t style = LV_FREETYPE_FONT_STYLE_NORMAL)
+{
+    auto &fonts = cp0_fonts();
+    const lv_font_t *bitmap = fonts.fallback(size);
+    constexpr auto render = LV_FREETYPE_FONT_RENDER_MODE_BITMAP;
+    auto *alibaba = fonts.get("AlibabaPuHuiTi-3-55-Regular.ttf", size, style);
+    auto *dejavu = fonts.get(dejavu_name, size, style, render,
+                             alibaba == bitmap ? nullptr : alibaba,
+                             Cp0FontService::GlyphRange::LatinExtendedA);
+    auto *fallback = dejavu == bitmap ? alibaba : dejavu;
+    auto *noto = fonts.get(noto_name, size, style, render,
+                           fallback == bitmap ? nullptr : fallback);
+    return noto == bitmap ? fallback : noto;
+}
+
 inline const lv_font_t *cjk_sans(uint16_t size,
                                  lv_freetype_font_style_t style = LV_FREETYPE_FONT_STYLE_NORMAL)
 {
-    auto &fonts = cp0_fonts();
-    const lv_font_t *dejavu = sans(size, style);
-    const lv_font_t *bitmap = fonts.fallback(size);
-    const lv_font_t *noto = fonts.get("NotoSansCJK-Regular.ttc", size, style,
-                                     LV_FREETYPE_FONT_RENDER_MODE_BITMAP,
-                                     dejavu == bitmap ? nullptr : dejavu);
-    return noto == bitmap ? dejavu : noto;
+    return cjk("NotoSansCJK-Regular.ttc", "DejaVuSans.ttf", size, style);
 }
 
 inline const lv_font_t *cjk_serif(uint16_t size,
                                   lv_freetype_font_style_t style = LV_FREETYPE_FONT_STYLE_NORMAL)
 {
-    const lv_font_t *font = cp0_fonts().get("NotoSerifCJK-Regular.ttc", size, style);
-    if (font == cp0_fonts().fallback(size))
-        font = cp0_fonts().get("AlibabaPuHuiTi-3-55-Regular.ttf", size, style);
-    return font;
+    return cjk("NotoSerifCJK-Regular.ttc", "DejaVuSerif.ttf", size, style);
 }
 
 } // namespace settings_fonts

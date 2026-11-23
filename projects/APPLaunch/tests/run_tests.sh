@@ -272,15 +272,17 @@ ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     -o "$build_dir/test_terminal_unicode"
 "$build_dir/test_terminal_unicode"
 
-# Exercise the real Bluetooth page and LVGL event dispatch on the host.
+# Exercise font fallback and the Bluetooth page with real LVGL on the host.
 repo_root=$(CDPATH= cd -- "$test_root/../../.." && pwd)
-lvgl_root="$repo_root/SDK/github_source/lvgl/lvgl_9_5/lvgl"
+lvgl_root="${LVGL_ROOT:-$repo_root/SDK/github_source/lvgl/lvgl_9_5/lvgl}"
 bluetooth_build_dir="$build_dir/bluetooth_ui"
 mkdir -p "$bluetooth_build_dir"
-sdl_cflags=$(pkg-config --cflags sdl2)
-sdl_libs=$(pkg-config --libs sdl2)
+sdl_cflags=$(pkg-config --cflags sdl2 freetype2)
+sdl_cflags="$sdl_cflags -DLV_USE_FREETYPE=1 -DLV_FONT_MONTSERRAT_12=1"
+sdl_libs=$(pkg-config --libs sdl2 freetype2)
 find "$lvgl_root/src" -type f -name '*.c' -print > "$bluetooth_build_dir/lvgl_sources"
 printf '%s\n' "$repo_root"/ext_components/cp0_lvgl/src/cp0_montserrat_medium_latin_*.c \
+    "$test_root/../main/ui/launcher_montserrat_bold_latin_16.c" \
     >> "$bluetooth_build_dir/lvgl_sources"
 set --
 while IFS= read -r source; do
@@ -293,6 +295,25 @@ while IFS= read -r source; do
         $sdl_cflags -c "$source" -o "$object"
     set -- "$@" "$object"
 done < "$bluetooth_build_dir/lvgl_sources"
+
+gc_sections_flag="-Wl,--gc-sections"
+if [ "$(uname -s)" = "Darwin" ]; then
+    gc_sections_flag="-Wl,-dead_strip"
+fi
+${CXX:-g++} -std=c++17 -pthread -ffunction-sections "$gc_sections_flag" \
+    -DLV_CONF_INCLUDE_SIMPLE -DLV_KCONFIG_IGNORE \
+    -I"$test_root/low_battery_ui" -I"$lvgl_root/.." -I"$lvgl_root" \
+    -I"$repo_root/ext_components/cp0_lvgl/include" \
+    -I"$test_root/../main/include" -I"$test_root/../main/ui" \
+    -I"$repo_root/SDK/github_source/eventpp/include" \
+    -I"$repo_root/SDK/components/utilities/include" \
+    $sdl_cflags \
+    "$repo_root/ext_components/cp0_lvgl/src/cp0_font_service.cpp" \
+    "$test_root/../main/ui/ui_launch_page_carousel_view.cpp" \
+    "$test_root/test_font_fallbacks.cpp" \
+    "$@" -lm $sdl_libs -o "$bluetooth_build_dir/test_font_fallbacks"
+"$bluetooth_build_dir/test_font_fallbacks" "$test_root/../APPLaunch/share/font"
+
 ${CXX:-g++} -std=c++17 -fno-access-control -pthread \
     -DLV_CONF_INCLUDE_SIMPLE -DLV_KCONFIG_IGNORE \
     -I"$test_root/low_battery_ui" -I"$lvgl_root/.." -I"$lvgl_root" \

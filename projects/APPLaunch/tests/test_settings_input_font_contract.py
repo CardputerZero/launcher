@@ -46,9 +46,7 @@ def test_editors_use_regular_bitmap_freetype_style():
         SETTINGS_FONTS, "inline const lv_font_t *cjk_sans"
     )
     assert "LV_FREETYPE_FONT_STYLE_NORMAL" in cjk_sans
-    assert '"NotoSansCJK-Regular.ttc"' in cjk_sans
-    assert "sans(size, style)" in cjk_sans
-    assert "Alibaba" not in cjk_sans
+    assert 'return cjk("NotoSansCJK-Regular.ttc", "DejaVuSans.ttf", size, style);' in cjk_sans
 
     get_start = FONT_SERVICE.index("lv_font_t *get(")
     get_declaration = FONT_SERVICE[

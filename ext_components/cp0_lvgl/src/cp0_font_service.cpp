@@ -52,22 +52,32 @@ Cp0FontService::~Cp0FontService()
 lv_font_t *Cp0FontService::get(const char *font_name, uint16_t size,
                                lv_freetype_font_style_t style,
                                lv_freetype_font_render_mode_t render_mode,
-                               const lv_font_t *glyph_fallback)
+                               const lv_font_t *glyph_fallback, GlyphRange glyph_range)
 {
 #if LV_USE_FREETYPE
     std::lock_guard<std::mutex> lock(mutex_);
     const std::string path = resolve_path(font_name);
     if (path.empty()) return fallback(size);
 
-    const std::string font_key = key(path, size, style, render_mode, glyph_fallback);
+    const std::string font_key = key(path, size, style, render_mode, glyph_fallback, glyph_range);
     const auto found = fonts_.find(font_key);
-    if (found != fonts_.end()) return found->second ? found->second : fallback(size);
+    if (found != fonts_.end()) return found->second.font;
 
     lv_font_t *font = lv_freetype_font_create(path.c_str(), render_mode, size, style);
     if (!cp0::font::should_cache(font)) return fallback(size);
     if (glyph_fallback) set_glyph_fallback(*font, *glyph_fallback);
     try {
-        fonts_.emplace(font_key, font);
+        auto entry = fonts_.emplace(font_key, CachedFont{font, font->get_glyph_dsc}).first;
+        if (glyph_range == GlyphRange::LatinExtendedA) {
+            // The cached callback's address stays valid across rehashes.
+            font->user_data = &entry->second.get_glyph_dsc;
+            font->get_glyph_dsc = [](const lv_font_t *face, lv_font_glyph_dsc_t *dsc,
+                                     uint32_t letter, uint32_t next) {
+                if (letter < 0x0100 || letter > 0x017F) return false;
+                const auto get_glyph_dsc = *static_cast<const GlyphCallback *>(face->user_data);
+                return get_glyph_dsc(face, dsc, letter, next);
+            };
+        }
     } catch (...) {
         lv_freetype_font_delete(font);
         return fallback(size);
@@ -78,6 +88,7 @@ lv_font_t *Cp0FontService::get(const char *font_name, uint16_t size,
     (void)style;
     (void)render_mode;
     (void)glyph_fallback;
+    (void)glyph_range;
     return fallback(size);
 #endif
 }
@@ -107,12 +118,13 @@ std::string Cp0FontService::resolve_path(const char *font_name)
 std::string Cp0FontService::key(const std::string &path, uint16_t size,
                                 lv_freetype_font_style_t style,
                                 lv_freetype_font_render_mode_t render_mode,
-                                const lv_font_t *glyph_fallback)
+                                const lv_font_t *glyph_fallback, GlyphRange glyph_range)
 {
     return path + "#" + std::to_string(size) + "#" +
            std::to_string(static_cast<int>(style)) + "#" +
            std::to_string(static_cast<int>(render_mode)) + "#" +
-           std::to_string(reinterpret_cast<std::uintptr_t>(glyph_fallback));
+           std::to_string(reinterpret_cast<std::uintptr_t>(glyph_fallback)) +
+           (glyph_range == GlyphRange::LatinExtendedA ? "#latin-extended-a" : "");
 }
 #endif
 
@@ -143,7 +155,7 @@ void Cp0FontService::release()
 #if LV_USE_FREETYPE
     std::lock_guard<std::mutex> lock(mutex_);
     for (auto &font : fonts_) {
-        if (font.second) lv_freetype_font_delete(font.second);
+        lv_freetype_font_delete(font.second.font);
     }
     fonts_.clear();
 #endif

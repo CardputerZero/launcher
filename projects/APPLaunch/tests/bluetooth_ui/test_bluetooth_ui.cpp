@@ -6,6 +6,7 @@
 #include <chrono>
 #include <thread>
 
+decltype(cp0_signal_filesystem_api) cp0_signal_filesystem_api;
 decltype(cp0_signal_bt_api) cp0_signal_bt_api;
 decltype(cp0_signal_bt_agent) cp0_signal_bt_agent;
 volatile uint32_t LV_EVENT_KEYBOARD = 0;
