@@ -10,4 +10,8 @@
 #define LV_USE_LODEPNG 1
 #define LV_USE_FS_STDIO 1
 #define LV_FS_STDIO_LETTER 'A'
+/* Mirror the device configuration (CONFIG_V9_5_LV_FS_DEFAULT_DRIVER_LETTER=65):
+ * unlettered paths, including a per-user wallpaper loaded from /home, use the
+ * same POSIX/STDIO driver as the packaged assets. */
+#define LV_FS_DEFAULT_DRIVER_LETTER 'A'
 #endif
