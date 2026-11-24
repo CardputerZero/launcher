@@ -202,6 +202,12 @@ ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
 "$build_dir/test_lockscreen_state_model"
 ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     -I"$test_root/../../../ext_components/cp0_lvgl/include" \
+    "$test_root/test_lockscreen_wallpaper.cpp" \
+    "$test_root/../main/ui/model/lockscreen_wallpaper.cpp" \
+    -o "$build_dir/test_lockscreen_wallpaper"
+"$build_dir/test_lockscreen_wallpaper"
+${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
+    -I"$test_root/../../../ext_components/cp0_lvgl/include" \
     "$test_root/test_esc_hold_lifecycle_model.cpp" \
     "$test_root/../main/ui/model/esc_hold_lifecycle_model.cpp" \
     -o "$build_dir/test_esc_hold_lifecycle_model"

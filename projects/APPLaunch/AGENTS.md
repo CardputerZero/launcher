@@ -239,6 +239,17 @@ its black-backed yellow unlock hint is a top-layer sibling over the title.
 Cache and own the decoded wallpaper buffer until teardown. Animate exit using
 the stored panel rectangle, not potentially stale LVGL layout geometry.
 
+The wallpaper is `share/images/lockscreen.png` unless the per-user override
+`~/.config/APPLaunch/config.json` contains
+`{"lockscreen_wallpaper": "<absolute, ~/ or config-relative path>"}`. That file
+is separate from the shared settings in
+`~/.config/cardputerzero/config.json`; `model/lockscreen_wallpaper.*` owns the
+path/JSON policy (pure, unit-tested in `tests/test_lockscreen_wallpaper.cpp`).
+Resolve it once while the lock screen initializes. A missing file, bad JSON, a
+missing/unreadable entry, or an image that fails to decode (or exceeds
+`lockscreen_wallpaper::kMaxPixels`) must fall back to the packaged asset — never
+leave the overlay without a wallpaper, and never re-read the file per lock entry.
+
 Keep `lock.mp3`, `select.mp3`, `blocked.mp3`, and `unlock.mp3` in `share/audio/`.
 Register them with `RegisterSystemSounds` and play them via
 `cp0_signal_system_play`, preserving the platform's startup/switch/enter slots.

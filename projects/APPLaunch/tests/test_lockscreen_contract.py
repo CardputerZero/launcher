@@ -93,6 +93,11 @@ assert "Press TAB to unlock" in SOURCE
 assert "Press ENTER to unlock" in SOURCE
 assert "show_hint(" in SOURCE and "hide_hint()" in SOURCE
 assert 'launcher_platform::path("lockscreen.png")' in SOURCE
+# The packaged asset stays the fallback; an optional per-user override from
+# ~/.config/APPLaunch/config.json is resolved before the cache is filled.
+assert "lockscreen_wallpaper::config_file_path" in SOURCE
+assert "lockscreen_wallpaper::choose" in SOURCE
+assert "prepare_lockscreen_background()" in SOURCE
 assert "lv_draw_buf_dup(decoder.decoded)" in SOURCE
 assert "panel.black ? nullptr : s_background_cache.image()" in SOURCE
 

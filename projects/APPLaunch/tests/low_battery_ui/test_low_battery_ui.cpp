@@ -47,6 +47,12 @@ static int backlight_suspends;
 static int backlight_restores;
 static bool fail_backlight_write;
 static std::string screensaver_timeout = "0";
+/* The lock screen reads its per-user wallpaper override through the filesystem
+ * API.  An empty text means "no override file"; exists_path is the only path
+ * the harness reports as readable. */
+static std::string wallpaper_config_text;
+static std::string wallpaper_exists_path;
+static int wallpaper_config_reads;
 
 decltype(cp0_signal_config_api) cp0_signal_config_api;
 decltype(cp0_signal_audio_api) cp0_signal_audio_api;
@@ -391,6 +397,14 @@ static void test_background_cache()
     assert(!cache.load(TEST_LOCKSCREEN_BACKGROUND));
     cache.reset();
     assert(cache.load(TEST_LOCKSCREEN_BACKGROUND));
+
+    // The pixel cap rejects an oversized source from its header alone; the
+    // exact boundary still decodes.
+    LockscreenBackgroundCache capped;
+    assert(!capped.load(TEST_CUSTOM_WALLPAPER, 100ull * 99ull));
+    capped.reset();
+    assert(capped.load(TEST_CUSTOM_WALLPAPER, 100ull * 100ull));
+    assert(capped.image()->header.w == 100 && capped.image()->header.h == 100);
 }
 
 static void test_unlock_restarts_idle_timeout()
@@ -682,6 +696,52 @@ static void test_low_battery_sounds_rearm_while_locked()
     shutdown_warning();
 }
 
+/* The optional ~/.config/APPLaunch/config.json entry replaces the packaged
+ * wallpaper; anything unreadable or undecodable keeps lockscreen.png. */
+static void test_wallpaper_override()
+{
+    const int reads_before = wallpaper_config_reads;
+
+    wallpaper_exists_path = TEST_CUSTOM_WALLPAPER;
+    wallpaper_config_text = std::string("{\"lockscreen_wallpaper\": \"") +
+                            TEST_CUSTOM_WALLPAPER + "\"}";
+    ui_screensaver_init();
+    assert(wallpaper_config_reads > reads_before);
+    assert(s_background_cache.image());
+    assert(s_background_cache.image()->header.w == 100);
+    assert(s_background_cache.image()->header.h == 100);
+    ui_screensaver_deinit();
+
+    /* A configured path the filesystem reports as unreadable keeps the
+     * packaged wallpaper and is still reported for logging. */
+    wallpaper_exists_path = "/some-other-wallpaper.png";
+    wallpaper_config_text =
+        "{\"lockscreen_wallpaper\": \"/missing-custom-wallpaper.png\"}";
+    ui_screensaver_init();
+    assert(s_background_cache.image());
+    assert(s_background_cache.image()->header.w == 320);
+    assert(s_background_cache.image()->header.h == 150);
+    ui_screensaver_deinit();
+
+    /* A readable path that cannot be decoded falls back the same way. */
+    wallpaper_exists_path = "/missing-custom-wallpaper.png";
+    ui_screensaver_init();
+    assert(s_background_cache.image());
+    assert(s_background_cache.image()->header.w == 320);
+    assert(s_background_cache.image()->header.h == 150);
+    ui_screensaver_deinit();
+
+    /* A malformed file is ignored the same way. */
+    wallpaper_config_text = "not json";
+    ui_screensaver_init();
+    assert(s_background_cache.image());
+    assert(s_background_cache.image()->header.w == 320);
+    ui_screensaver_deinit();
+
+    wallpaper_config_text.clear();
+    wallpaper_exists_path.clear();
+}
+
 int main()
 {
     using namespace launcher_battery_ui;
@@ -700,7 +760,24 @@ int main()
         if (reply) reply(0, "");
     });
     cp0_signal_system_play.append([](std::string asset) { played_sounds.push_back(asset); });
-    cp0_signal_filesystem_api.append([](std::list<std::string> arguments, std::function<void(int, std::string)> reply) {
+    cp0_signal_filesystem_api.append([](std::list<std::string> arguments,
+                                        std::function<void(int, std::string)> reply) {
+        assert(!arguments.empty());
+        const std::string command = arguments.front();
+        if (command == "ReadFile") {
+            ++wallpaper_config_reads;
+            if (reply) {
+                if (wallpaper_config_text.empty()) reply(-1, "");
+                else reply(0, wallpaper_config_text);
+            }
+            return;
+        }
+        if (command == "Exists") {
+            const bool exists = arguments.size() >= 2 &&
+                                *std::next(arguments.begin()) == wallpaper_exists_path;
+            if (reply) reply(0, exists ? "1" : "0");
+            return;
+        }
         if (reply) reply(0, arguments.back() == "lockscreen.png"
                                ? TEST_LOCKSCREEN_BACKGROUND : "/missing-screensaver-test-image.png");
     });
@@ -844,6 +921,7 @@ int main()
     test_low_battery_sounds_respect_lockscreen();
     test_low_battery_sounds_rearm_while_locked();
     ui_screensaver_deinit();
+    test_wallpaper_override();
     cp0_keyboard_set_key_filter(nullptr);
     lv_display_delete(display);
     lv_deinit();

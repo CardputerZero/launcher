@@ -57,6 +57,7 @@ trap cleanup EXIT
 common_flags=(
     -DLV_CONF_INCLUDE_SIMPLE -DLV_KCONFIG_IGNORE
     "-DTEST_LOCKSCREEN_BACKGROUND=\"A:$project/APPLaunch/share/images/lockscreen.png\""
+    "-DTEST_CUSTOM_WALLPAPER=\"$project/APPLaunch/share/images/setting_100.png\""
     "-I$test_dir" "-I$lvgl/.." "-I$lvgl" "-I$component/include"
     "-I$project/main/include" "-I$root/SDK/github_source/eventpp/include"
     "-I$root/SDK/components/utilities/include"
@@ -92,6 +93,7 @@ for name in cp0_keyboard_queue cp0_keyboard_text cp0_esc_state; do
     compile "$component/src/$name.c" "$object"
 done
 for name in model/screensaver_model.cpp \
+            model/lockscreen_wallpaper.cpp \
             launcher_media_controls.cpp model/launcher_media_model.cpp \
             model/setup_value_policy.cpp; do
     object="$build_dir/ui/$name.o"

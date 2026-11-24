@@ -17,11 +17,14 @@
 #include "lvgl/lvgl.h"
 #include "lvgl/src/draw/lv_image_decoder_private.h"
 #include "model/lockscreen_state_model.hpp"
+#include "model/lockscreen_wallpaper.hpp"
 #include "model/screensaver_model.hpp"
 #include "model/screensaver_runtime_contract.hpp"
+#include "sample_log.h"
 #include "ui_app_page.hpp"
 
 #include <algorithm>
+#include <cstdint>
 #include <future>
 #include <string>
 #include <utility>
@@ -42,14 +45,25 @@ public:
     LockscreenBackgroundCache &operator=(const LockscreenBackgroundCache &) = delete;
     ~LockscreenBackgroundCache() { reset(); }
 
-    bool load(const std::string &path)
+    /* max_pixels is 0 for the packaged wallpaper; a per-user override is held
+     * to a bounded source size so a full-resolution photo cannot exhaust the
+     * device.  The header is checked before the decoder allocates pixels. */
+    bool load(const std::string &path, uint64_t max_pixels = 0)
     {
         if (attempted_) return buffer_ != nullptr;
         attempted_ = true;
+        if (path.empty()) return false;
+        if (max_pixels > 0) {
+            lv_image_header_t header{};
+            if (lv_image_decoder_get_info(path.c_str(), &header) != LV_RESULT_OK)
+                return false;
+            if (static_cast<uint64_t>(header.w) * header.h > max_pixels)
+                return false;
+        }
         lv_image_decoder_dsc_t decoder{};
         lv_image_decoder_args_t args{};
         args.no_cache = true;
-        if (path.empty() || lv_image_decoder_open(&decoder, path.c_str(), &args) != LV_RESULT_OK)
+        if (lv_image_decoder_open(&decoder, path.c_str(), &args) != LV_RESULT_OK)
             return false;
         if (decoder.decoded)
             buffer_ = lv_draw_buf_dup(decoder.decoded);
@@ -59,6 +73,10 @@ public:
     }
 
     const lv_image_dsc_t *image() const { return buffer_ ? &image_ : nullptr; }
+
+    /* The wallpaper is resolved once per process; this keeps a failed decode
+     * from being retried on every lock entry. */
+    bool attempted() const { return attempted_; }
 
     void reset()
     {
@@ -88,6 +106,73 @@ LockscreenBackgroundCache s_background_cache;
 /* Raw backlight value captured when the panel is forced dark, or -1 while the
  * backlight is under normal control. */
 int s_screen_off_backlight_raw = -1;
+
+/* ---- per-user wallpaper override ---------------------------------------
+ * The optional ~/.config/APPLaunch/config.json entry replaces the packaged
+ * lockscreen.png.  It is read while the launcher starts; edits take effect on
+ * the next start.  Every failure mode (no file, bad JSON, missing entry,
+ * unreadable path, undecodable image) falls back to the packaged asset. */
+std::string read_wallpaper_config(const std::string &path)
+{
+    std::string text;
+    if (path.empty()) return text;
+    cp0_signal_filesystem_api(
+        {"ReadFile", path, std::to_string(lockscreen_wallpaper::kMaxConfigBytes)},
+        [&](int code, std::string data) {
+            if (code == 0) text = std::move(data);
+        });
+    return text;
+}
+
+bool wallpaper_file_is_readable(const std::string &path)
+{
+    std::string answer;
+    cp0_signal_filesystem_api({"Exists", path}, [&](int code, std::string data) {
+        if (code == 0) answer = std::move(data);
+    });
+    return answer == "1";
+}
+
+lockscreen_wallpaper::Choice select_lockscreen_wallpaper(const std::string &fallback_path)
+{
+    const std::string home = lockscreen_wallpaper::home_directory();
+    const std::string config_path = lockscreen_wallpaper::config_file_path(home);
+    const lockscreen_wallpaper::Choice choice = lockscreen_wallpaper::choose(
+        read_wallpaper_config(config_path), home, wallpaper_file_is_readable,
+        fallback_path);
+
+    if (choice.status == lockscreen_wallpaper::ConfigStatus::Invalid) {
+        SLOGW("[LOCK] ignoring the unreadable wallpaper config: %s", config_path.c_str());
+    } else if (!choice.candidate.empty() && !choice.overridden) {
+        SLOGW("[LOCK] the configured wallpaper is not readable: %s (from %s)",
+              choice.candidate.c_str(), config_path.c_str());
+    }
+    return choice;
+}
+
+void prepare_lockscreen_background()
+{
+    const std::string default_path = launcher_platform::path("lockscreen.png");
+    const lockscreen_wallpaper::Choice choice =
+        select_lockscreen_wallpaper(default_path);
+
+    if (choice.overridden) {
+        if (s_background_cache.load(choice.path, lockscreen_wallpaper::kMaxPixels)) {
+            SLOGI("[LOCK] using the configured wallpaper: %s", choice.path.c_str());
+            return;
+        }
+        SLOGW("[LOCK] the configured wallpaper could not be decoded or is too large: %s",
+              choice.path.c_str());
+        /* A rejected override must never leave the lock screen without a
+         * wallpaper: drop the failed attempt and load the packaged asset. */
+        s_background_cache.reset();
+    }
+
+    if (!s_background_cache.load(default_path)) {
+        SLOGW("[LOCK] failed to decode the packaged wallpaper: %s",
+              default_path.c_str());
+    }
+}
 
 struct ScreensaverPanel
 {
@@ -382,8 +467,8 @@ void create_objects()
     if (!display)
         return;
 
-    if (!s_background_cache.image())
-        s_background_cache.load(launcher_platform::path("lockscreen.png"));
+    if (!s_background_cache.attempted())
+        prepare_lockscreen_background();
 
     if (!s_overlay) {
         lv_obj_t *parent = lv_layer_top();
