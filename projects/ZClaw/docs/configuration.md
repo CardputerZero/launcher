@@ -32,7 +32,7 @@ Setting the environment variable `CardputerZero=y` forces `linux_x86_cross_cp0_c
 
 The cross profiles use an AArch64 GNU/Linux toolchain. The macOS profile expects an `aarch64-linux-gnu-` compatible prefix. Cross builds also derive a sysroot from `ext_components/cp0_lvgl/sdk_version.txt` and the matching SDK static-library package.
 
-All profiles enable LVGL 9.5, POSIX filesystem support, FreeType, image/vector support, cp0_lvgl, Sigslot, and eventpp. The SDL2 and cross profiles additionally enable pthreads, Miniaudio, and RadioLib; the device cross profiles also enable NEON software drawing.
+All profiles enable LVGL 9.5, POSIX filesystem support, FreeType, image/vector support, cp0_lvgl, Sigslot, and eventpp. The SDL2 and cross profiles additionally enable pthreads; the device cross profiles also enable NEON software drawing.
 
 `config_defaults.mk` is not a complete runnable target by itself unless another
 configuration layer selects a display and input backend.

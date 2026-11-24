@@ -11,7 +11,6 @@ def_hal_fun(void(std::list<std::string>, std::function<void(int, std::string)>),
 def_hal_fun(void(std::list<std::string>, std::function<void(int, std::string)>), cp0_signal_pty_api)
 def_hal_fun(void(std::list<std::string>, std::function<void(int, std::string)>), cp0_signal_config_api)
 def_hal_fun(void(std::list<std::string>, std::function<void(int, std::string)>), cp0_signal_filesystem_api)
-def_hal_fun(void(std::list<std::string>, std::function<void(int, std::string)>), cp0_signal_lora_api)
 def_hal_fun(void(std::list<std::string>, std::function<void(int, std::string)>), cp0_signal_wifi_api)
 def_hal_fun(void(std::list<std::string>, std::function<void(int, std::string)>), cp0_signal_bt_api)
 // Bluetooth Agent requests are emitted by the BlueZ worker thread. Consumers

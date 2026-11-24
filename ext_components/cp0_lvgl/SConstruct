@@ -49,7 +49,6 @@ if "CONFIG_CP0_LVGL_COMPONENT_ENABLED" in os.environ or "CONFIG_SIGSLOT_COMPONEN
         'CAMERA': 'camera',
         'CONFIG': 'config',
         'FILESYSTEM': 'filesystem',
-        'LORA': 'lara',
         'OSINFO': 'osinfo',
         'PROCESS': 'process',
         'PTY': 'pty',
@@ -71,8 +70,6 @@ if "CONFIG_CP0_LVGL_COMPONENT_ENABLED" in os.environ or "CONFIG_SIGSLOT_COMPONEN
 
     if service_enabled('AUDIO'):
         REQUIREMENTS += ['Miniaudio']
-    if service_enabled('LORA'):
-        REQUIREMENTS += ['RadioLib']
 
     SRCS += Glob('src/*.c*')
     if 'CONFIG_V9_5_LV_USE_SDL' in os.environ:
@@ -106,16 +103,12 @@ if "CONFIG_CP0_LVGL_COMPONENT_ENABLED" in os.environ or "CONFIG_SIGSLOT_COMPONEN
             if 'zmq' not in REQUIREMENTS:
                 REQUIREMENTS += ['zmq']
 
-    source_selected_services = {'AUDIO', 'CAMERA', 'LORA'}
+    source_selected_services = {'AUDIO', 'CAMERA'}
     for source in platform_srcs:
         source_name = str(source).lower()
         disabled = any(token in source_name and not service_enabled(name)
                        for name, token in optional_services.items()
                        if name in source_selected_services)
-        # The LoRa implementation historically used "lara" in one filename,
-        # while the bridge service uses the correct "lora" spelling.
-        if not service_enabled('LORA') and ('lora' in source_name or 'lara' in source_name):
-            disabled = True
         if not disabled:
             SRCS.append(source)
 

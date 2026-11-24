@@ -87,29 +87,6 @@ typedef struct {
     char hostname[128];
 } cp0_account_info_t;
 
-typedef struct {
-    int initialized;
-    int hw_ready;
-    int tx_mode;
-    int tx_in_progress;
-    int has_sent_message;
-    int rx_event;
-    int tx_event;
-    char spi_device[64];
-    char last_rx[128];
-    char last_tx[128];
-    char diag[256];
-    char probe_summary[256];
-    char probe_display[128];
-    char pi4io_status[160];
-    float rssi;
-    float snr;
-} cp0_lora_info_t;
-
-/* Request cancellation of an in-flight LoRa initialization. */
-void cp0_lora_request_stop(void);
-void cp0_lora_clear_stop(void);
-
 typedef void *cp0_watcher_t;
 typedef int cp0_pid_t;
 typedef enum {

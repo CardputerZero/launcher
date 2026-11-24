@@ -6,7 +6,7 @@
 
 このリポジトリには、3 つの主要プロジェクトと、いくつかのサンプル／補助プロジェクトが含まれています。
 - **HelloWorld** - ステータスバーとシンプルな UI を表示する基本的なユーザーデモ
-- **APPLaunch** - 複数アプリのナビゲーション、LoRa 通信、オーディオ再生などの豊富な機能を備えたアプリケーションランチャー
+- **APPLaunch** - 複数アプリのナビゲーション、オーディオ再生などの豊富な機能を備えたアプリケーションランチャー
 - **ZClaw** - ガイド付きプロバイダー設定とツール承認に対応する、キーボード中心の ZeroClaw Webhook 用 LVGL チャットクライアント
 
 UI は **SquareLine Studio 1.5.0** によって生成され、ローカルデバッグ用の SDL2 シミュレーションモードと、デバイス上で実行する Linux Framebuffer モードの 2 つの表示バックエンドをサポートします。
@@ -49,7 +49,7 @@ launcher/
 │   ├── Calculator/             # Calculator
 │   ├── AppStore/               # App store
 │   └── HelloWorld/             # Hello World example
-├── ext_components/             # External components (Miniaudio, RadioLib, etc.)
+├── ext_components/             # External components (Miniaudio, etc.)
 ├── docs/                       # Project documentation
 ├── scripts/                    # Repository helper tools
 ├── README.md
@@ -73,8 +73,7 @@ launcher/
 ### APPLaunch の機能
 
 - 複数アプリのナビゲーションに対応したアプリケーションランチャー UI（カルーセル形式のページ切り替え）
-- すべてのビルドで Python、Store、CLI/ST ターミナル、Game、Setting、Math、LoRa を登録し、Linux デバイスビルドでは IP Panel、SSH、Tank Battle も登録
-- LoRa 通信（RadioLib SX1262 ベース）
+- すべてのビルドで Python、Store、CLI/ST ターミナル、Game、Setting、Math を登録し、Linux デバイスビルドでは IP Panel、SSH、Tank Battle も登録
 - オーディオ再生（Miniaudio ベース）
 - バッテリー状態の監視と表示
 - グローバルショートカットキーのヒント（ESC / Shift / SYM）
@@ -353,7 +352,7 @@ UI は SquareLine Studio 1.5.0 によって設計・生成されており、解�
 | メインコンテンツ領域 | アプリケーションのカルーセルページ（左右のページナビゲーション） |
 | グローバルヒント | ESC / Shift / SYM ショートカットヒントのオーバーレイ |
 
-APPLaunch はすべてのビルドで Python、Store、CLI/ST ターミナル、Game、Setting、Math、LoRa を登録し、Linux デバイスビルドでは IP Panel、SSH、Tank Battle も登録します。Python、Store、Math はコマンドまたは外部プロセスのエントリで、それ以外はプロセス内ページです。
+APPLaunch はすべてのビルドで Python、Store、CLI/ST ターミナル、Game、Setting、Math を登録し、Linux デバイスビルドでは IP Panel、SSH、Tank Battle も登録します。Python、Store、Math はコマンドまたは外部プロセスのエントリで、それ以外はプロセス内ページです。
 
 ## 関連リソース
 

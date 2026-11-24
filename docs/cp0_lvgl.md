@@ -153,7 +153,6 @@ int cp0_time_ntp_set(int enable);
 - `cp0_account_info_read`：读取当前 user 和 hostname。
 - `cp0_system_apt_update_background`、`cp0_system_update_launcher_background`：启动后台更新。
 - `cp0_desktop_exec_is_safe`：返回安全检查结果并写入原因。
-- `cp0_lora_request_stop`、`cp0_lora_clear_stop`：取消/清除 LoRa 初始化停止请求。
 
 ## 4. `cp0_signal_*` 完整用法
 
@@ -231,10 +230,6 @@ int cp0_time_ntp_set(int enable);
 ### 文件系统：`cp0_signal_filesystem_api(args, cb)`
 
 命令：`Path logical_name`（解析路径）、`DirList path`、`DirListDetail path`、`Exists path`、`ReadFile path [max_bytes]`、`EnsureDirForUser path`、`Touch path`、`Remove path`、`WatchStart path`、`WatchPoll handle`、`WatchStop handle`。成功的 `Exists` data 为 `1/0`；`WatchStart` data 为句柄；`WatchPoll` data 为轮询结果；目录列表为编码后的逐行记录。路径不能为空且不能包含 NUL；未知命令 code=-2。
-
-### LoRa：`cp0_signal_lora_api(args, cb)`
-
-命令：`Init`、`Poll`、`Info`、`SendText text`、`StartReceive`、`SetTxMode 0|1`、`Shutdown`。`SendText` 非空且最多 127 字节。`Poll`/`Info` 成功 data 是原始 `cp0_lora_info_t` 二进制（必须按同一 ABI 解码），字段见 `cp0_lvgl_app.h`。`Poll` 会先执行硬件轮询，`Info` 只读当前状态。
 
 ### Wi-Fi：`cp0_signal_wifi_api(args, cb)`
 

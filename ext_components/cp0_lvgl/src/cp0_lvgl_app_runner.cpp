@@ -150,13 +150,6 @@ void stop_rpc() noexcept
 #endif
 }
 
-void stop_lora() noexcept
-{
-#ifdef CONFIG_CP0_LVGL_INIT_LORA
-    deinit_lora();
-#endif
-}
-
 } // namespace
 
 void cp0_lvgl_wake()
@@ -206,7 +199,7 @@ int cp0_lvgl_run(Cp0LvglRunOptions options)
         lv_timer_handler_set_resume_cb(nullptr, nullptr);
         cp0::runner::shutdown_services(
             stop_sudo, stop_rpc, stop_camera, stop_audio, stop_pty,
-            deinit_input, deinit_wifi, stop_lora, deinit_battery, lv_deinit);
+            deinit_input, deinit_wifi, deinit_battery, lv_deinit);
         std::lock_guard<std::mutex> lock(runner_mutex);
         semaphore_ready = false;
 #if defined(__APPLE__)

@@ -250,7 +250,6 @@ static uint32_t fzxc_to_arrow(uint32_t key)
 | `UIGamePage` | `ui_app_game.hpp` | 共通ページキー処理を使用。ESC で戻る |
 | `UIIpPanelPage` | `ui_app_ip_panel.hpp` | F/X/Z/C を LV_KEY_* へ変換。UP/DOWN で選択、ESC で戻る |
 | `UISSHPage` | `ui_app_ssh.hpp` | UP/DOWN で Host/Port/User 切替、文字入力、BACKSPACE で削除、ENTER で接続、ESC で戻る |
-| `UILoraPage` | `ui_app_lora.hpp` | KEY_UP/DOWN/LEFT/RIGHT/ENTER/ESC/BACKSPACE/DELETE を LV_KEY_* へ変換し、業務ロジックへ渡す |
 | `UITankBattlePage` | `ui_app_tank_battle.hpp` | `33(F)` 上、`45(X)` 下、`44(Z)` 左、`46(C)` 右、`57(SPACE)` 発射、ESC で戻る |
 
 ## 8. F/X/Z/C 方向キーの慣例
@@ -275,26 +274,21 @@ case KEY_C: return LV_KEY_RIGHT;
 
 ## 9. テキスト入力
 
-SSH、Mesh、WiFi パスワード、ターミナルなど、一部ページでは文字入力が必要です。
+SSH、WiFi パスワード、ターミナルなど、一部ページでは文字入力が必要です。
 
-### 9.1 単純な ASCII マッピング
+### 9.1 SSH ページの入力
 
-`UISSHPage` と `UIMeshPage` は `keycode_to_char()` を使い、`KEY_1`、`KEY_Q` などを小文字へ変換します。
+`UISSHPage` は `LV_EVENT_KEYBOARD` を処理して `struct key_item` を読み、`launcher_ui::text_input::key_text(key, item)` で印字可能文字を接続モデルへ追加します。`KEY_BACKSPACE`、`KEY_TAB`、`KEY_ENTER`、`KEY_ESC` はそれぞれ削除、保存、接続、戻るに使います。
 
 ```cpp
-static char keycode_to_char(uint32_t key)
-{
-    if (key >= KEY_1 && key <= KEY_9) return '1' + (key - KEY_1);
-    if (key == KEY_0) return '0';
-    if (key >= KEY_Q && key <= KEY_P) return qwerty[key - KEY_Q];
-    if (key == KEY_SPACE) return ' ';
-    if (key == 52) return '.';  // KEY_DOT
-    if (key == 12) return '-';  // KEY_MINUS
-    return 0;
-}
+if (lv_event_get_code(event) != static_cast<lv_event_code_t>(LV_EVENT_KEYBOARD)) return;
+const struct key_item *item = launcher_ui::events::keyboard_item(event);
+if (launcher_ui::events::is_key_released(event)) return;
+const uint32_t key = launcher_ui::events::keyboard_key(event);
+model_.append(launcher_ui::text_input::key_text(key, item));
 ```
 
-この方法は単純ですが、Shift による大文字、入力メソッド、マルチバイト文字には対応しません。完全なテキスト入力能力が必要な場合は、`key_item::utf8` または `codepoint` を読んでください。
+文字の大文字小文字、Shift、マルチバイト入力は `key_item` の `utf8` / `codepoint` フィールドが提供します。完全なテキスト入力が必要な場合はこれらのフィールドを読んでください。
 
 ### 9.2 ターミナル入力
 
@@ -385,7 +379,7 @@ launch_page_->show_home_screen();
 
 - リスト/メニューページ: `launcher_ui::events::is_key_released(e)` で `KEY_UP/DOWN/LEFT/RIGHT/ENTER/ESC` を処理します。
 - ゲームページ: 連続動作は `launcher_ui::events::is_key_pressed(e)` で処理し、必要なら repeat も受け付けます。
-- テキスト入力ページ: `key_item::utf8` を優先します。`keycode_to_char()` は単純な場合だけ使います。
+- テキスト入力ページ: `key_item::utf8` を優先し、`launcher_ui::text_input::key_text()` を再利用します。
 - 戻るキー: ESC は現在のページまたは現在のポップアップを閉じる必要があります。多階層ビューではまず前の階層に戻り、その後ホームへ戻ります。
 - 方向代替キー: デバイスキーボード対応ページでは `F/X/Z/C` を一貫してサポートしてください。
 - `struct key_item *` ポインタを保存しないでください。非同期処理が必要なら `key_code`、`utf8` などのフィールドをコピーします。

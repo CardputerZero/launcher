@@ -47,7 +47,6 @@ env = SConscript(
 ext_components/
 ├── cp0_lvgl/
 ├── Miniaudio/
-├── RadioLib/
 └── Sigslot/
 ```
 
@@ -56,7 +55,6 @@ ext_components/
 | `cp0_lvgl` | CardputerZero プラットフォーム適応。LVGL 初期化、ファイルパス、入力、プロセス、PTY、システム機能をラップする |
 | `Miniaudio` | 音声再生と録音の依存ライブラリ |
 | `Sigslot` | signal-slot 機構 |
-| `RadioLib` | LoRa/SX126x 無線通信ライブラリコンポーネント |
 
 ### 1.3 `projects/`
 
@@ -198,7 +196,6 @@ main/ui/page_app/
 ├── ui_app_st.{hpp,cpp,...}
 ├── ui_app_game.{hpp,cpp,...}
 ├── ui_app_setup.{hpp,cpp,...}
-├── ui_app_lora.{hpp,cpp,...}
 ├── ui_app_ssh.{hpp,cpp,...}
 ├── ui_app_tank_battle.{hpp,cpp,...}
 └── ui_app_ip_panel.{hpp,cpp,...}

@@ -44,9 +44,6 @@ static uint64_t enabled_features(void)
 #ifdef CONFIG_CP0_LVGL_INIT_SCREENSHOT
     features |= CP0_INIT_FEATURE_SCREENSHOT;
 #endif
-#ifdef CONFIG_CP0_LVGL_INIT_LORA
-    features |= CP0_INIT_FEATURE_LORA;
-#endif
 #ifdef CONFIG_CP0_LVGL_INIT_WIFI
     features |= CP0_INIT_FEATURE_WIFI;
 #endif
@@ -118,11 +115,6 @@ static int run_init_step(cp0_init_step_t step)
     case CP0_INIT_STEP_SCREENSHOT:
 #ifdef CONFIG_CP0_LVGL_INIT_SCREENSHOT
         init_screenshot();
-#endif
-        break;
-    case CP0_INIT_STEP_LORA:
-#ifdef CONFIG_CP0_LVGL_INIT_LORA
-        init_lora();
 #endif
         break;
     case CP0_INIT_STEP_WIFI:

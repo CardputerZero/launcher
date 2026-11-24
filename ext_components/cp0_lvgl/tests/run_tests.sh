@@ -196,31 +196,6 @@ trap 'rm -f "$binary" "$init_plan_object" "$esc_state_object"' EXIT HUP INT TERM
 
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror \
     -I"$root/src/cp0" \
-    "$root/src/cp0/cp0_lora_runtime_policy.cpp" \
-    "$root/tests/test_lora_runtime_policy.cpp" -o "$binary"
-"$binary"
-
-"${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror \
-    -I"$root/src/cp0" \
-    "$root/tests/test_lora_gpio_offset_policy.cpp" -o "$binary"
-"$binary"
-
-"${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -pthread \
-    -I"$root/include" -I"$root/src" \
-    "$root/src/cp0_lora_contract.cpp" \
-    "$root/tests/test_lora_contract.cpp" -o "$binary"
-"$binary"
-
-"${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -pthread \
-    -I"$root/include" -I"$root/src" \
-    -I"$root/../../SDK/github_source/eventpp/include" \
-    "$root/src/cp0_lora_contract.cpp" \
-    "$root/src/sdl/sdl_lvgl_lara.cpp" \
-    "$root/tests/test_sdl_lora_registration.cpp" -o "$binary"
-"$binary"
-
-"${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror \
-    -I"$root/src/cp0" \
     "$root/src/cp0/cp0_network_policy.cpp" \
     "$root/tests/test_network_policy.cpp" -o "$binary"
 "$binary"

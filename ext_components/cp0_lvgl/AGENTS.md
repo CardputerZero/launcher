@@ -10,7 +10,7 @@
 
 ## Module Boundary
 
-`cp0_lvgl` provides the LVGL runner, reusable page bases, and eventpp callback-list services for audio, PTY, configuration, filesystem, LoRa, Wi-Fi, Bluetooth, settings, process execution, OS information, time, battery, screenshots, camera, soundcard, and sudo. Whether a service is installed is controlled by `CONFIG_CP0_LVGL_INIT_*`; never assume a disabled service exists.
+`cp0_lvgl` provides the LVGL runner, reusable page bases, and eventpp callback-list services for audio, PTY, configuration, filesystem, Wi-Fi, Bluetooth, settings, process execution, OS information, time, battery, screenshots, camera, soundcard, and sudo. Whether a service is installed is controlled by `CONFIG_CP0_LVGL_INIT_*`; never assume a disabled service exists.
 
 Request signals normally take `std::list<std::string>` with the command name at element zero and a `std::function<void(int, std::string)>` callback. `code == 0` means success; interpret `data` using the wire format documented in the README. Callbacks may run on worker threads, so UI code must marshal back to the LVGL thread. Stop background threads, timers, PTYs, camera work, and sudo requests before service teardown.
 
@@ -18,7 +18,7 @@ Request signals normally take `std::list<std::string>` with the command name at 
 
 - Runner: `cp0_lvgl_init()`, `cp0_lvgl_run()`, `cp0_lvgl_wake()`; pages: `AppPageRoot`, `AppPage`, `AppPageWithBottomBarLayout`, `cp0_lvgl_start_app_page()`, and `cp0_lvgl_start_app<PageT>()`.
 - C wrappers: `cp0_file_*` / `cp0_dir_*`, `cp0_network_list`, `cp0_wifi_*`, `cp0_process_*`, `cp0_system_shutdown/reboot`, `cp0_sudo_*`, `cp0_battery_read`, `cp0_bq27220_calibrate`, `cp0_backlight_*`, `cp0_time_*`, `cp0_eth_info_read`, `cp0_account_info_read`, and background update functions. Full declarations are in `include/cp0_lvgl_app.h`.
-- Request/response signals: `cp0_signal_audio_api`, `cp0_signal_audio_setup`, `cp0_signal_pty_api`, `cp0_signal_config_api`, `cp0_signal_filesystem_api`, `cp0_signal_lora_api`, `cp0_signal_wifi_api`, `cp0_signal_bt_api`, `cp0_signal_settings_api`, `cp0_signal_process_api`, `cp0_signal_osinfo_api`, `cp0_signal_timedate_api`, `cp0_signal_bq27220_api`, `cp0_signal_screenshot_api`, `cp0_signal_camera_api`, and `cp0_signal_soundcard_api`.
+- Request/response signals: `cp0_signal_audio_api`, `cp0_signal_audio_setup`, `cp0_signal_pty_api`, `cp0_signal_config_api`, `cp0_signal_filesystem_api`, `cp0_signal_wifi_api`, `cp0_signal_bt_api`, `cp0_signal_settings_api`, `cp0_signal_process_api`, `cp0_signal_osinfo_api`, `cp0_signal_timedate_api`, `cp0_signal_bq27220_api`, `cp0_signal_screenshot_api`, `cp0_signal_camera_api`, and `cp0_signal_soundcard_api`.
 - One-way/event signals: `cp0_signal_audio_play(std::string)`, `cp0_signal_audio_cap(bool)`, `cp0_signal_system_play(std::string)`, `cp0_signal_battery_pub(std::function<void()>)`, `cp0_signal_network()`, and `cp0_signal_forkexec()`.
 - Async-specialized signals: `cp0_signal_bt_agent(uint64_t, method, device, value, reply)`, `cp0_signal_sudo_argv_async(args, auth_timeout_ms, exec_timeout_ms, complete, started)`, `cp0_signal_sudo_cancel(request_id, done)`, and `cp0_signal_system_admin_async(args, auth_timeout_ms, exec_timeout_ms, complete, started)`.
 - `cp0_signal_network` and `cp0_signal_forkexec` currently have only plan declarations and no `cp0_lvgl` registration. Confirm an implementation exists before calling them. Bluetooth Agent requests originate on a worker thread; sudo calls `started` before `complete`; neither callback may directly manipulate LVGL objects.

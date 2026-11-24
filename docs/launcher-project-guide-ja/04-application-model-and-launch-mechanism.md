@@ -34,7 +34,7 @@ Home center card
 | `projects/APPLaunch/main/ui/launch.cpp` | `app`、`Launch`、アプリケーションリスト、起動ロジック、`.desktop` スキャン |
 | `projects/APPLaunch/main/ui/ui_launch_page.cpp` | Enter / クリックイベントを `Launch::launch_app()` へ転送する |
 | `projects/APPLaunch/main/ui/page_app/ui_app_st.hpp` | 端末ページ `UISTPage` |
-| `projects/APPLaunch/main/ui/page_app/*.hpp` | settings、game、file、camera、LoRa などの組み込みページ |
+| `projects/APPLaunch/main/ui/page_app/*.hpp` | settings、game、file、camera などの組み込みページ |
 | `projects/APPLaunch/APPLaunch/applications/` | 実行時 `.desktop` アプリケーション記述ディレクトリ |
 | `ext_components/cp0_lvgl` | プロセス起動、PTY、ディレクトリ監視、パス解決などの低レベル機能 |
 
@@ -81,7 +81,7 @@ struct app
 
 | Type | Construction | Launch function | Examples |
 | --- | --- | --- | --- |
-| Built-in page | `page_v<PageT>` / `append_page_app<PageT>` | ページを構築し `cp0_lvgl_start_app_page()` を呼ぶ | `CLI`, `GAME`, `SETTING`, `LORA` |
+| Built-in page | `page_v<PageT>` / `append_page_app<PageT>` | ページを構築し `cp0_lvgl_start_app_page()` を呼ぶ | `CLI`, `GAME`, `SETTING` |
 | Terminal command | `exec, terminal=true` | `launch_Exec_in_terminal()` が `UISTPage` を作成して `exec()` を呼ぶ | `Python`, `Terminal=true` の `.desktop` アプリ |
 | External process | `exec, terminal=false` | `launch_Exec()` | AppStore, Calculator |
 

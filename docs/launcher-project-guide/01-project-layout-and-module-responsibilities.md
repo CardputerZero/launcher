@@ -47,7 +47,6 @@ env = SConscript(
 ext_components/
 ├── cp0_lvgl/
 ├── Miniaudio/
-├── RadioLib/
 ├── Sigslot/
 ├── SmoothUI/
 ├── Spdlog/
@@ -60,7 +59,6 @@ ext_components/
 | `cp0_lvgl` | CardputerZero platform adaptation; wraps LVGL initialization, file paths, input, processes, PTY, and system capabilities |
 | `Miniaudio` | Dependency for audio playback and recording |
 | `Sigslot` | Signal-slot mechanism |
-| `RadioLib` | LoRa/SX126x wireless communication library component |
 | `SmoothUI`, `Spdlog` | Optional upstream UI and logging wrappers |
 | `bluectl` | C DBus/BlueZ API and test utilities |
 | `nmtui` | NetworkManager/libnm Wi-Fi adapter |
@@ -212,8 +210,6 @@ main/ui/
 main/ui/page_app/
 ├── ui_app_st.*
 ├── ui_app_game.*
-├── ui_app_lora.*
-├── ui_app_mesh.*
 ├── ui_app_setup.*
 ├── ui_app_ssh.*
 ├── ui_app_tank_battle.*

@@ -62,7 +62,6 @@ git status --short
 | GAME | `projects/APPLaunch/main/ui/page_app/ui_app_game.hpp` | `GAME` / `game_100.png` | 組み込みゲームエントリ |
 | IP_PANEL | `projects/APPLaunch/main/ui/page_app/ui_app_ip_panel.hpp` | `IP_PANEL` / `ip_panel_100.png` | IP 情報パネル。デバイスで有効 |
 | SSH | `projects/APPLaunch/main/ui/page_app/ui_app_ssh.hpp` | `SSH` / `ssh_100.png` | SSH ページ。デバイスで有効 |
-| LORA | `projects/APPLaunch/main/ui/page_app/ui_app_lora.hpp` | `LORA` / `lora_100.png` | LoRa ページ。デバイスで有効 |
 | TANK | `projects/APPLaunch/main/ui/page_app/ui_app_tank_battle.hpp` | `TANK` / `tank_100.png` | Tank game。デバイスで有効 |
 | CLI/terminal | `projects/APPLaunch/main/ui/page_app/ui_app_st.hpp` | `CLI` / `cli_100.png` | `UISTPage`。bash、python、`Terminal=true` アプリで使用 |
 
