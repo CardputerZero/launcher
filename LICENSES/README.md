@@ -8,6 +8,9 @@ selection inventory is in [OPEN_SOURCE_COMPONENTS.md](../docs/OPEN_SOURCE_COMPON
 | --- | --- |
 | M5Stack-SDK-MIT.txt | SDK/LICENSE |
 | LVGL-MIT.txt | SDK/github_source/lvgl/lvgl_9_5/lvgl/LICENCE.txt |
+| Noto-CJK-OFL.txt | [Noto Sans CJK 2.004 LICENSE](https://github.com/notofonts/noto-cjk/blob/Sans2.004/LICENSE), identical to the [Noto Serif CJK license](https://github.com/notofonts/noto-cjk/blob/main/Serif/LICENSE) |
+| FontAwesome5-LVGL-LICENSE.txt | [LVGL Font Awesome 5 license](https://github.com/lvgl/lvgl/blob/85aa60d18b3d5e5588d7b247abf90198f07c8a63/scripts/built_in_font/font_license/FontAwesome5/LICENSE.txt) |
+| DejaVu-LICENSE.txt | [DejaVu Fonts 2.37 LICENSE](https://github.com/dejavu-fonts/dejavu-fonts/blob/version_2_37/LICENSE) |
 | eventpp-Apache-2.0.txt | SDK/github_source/eventpp/license |
 | libhv-BSD-3-Clause.txt | SDK/github_source/libhv/LICENSE |
 | fmt-MIT.txt | SDK/components/utilities/party/fmt/LICENSE.rst |

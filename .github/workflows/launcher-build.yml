@@ -317,13 +317,13 @@ jobs:
       with:
         persist-credentials: false
 
-    - name: Initialize submodules (SDK)
-      run: git submodule update --init --depth=1 SDK
+    - name: Initialize submodules (SDK and LVGL)
+      run: git submodule update --init --depth=1 SDK projects/CardputerZero-Emulator/lib/lvgl
 
     - name: Install test dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y libxkbcommon-dev
+        sudo apt-get install -y libxkbcommon-dev libsdl2-dev libfreetype-dev
 
     - name: Pre-download eventpp headers (pinned to the revision scons resolves)
       run: |
@@ -350,10 +350,10 @@ jobs:
     - name: Run cp0_lvgl unit tests
       run: sh ext_components/cp0_lvgl/tests/run_tests.sh
 
-    - name: Run APPLaunch packaging tests
-      # Guards the release workflow contract (publish gate, tag/version rules,
-      # channel assets, rollback alias) on every CI run.
-      run: python3 projects/APPLaunch/tests/test_updater_packaging.py
+    - name: Run APPLaunch tests
+      env:
+        LVGL_ROOT: ${{ github.workspace }}/projects/CardputerZero-Emulator/lib/lvgl
+      run: TMPDIR="$RUNNER_TEMP" sh projects/APPLaunch/tests/run_tests.sh
 
   # Publishing is manual on purpose: launcher-release.yml calls this workflow with
   # publish=true after the merged change has been reviewed. Pushes, pull requests

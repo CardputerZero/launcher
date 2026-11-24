@@ -15,6 +15,17 @@
 #include <cstdint>
 #include <string>
 
+extern "C" {
+LV_FONT_DECLARE(launcher_montserrat_bold_latin_16)
+}
+
+const lv_font_t *launcher_ui::carousel_title_font()
+{
+    return launcher_fonts().get("Montserrat-Bold.ttf", 16, LV_FREETYPE_FONT_STYLE_BOLD,
+                                LV_FREETYPE_FONT_RENDER_MODE_BITMAP,
+                                &launcher_montserrat_bold_latin_16);
+}
+
 namespace {
 
 using launcher_carousel_layout::Slot;
@@ -133,7 +144,7 @@ lv_obj_t *create_carousel_title(lv_obj_t *parent, const Slot &slot,
     lv_obj_set_style_text_align(title, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_font(
         title,
-        launcher_fonts().get("Montserrat-Bold.ttf", 16, LV_FREETYPE_FONT_STYLE_BOLD),
+        launcher_ui::carousel_title_font(),
         LV_PART_MAIN | LV_STATE_DEFAULT);
     launcher_home_animation::set_title_text(title, text);
     lv_obj_set_style_text_color(title, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);

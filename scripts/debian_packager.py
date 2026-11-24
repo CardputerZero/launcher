@@ -992,6 +992,17 @@ def prepare_package_tree(
         _service_text(config),
     )
     if config.app_name == APP_NAME and config.package_name == PACKAGE_NAME:
+        doc_dir = paths.package_root / "usr" / "share" / "doc" / config.package_name
+        font_licenses = (
+            "projects/APPLaunch/APPLaunch/share/font/Montserrat-OFL.txt",
+            "LICENSES/Noto-CJK-OFL.txt",
+            "LICENSES/FontAwesome5-LVGL-LICENSE.txt",
+            "LICENSES/DejaVu-LICENSE.txt",
+        )
+        for relative in font_licenses:
+            source = paths.repo_root / relative
+            _copy_file(source, doc_dir / source.name, mode=0o644)
+
         _write_text(
             paths.package_root / Path(*SYSTEM_SERVICE_PATH.parts) / "applaunch-updater.service",
             _updater_service_text(),

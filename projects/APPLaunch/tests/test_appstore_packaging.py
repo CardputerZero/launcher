@@ -39,7 +39,7 @@ with tempfile.TemporaryDirectory() as temp_dir:
     config = packager.PackageConfig()
     package_root = root / "staging" / "debian-APPLaunch"
     paths = packager.Paths(
-        repo_root=root,
+        repo_root=repo,
         tool_dir=root / "scripts",
         project_dir=project_dir,
         src_dir=src_dir,
@@ -57,3 +57,13 @@ with tempfile.TemporaryDirectory() as temp_dir:
     assert (package_root / "usr/lib/systemd/system/applaunch-updater.service").is_file()
     assert (package_root / "usr/lib/systemd/system/applaunch-apt-update.service").is_file()
     assert (package_root / "usr/share/polkit-1/rules.d/60-applaunch-updater.rules").is_file()
+
+    doc_dir = package_root / "usr/share/doc/applaunch"
+    for relative in (
+        "projects/APPLaunch/APPLaunch/share/font/Montserrat-OFL.txt",
+        "LICENSES/Noto-CJK-OFL.txt",
+        "LICENSES/FontAwesome5-LVGL-LICENSE.txt",
+        "LICENSES/DejaVu-LICENSE.txt",
+    ):
+        source = repo / relative
+        assert (doc_dir / source.name).read_bytes() == source.read_bytes()

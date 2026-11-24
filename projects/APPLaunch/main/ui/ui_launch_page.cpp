@@ -363,7 +363,8 @@ void UILaunchPage::finish_switch_animation()
 
     for (size_t i = launcher_carousel_layout::kTitleOffset;
          i < launcher_carousel_layout::kElementCount; ++i) {
-        lv_obj_set_style_text_font(carousel_elements_[i], launcher_fonts().get("Montserrat-Bold.ttf", 16, LV_FREETYPE_FONT_STYLE_BOLD), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_text_font(carousel_elements_[i], launcher_ui::carousel_title_font(),
+                                    LV_PART_MAIN | LV_STATE_DEFAULT);
     }
 
 }

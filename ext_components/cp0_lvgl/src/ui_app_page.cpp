@@ -6,6 +6,7 @@
 
 #include "ui_app_page.hpp"
 #include "cp0_callback_contract.hpp"
+#include "cp0_font_service.hpp"
 #include "cp0_pointer_lifecycle.hpp"
 #include "cp0_status_lifecycle.hpp"
 #include "cp0_status_component_contract.hpp"
@@ -346,7 +347,7 @@ void AppTopBarTitleComponent::on_create(lv_obj_t *obj)
     lv_obj_set_size(label_, LV_PCT(100), LV_PCT(100));
     lv_label_set_long_mode(label_, LV_LABEL_LONG_DOT);
     lv_obj_set_style_text_color(label_, lv_color_hex(0xCCAA00), 0);
-    lv_obj_set_style_text_font(label_, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_font(label_, cp0_fonts().fallback(14), 0);
     lv_obj_set_style_text_align(label_, LV_TEXT_ALIGN_LEFT, 0);
     lv_label_set_text(label_, title_.c_str());
 }
