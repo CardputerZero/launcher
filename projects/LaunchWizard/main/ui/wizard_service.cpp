@@ -382,8 +382,10 @@ bool first_user_has_factory_name()
 #endif
 }
 
-// True while the UID 1000 account still carries the factory credentials that
-// pi-gen bakes into the image (FIRST_USER_NAME=pi / FIRST_USER_PASS=raspberry).
+// True while the UID 1000 account still carries the factory password that
+// pi-gen bakes into the image (FIRST_USER_PASS=raspberry), regardless of what
+// the account is named -- a rename does not re-hash the password, so the name
+// says nothing about whether the shipped credential is still live.
 // Verification follows crypt(5): hash the candidate with the stored hash as
 // the setting string; a byte-identical result means the password matches. Any
 // crypt failure yields NULL or a "*" failure token that never compares equal,
@@ -394,7 +396,7 @@ bool first_user_has_factory_credentials()
     return false;
 #else
     struct passwd *pw = getpwuid(kDefaultUserUid);
-    if (!pw || !pw->pw_name || strcmp(pw->pw_name, kFactoryDefaultUser) != 0)
+    if (!pw || !pw->pw_name)
         return false;
     struct spwd *sp = getspnam(pw->pw_name);
     if (!sp || !sp->sp_pwdp || sp->sp_pwdp[0] != '$')

@@ -46,14 +46,20 @@ bool test_first_boot_policy()
     state.factory_credentials = false;
     passed &= expect_wizard(false, state, "factory imager-provisioned");
 
-    // A renamed user always means the device was provisioned, even when no
-    // password was set (e.g. Imager with SSH keys only).
+    // A renamed user means the device was provisioned, even when no password
+    // was set (e.g. Imager with SSH keys only).
     state.factory_username = false;
     state.user_has_password = false;
     passed &= expect_wizard(false, state, "renamed user without password");
+
+    // ...but a rename does not re-hash the password. While the baked default
+    // still verifies, the shipped credential is live and the OOBE must run so
+    // the user is made to replace it. Previously the username check
+    // short-circuited this, and first_user_has_factory_credentials() refused to
+    // hash a renamed account at all, so this state was unreachable.
     state.user_has_password = true;
     state.factory_credentials = true;
-    passed &= expect_wizard(false, state, "renamed user keeps factory password");
+    passed &= expect_wizard(true, state, "renamed user keeps factory password");
 
     // Settings "Run Setup Wizard" re-arm always wins, even when configured.
     state.rearm_marker = true;
