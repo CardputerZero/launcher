@@ -11,15 +11,19 @@
 #include "../cp0_external_process_group.hpp"
 #include "cp0_process_commands.hpp"
 
+#include <cerrno>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#include <system_error>
 #include <thread>
 
 #if !defined(_WIN32)
 #include <fcntl.h>
 #include <linux/input.h>
+#include <poll.h>
 #include <signal.h>
+#include <sys/eventfd.h>
 #include <sys/wait.h>
 #include <unistd.h>
 #endif
@@ -56,7 +60,7 @@ int run(const char *command, bool keep_root)
     keyboard_pause();
     const bool subreaper = cp0_process_group::enable_subreaper();
 
-    const int keyboard_fd = open(keyboard_device(), O_RDONLY | O_NONBLOCK);
+    int keyboard_fd = open(keyboard_device(), O_RDONLY | O_NONBLOCK | O_CLOEXEC);
     if (keyboard_fd < 0) {
         std::perror("[cp0] open evdev");
         keyboard_resume();
@@ -89,6 +93,10 @@ int run(const char *command, bool keep_root)
                  subreaper ? 1 : 0);
 
     cp0_esc_exit_policy::StateMachine esc_policy;
+    // A shell may exit before its descendants. Watch the entire process group;
+    // WNOWAIT leaves reaping, exit status and group signalling on this thread.
+    int child_event = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
+    std::thread child_waiter;
     bool leader_reaped = false;
     int status = 0;
 
@@ -96,8 +104,24 @@ int run(const char *command, bool keep_root)
         cp0_process_group::reap_available(pid, pid, status, leader_reaped);
         if (!cp0_process_group::exists(pid)) break;
 
+        if (child_event >= 0 && !child_waiter.joinable()) {
+            try {
+                child_waiter = std::thread([pid, child_event] {
+                    siginfo_t info{};
+                    int rc;
+                    do {
+                        rc = waitid(P_PGID, pid, &info, WEXITED | WNOWAIT);
+                    } while (rc < 0 && errno == EINTR);
+                    while (eventfd_write(child_event, rc == 0 ? 1 : 2) < 0 && errno == EINTR) {}
+                });
+            } catch (const std::system_error &) {
+                close(child_event);
+                child_event = -1;
+            }
+        }
+
         struct input_event event;
-        while (read(keyboard_fd, &event, sizeof(event)) == static_cast<ssize_t>(sizeof(event))) {
+        while (keyboard_fd >= 0 && read(keyboard_fd, &event, sizeof(event)) == sizeof(event)) {
             if (event.type == EV_KEY && event.code == KEY_ESC) {
                 if (event.value == 1)
                     cp0_esc_state_write(1);
@@ -118,16 +142,40 @@ int run(const char *command, bool keep_root)
             std::fprintf(stderr, "[process] grace timeout: SIGKILL pgid=%d\n", static_cast<int>(pid));
             killpg(pid, SIGKILL);
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        int timeout = esc_policy.timeout_ms(monotonic_ms());
+        // A non-waitable descendant (e.g. if subreaper setup failed) has no
+        // child-exit event. Bound only that degraded path.
+        if (child_event < 0 && (timeout < 0 || timeout > 100)) timeout = 100;
+        pollfd fds[] = {{keyboard_fd, POLLIN, 0}, {child_event, POLLIN, 0}};
+        if (poll(fds, 2, timeout) < 0) {
+            if (errno == EINTR) continue;
+            std::perror("[cp0] poll external app");
+            continue;
+        }
+        if (fds[0].revents & (POLLHUP | POLLERR | POLLNVAL)) {
+            close(keyboard_fd);
+            keyboard_fd = -1;
+            cp0_esc_state_reset();
+        }
+        if (fds[1].revents & POLLIN) {
+            child_waiter.join();
+            eventfd_t result;
+            if (eventfd_read(child_event, &result) < 0 || result != 1) {
+                close(child_event);
+                child_event = -1;
+            }
+        }
     }
 
+    if (child_waiter.joinable()) child_waiter.join();
+    if (child_event >= 0) close(child_event);
     if (esc_policy.finish().hide_hint) ui_external_esc_hint(0);
     cp0_process_group::reap_available(pid, pid, status, leader_reaped);
     std::fprintf(stderr,
                  "[process] external app group drained pgid=%d leader_reaped=%d\n",
                  static_cast<int>(pid),
                  leader_reaped ? 1 : 0);
-    close(keyboard_fd);
+    if (keyboard_fd >= 0) close(keyboard_fd);
     keyboard_resume();
     cp0_esc_state_reset();
     std::printf("[cp0] Returned to launcher\n");
