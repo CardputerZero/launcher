@@ -20,8 +20,10 @@
 #include <stdint.h>
 #include <time.h>
 #ifdef __linux__
+#include <limits.h>
 #include <sys/ioctl.h>
 #include <sys/timerfd.h>
+#include <libudev.h>
 #include <linux/input.h>
 #include <libinput.h>
 #include <xkbcommon/xkbcommon.h>
@@ -184,9 +186,20 @@ static const struct libinput_interface interface = {
 /* ============================================================
  *  Keyboard context
  * ============================================================ */
+#define MAX_TRACKED_KEYBOARDS 32
+
+struct tracked_kbd_dev {
+    struct libinput_device *dev;
+    char devnode[128];
+};
+
 struct kbd_ctx {
     struct libinput        *li;
     struct libinput_device *dev;
+    struct libinput_device *repeat_dev;
+    struct tracked_kbd_dev  devices[MAX_TRACKED_KEYBOARDS];
+    size_t                  device_count;
+    char                    builtin_sysname[64];
 
     struct xkb_context        *ctx;
     struct xkb_keymap         *keymap;
@@ -252,10 +265,46 @@ static uint32_t get_mods(struct xkb_state *state) {
     return m;
 }
 
+static void canonicalize_devnode(const char *path, char *out, size_t out_size)
+{
+    if (!out || out_size == 0) return;
+    out[0] = '\0';
+    if (!path || path[0] == '\0') return;
+    char resolved[PATH_MAX];
+    const char *target = realpath(path, resolved) ? resolved : path;
+    snprintf(out, out_size, "%s", target);
+}
+
+static void resolve_builtin_sysname(const char *device_path, char *out, size_t out_size)
+{
+    if (!out || out_size == 0) return;
+    out[0] = '\0';
+    if (!device_path || device_path[0] == '\0') return;
+    char devnode[PATH_MAX];
+    canonicalize_devnode(device_path, devnode, sizeof(devnode));
+    const char *base = strrchr(devnode, '/');
+    const char *name = base ? base + 1 : devnode;
+    snprintf(out, out_size, "%s", name);
+}
+
+static bool is_builtin_tca8418_device(const struct kbd_ctx *kc, struct libinput_device *dev)
+{
+    if (!dev) return false;
+    const char *name = libinput_device_get_name(dev);
+    if (name && strcasestr(name, "tca8418") != NULL)
+        return true;
+    const char *sysname = libinput_device_get_sysname(dev);
+    if (kc->builtin_sysname[0] != '\0' && sysname &&
+        strcmp(sysname, kc->builtin_sysname) == 0)
+        return true;
+    return false;
+}
+
 /* ============================================================
  *  LED update (via libinput; no need to write evdev directly)
  * ============================================================ */
 static void update_leds(struct kbd_ctx *kc) {
+    if (!kc->dev) return;
     enum libinput_led leds = 0;
     if (xkb_state_led_name_is_active(kc->state, XKB_LED_NAME_NUM) > 0)
         leds |= LIBINPUT_LED_NUM_LOCK;
@@ -341,11 +390,13 @@ static void repeat_start(struct kbd_ctx *kc) {
         .it_value    = { .tv_sec = 0, .tv_nsec = (long)delay_ms * 1000000L },
     };
     timerfd_settime(kc->repeat_fd, 0, &ts, NULL);
+    kc->repeat_dev = kc->dev;
     kc->repeating = true;
 }
 static void repeat_stop(struct kbd_ctx *kc) {
     struct itimerspec ts = {0};
     timerfd_settime(kc->repeat_fd, 0, &ts, NULL);
+    kc->repeat_dev = NULL;
     kc->repeating = false;
 }
 
@@ -368,8 +419,9 @@ static void process_key(struct kbd_ctx *kc, uint32_t code, int pressed)
         if (pressed) kc->fn_pressed_at_ms = monotonic_ms();
     }
 
-    /* ---------- 1. TCA8418 custom keycodes first ---------- */
-    const struct cp0_keyboard_keymap_entry *mapped = cp0_keyboard_keymap_lookup(code);
+    /* ---------- 1. TCA8418 custom keycodes first (built-in keypad only) ---------- */
+    const struct cp0_keyboard_keymap_entry *mapped =
+        is_builtin_tca8418_device(kc, kc->dev) ? cp0_keyboard_keymap_lookup(code) : NULL;
     if (mapped) {
         xkb_keysym_t sym = xkb_keysym_from_name(mapped->sym_name,
                                                 XKB_KEYSYM_NO_FLAGS);
@@ -559,6 +611,171 @@ static void kbd_wake_up(struct kbd_ctx *kc) {
     if (kc->compose_state) xkb_compose_state_reset(kc->compose_state);
 }
 
+static bool kbd_add_device_path(struct kbd_ctx *kc, const char *path)
+{
+    if (!kc || !kc->li || !path || path[0] == '\0') return false;
+
+    char devnode[128];
+    canonicalize_devnode(path, devnode, sizeof(devnode));
+    if (devnode[0] == '\0') return false;
+
+    for (size_t i = 0; i < kc->device_count; ++i) {
+        if (strcmp(kc->devices[i].devnode, devnode) == 0)
+            return true;
+    }
+
+    if (kc->device_count >= MAX_TRACKED_KEYBOARDS) {
+        SLOGW("[KBD] max tracked keyboards (%d) reached; skipping %s",
+              MAX_TRACKED_KEYBOARDS, devnode);
+        fflush(stdout);
+        return false;
+    }
+
+    struct libinput_device *dev = libinput_path_add_device(kc->li, devnode);
+    if (!dev) {
+        SLOGW("[KBD] failed to add input device %s", devnode);
+        fflush(stdout);
+        return false;
+    }
+
+    if (!libinput_device_has_capability(dev, LIBINPUT_DEVICE_CAP_KEYBOARD)) {
+        libinput_path_remove_device(dev);
+        return false;
+    }
+
+    struct tracked_kbd_dev *slot = &kc->devices[kc->device_count++];
+    slot->dev = libinput_device_ref(dev);
+    snprintf(slot->devnode, sizeof(slot->devnode), "%s", devnode);
+
+    SLOGI("[KBD] keyboard added: %s (%s)%s",
+          libinput_device_get_name(dev) ? libinput_device_get_name(dev) : "unknown",
+          libinput_device_get_sysname(dev) ? libinput_device_get_sysname(dev) : devnode,
+          is_builtin_tca8418_device(kc, dev) ? " [tca8418]" : "");
+    fflush(stdout);
+    return true;
+}
+
+static void kbd_remove_device_path(struct kbd_ctx *kc, const char *path)
+{
+    if (!kc || !path || path[0] == '\0') return;
+
+    char devnode[128];
+    canonicalize_devnode(path, devnode, sizeof(devnode));
+
+    for (size_t i = 0; i < kc->device_count; ++i) {
+        if (strcmp(kc->devices[i].devnode, devnode) == 0 ||
+            strcmp(kc->devices[i].devnode, path) == 0) {
+            struct libinput_device *dev = kc->devices[i].dev;
+            SLOGI("[KBD] keyboard removed: %s (%s)",
+                  libinput_device_get_name(dev) ? libinput_device_get_name(dev) : "unknown",
+                  kc->devices[i].devnode);
+            fflush(stdout);
+            if (kc->dev == dev) kc->dev = NULL;
+            if (kc->repeat_dev == dev) repeat_stop(kc);
+            libinput_path_remove_device(dev);
+            libinput_device_unref(dev);
+            kc->devices[i] = kc->devices[kc->device_count - 1];
+            memset(&kc->devices[kc->device_count - 1], 0, sizeof(kc->devices[0]));
+            --kc->device_count;
+            return;
+        }
+    }
+}
+
+static void kbd_remove_all_devices(struct kbd_ctx *kc)
+{
+    if (!kc) return;
+    for (size_t i = 0; i < kc->device_count; ++i) {
+        struct libinput_device *dev = kc->devices[i].dev;
+        if (dev) {
+            libinput_path_remove_device(dev);
+            libinput_device_unref(dev);
+        }
+    }
+    kc->device_count = 0;
+    kc->dev = NULL;
+    kc->repeat_dev = NULL;
+}
+
+static void kbd_scan_udev_keyboards(struct kbd_ctx *kc, struct udev *udev)
+{
+    if (!kc || !udev) return;
+    struct udev_enumerate *enumerate = udev_enumerate_new(udev);
+    if (!enumerate) return;
+
+    udev_enumerate_add_match_subsystem(enumerate, "input");
+    udev_enumerate_add_match_property(enumerate, "ID_INPUT_KEYBOARD", "1");
+    udev_enumerate_scan_devices(enumerate);
+
+    struct udev_list_entry *entry = NULL;
+    udev_list_entry_foreach(entry, udev_enumerate_get_list_entry(enumerate)) {
+        const char *syspath = udev_list_entry_get_name(entry);
+        if (!syspath) continue;
+        struct udev_device *ud = udev_device_new_from_syspath(udev, syspath);
+        if (!ud) continue;
+        const char *devnode = udev_device_get_devnode(ud);
+        if (devnode && strncmp(devnode, "/dev/input/event", 16) == 0) {
+            kbd_add_device_path(kc, devnode);
+        }
+        udev_device_unref(ud);
+    }
+
+    udev_enumerate_unref(enumerate);
+}
+
+static void handle_udev_monitor_event(struct kbd_ctx *kc, struct udev_monitor *mon,
+                                      const char *builtin_device_path)
+{
+    struct udev_device *ud = udev_monitor_receive_device(mon);
+    if (!ud) return;
+
+    const char *action = udev_device_get_action(ud);
+    const char *devnode = udev_device_get_devnode(ud);
+    if (action && devnode && strncmp(devnode, "/dev/input/event", 16) == 0) {
+        if (strcmp(action, "add") == 0) {
+            const char *is_kbd = udev_device_get_property_value(ud, "ID_INPUT_KEYBOARD");
+            const char *sysname = udev_device_get_sysname(ud);
+            if (kc->builtin_sysname[0] == '\0' && builtin_device_path)
+                resolve_builtin_sysname(builtin_device_path, kc->builtin_sysname,
+                                        sizeof(kc->builtin_sysname));
+            const bool is_builtin = (kc->builtin_sysname[0] != '\0' && sysname &&
+                                     strcmp(sysname, kc->builtin_sysname) == 0);
+            if ((is_kbd && strcmp(is_kbd, "1") == 0) || is_builtin) {
+                kbd_add_device_path(kc, devnode);
+            }
+        } else if (strcmp(action, "remove") == 0) {
+            kbd_remove_device_path(kc, devnode);
+        }
+    }
+
+    udev_device_unref(ud);
+}
+
+static void drain_libinput_events(struct kbd_ctx *kc)
+{
+    libinput_dispatch(kc->li);
+    struct libinput_event *ev;
+    while ((ev = libinput_get_event(kc->li)) != NULL) {
+        enum libinput_event_type ev_type = libinput_event_get_type(ev);
+        if (ev_type == LIBINPUT_EVENT_DEVICE_REMOVED) {
+            struct libinput_device *dev = libinput_event_get_device(ev);
+            if (kc->dev == dev) kc->dev = NULL;
+            if (kc->repeat_dev == dev) repeat_stop(kc);
+        } else if (ev_type == LIBINPUT_EVENT_KEYBOARD_KEY) {
+            struct libinput_event_keyboard *kev =
+                libinput_event_get_keyboard_event(ev);
+            uint32_t code = libinput_event_keyboard_get_key(kev);
+            kc->dev = libinput_event_get_device(ev);
+            enum libinput_key_state ks =
+                libinput_event_keyboard_get_key_state(kev);
+            process_key(kc, code,
+                        ks == LIBINPUT_KEY_STATE_PRESSED ? 1 : 0);
+            kc->dev = NULL;
+        }
+        libinput_event_destroy(ev);
+    }
+}
+
 /* ============================================================
  *  Thread main loop
  * ============================================================ */
@@ -566,22 +783,40 @@ void *keyboard_read_thread(void *argv) {
     char *device_path_arg = argv ? (char *)argv : NULL;
     const char *device_path = device_path_arg ? device_path_arg
         : "/dev/input/by-path/platform-3f804000.i2c-event";
+    struct udev *udev = NULL;
+    struct udev_monitor *mon = NULL;
+    int mon_fd = -1;
 
     struct kbd_ctx kc = {0};
     kc.repeat_fd = -1;
+    resolve_builtin_sysname(device_path, kc.builtin_sysname, sizeof(kc.builtin_sysname));
 
-    /* ---------- 1. libinput ---------- */
+    /* ---------- 1. libinput path backend + libudev multi-seat discovery ---------- */
     kc.li = libinput_path_create_context(&interface, NULL);
-    if (!kc.li) { fprintf(stderr, "failed to create libinput context\n"); goto out; }
-
-    kc.dev = libinput_path_add_device(kc.li, device_path);
-    if (!kc.dev) {
-        fprintf(stderr, "Failed to add device %s (root permissions may be required)\n", device_path);
+    if (!kc.li) {
+        fprintf(stderr, "failed to create libinput path context\n");
         goto out;
     }
-    if (!libinput_device_has_capability(kc.dev, LIBINPUT_DEVICE_CAP_KEYBOARD)) {
-        fprintf(stderr, "%s is not a keyboard device\n", device_path);
-        goto out;
+
+    /* Always add the built-in keypad (may live on seat1 without ID_INPUT_KEYBOARD). */
+    (void)kbd_add_device_path(&kc, device_path);
+
+    /* Discover existing USB/Bluetooth keyboards across all seats and watch hotplug. */
+    udev = udev_new();
+    if (udev) {
+        kbd_scan_udev_keyboards(&kc, udev);
+        mon = udev_monitor_new_from_netlink(udev, "udev");
+        if (mon) {
+            udev_monitor_filter_add_match_subsystem_devtype(mon, "input", NULL);
+            if (udev_monitor_enable_receiving(mon) == 0) {
+                mon_fd = udev_monitor_get_fd(mon);
+            } else {
+                udev_monitor_unref(mon);
+                mon = NULL;
+            }
+        }
+    } else {
+        fprintf(stderr, "Warning: udev_new failed; external keyboard hotplug disabled\n");
     }
 
     /* ---------- 2. xkbcommon ---------- */
@@ -593,14 +828,20 @@ void *keyboard_read_thread(void *argv) {
 
     /* ---------- 4. event loop ---------- */
     int li_fd = libinput_get_fd(kc.li);
-    struct pollfd pfds[2] = {
+    struct pollfd pfds[3] = {
         { .fd = li_fd,        .events = POLLIN },
         { .fd = kc.repeat_fd, .events = POLLIN },
+        { .fd = mon_fd,       .events = POLLIN },
     };
+    const nfds_t nfds = (mon_fd >= 0) ? 3 : 2;
 
     g_libinput = kc.li;
-    SLOGI("Start listening for keyboard input (%s)", device_path);
-    libinput_dispatch(kc.li);
+    SLOGI("[KBD] Listening on %zu keyboard device(s) (built-in: %s, hotplug: %s)",
+          kc.device_count,
+          kc.builtin_sysname[0] ? kc.builtin_sysname : device_path,
+          mon_fd >= 0 ? "enabled" : "disabled");
+    fflush(stdout);
+    drain_libinput_events(&kc);
 
     while (!atomic_load_explicit(&keyboard_shutdown_requested,
                                  memory_order_acquire)) {
@@ -608,7 +849,7 @@ void *keyboard_read_thread(void *argv) {
             usleep(50000);
             continue;
         }
-        int pr = poll(pfds, 2, 100);
+        int pr = poll(pfds, nfds, 100);
         if (pr < 0) {
             if (errno == EINTR) continue;
             perror("poll"); break;
@@ -617,20 +858,7 @@ void *keyboard_read_thread(void *argv) {
 
         /* keyboard event */
         if (pfds[0].revents & POLLIN) {
-            libinput_dispatch(kc.li);
-            struct libinput_event *ev;
-            while ((ev = libinput_get_event(kc.li)) != NULL) {
-                if (libinput_event_get_type(ev) == LIBINPUT_EVENT_KEYBOARD_KEY) {
-                    struct libinput_event_keyboard *kev =
-                        libinput_event_get_keyboard_event(ev);
-                    uint32_t code = libinput_event_keyboard_get_key(kev);
-                    enum libinput_key_state ks =
-                        libinput_event_keyboard_get_key_state(kev);
-                    process_key(&kc, code,
-                                ks == LIBINPUT_KEY_STATE_PRESSED ? 1 : 0);
-                }
-                libinput_event_destroy(ev);
-            }
+            drain_libinput_events(&kc);
         }
 
         /* repeat timer triggered */
@@ -646,14 +874,22 @@ void *keyboard_read_thread(void *argv) {
                 }
             }
         }
+
+        /* udev hotplug event */
+        if (nfds == 3 && (pfds[2].revents & POLLIN)) {
+            handle_udev_monitor_event(&kc, mon, device_path);
+            drain_libinput_events(&kc);
+        }
     }
 
 out:
     g_libinput = NULL;
     if (kc.repeat_fd >= 0) close(kc.repeat_fd);
     free_xkb(&kc);
-    if (kc.dev) libinput_path_remove_device(kc.dev);
+    kbd_remove_all_devices(&kc);
+    if (mon) udev_monitor_unref(mon);
     if (kc.li) libinput_unref(kc.li);
+    if (udev) udev_unref(udev);
     free(device_path_arg);
     return NULL;
 }
