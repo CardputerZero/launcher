@@ -282,6 +282,11 @@ private:
 class AppTopBarTimeComponent final : public AppTopBarComponent
 {
 public:
+    // Pill widths in pixels.  The 24-hour pill fits "HH:MM"; the US 12-hour
+    // form ("h:MM AM/PM") needs room for its widest value, "10:44 AM".
+    static constexpr int kTwentyFourHourWidth = 40;
+    static constexpr int kTwelveHourWidth = 68;
+
     AppTopBarTimeComponent();
     ~AppTopBarTimeComponent() override;
     void refresh() override;
@@ -293,7 +298,11 @@ protected:
 
 private:
     static void child_delete_cb(lv_event_t *event);
+    // Resizes the pill when the CP0_CONFIG_KEY_CLOCK_12H preference changes.
+    void apply_clock_format(bool twelve_hour);
     lv_obj_t *label_ = nullptr;
+    bool twelve_hour_ = false;
+    bool clock_format_applied_ = false;
 };
 
 /** @brief Built-in top-bar component that displays battery state. */
