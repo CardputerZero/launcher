@@ -12,9 +12,15 @@ bool should_run_wizard(const FirstBootState &state)
 {
     if (state.rearm_marker)
         return true;
-    if (state.factory_marker)
-        return state.factory_username &&
-               (!state.user_has_password || state.factory_credentials);
+    if (state.factory_marker) {
+        // The baked factory password still verifying is on its own enough to
+        // run the OOBE, whatever the account is called. Gating this on the
+        // username as well meant a renamed account that kept the factory
+        // password was treated as provisioned.
+        if (state.factory_credentials)
+            return true;
+        return state.factory_username && !state.user_has_password;
+    }
     return state.legacy_piwiz_active;
 }
 

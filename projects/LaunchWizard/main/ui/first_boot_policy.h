@@ -18,8 +18,9 @@ struct FirstBootState {
     // /var/lib/LaunchWizard/run-oobe: baked into every factory image by pi-gen.
     bool factory_marker = false;
     // The UID 1000 user is still named after the factory default ("pi"). A
-    // rename can only come from provisioning (Imager/userconf), so a changed
-    // name alone means the device was configured.
+    // rename normally comes from provisioning (Imager/userconf), so a changed
+    // name is evidence the device was configured -- but only evidence: it is
+    // no longer trusted on its own while the factory password still verifies.
     bool factory_username = false;
     // The UID 1000 user's shadow entry holds a real "$..." hash, meaning the
     // account was configured (Raspberry Pi Imager, a finished OOBE, ...).
@@ -32,11 +33,12 @@ struct FirstBootState {
     bool legacy_piwiz_active = false;
 };
 
-// A user-requested re-run always shows the wizard. The factory marker shows it
-// only while the account is exactly in factory state: default username with
-// either no password at all or the baked default password. A changed username
-// or a user-chosen password both mean the device was provisioned (Raspberry Pi
-// Imager), so first boot skips straight to the launcher.
+// A user-requested re-run always shows the wizard. Under the factory marker the
+// wizard runs whenever the baked default password still verifies -- whatever the
+// account is named -- and otherwise only while the account is untouched:
+// default username and no password at all. A user-chosen password, or a rename
+// together with some other password, means the device was provisioned
+// (Raspberry Pi Imager), so first boot skips straight to the launcher.
 bool should_run_wizard(const FirstBootState &state);
 
 // Expanding the root filesystem is a first-boot operation: it rewrites the
