@@ -750,6 +750,8 @@ void UISettingTreePage::create_page_detail()
                                SettingEntry{"Licenses", settings_credit_page_factory, PageType::FullCustom});
         settings_t12b::append_boot_action_child(
             mode_tree, system, settings_t12b::boot_actions::Action::Reboot, confirm_page3_factory);
+        settings_t12b::append_boot_action_child(
+            mode_tree, system, settings_t12b::boot_actions::Action::Shutdown, confirm_page3_factory);
     }
 
 }
