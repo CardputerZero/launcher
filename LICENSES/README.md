@@ -33,7 +33,9 @@ Wrapper-local LICENSE files for Sigslot, SmoothUI and Spdlog were
 copied from their corresponding SDK/github_source trees. Miniaudio/LICENSE
 is the complete dual-license block extracted from its single header.
 APPLaunch's local LVGL directory contains copies of the LVGL and FreeType
-notices. Keyboard Guide's NotoSans/OFL.txt comes from LVGL's
+notices; `projects/APPLaunch/main/lvgl/lodepng.c` is a modified copy of LVGL's
+LodePNG file and keeps the upstream zlib notice inline (issue #268).
+Keyboard Guide's NotoSans/OFL.txt comes from LVGL's
 scripts/built_in_font/font_license/NotoSansSC/OFL.txt; the input font's
 embedded metadata confirms the same Adobe copyright and OFL-1.1 license.
 

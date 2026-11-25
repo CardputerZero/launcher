@@ -120,7 +120,8 @@ if 'CONFIG_BACKWARD_CPP_ENABLED' in os.environ:
 
 # custom lvgl component
 lvgl_component = list(filter(lambda x: x['target'] == 'lvgl_component', env['COMPONENTS']))[0]
-local_lvgl_override_srcs = Glob('lvgl/lv_freetype*.c')
+# lodepng.c: issue #268, size the decode buffer for 16-bit PNGs (see the file header).
+local_lvgl_override_srcs = Glob('lvgl/lv_freetype*.c') + Glob('lvgl/lodepng.c')
 local_lvgl_override_names = set(Path(str(src)).name for src in local_lvgl_override_srcs)
 lvgl_component['SRCS'] = [
     src for src in lvgl_component['SRCS']
@@ -130,7 +131,10 @@ lvgl_component['SRCS'] += local_lvgl_override_srcs
 lvgl_component['PRIVATE_INCLUDE'] = [
     ADir('lvgl'),
     ADir('../../../SDK/github_source/lvgl/lvgl_9_5/lvgl/src/libs/freetype'),
+    ADir('../../../SDK/github_source/lvgl/lvgl_9_5/lvgl/src/libs/lodepng'),
 ] + lvgl_component['PRIVATE_INCLUDE']
+if 'lodepng.c' in local_lvgl_override_names:
+    print('[APPLaunch] lvgl override active: main/lvgl/lodepng.c replaces SDK src/libs/lodepng/lodepng.c (#268)')
 
 
 
