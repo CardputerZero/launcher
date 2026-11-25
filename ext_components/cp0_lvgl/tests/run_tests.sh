@@ -251,6 +251,14 @@ fi
     "$root/tests/test_sdl_external_app_runner.cpp" -o "$binary"
 "$binary"
 
+if [ "$(uname -s)" = Linux ]; then
+    "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -pthread \
+        -I"$root/include" -I"$root/src" "$esc_state_object" \
+        "$root/src/cp0/cp0_external_app_runner.cpp" \
+        "$root/tests/test_device_external_app_runner.cpp" -o "$binary"
+    "$binary"
+fi
+
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror \
     -I"$root/include" -I"$root/src" \
     "$root/src/cp0_filesystem_api.cpp" \

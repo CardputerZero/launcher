@@ -60,6 +60,15 @@ public:
         return decision;
     }
 
+    // poll(2) uses -1 when only input or child exit can change the state.
+    int timeout_ms(std::uint64_t now_ms) const
+    {
+        if (killed_ || (!terminated_ && !pressed_)) return -1;
+        const auto deadline = terminated_ ? terminate_ms_ + KILL_GRACE_MS :
+            press_ms_ + (hint_visible_ ? TERMINATE_DELAY_MS : HINT_DELAY_MS);
+        return now_ms >= deadline ? 0 : static_cast<int>(deadline - now_ms);
+    }
+
     Decision finish()
     {
         Decision decision;
