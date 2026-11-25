@@ -13,7 +13,7 @@ Paths in the evidence column are relative to the repository root.
 | Component | Build/source evidence | License and local text |
 | --- | --- | --- |
 | M5Stack Linux Libs SDK | `SDK`, pinned gitlink; SCons/Kconfig framework | [MIT, 2024 M5Stack](../LICENSES/M5Stack-SDK-MIT.txt) |
-| LVGL 9.5 | SDK LVGL component, emulator `lib/lvgl`, APPLaunch `lv_freetype*` and `lv_sdl_keyboard.c` overrides | [MIT](../LICENSES/LVGL-MIT.txt); bundled sublibraries retain their own notices |
+| LVGL 9.5 | SDK LVGL component, emulator `lib/lvgl`, APPLaunch `lv_freetype*`, `lv_sdl_keyboard.c` and `lodepng.c` overrides (the lodepng copy keeps LodePNG's zlib notice inline; issue #268) | [MIT](../LICENSES/LVGL-MIT.txt); bundled sublibraries retain their own notices |
 | FreeType | APPLaunch `main/lvgl/ftmodule.h` and `main/SConstruct` | FTL or GPL-2.0; [FTL text](../projects/APPLaunch/main/lvgl/freetype-LICENSE.txt) |
 | tree.hh 3.20 | `ext_components/cp0_lvgl/include/tree.hh`, Kasper Peeters 2001–2024 | [GPL-3.0-only](../LICENSES/tree.hh-GPL-3.0-only.txt): header specifies version 3 without an “or later” grant |
 | miniaudio 0.11.25 | `ext_components/Miniaudio/include/miniaudio.h`; audio service | [Unlicense OR MIT-0](../ext_components/Miniaudio/LICENSE), David Reid |
