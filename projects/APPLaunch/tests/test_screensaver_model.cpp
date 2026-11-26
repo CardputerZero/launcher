@@ -26,7 +26,10 @@ int main()
     assert(!screensaver_delete_is_tracked(nullptr, &timer, &timer));
     assert(screensaver_timeout_from_config(true, "0") == 0);
     assert(screensaver_timeout_from_config(true, "10") == 10);
+    assert(screensaver_timeout_from_config(true, "120") == 120);
+    assert(screensaver_timeout_from_config(true, "180") == 180);
     assert(screensaver_timeout_from_config(true, "300") == 300);
+    assert(screensaver_timeout_from_config(true, "150") == 30);
     assert(screensaver_timeout_from_config(true, "garbage") == 30);
     assert(screensaver_timeout_from_config(true, "10junk") == 30);
     assert(screensaver_timeout_from_config(true, " 10") == 30);

@@ -47,7 +47,13 @@ int main()
     assert(!setup_values::parse_nonnegative_int("2147483648", parsed));
 
     assert(setup_values::dark_time_index(0) == 0);
-    assert(setup_values::dark_time_index(300) == 4);
+    assert(setup_values::dark_time_index(120) == 4);
+    assert(setup_values::dark_time_index(180) == 5);
+    assert(setup_values::dark_time_index(300) == 6);
+    assert(setup_values::dark_time_index(150) == 2);
+    assert(setup_values::dark_time_seconds(4) == 120);
+    assert(setup_values::dark_time_seconds(5) == 180);
+    assert(setup_values::dark_time_option_count() == 7);
     assert(setup_values::dark_time_index(17) == 2);
     assert(setup_values::dark_time_seconds(-1) == 0);
     assert(setup_values::dark_time_seconds(99) == 300);

@@ -619,6 +619,8 @@ void UISettingTreePage::create_page_detail()
             mode_tree.append_child(dark_time, SettingEntry{"10S"});
             mode_tree.append_child(dark_time, SettingEntry{"30S"});
             mode_tree.append_child(dark_time, SettingEntry{"60S"});
+            mode_tree.append_child(dark_time, SettingEntry{"120S"});
+            mode_tree.append_child(dark_time, SettingEntry{"180S"});
             mode_tree.append_child(dark_time, SettingEntry{"300S"});
         }
     }

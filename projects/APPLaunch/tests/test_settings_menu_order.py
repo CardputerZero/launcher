@@ -62,7 +62,7 @@ def test_screen_keeps_lock_timeout_options():
     timeouts = re.findall(
         r'append_child\(\s*dark_time,\s*SettingEntry\{"([^"]+)"', builder
     )
-    assert timeouts == ["Never", "10S", "30S", "60S", "300S"]
+    assert timeouts == ["Never", "10S", "30S", "60S", "120S", "180S", "300S"]
 
 
 def test_volume_opens_the_volume_editor_directly():

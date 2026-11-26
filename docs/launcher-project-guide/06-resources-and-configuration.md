@@ -306,7 +306,7 @@ These entries come from `BUILTIN_APPS[]` in `projects/APPLaunch/main/ui/builtin_
 | --- | --- | --- |
 | `brightness` | `UISetupPage`, `ext_components/cp0_lvgl/src/commount.cpp` | Backlight brightness value; restored at startup and written by the settings page |
 | `volume` | `UISetupPage`, `commount.cpp` | System volume; restored at startup and written by the settings page |
-| `dark_time` | `settings_screen_timeout_page.*`, `ui_screensaver.cpp` | Idle lock timeout: `0/10/30/60/300` seconds, default `30`; `0` disables automatic locking only |
+| `dark_time` | `settings_screen_timeout_page.*`, `ui_screensaver.cpp` | Idle lock timeout: `0/10/30/60/120/180/300` seconds, default `30`; `0` disables automatic locking only |
 | `bt_named_only` | Bluetooth settings | Whether to show only named Bluetooth devices; defaults to `1` |
 | `run_as_user` | `cp0_process_commands.cpp`, `cp0_sudo_async.cpp` | User configuration for dropping privileges in external processes / PTY commands |
 

@@ -46,6 +46,7 @@ bool parse_nonnegative_int(std::string_view text, int &value);
 
 int dark_time_index(int seconds);
 int dark_time_seconds(int index);
+int dark_time_option_count();
 
 int round_volume_percent(int percent);
 int volume_index(int percent);

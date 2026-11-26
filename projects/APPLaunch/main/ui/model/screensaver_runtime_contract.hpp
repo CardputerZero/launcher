@@ -39,6 +39,8 @@ inline int screensaver_timeout_from_config(bool request_succeeded,
     case 10:
     case 30:
     case 60:
+    case 120:
+    case 180:
     case 300:
         return value;
     default:

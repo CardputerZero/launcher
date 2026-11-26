@@ -293,7 +293,7 @@ cp0_signal_config_api({"Save"}, save_callback);
 | --- | --- | --- |
 | `brightness` | `UISetupPage`, `ext_components/cp0_lvgl/src/commount.cpp` | バックライト輝度値。起動時に復元され、設定ページから書き込まれる |
 | `volume` | `UISetupPage`, `commount.cpp` | システム音量。起動時に復元され、設定ページから書き込まれる |
-| `dark_time` | `settings_screen_timeout_page.*`, `ui_screensaver.cpp` | 自動ロックまでの待機時間：`0/10/30/60/300` 秒、既定値 `30`。`0` は自動ロックだけを無効にする |
+| `dark_time` | `settings_screen_timeout_page.*`, `ui_screensaver.cpp` | 自動ロックまでの待機時間：`0/10/30/60/120/180/300` 秒、既定値 `30`。`0` は自動ロックだけを無効にする |
 | `bt_named_only` | Bluetooth 設定 | 名前のある Bluetooth デバイスだけを表示するか。既定値は `1` |
 | `run_as_user` | `cp0_process_commands.cpp`, `cp0_sudo_async.cpp` | 外部プロセス / PTY コマンドで権限を下げる際のユーザー設定 |
 

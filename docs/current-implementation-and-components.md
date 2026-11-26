@@ -30,7 +30,7 @@ main loop and teardown to `cp0_lvgl_run()`.
 
 The bouncing-image screensaver has been removed, but the lock screen remains.
 The legacy `ui_screensaver_*` API names now refer only to the lock screen.
-Settings -> Screen -> DarkTime controls its idle timeout (`0/10/30/60/300`
+Settings -> Screen -> DarkTime controls its idle timeout (`0/10/30/60/120/180/300`
 seconds, default `30`); `0` disables automatic locking, not the manual TAB hold.
 Holding TAB for 3 seconds also locks. A fresh key press wakes the black screen,
 then TAB and ENTER unlock it. The wallpaper `lockscreen.png` and four lock

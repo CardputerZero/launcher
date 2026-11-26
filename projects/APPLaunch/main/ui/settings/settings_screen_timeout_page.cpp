@@ -84,7 +84,7 @@ class settings_dark_time_com {
     }
     static int dark_time_index(int seconds) { return setup_values::dark_time_index(seconds); }
     static int dark_time_seconds(int index) { return setup_values::dark_time_seconds(index); }
-    static bool valid_index(int index) { return index >= 0 && index < 5; }
+    static bool valid_index(int index) { return index >= 0 && index < setup_values::dark_time_option_count(); }
     static bool restore(const ConfigInvoker &invoker, int value)
     {
         return response_is_ok(set_int(invoker, value)) && response_is_ok(save(invoker));
@@ -374,7 +374,7 @@ void LvSettingDarkTimePage3::finish_write_failure()
 
 bool LvSettingDarkTimePage3::begin_write()
 {
-    if (selected_index < 0 || selected_index >= 5) {
+    if (selected_index < 0 || selected_index >= setup_values::dark_time_option_count()) {
         select(saved_index_);
         restore_focus();
         set_status("Invalid dark time target", true);

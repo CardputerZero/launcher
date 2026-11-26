@@ -213,8 +213,9 @@ the lock and restarts the idle interval; it does not resume a previous lock stat
 
 `settings/settings_screen_timeout_page.*` implements Screen -> DarkTime.
 It reads and saves `dark_time` through `GetInt`, `SetInt`, and `Save`, with
-rollback on write/save failure. Never/10S/30S/60S/300S map to 0/10/30/60/300
-seconds. The default is 30 seconds; 0 disables automatic locking only.
+rollback on write/save failure. Never/10S/30S/60S/120S/180S/300S map to
+0/10/30/60/120/180/300 seconds. The default is 30 seconds; 0 disables
+automatic locking only.
 The lock-screen runtime reads this setting during its idle checks.
 
 While unlocked, the filter observes TAB without consuming its press/release,

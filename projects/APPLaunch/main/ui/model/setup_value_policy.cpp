@@ -14,7 +14,7 @@ namespace setup_values {
 namespace {
 
 constexpr int kBrightnessPercentages[] = {100, 75, 50, 25};
-constexpr int kDarkTimes[] = {0, 10, 30, 60, 300};
+constexpr int kDarkTimes[] = {0, 10, 30, 60, 120, 180, 300};
 constexpr CameraResolution kCameraResolutions[] = {{1280, 720}, {640, 480}};
 
 template <typename T, int N>
@@ -113,6 +113,11 @@ int dark_time_index(int seconds)
         if (kDarkTimes[i] == seconds) return i;
     }
     return 2;
+}
+
+int dark_time_option_count()
+{
+    return array_size(kDarkTimes);
 }
 
 int dark_time_seconds(int index)
