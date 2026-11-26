@@ -31,6 +31,13 @@ int main(void)
             else
                 SLOGE("[BOOT] failed to set m5ioe1 line 9 low: %s", data.c_str());
         });
+        /* Defensive wake reset: a previous process may have died while the
+         * screen-off deep stage had blanked the panel or pinned the CPU
+         * governor.  Both calls are no-ops after a normal boot. */
+        if (cp0_panel_fb_blank(0) == 0)
+            SLOGI("[BOOT] panel unblanked (defensive wake reset)");
+        if (cp0_cpufreq_wake_reset() > 0)
+            SLOGI("[BOOT] cleared a stale cpufreq powersave pin");
         if (launcher_media_controls::restore_startup_backlight())
             SLOGI("[BOOT] restored working backlight brightness");
         else

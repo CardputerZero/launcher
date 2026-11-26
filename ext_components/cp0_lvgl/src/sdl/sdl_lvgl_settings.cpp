@@ -202,3 +202,31 @@ extern "C" void cp0_time_str(char *buffer, int buffer_size)
 {
     SettingsSystem::api_time_str(buffer, buffer_size);
 }
+
+/* The simulator has no status LED, cpufreq or framebuffer blanking; the
+ * screen-off power staging degrades to no-ops on this backend. */
+extern "C" int cp0_status_led_suspend(void)
+{
+    return 0;
+}
+
+extern "C" void cp0_status_led_restore(void)
+{
+}
+
+extern "C" int cp0_cpufreq_powersave_set(int enable)
+{
+    (void)enable;
+    return 0;
+}
+
+extern "C" int cp0_cpufreq_wake_reset(void)
+{
+    return 0;
+}
+
+extern "C" int cp0_panel_fb_blank(int blank)
+{
+    (void)blank;
+    return 0;
+}

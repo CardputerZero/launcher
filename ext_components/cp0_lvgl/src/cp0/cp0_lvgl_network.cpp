@@ -7,6 +7,7 @@
 #include "cp0_lvgl_app.h"
 #include "keyboard_input.h"  // LVGL_RUN_FLAGE
 #include "hal_lvgl_bsp.h"
+#include "cp0_status_pause.h"  // screen-off polling hold
 #include "../cp0_app_internal_utils.h"
 #include "../cp0_network_api_contract.hpp"
 #include "../cp0_callback_result.hpp"
@@ -503,6 +504,17 @@ private:
         auto last_refresh = std::chrono::steady_clock::time_point{};
         while (running_.load()) {
             const auto now = std::chrono::steady_clock::now();
+            if (cp0_status_pause_get()) {
+                /* The panel is dark: hold all status polling instead of the
+                 * 60 s hidden backstop.  Wi-Fi itself stays connected; the
+                 * cache refreshes right after the flag clears (last_refresh
+                 * reset below makes the first awake iteration refresh). */
+                last_refresh = std::chrono::steady_clock::time_point{};
+                std::unique_lock<std::mutex> lock(wake_mutex_);
+                wake_.wait_for(lock, kVisiblePollInterval,
+                               [this] { return !running_.load(); });
+                continue;
+            }
             if (last_refresh == std::chrono::steady_clock::time_point{} || status_visible() ||
                 now - last_refresh >= kHiddenPollInterval) {
                 update_status_cache();
