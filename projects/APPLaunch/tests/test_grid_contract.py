@@ -99,9 +99,17 @@ assert "BORDER_COLOR_CENTER" not in PAGE
 # old no-op UP/DOWN branches are gone.
 assert "move_grid_up()" in INPUT and "move_grid_down()" in INPUT
 assert "move_grid_previous()" in INPUT and "move_grid_next()" in INPUT
+assert "move_grid_page_previous()" in INPUT and "move_grid_page_next()" in INPUT
 assert "case KEY_UP:" in INPUT and "case KEY_DOWN:" in INPUT
+assert "case KEY_I:" in INPUT and "case KEY_O:" in INPUT
 assert "fzxc_to_arrow" in INPUT
 # Clicking a card selects its cell, then launches.
 assert "select_grid_cell(cell);" in INPUT
 assert "launch_selected_app();" in INPUT
 assert "void UILaunchPage::select_grid_cell(size_t cell)" in PAGE
+
+# Ragged pages -------------------------------------------------------------
+# Pages never show wrapped filler: cells past the app count are hidden, and
+# the model owns the clamped edge/wrap targets plus the I/O page flips.
+assert "LV_OBJ_FLAG_HIDDEN" in PAGE and "real" in PAGE
+assert "bool flip_page(int dir)" in MODEL
