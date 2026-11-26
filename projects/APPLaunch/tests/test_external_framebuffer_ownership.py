@@ -9,7 +9,7 @@ source = (Path(__file__).resolve().parents[1] / "main/ui/launch.cpp").read_text(
     encoding="utf-8"
 )
 start = source.index("void Launch::launch_Exec(")
-end = source.index("\nvoid Launch::select_next_app()", start)
+end = source.index("\nvoid Launch::select_app_relative(int delta)", start)
 body = source[start:end]
 
 paint = body.index("lv_refr_now(disp)")

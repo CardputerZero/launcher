@@ -63,11 +63,11 @@ public:
 
     void bind_ui();
     void set_launch_page(std::shared_ptr<UILaunchPage> launch_page);
-    void select_next_app();
-    void select_previous_app();
+    void select_app_relative(int delta);
     std::size_t app_count() const;
     std::size_t current_app_index() const;
-    const app *carousel_slot_app(size_t slot) const;
+    /* Absolute lookup into the (wrapped) app list; drives the home grid. */
+    const app *app_at_index(int index) const;
     void launch_app();
 
 private:
@@ -85,14 +85,13 @@ private:
     void applications_reload();
     void rebuild_builtin_apps();
     int normalized_app_index(int index) const;
-    const app *app_at_index(int index) const;
 
     static void lv_go_back_home(void *arg) noexcept;
     static void esc_force_home_cb(void *user_data) noexcept;
     static void app_registry_changed_cb(void *user_data) noexcept;
 
     std::weak_ptr<UILaunchPage> launch_page_;
-    int current_app = 2;
+    int current_app = 0;
     AppDirectoryWatcher app_directory_watcher_;
     EscUiWatchdog esc_ui_watchdog_;
     LauncherPageLifecycleModel page_lifecycle_;

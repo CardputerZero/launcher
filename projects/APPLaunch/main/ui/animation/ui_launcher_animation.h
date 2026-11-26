@@ -15,8 +15,11 @@ namespace launcher_home_animation {
 using ReadyCallback = std::function<void()>;
 using AliveCallback = std::function<bool()>;
 
-void animate_right(lv_obj_t **items, ReadyCallback ready_cb, AliveCallback alive_cb);
-void animate_left(lv_obj_t **items, ReadyCallback ready_cb, AliveCallback alive_cb);
+// Slide the whole grid container in from the left/right edge (a page flip).
+// forward=true enters from the right edge, false from the left.  The
+// container must be alive for the whole animation; alive_cb guards that.
+void animate_page_slide(lv_obj_t *container, bool forward,
+                        ReadyCallback ready_cb, AliveCallback alive_cb);
 
 // Selected titles bounce (pause, left, pause, right). Others end in "...".
 void set_title_text(lv_obj_t *label, const char *text);
