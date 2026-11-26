@@ -199,6 +199,10 @@ void cp0_status_led_restore(void);
 /* CPU frequency staging: 1 pins the cpufreq governor to powersave, 0 restores
  * the previously active governor.  Negative when the node is not writable. */
 int cp0_cpufreq_powersave_set(int enable);
+/* Startup safety net: if the governor is still sitting on powersave from a
+ * previous process that died during the screen-off stage, restore the
+ * platform default (ondemand).  Returns 1 when a stale pin was cleared. */
+int cp0_cpufreq_wake_reset(void);
 /* LCD panel power through the framebuffer blanking ioctl: 1 blanks the panel
  * (display off + MIPI sleep), 0 wakes it again and flushes the framebuffer
  * back.  0 on success, negative when no framebuffer can be blanked. */

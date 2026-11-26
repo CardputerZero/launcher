@@ -658,6 +658,19 @@ extern "C" int cp0_cpufreq_powersave_set(int enable)
     return write_text_node(path, restore) ? 0 : -1;
 }
 
+extern "C" int cp0_cpufreq_wake_reset(void)
+{
+    const char *path = first_writable_governor_path();
+    if (!path) return 0;
+    std::string current;
+    if (!read_text_node(path, current)) return 0;
+    current = trim_node_text(std::move(current));
+    if (current != "powersave") return 0;
+    /* A previous process died while the screen-off stage had pinned the
+     * governor down; restore the platform default. */
+    return write_text_node(path, "ondemand") ? 1 : -1;
+}
+
 extern "C" int cp0_panel_fb_blank(int blank)
 {
     const char *paths[] = {"/dev/fb_lcd", "/dev/fb0"};

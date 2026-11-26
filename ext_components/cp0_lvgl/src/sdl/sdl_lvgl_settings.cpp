@@ -220,6 +220,11 @@ extern "C" int cp0_cpufreq_powersave_set(int enable)
     return 0;
 }
 
+extern "C" int cp0_cpufreq_wake_reset(void)
+{
+    return 0;
+}
+
 extern "C" int cp0_panel_fb_blank(int blank)
 {
     (void)blank;

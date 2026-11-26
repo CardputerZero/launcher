@@ -53,6 +53,7 @@ for symbol in (
     "cp0_status_led_suspend",
     "cp0_status_led_restore",
     "cp0_cpufreq_powersave_set",
+    "cp0_cpufreq_wake_reset",
     "cp0_panel_fb_blank",
 ):
     assert f"int {symbol}(void)" in APP_HEADER or f"{symbol}(" in APP_HEADER
