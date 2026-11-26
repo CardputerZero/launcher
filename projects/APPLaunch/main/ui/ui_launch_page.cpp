@@ -266,13 +266,33 @@ void UILaunchPage::apply_grid_highlight()
     const size_t page_base = grid_.page() * LauncherGridModel::kCellsPerPage;
     for (size_t cell = 0; cell < launcher_grid_layout::kCells; ++cell) {
         const bool selected = page_base + cell == grid_.index();
-        if (grid_elements_[cell]) {
-            const uint32_t color = selected ? BORDER_COLOR_CENTER : BORDER_COLOR_SIDE;
-            lv_obj_set_style_border_color(
-                grid_elements_[cell], lv_color_hex(color), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_t *card = grid_elements_[cell];
+        if (card) {
+            const auto selector = LV_PART_MAIN | LV_STATE_DEFAULT;
+            const uint32_t border = selected ? launcher_grid_layout::kSelectedBorderColor
+                                             : BORDER_COLOR_SIDE;
+            lv_obj_set_style_border_color(card, lv_color_hex(border), selector);
+            lv_obj_set_style_bg_color(
+                card, lv_color_hex(launcher_grid_layout::kSelectedBgColor), selector);
+            lv_obj_set_style_bg_opa(card, selected ? launcher_grid_layout::kSelectedBgOpa
+                                                   : LV_OPA_TRANSP,
+                                    selector);
+            /* Dim the icon art so the selected tile reads as the lit one. */
+            if (lv_obj_t *clip = lv_obj_get_child(card, 0)) {
+                if (lv_obj_t *image = lv_obj_get_child(clip, 0))
+                    lv_obj_set_style_opa(image, selected ? LV_OPA_COVER
+                                                         : launcher_grid_layout::kUnselectedIconOpa,
+                                         selector);
+            }
         }
-        if (label(cell))
+        if (label(cell)) {
             launcher_home_animation::apply_title_overflow(label(cell), selected);
+            lv_obj_set_style_text_color(
+                label(cell),
+                lv_color_hex(selected ? 0xFFFFFF
+                                      : launcher_grid_layout::kUnselectedTitleColor),
+                LV_PART_MAIN | LV_STATE_DEFAULT);
+        }
     }
 }
 

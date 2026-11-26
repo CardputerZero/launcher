@@ -85,9 +85,14 @@ factory = VIEW[start:end]
 assert "lv_obj_set_style_border_width(card," not in factory
 assert "lv_obj_set_style_border_post(card, true," in factory
 assert "lv_obj_set_style_clip_corner(card," not in factory
-# The selection highlight only swaps the border colour.
-assert "BORDER_COLOR_CENTER" in PAGE and "BORDER_COLOR_SIDE" in PAGE
-assert "set_style_border_color" in PAGE
+# The selection highlight is unmistakable: theme-accent border + lit tile on
+# the selection, dimmed icons/titles on the neighbours.
+assert "kSelectedBorderColor" in LAYOUT and "kSelectedBorderColor" in PAGE
+assert "BORDER_COLOR_SIDE" in PAGE
+assert "kSelectedBgOpa" in LAYOUT and "set_style_bg_opa" in PAGE
+assert "kUnselectedIconOpa" in LAYOUT and "set_style_opa" in PAGE
+assert "kUnselectedTitleColor" in LAYOUT and "set_style_text_color" in PAGE
+assert "BORDER_COLOR_CENTER" not in PAGE
 
 # ---- arrows and keys ----------------------------------------------------
 # All four arrows move the grid; F/Z/X/C remap onto them as before, and the
