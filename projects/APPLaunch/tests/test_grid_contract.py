@@ -53,12 +53,17 @@ for gone in (
     assert gone not in LAUNCH_H + LAUNCH, gone
 
 # ---- selection model ----------------------------------------------------
-# The UI only strides the absolute index; Launch wraps it.
+# The UI drives the model's named moves; left/right stay inside the row and
+# the model decides when an edge move means a page flip.
 assert "void select_app_relative(int delta);" in LAUNCH_H
-assert "select_app_relative(delta)" in PAGE
+assert "select_app_relative(static_cast<int>(grid_.index())" in PAGE
 assert "class LauncherGridModel" in MODEL
 assert "kCellsPerPage = kCols * kRows" in MODEL
 assert "crossed_page_" in MODEL and "moved_forward_" in MODEL
+assert "bool move_row_right() { return move_row(1); }" in MODEL
+assert "bool move_row_left() { return move_row(-1); }" in MODEL
+assert "grid_.move_row_right()" in PAGE and "grid_.move_row_left()" in PAGE
+assert "grid_.move_down()" in PAGE and "grid_.move_up()" in PAGE
 # Moves ignore while a page flip animates, so strides cannot interleave.
 assert "if (page_flip_active_) return false;" in PAGE
 

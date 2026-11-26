@@ -14,10 +14,29 @@
 
 #include <algorithm>
 
-void UILaunchPage::move_grid_next() { (void)move_grid(1); }
-void UILaunchPage::move_grid_previous() { (void)move_grid(-1); }
-void UILaunchPage::move_grid_down() { (void)move_grid(static_cast<int>(launcher_grid_layout::kCols)); }
-void UILaunchPage::move_grid_up() { (void)move_grid(-static_cast<int>(launcher_grid_layout::kCols)); }
+void UILaunchPage::move_grid_next()
+{
+    if (!begin_grid_move()) return;
+    if (grid_.move_row_right()) finish_grid_move();
+}
+
+void UILaunchPage::move_grid_previous()
+{
+    if (!begin_grid_move()) return;
+    if (grid_.move_row_left()) finish_grid_move();
+}
+
+void UILaunchPage::move_grid_down()
+{
+    if (!begin_grid_move()) return;
+    if (grid_.move_down()) finish_grid_move();
+}
+
+void UILaunchPage::move_grid_up()
+{
+    if (!begin_grid_move()) return;
+    if (grid_.move_up()) finish_grid_move();
+}
 
 namespace {
 
@@ -272,7 +291,7 @@ void UILaunchPage::apply_grid_highlight()
     }
 }
 
-bool UILaunchPage::move_grid(int delta)
+bool UILaunchPage::begin_grid_move()
 {
     if (page_flip_active_) return false;
     if (!launch_) return false;
@@ -282,15 +301,19 @@ bool UILaunchPage::move_grid(int delta)
 
     grid_.set_app_count(launch_->app_count());
     grid_.set_index(launch_->current_app_index());
+    return true;
+}
 
-    if (!grid_.move_by(delta)) return false;
-
-    launch_->select_app_relative(delta);
+void UILaunchPage::finish_grid_move()
+{
+    // The model already sits on the new index; sync Launch through a signed
+    // delta (select_app_relative wraps, so any magnitude works).
+    launch_->select_app_relative(static_cast<int>(grid_.index()) -
+                                 static_cast<int>(launch_->current_app_index()));
     if (grid_.crossed_page())
         start_page_flip(grid_.moved_forward());
     else
         apply_grid_highlight();
-    return true;
 }
 
 void UILaunchPage::start_page_flip(bool forward)

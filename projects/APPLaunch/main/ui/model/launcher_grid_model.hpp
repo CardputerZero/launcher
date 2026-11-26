@@ -49,21 +49,15 @@ public:
     // crossed_page() reports whether the new selection sits on another grid
     // page (the caller plays the page-flip animation) and moved_forward()
     // reports the travel direction for the slide.
-    bool move_next() { return step(1); }
-    bool move_previous() { return step(-1); }
+    //
+    // Left/right stay inside the current row: stepping past the row edge
+    // flips to the neighbouring page at the same row (forward = next page
+    // row start, backward = previous page row end).  Up/down swap rows and
+    // wrap through the page boundary.
+    bool move_row_right() { return move_row(1); }
+    bool move_row_left() { return move_row(-1); }
     bool move_up() { return step(-static_cast<int>(kCols)); }
     bool move_down() { return step(static_cast<int>(kCols)); }
-
-    // Single entry point for the UI: delta is the stride in apps
-    // (+-1 walks a row, +-kCols swaps rows).
-    bool move_by(int delta)
-    {
-        switch (delta) {
-        case 1: return move_next();
-        case -1: return move_previous();
-        default: return delta < 0 ? move_up() : move_down();
-        }
-    }
 
     bool crossed_page() const { return crossed_page_; }
     bool moved_forward() const { return moved_forward_; }
@@ -82,6 +76,42 @@ private:
         if (index_ == previous) return false;
         crossed_page_ = index_ / kCellsPerPage != previous / kCellsPerPage;
         moved_forward_ = delta > 0;
+        return true;
+    }
+
+    // dir 1 = right, -1 = left.  Within the row this is a plain +-1; at the
+    // row edge the target jumps to the neighbouring page's same-row far
+    // cell.  A ragged last page still displays wrapped apps in its trailing
+    // cells, so the computed target always matches what is on screen.
+    bool move_row(int dir)
+    {
+        crossed_page_ = false;
+        moved_forward_ = false;
+        if (app_count_ == 0) return false;
+        const size_t page = index_ / kCellsPerPage;
+        const size_t cell = index_ % kCellsPerPage;
+        const size_t row = cell / kCols;
+        const size_t col = cell % kCols;
+        const size_t pages = page_count();
+        size_t target;
+        if (dir > 0 && col + 1 < kCols) {
+            target = index_ + 1;
+        } else if (dir < 0 && col > 0) {
+            target = index_ - 1;
+        } else {
+            const size_t neighbour = dir > 0 ? (page + 1) % pages
+                                             : (page + pages - 1) % pages;
+            target = neighbour * kCellsPerPage + row * kCols +
+                     (dir > 0 ? 0 : kCols - 1);
+        }
+        target %= app_count_;
+        if (target == index_) return false;
+        index_ = target;
+        // Crossing is a page-number change, nothing else: on a single-page
+        // list the row-edge wrap stays on the same page and animates as a
+        // plain highlight move.
+        crossed_page_ = index_ / kCellsPerPage != page;
+        moved_forward_ = dir > 0;
         return true;
     }
 

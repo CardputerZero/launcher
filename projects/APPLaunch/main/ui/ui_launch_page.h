@@ -93,7 +93,8 @@ private:
     };
 
     void create_app_container(lv_obj_t *parent);
-    bool move_grid(int delta);
+    bool begin_grid_move();
+    void finish_grid_move();
     void start_page_flip(bool forward);
     void finish_page_flip_animation();
     void cancel_page_flip_animation();
