@@ -38,6 +38,18 @@ void UILaunchPage::move_grid_up()
     if (grid_.move_up()) finish_grid_move();
 }
 
+void UILaunchPage::move_grid_page_next()
+{
+    if (!begin_grid_move()) return;
+    if (grid_.flip_page(1)) finish_grid_move();
+}
+
+void UILaunchPage::move_grid_page_previous()
+{
+    if (!begin_grid_move()) return;
+    if (grid_.flip_page(-1)) finish_grid_move();
+}
+
 namespace {
 
 UILaunchPage *active_launch_page = nullptr;
@@ -221,12 +233,31 @@ void UILaunchPage::refresh_grid()
     grid_.set_app_count(launch_->app_count());
     grid_.set_index(launch_->current_app_index());
 
+    /* Pages never show wrapped filler: cells past the end of the app list
+     * stay empty (hidden card + title) on a ragged last page. */
     const size_t page_base = grid_.page() * LauncherGridModel::kCellsPerPage;
     for (size_t cell = 0; cell < launcher_grid_layout::kCells; ++cell) {
-        if (const app *item = launch_->app_at_index(static_cast<int>(page_base + cell)))
-            update_grid_cell(cell, item->Name.c_str(), item->Icon);
-        else
+        const bool real = page_base + cell < launch_->app_count();
+        if (real) {
+            if (const app *item = launch_->app_at_index(static_cast<int>(page_base + cell)))
+                update_grid_cell(cell, item->Name.c_str(), item->Icon);
+            else
+                update_grid_cell(cell, "", {});
+        } else {
             update_grid_cell(cell, "", {});
+        }
+        if (panel(cell)) {
+            if (real)
+                lv_obj_clear_flag(panel(cell), LV_OBJ_FLAG_HIDDEN);
+            else
+                lv_obj_add_flag(panel(cell), LV_OBJ_FLAG_HIDDEN);
+        }
+        if (label(cell)) {
+            if (real)
+                lv_obj_clear_flag(label(cell), LV_OBJ_FLAG_HIDDEN);
+            else
+                lv_obj_add_flag(label(cell), LV_OBJ_FLAG_HIDDEN);
+        }
     }
     apply_grid_highlight();
 }

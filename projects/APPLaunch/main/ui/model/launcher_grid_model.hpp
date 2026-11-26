@@ -9,9 +9,9 @@
 #include <cstddef>
 
 // Selection model for the 3x2 home grid.  The selected app is one absolute
-// index into the (wrapped) app list; every move is a fixed stride on that
-// index, so the cursor can never land on an empty cell of a partly filled
-// last page - the list simply wraps.
+// index into the app list; pages never show wrapped filler, so a ragged
+// last page simply leaves its trailing cells empty and every move targets a
+// real app.
 class LauncherGridModel
 {
 public:
@@ -51,13 +51,35 @@ public:
     // reports the travel direction for the slide.
     //
     // Left/right stay inside the current row: stepping past the row edge
-    // flips to the neighbouring page at the same row (forward = next page
-    // row start, backward = previous page row end).  Up/down swap rows and
-    // wrap through the page boundary.
+    // flips to the neighbouring page at the same row, clamped to a real app
+    // when that page is ragged; walking right past the very last app wraps
+    // to the first page's first cell.  Up/down swap rows and wrap through
+    // the page boundary.
     bool move_row_right() { return move_row(1); }
     bool move_row_left() { return move_row(-1); }
     bool move_up() { return step(-static_cast<int>(kCols)); }
     bool move_down() { return step(static_cast<int>(kCols)); }
+
+    // Direct page flip (I/O keys): keep the cursor's cell position on the
+    // neighbouring page; a ragged neighbour clamps to its last real app.
+    bool flip_page(int dir)
+    {
+        crossed_page_ = false;
+        moved_forward_ = false;
+        const size_t pages = page_count();
+        if (app_count_ == 0 || pages == 1) return false;
+        const size_t page = index_ / kCellsPerPage;
+        const size_t cell = index_ % kCellsPerPage;
+        const size_t neighbour = dir > 0 ? (page + 1) % pages
+                                         : (page + pages - 1) % pages;
+        size_t target = neighbour * kCellsPerPage + cell;
+        if (target >= app_count_) target = app_count_ - 1;
+        if (target == index_) return false;
+        index_ = target;
+        crossed_page_ = index_ / kCellsPerPage != page;
+        moved_forward_ = dir > 0;
+        return true;
+    }
 
     bool crossed_page() const { return crossed_page_; }
     bool moved_forward() const { return moved_forward_; }
@@ -79,10 +101,10 @@ private:
         return true;
     }
 
-    // dir 1 = right, -1 = left.  Within the row this is a plain +-1; at the
-    // row edge the target jumps to the neighbouring page's same-row far
-    // cell.  A ragged last page still displays wrapped apps in its trailing
-    // cells, so the computed target always matches what is on screen.
+    // dir 1 = right, -1 = left.  Within the row this is a plain +-1 (right
+    // past the very last app wraps to the front); at the row edge the target
+    // jumps to the neighbouring page's same-row far cell, clamped to a real
+    // app when that page is ragged.
     bool move_row(int dir)
     {
         crossed_page_ = false;
@@ -96,15 +118,17 @@ private:
         size_t target;
         if (dir > 0 && col + 1 < kCols) {
             target = index_ + 1;
+            if (target >= app_count_) target = 0;  // wrap past the last app
         } else if (dir < 0 && col > 0) {
-            target = index_ - 1;
+            target = index_ - 1;  // always real: empty cells sit at the end
         } else {
             const size_t neighbour = dir > 0 ? (page + 1) % pages
                                              : (page + pages - 1) % pages;
             target = neighbour * kCellsPerPage + row * kCols +
                      (dir > 0 ? 0 : kCols - 1);
+            if (target >= app_count_)
+                target = app_count_ - 1;  // ragged neighbour: nearest real app
         }
-        target %= app_count_;
         if (target == index_) return false;
         index_ = target;
         // Crossing is a page-number change, nothing else: on a single-page

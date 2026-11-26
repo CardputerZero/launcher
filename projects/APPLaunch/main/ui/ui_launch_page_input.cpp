@@ -128,6 +128,26 @@ void UILaunchPage::handle_home_key(lv_event_t *event)
         }
         break;
 
+        case KEY_I:
+        {
+            if (navigation_ready())
+            {
+                audio_play_switch();
+                move_grid_page_previous();
+            }
+        }
+        break;
+
+        case KEY_O:
+        {
+            if (navigation_ready())
+            {
+                audio_play_switch();
+                move_grid_page_next();
+            }
+        }
+        break;
+
         default:
             break;
         }

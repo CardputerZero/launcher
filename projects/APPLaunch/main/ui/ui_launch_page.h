@@ -66,6 +66,8 @@ public:
     void move_grid_previous();
     void move_grid_up();
     void move_grid_down();
+    void move_grid_page_next();
+    void move_grid_page_previous();
     void select_grid_cell(size_t cell);
     bool navigation_ready() const { return !page_flip_active_; }
 
