@@ -190,6 +190,19 @@ cp0_battery_info_t cp0_battery_read(void);
 int cp0_backlight_read(void);
 int cp0_backlight_max(void);
 int cp0_backlight_write(int val);
+/* Red status LED staging for the screen-off state: suspend turns the trigger
+ * off and the led dark while remembering the previous trigger and brightness;
+ * restore brings them back.  Both degrade to a no-op (negative return) when
+ * the sysfs nodes are missing or not writable. */
+int cp0_status_led_suspend(void);
+void cp0_status_led_restore(void);
+/* CPU frequency staging: 1 pins the cpufreq governor to powersave, 0 restores
+ * the previously active governor.  Negative when the node is not writable. */
+int cp0_cpufreq_powersave_set(int enable);
+/* LCD panel power through the framebuffer blanking ioctl: 1 blanks the panel
+ * (display off + MIPI sleep), 0 wakes it again and flushes the framebuffer
+ * back.  0 on success, negative when no framebuffer can be blanked. */
+int cp0_panel_fb_blank(int blank);
 void cp0_time_str(char *buf, int buf_size);
 
 #ifdef __cplusplus

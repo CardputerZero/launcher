@@ -10,6 +10,7 @@
 #include "cp0_pointer_lifecycle.hpp"
 #include "cp0_status_lifecycle.hpp"
 #include "cp0_status_component_contract.hpp"
+#include "cp0_status_pause.h"
 
 namespace {
 
@@ -1021,6 +1022,7 @@ AppTopBarComponent *AppTopBarRegion::component(const std::string &id) const
 
 void AppTopBarRegion::battery_event_cb(lv_event_t *event)
 {
+    if (cp0_status_pause_get()) return;  // screen off: nothing on the panel is visible
     auto *self = static_cast<AppTopBarRegion *>(lv_event_get_user_data(event));
     auto *battery = static_cast<const cp0_battery_info_t *>(lv_event_get_param(event));
     if (!battery) return;
@@ -1030,6 +1032,7 @@ void AppTopBarRegion::battery_event_cb(lv_event_t *event)
 
 void AppTopBarRegion::time_timer_cb(lv_timer_t *timer)
 {
+    if (cp0_status_pause_get()) return;  // screen off: skip the per-second redraw
     auto *self = static_cast<AppTopBarRegion *>(lv_timer_get_user_data(timer));
     cp0::callback::invoke_if_present(
         self, [](AppTopBarRegion &region) { region.update_time(); });
@@ -1037,6 +1040,7 @@ void AppTopBarRegion::time_timer_cb(lv_timer_t *timer)
 
 void AppTopBarRegion::status_timer_cb(lv_timer_t *timer)
 {
+    if (cp0_status_pause_get()) return;  // screen off: the network worker pauses too
     auto *self = static_cast<AppTopBarRegion *>(lv_timer_get_user_data(timer));
     cp0::callback::invoke_if_present(
         self, [](AppTopBarRegion &region) { region.update_status(); });

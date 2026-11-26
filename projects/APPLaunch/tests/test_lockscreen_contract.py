@@ -147,3 +147,28 @@ assert "int suspend_backlight();" in CONTROLS_HEADER
 assert "void restore_backlight(int raw);" in CONTROLS_HEADER
 assert "write_backlight_raw(0)" in CONTROLS
 assert "if (raw <= 0) return;" in CONTROLS
+
+# ---- screen-off power staging -------------------------------------------
+# Stage 1 (backlight dark) also stands down the periodic UI refreshers and the
+# red status LED; stage 2, after the configured delay, blanks the SPI panel,
+# pins the CPU governor and stops the LVGL timers until a key arrives.  Every
+# exit path must reverse the stage before restoring the backlight.
+assert "cp0_status_pause_set(1)" in SOURCE
+assert "cp0_status_pause_set(0)" in SOURCE
+assert "cp0_status_led_suspend()" in SOURCE
+assert "cp0_status_led_restore()" in SOURCE
+assert "void deep_sleep_enter()" in SOURCE
+assert "void deep_sleep_exit()" in SOURCE
+assert "cp0_panel_fb_blank(1)" in SOURCE
+assert "cp0_panel_fb_blank(0)" in SOURCE
+assert "cp0_cpufreq_powersave_set(1)" in SOURCE
+assert "cp0_cpufreq_powersave_set(0)" in SOURCE
+# The timer stop is what makes the process sleep on the input semaphore; the
+# key path must always bring the timers back before the lock flow runs.
+assert "lv_timer_enable(false)" in SOURCE
+assert "lv_timer_enable(true)" in SOURCE
+assert 'cp0_signal_config_api({"GetInt", "panel_sleep_time", "30"}' in SOURCE
+# The wake order inside the release: panel first, then backlight, LED and the
+# refresh pause together with it.
+assert "deep_sleep_exit();" in SOURCE
+assert SOURCE.count("deep_sleep_exit();") >= 4
