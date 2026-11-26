@@ -112,8 +112,6 @@ private:
 
     void set_grid_clickable(bool clickable);
     void set_panel_icon(lv_obj_t *panel, const std::string &src);
-    static void on_left_arrow_clicked(lv_event_t *event) noexcept;
-    static void on_right_arrow_clicked(lv_event_t *event) noexcept;
     static void on_app_clicked(lv_event_t *event) noexcept;
     static void on_home_key(lv_event_t *event) noexcept;
     static void on_startup_gif_event(lv_event_t *event) noexcept;
@@ -125,8 +123,6 @@ private:
 
     Launch *launch_ = nullptr;
     lv_obj_t *startup_gif_ = nullptr;
-    lv_obj_t *left_arrow_button_ = nullptr;
-    lv_obj_t *right_arrow_button_ = nullptr;
     lv_obj_t *grid_container_ = nullptr;
     lv_timer_t *startup_sound_timer_ = nullptr;
     lv_timer_t *startup_delay_timer_ = nullptr;

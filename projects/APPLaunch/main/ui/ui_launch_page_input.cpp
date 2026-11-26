@@ -139,22 +139,6 @@ void UILaunchPage::handle_home_key(lv_event_t *event)
     }
 }
 
-void UILaunchPage::on_left_arrow_clicked(lv_event_t *event) noexcept
-{
-    try {
-        if (UILaunchPage *self = page_from_event(event)) self->move_grid_previous();
-    } catch (...) {
-    }
-}
-
-void UILaunchPage::on_right_arrow_clicked(lv_event_t *event) noexcept
-{
-    try {
-        if (UILaunchPage *self = page_from_event(event)) self->move_grid_next();
-    } catch (...) {
-    }
-}
-
 void UILaunchPage::on_app_clicked(lv_event_t *event) noexcept
 {
     try {

@@ -102,17 +102,9 @@ UILaunchPage::~UILaunchPage()
                 lv_obj_remove_event_cb_with_user_data(
                     element, UILaunchPage::on_owned_obj_deleted, this);
         }
-        if (left_arrow_button_)
-            lv_obj_remove_event_cb_with_user_data(
-                left_arrow_button_, UILaunchPage::on_owned_obj_deleted, this);
-        if (right_arrow_button_)
-            lv_obj_remove_event_cb_with_user_data(
-                right_arrow_button_, UILaunchPage::on_owned_obj_deleted, this);
         lv_obj_delete(grid_container_);
         grid_container_ = nullptr;
         grid_elements_.fill(nullptr);
-        left_arrow_button_ = nullptr;
-        right_arrow_button_ = nullptr;
     }
     if (home_key_registered_ && root_screen_) {
         lv_obj_remove_event_cb_with_user_data(
@@ -183,8 +175,6 @@ void UILaunchPage::on_root_deleted(lv_event_t *event) noexcept
         *self->grid_alive_ = false;
         self->grid_elements_.fill(nullptr);
         self->grid_container_ = nullptr;
-        self->left_arrow_button_ = nullptr;
-        self->right_arrow_button_ = nullptr;
         self->home_key_registered_ = false;
     } catch (...) {
     }
@@ -200,21 +190,16 @@ void UILaunchPage::on_owned_obj_deleted(lv_event_t *event) noexcept
             self->startup_gif_ == target, self->startup_gif_done_);
         if (self->startup_logo_scr_ == target) self->startup_logo_scr_ = nullptr;
         if (self->startup_gif_ == target) self->startup_gif_ = nullptr;
-        bool grid_object_deleted = self->grid_container_ == target ||
-            self->left_arrow_button_ == target || self->right_arrow_button_ == target;
+        bool grid_object_deleted = self->grid_container_ == target;
         for (lv_obj_t *&element : self->grid_elements_) {
             if (element == target) {
                 element = nullptr;
                 grid_object_deleted = true;
             }
         }
-        if (self->left_arrow_button_ == target) self->left_arrow_button_ = nullptr;
-        if (self->right_arrow_button_ == target) self->right_arrow_button_ = nullptr;
         if (self->grid_container_ == target) {
             self->grid_container_ = nullptr;
             self->grid_elements_.fill(nullptr);
-            self->left_arrow_button_ = nullptr;
-            self->right_arrow_button_ = nullptr;
         }
         if (grid_object_deleted) {
             *self->grid_alive_ = false;

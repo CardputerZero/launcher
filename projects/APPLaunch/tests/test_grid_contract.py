@@ -48,6 +48,8 @@ for gone in (
     "kHomeCarouselSlotCount",
     "animate_left",
     "animate_right",
+    "arrow_button_",
+    "create_grid_arrow",
 ):
     assert gone not in PAGE_HEADER + PAGE + VIEW + INPUT + ANIMATION_H, gone
     assert gone not in LAUNCH_H + LAUNCH, gone

@@ -101,24 +101,6 @@ lv_obj_t *create_grid_title(lv_obj_t *parent, const Cell &cell, const char *text
     return title;
 }
 
-lv_obj_t *create_grid_arrow(lv_obj_t *parent, lv_coord_t x, const char *asset)
-{
-    lv_obj_t *button = lv_btn_create(parent);
-    if (!button) return nullptr;
-    lv_obj_set_size(button, 17, 23);
-    lv_obj_set_pos(button, x, -4);
-    lv_obj_set_align(button, LV_ALIGN_CENTER);
-    lv_obj_add_flag(button, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
-    lv_obj_clear_flag(button, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_radius(button, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(button, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_opa(button, LV_OPA_TRANSP, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_img_src(button, launcher_platform::path_c(asset), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_shadow_color(button, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_shadow_opa(button, LV_OPA_TRANSP, LV_PART_MAIN | LV_STATE_DEFAULT);
-    return button;
-}
-
 } // namespace
 
 void UILaunchPage::set_panel_icon(lv_obj_t *panel, const std::string &src)
@@ -181,7 +163,7 @@ void UILaunchPage::update_grid_item(lv_obj_t *panel, lv_obj_t *label,
 
 void UILaunchPage::create_screen()
 {
-    const bool complete = grid_container_ && left_arrow_button_ && right_arrow_button_ &&
+    const bool complete = grid_container_ &&
         std::all_of(grid_elements_.begin(), grid_elements_.end(),
                     [](lv_obj_t *element) { return element != nullptr; });
     if (!complete)
@@ -211,10 +193,7 @@ void UILaunchPage::create_app_container(lv_obj_t *parent)
             container, layout, BORDER_COLOR_SIDE, true);
     }
 
-    lv_obj_t *left_arrow = create_grid_arrow(container, -151, "carousel_left_arrow.png");
-    lv_obj_t *right_arrow = create_grid_arrow(container, 150, "carousel_right_arrow.png");
-
-    const bool complete = left_arrow && right_arrow &&
+    const bool complete =
         std::all_of(elements.begin(), elements.end(), [](lv_obj_t *element) { return element != nullptr; });
     if (!complete) {
         lv_obj_delete(container);
@@ -225,18 +204,12 @@ void UILaunchPage::create_app_container(lv_obj_t *parent)
     grid_alive_ = std::make_shared<bool>(true);
     grid_container_ = container;
     grid_elements_ = elements;
-    left_arrow_button_ = left_arrow;
-    right_arrow_button_ = right_arrow;
 
     for (size_t cell = 0; cell < launcher_grid_layout::kCells; ++cell)
         lv_obj_add_event_cb(grid_elements_[kCard0 + cell], on_app_clicked, LV_EVENT_CLICKED, this);
-    lv_obj_add_event_cb(left_arrow_button_, on_left_arrow_clicked, LV_EVENT_CLICKED, this);
-    lv_obj_add_event_cb(right_arrow_button_, on_right_arrow_clicked, LV_EVENT_CLICKED, this);
     lv_obj_add_event_cb(grid_container_, on_owned_obj_deleted, LV_EVENT_DELETE, this);
     for (lv_obj_t *element : grid_elements_)
         lv_obj_add_event_cb(element, on_owned_obj_deleted, LV_EVENT_DELETE, this);
-    lv_obj_add_event_cb(left_arrow_button_, on_owned_obj_deleted, LV_EVENT_DELETE, this);
-    lv_obj_add_event_cb(right_arrow_button_, on_owned_obj_deleted, LV_EVENT_DELETE, this);
     if (!home_key_registered_ && screen()) {
         lv_obj_add_event_cb(screen(), on_home_key, (lv_event_code_t)LV_EVENT_KEYBOARD, this);
         home_key_registered_ = true;
