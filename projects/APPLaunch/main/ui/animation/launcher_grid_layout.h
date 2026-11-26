@@ -27,13 +27,11 @@ inline constexpr lv_coord_t kCardRadius = 14;
 inline constexpr lv_coord_t kTitleWidth = 96;
 
 // Selection affordance: the theme accent (same yellow as the page slider
-// knob) borders and backlights the selected tile, while neighbour icons and
-// titles are dimmed, so the selection stays readable on the black page.
+// knob) borders and backlights the selected tile; every card keeps full
+// icon brightness, the yellow tile alone marks the selection.
 inline constexpr uint32_t kSelectedBorderColor = 0xF2C94C;
 inline constexpr uint32_t kSelectedBgColor = 0xF2C94C;
-inline constexpr lv_opa_t kSelectedBgOpa = 50;        // ~20% tint
-inline constexpr lv_opa_t kUnselectedIconOpa = 150;   // ~59%
-inline constexpr uint32_t kUnselectedTitleColor = 0x9A9A9A;
+inline constexpr lv_opa_t kSelectedBgOpa = 50;  // ~20% tint
 
 struct Cell
 {

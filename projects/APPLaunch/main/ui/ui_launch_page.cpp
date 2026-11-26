@@ -308,22 +308,9 @@ void UILaunchPage::apply_grid_highlight()
             lv_obj_set_style_bg_opa(card, selected ? launcher_grid_layout::kSelectedBgOpa
                                                    : LV_OPA_TRANSP,
                                     selector);
-            /* Dim the icon art so the selected tile reads as the lit one. */
-            if (lv_obj_t *clip = lv_obj_get_child(card, 0)) {
-                if (lv_obj_t *image = lv_obj_get_child(clip, 0))
-                    lv_obj_set_style_opa(image, selected ? LV_OPA_COVER
-                                                         : launcher_grid_layout::kUnselectedIconOpa,
-                                         selector);
-            }
         }
-        if (label(cell)) {
+        if (label(cell))
             launcher_home_animation::apply_title_overflow(label(cell), selected);
-            lv_obj_set_style_text_color(
-                label(cell),
-                lv_color_hex(selected ? 0xFFFFFF
-                                      : launcher_grid_layout::kUnselectedTitleColor),
-                LV_PART_MAIN | LV_STATE_DEFAULT);
-        }
     }
 }
 

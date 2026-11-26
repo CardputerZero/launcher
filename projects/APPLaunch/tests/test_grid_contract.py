@@ -85,13 +85,13 @@ factory = VIEW[start:end]
 assert "lv_obj_set_style_border_width(card," not in factory
 assert "lv_obj_set_style_border_post(card, true," in factory
 assert "lv_obj_set_style_clip_corner(card," not in factory
-# The selection highlight is unmistakable: theme-accent border + lit tile on
-# the selection, dimmed icons/titles on the neighbours.
+# The selection highlight: theme-accent border + lit tile on the selection;
+# every card keeps full icon brightness (no dimming of neighbours).
 assert "kSelectedBorderColor" in LAYOUT and "kSelectedBorderColor" in PAGE
 assert "BORDER_COLOR_SIDE" in PAGE
 assert "kSelectedBgOpa" in LAYOUT and "set_style_bg_opa" in PAGE
-assert "kUnselectedIconOpa" in LAYOUT and "set_style_opa" in PAGE
-assert "kUnselectedTitleColor" in LAYOUT and "set_style_text_color" in PAGE
+assert "kUnselectedIconOpa" not in LAYOUT + PAGE
+assert "kUnselectedTitleColor" not in LAYOUT + PAGE
 assert "BORDER_COLOR_CENTER" not in PAGE
 
 # ---- arrows and keys ----------------------------------------------------
