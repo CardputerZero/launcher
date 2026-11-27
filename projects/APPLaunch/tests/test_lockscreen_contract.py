@@ -163,6 +163,10 @@ assert "cp0_panel_fb_blank(1)" in SOURCE
 assert "cp0_panel_fb_blank(0)" in SOURCE
 assert "cp0_cpufreq_powersave_set(1)" in SOURCE
 assert "cp0_cpufreq_powersave_set(0)" in SOURCE
+# Stage 2 drops the Bluetooth radio and any LED re-registration relight; the
+# wake path powers Bluetooth back up.
+assert "cp0_bluetooth_power_set_async(0)" in SOURCE
+assert "cp0_bluetooth_power_set_async(1)" in SOURCE
 # The timer stop is what makes the process sleep on the input semaphore; the
 # key path must always bring the timers back before the lock flow runs.
 assert "lv_timer_enable(false)" in SOURCE

@@ -39,6 +39,7 @@ SYSTEM_SERVICE_PATH = PurePosixPath("usr/lib/systemd/system")
 POLKIT_RULES_PATH = PurePosixPath("usr/share/polkit-1/rules.d")
 LIBEXEC_PATH = PurePosixPath("usr/libexec")
 TMPFILES_PATH = PurePosixPath("usr/lib/tmpfiles.d")
+UDEV_RULES_PATH = PurePosixPath("usr/lib/udev/rules.d")
 LAUNCHER_UPDATE_ABI = "1"
 
 OPTIONAL_BINARIES = (
@@ -448,6 +449,16 @@ def _postinst_tmpfiles_snippet() -> str:
 if [ -f /usr/lib/tmpfiles.d/applaunch-power.conf ] && command -v systemd-tmpfiles >/dev/null 2>&1; then
     systemd-tmpfiles --create /usr/lib/tmpfiles.d/applaunch-power.conf >/dev/null 2>&1 || true
 fi
+"""
+
+
+def _power_udev_rules_text() -> str:
+    return """# Screen-off power staging permissions, re-applied on hotplug: the ACT
+# status LED classdev can be re-registered by a deferred probe after boot,
+# which resets its permissions and relights the default trigger.  Same
+# pattern as the image's 60-cardputerzero-leds.rules.
+ACTION=="add", SUBSYSTEM=="leds", KERNEL=="ACT", RUN+="/bin/chgrp gpio $sys$devpath/brightness", RUN+="/bin/chmod g+w $sys$devpath/brightness"
+ACTION=="add", SUBSYSTEM=="leds", KERNEL=="ACT", RUN+="/bin/chgrp gpio $sys$devpath/trigger", RUN+="/bin/chmod g+w $sys$devpath/trigger"
 """
 
 
@@ -1057,6 +1068,10 @@ def prepare_package_tree(
         _write_text(
             paths.package_root / Path(*TMPFILES_PATH.parts) / "applaunch-power.conf",
             _power_tmpfiles_text(),
+        )
+        _write_text(
+            paths.package_root / Path(*UDEV_RULES_PATH.parts) / "61-applaunch-power.rules",
+            _power_udev_rules_text(),
         )
 
     print(f"Staged package tree: {paths.package_root}")

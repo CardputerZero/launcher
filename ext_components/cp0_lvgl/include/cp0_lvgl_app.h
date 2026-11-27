@@ -203,6 +203,9 @@ int cp0_cpufreq_powersave_set(int enable);
  * previous process that died during the screen-off stage, restore the
  * platform default (ondemand).  Returns 1 when a stale pin was cleared. */
 int cp0_cpufreq_wake_reset(void);
+/* Bluetooth radio power for the screen-off staging: fire-and-forget async
+ * D-Bus call, safe from the LVGL thread. */
+void cp0_bluetooth_power_set_async(int enabled);
 /* LCD panel power through the framebuffer blanking ioctl: 1 blanks the panel
  * (display off + MIPI sleep), 0 wakes it again and flushes the framebuffer
  * back.  0 on success, negative when no framebuffer can be blanked. */

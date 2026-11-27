@@ -604,16 +604,21 @@ std::string trim_node_text(std::string text)
 
 extern "C" int cp0_status_led_suspend(void)
 {
-    if (g_status_led_suspended) return 0;
     const std::string trigger_path = std::string(kStatusLedDir) + "/trigger";
     const std::string brightness_path = std::string(kStatusLedDir) + "/brightness";
-    std::string trigger_list;
-    int brightness = 0;
-    if (!read_text_node(trigger_path.c_str(), trigger_list) ||
-        !read_int_node(brightness_path.c_str(), brightness))
-        return -1;
-    g_status_led_trigger = active_trigger_token(trigger_list);
-    g_status_led_brightness = brightness > 0 ? brightness : 0;
+    /* The LED classdev can be re-registered by a deferred probe after the
+     * first suspend (fresh node, default trigger, root-only perms), so every
+     * call re-asserts the dark state instead of trusting a suspended flag;
+     * the restore values are saved once, from the first pre-suspend read. */
+    if (!g_status_led_suspended) {
+        std::string trigger_list;
+        int brightness = 0;
+        if (!read_text_node(trigger_path.c_str(), trigger_list) ||
+            !read_int_node(brightness_path.c_str(), brightness))
+            return -1;
+        g_status_led_trigger = active_trigger_token(trigger_list);
+        g_status_led_brightness = brightness > 0 ? brightness : 0;
+    }
     if (!write_text_node(trigger_path.c_str(), "none") ||
         !write_text_node(brightness_path.c_str(), "0"))
         return -1;

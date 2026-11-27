@@ -22,6 +22,7 @@ PAGE = (PLATFORM / "src/ui_app_page.cpp").read_text()
 NETWORK = (PLATFORM / "src/cp0/cp0_lvgl_network.cpp").read_text()
 SETTINGS_DEVICE = (PLATFORM / "src/cp0/cp0_lvgl_settings.cpp").read_text()
 SETTINGS_SDL = (PLATFORM / "src/sdl/sdl_lvgl_settings.cpp").read_text()
+BLUETOOTH = (PLATFORM / "src/cp0/cp0_lvgl_bluetooth.cpp").read_text()
 APP_HEADER = (PLATFORM / "include/cp0_lvgl_app.h").read_text()
 PACKAGER = (ROOT / "../../scripts/debian_packager.py").read_text()
 
@@ -61,6 +62,12 @@ for symbol in (
     assert f"{symbol}(void)" in SETTINGS_DEVICE or f"{symbol}(int" in SETTINGS_DEVICE
     assert symbol in SETTINGS_SDL
 
+# The Bluetooth radio staging rides the platform's own bluez client with an
+# extern C fire-and-forget wrapper; the backend compiles for both profiles.
+assert "void cp0_bluetooth_power_set_async(int enabled);" in APP_HEADER
+assert "cp0_bluetooth_power_set_async(int enabled)" in BLUETOOTH
+assert "set_power_async(enabled, nullptr)" in BLUETOOTH
+
 # The LED stage saves the active trigger token before detaching it, so the
 # red status led comes back with its original behaviour.
 assert "active_trigger_token" in SETTINGS_DEVICE
@@ -72,6 +79,8 @@ assert "FB_BLANK_UNBLANK" in SETTINGS_DEVICE
 # the staged nodes, mirroring the image's cardputerzero-leds.conf, and the
 # postinst applies it immediately.
 assert "applaunch-power.conf" in PACKAGER
+assert "61-applaunch-power.rules" in PACKAGER
+assert "chgrp gpio" in PACKAGER
 assert "scaling_governor" in PACKAGER
 assert "0664 root gpio" in PACKAGER
 assert "systemd-tmpfiles --create" in PACKAGER

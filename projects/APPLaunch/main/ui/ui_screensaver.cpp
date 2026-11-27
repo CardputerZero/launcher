@@ -318,6 +318,10 @@ void deep_sleep_enter() noexcept
             SLOGW("[POWER] panel blank failed; staying on the backlit-dark stage");
         if (cp0_cpufreq_powersave_set(1) != 0)
             SLOGW("[POWER] cpufreq powersave unavailable");
+        /* Re-assert the LED (a deferred LED re-registration can relight it
+         * after stage 1) and drop the Bluetooth radio for the idle period. */
+        (void)cp0_status_led_suspend();
+        cp0_bluetooth_power_set_async(0);
     } catch (...) {
     }
     s_deep_asleep = true;
@@ -333,6 +337,7 @@ void deep_sleep_exit() noexcept
     try {
         (void)cp0_cpufreq_powersave_set(0);
         (void)cp0_panel_fb_blank(0);
+        cp0_bluetooth_power_set_async(1);
     } catch (...) {
     }
 }
