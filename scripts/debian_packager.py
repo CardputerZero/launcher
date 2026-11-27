@@ -38,6 +38,8 @@ SERVICE_PATH = PurePosixPath("usr/lib/systemd/user")
 SYSTEM_SERVICE_PATH = PurePosixPath("usr/lib/systemd/system")
 POLKIT_RULES_PATH = PurePosixPath("usr/share/polkit-1/rules.d")
 LIBEXEC_PATH = PurePosixPath("usr/libexec")
+TMPFILES_PATH = PurePosixPath("usr/lib/tmpfiles.d")
+UDEV_RULES_PATH = PurePosixPath("usr/lib/udev/rules.d")
 LAUNCHER_UPDATE_ABI = "1"
 
 OPTIONAL_BINARIES = (
@@ -253,6 +255,7 @@ set -e
 mkdir -p /var/cache/{config.app_name}
 chown 1000:1000 /var/cache/{config.app_name} || true
 ln -sfn /var/cache/{config.app_name} /usr/share/{config.app_name}/cache
+{_postinst_tmpfiles_snippet()}
 SERVICE_NAME="{service_name}"
 SERVICE_FILE="{service_file}"
 {adb_migration}
@@ -279,6 +282,7 @@ set -e
 mkdir -p /var/cache/{config.app_name}
 chown 1000:1000 /var/cache/{config.app_name} || true
 ln -sfn /var/cache/{config.app_name} /usr/share/{config.app_name}/cache
+{_postinst_tmpfiles_snippet()}
 	APP_UID=1000
 	APP_USER="$(getent passwd "$APP_UID" | cut -d: -f1)"
 	APP_GID="$(getent passwd "$APP_UID" | cut -d: -f4)"
@@ -423,6 +427,38 @@ Type=oneshot
 ExecStart=/usr/bin/apt update
 TimeoutStartSec=5min
 Nice=10
+"""
+
+
+def _power_tmpfiles_text() -> str:
+    return """# Screen-off power staging permissions for the launcher.
+# The launcher (device user, gpio group) stages the red status LED, the
+# cpufreq governor and the panel blank ioctl when the panel is dark.  Same
+# pattern as the image's cardputerzero-leds.conf.
+z /sys/class/leds/ACT/brightness                            0664 root gpio -
+z /sys/class/leds/ACT/trigger                               0664 root gpio -
+z /sys/devices/system/cpu/cpufreq/policy0/scaling_governor  0664 root gpio -
+z /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor     0664 root gpio -
+"""
+
+
+def _postinst_tmpfiles_snippet() -> str:
+    return """# Apply the screen-off power staging permissions right away (normally done
+# by systemd-tmpfiles-setup at boot).  Only the APPLaunch package ships the
+# conf; other packages reusing this builder simply skip the block.
+if [ -f /usr/lib/tmpfiles.d/applaunch-power.conf ] && command -v systemd-tmpfiles >/dev/null 2>&1; then
+    systemd-tmpfiles --create /usr/lib/tmpfiles.d/applaunch-power.conf >/dev/null 2>&1 || true
+fi
+"""
+
+
+def _power_udev_rules_text() -> str:
+    return """# Screen-off power staging permissions, re-applied on hotplug: the ACT
+# status LED classdev can be re-registered by a deferred probe after boot,
+# which resets its permissions and relights the default trigger.  Same
+# pattern as the image's 60-cardputerzero-leds.rules.
+ACTION=="add", SUBSYSTEM=="leds", KERNEL=="ACT", RUN+="/bin/chgrp gpio $sys$devpath/brightness", RUN+="/bin/chmod g+w $sys$devpath/brightness"
+ACTION=="add", SUBSYSTEM=="leds", KERNEL=="ACT", RUN+="/bin/chgrp gpio $sys$devpath/trigger", RUN+="/bin/chmod g+w $sys$devpath/trigger"
 """
 
 
@@ -1028,6 +1064,14 @@ def prepare_package_tree(
             paths.package_root / Path(*LIBEXEC_PATH.parts) /
             "applaunch-apps-updater",
             _apps_updater_script_text(), mode=0o755,
+        )
+        _write_text(
+            paths.package_root / Path(*TMPFILES_PATH.parts) / "applaunch-power.conf",
+            _power_tmpfiles_text(),
+        )
+        _write_text(
+            paths.package_root / Path(*UDEV_RULES_PATH.parts) / "61-applaunch-power.rules",
+            _power_udev_rules_text(),
         )
 
     print(f"Staged package tree: {paths.package_root}")

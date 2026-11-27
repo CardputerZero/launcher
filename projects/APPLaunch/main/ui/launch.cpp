@@ -25,11 +25,6 @@
 #include <string>
 #include <utility>
 
-namespace {
-constexpr size_t kHomeCarouselSlotCount = 5;
-constexpr int kHomeCarouselCenterSlot = 2;
-}
-
 // ============================================================
 // Launch
 // ============================================================
@@ -181,16 +176,10 @@ void Launch::launch_Exec(const std::string &exec, bool keep_root)
     ui_screensaver_set_foreground(1);
 }
 
-void Launch::select_next_app()
+void Launch::select_app_relative(int delta)
 {
-    int next = normalized_app_index(current_app + 1);
+    int next = normalized_app_index(current_app + delta);
     if (next >= 0) current_app = next;
-}
-
-void Launch::select_previous_app()
-{
-    int previous = normalized_app_index(current_app - 1);
-    if (previous >= 0) current_app = previous;
 }
 
 std::size_t Launch::app_count() const
@@ -204,13 +193,6 @@ std::size_t Launch::current_app_index() const
     return normalized < 0 ? 0 : static_cast<std::size_t>(normalized);
 }
 
-const app *Launch::carousel_slot_app(size_t slot) const
-{
-    if (slot >= kHomeCarouselSlotCount)
-        return nullptr;
-    return app_at_index(current_app + static_cast<int>(slot) - kHomeCarouselCenterSlot);
-}
-
 void Launch::applications_load()
 {
     launcher_append_desktop_apps(app_list);
@@ -222,7 +204,7 @@ void Launch::refresh_home_carousel()
     int normalized = normalized_app_index(current_app);
     if (normalized < 0) return;
     current_app = normalized;
-    if (auto page = launch_page_.lock()) page->refresh_carousel();
+    if (auto page = launch_page_.lock()) page->refresh_grid();
 }
 
 void Launch::reload_home_icons()

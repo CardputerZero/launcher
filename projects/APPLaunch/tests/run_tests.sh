@@ -5,7 +5,7 @@
 set -eu
 test_root=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
 settings_ui_root=$(CDPATH= cd -- "$test_root/../main/ui/settings" && pwd)
-python3 "$test_root/test_carousel_border_contract.py"
+python3 "$test_root/test_grid_contract.py"
 python3 "$test_root/test_external_framebuffer_ownership.py"
 python3 "$test_root/test_settings_input_font_contract.py"
 python3 "$test_root/test_settings_menu_order.py"
@@ -18,6 +18,7 @@ python3 "$test_root/test_settings_storage_build_contract.py"
 python3 "$test_root/test_settings_software_page_contract.py"
 python3 "$test_root/test_static_resource_staging.py"
 python3 "$test_root/test_lockscreen_contract.py"
+python3 "$test_root/test_power_contract.py"
 python3 "$test_root/test_home_icon_fallback_contract.py"
 python3 "$test_root/test_lodepng_override_contract.py"
 PYTHONPATH="$test_root/..${PYTHONPATH:+:$PYTHONPATH}" \
@@ -190,6 +191,11 @@ ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     -I"$test_root/../../../ext_components/cp0_lvgl/include" \
     "$test_root/test_lockscreen_state_model.cpp" \
     -o "$build_dir/test_lockscreen_state_model"
+${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
+    -I"$test_root/../main/ui" \
+    "$test_root/test_launcher_grid_model.cpp" \
+    -o "$build_dir/test_launcher_grid_model"
+"$build_dir/test_launcher_grid_model"
 "$build_dir/test_lockscreen_state_model"
 ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     -I"$test_root/../../../ext_components/cp0_lvgl/include" \

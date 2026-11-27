@@ -83,7 +83,7 @@ inline const cp0_battery_info_t *battery_info(lv_event_t *event)
 
 void init();
 void deinit();
-const lv_font_t *carousel_title_font();
+const lv_font_t *grid_title_font();
 }
 
 inline Cp0FontService &launcher_fonts() { return cp0_fonts(); }

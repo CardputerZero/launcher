@@ -25,6 +25,7 @@
 #include <mutex>
 #include <string>
 #include <sys/ioctl.h>
+#include <linux/fb.h>
 #include <linux/gpio.h>
 #include <unistd.h>
 #include <utility>
@@ -510,4 +511,183 @@ extern "C" int cp0_backlight_write(int val)
 extern "C" void cp0_time_str(char *buf, int buf_size)
 {
     SettingsSystem::api_time_str(buf, buf_size);
+}
+
+namespace {
+
+/* ---- screen-off power staging ------------------------------------------
+ * Status LED, cpufreq governor and panel blank helpers used by the launcher's
+ * screen-off sequence.  Every one of them degrades to a failure return when
+ * the sysfs node is missing or not writable; the tmpfiles.d rule shipped in
+ * the package (mirror of the image's cardputerzero-leds.conf) grants the gpio
+ * group write access at boot. */
+
+constexpr const char *kStatusLedDir = "/sys/class/leds/ACT";
+constexpr const char *kCpufreqGovernorPaths[] = {
+    "/sys/devices/system/cpu/cpufreq/policy0/scaling_governor",
+    "/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor",
+};
+
+bool g_status_led_suspended = false;
+std::string g_status_led_trigger;
+int g_status_led_brightness = 0;
+
+bool g_cpufreq_saved_valid = false;
+std::string g_cpufreq_saved_governor;
+
+bool write_text_node(const char *path, const std::string &value)
+{
+    FILE *f = std::fopen(path, "w");
+    if (!f) return false;
+    const int written = std::fprintf(f, "%s", value.c_str());
+    const int close_result = std::fclose(f);
+    return written > 0 && close_result == 0;
+}
+
+bool read_text_node(const char *path, std::string &value)
+{
+    FILE *f = std::fopen(path, "r");
+    if (!f) return false;
+    char buffer[256];
+    value.clear();
+    while (std::fgets(buffer, sizeof(buffer), f)) value += buffer;
+    const bool ok = std::ferror(f) == 0;
+    std::fclose(f);
+    return ok;
+}
+
+bool read_int_node(const char *path, int &value)
+{
+    std::string text;
+    if (!read_text_node(path, text)) return false;
+    char *end = nullptr;
+    const long parsed = std::strtol(text.c_str(), &end, 10);
+    if (end == text.c_str()) return false;
+    value = static_cast<int>(parsed);
+    return true;
+}
+
+/* The trigger node lists every trigger and brackets the active one, e.g.
+ * "none default ... [actpwr] mmc0". */
+std::string active_trigger_token(const std::string &trigger_list)
+{
+    const auto open = trigger_list.find_last_of('[');
+    const auto close = trigger_list.find_last_of(']');
+    if (open == std::string::npos || close == std::string::npos || close < open)
+        return {};
+    return trigger_list.substr(open + 1, close - open - 1);
+}
+
+const char *first_writable_governor_path()
+{
+    for (const char *path : kCpufreqGovernorPaths) {
+        /* Open read-write without truncating: this is both the writability
+         * probe and the handle check for a node that must keep its content. */
+        FILE *f = std::fopen(path, "r+");
+        if (f) {
+            std::fclose(f);
+            return path;
+        }
+    }
+    return nullptr;
+}
+
+std::string trim_node_text(std::string text)
+{
+    while (!text.empty() &&
+           (text.back() == '\n' || text.back() == '\r' || text.back() == ' '))
+        text.pop_back();
+    return text;
+}
+
+} // namespace
+
+extern "C" int cp0_status_led_suspend(void)
+{
+    const std::string trigger_path = std::string(kStatusLedDir) + "/trigger";
+    const std::string brightness_path = std::string(kStatusLedDir) + "/brightness";
+    /* The LED classdev can be re-registered by a deferred probe after the
+     * first suspend (fresh node, default trigger, root-only perms), so every
+     * call re-asserts the dark state instead of trusting a suspended flag;
+     * the restore values are saved once, from the first pre-suspend read. */
+    if (!g_status_led_suspended) {
+        std::string trigger_list;
+        int brightness = 0;
+        if (!read_text_node(trigger_path.c_str(), trigger_list) ||
+            !read_int_node(brightness_path.c_str(), brightness))
+            return -1;
+        g_status_led_trigger = active_trigger_token(trigger_list);
+        g_status_led_brightness = brightness > 0 ? brightness : 0;
+    }
+    if (!write_text_node(trigger_path.c_str(), "none") ||
+        !write_text_node(brightness_path.c_str(), "0"))
+        return -1;
+    g_status_led_suspended = true;
+    return 0;
+}
+
+extern "C" void cp0_status_led_restore(void)
+{
+    if (!g_status_led_suspended) return;
+    g_status_led_suspended = false;
+    const std::string trigger_path = std::string(kStatusLedDir) + "/trigger";
+    const std::string brightness_path = std::string(kStatusLedDir) + "/brightness";
+    if (!g_status_led_trigger.empty())
+        (void)write_text_node(trigger_path.c_str(), g_status_led_trigger);
+    if (g_status_led_brightness > 0)
+        (void)write_text_node(brightness_path.c_str(),
+                              std::to_string(g_status_led_brightness));
+    g_status_led_trigger.clear();
+    g_status_led_brightness = 0;
+}
+
+extern "C" int cp0_cpufreq_powersave_set(int enable)
+{
+    const char *path = first_writable_governor_path();
+    if (!path) return -1;
+    if (enable) {
+        if (!g_cpufreq_saved_valid) {
+            std::string current;
+            if (!read_text_node(path, current)) return -1;
+            current = trim_node_text(std::move(current));
+            if (current.empty()) return -1;
+            g_cpufreq_saved_governor = current;
+            g_cpufreq_saved_valid = true;
+        }
+        return write_text_node(path, "powersave") ? 0 : -1;
+    }
+    if (!g_cpufreq_saved_valid) return 0;
+    const std::string restore = std::move(g_cpufreq_saved_governor);
+    g_cpufreq_saved_governor.clear();
+    g_cpufreq_saved_valid = false;
+    return write_text_node(path, restore) ? 0 : -1;
+}
+
+extern "C" int cp0_cpufreq_wake_reset(void)
+{
+    const char *path = first_writable_governor_path();
+    if (!path) return 0;
+    std::string current;
+    if (!read_text_node(path, current)) return 0;
+    current = trim_node_text(std::move(current));
+    if (current != "powersave") return 0;
+    /* A previous process died while the screen-off stage had pinned the
+     * governor down; restore the platform default. */
+    return write_text_node(path, "ondemand") ? 1 : -1;
+}
+
+extern "C" int cp0_panel_fb_blank(int blank)
+{
+    const char *paths[] = {"/dev/fb_lcd", "/dev/fb0"};
+    for (const char *path : paths) {
+        const int fd = open(path, O_RDWR | O_CLOEXEC);
+        if (fd < 0) continue;
+        const int result = ioctl(fd, FBIOBLANK,
+                                 blank ? FB_BLANK_POWERDOWN : FB_BLANK_UNBLANK);
+        const int saved_errno = errno;
+        close(fd);
+        if (result == 0) return 0;
+        errno = saved_errno;
+    }
+    return -1;
 }

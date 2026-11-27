@@ -6,6 +6,7 @@
 
 #include "ui_launch_page.h"
 
+#include "animation/launcher_grid_layout.h"
 #include "hal_lvgl_bsp.h"
 #include "input_keys.h"
 #include "keyboard_input.h"
@@ -88,27 +89,61 @@ void UILaunchPage::handle_home_key(lv_event_t *event)
         switch (code)
         {
         case KEY_UP:
-            break;
+        {
+            if (navigation_ready())
+            {
+                audio_play_switch();
+                move_grid_up();
+            }
+        }
+        break;
 
         case KEY_DOWN:
-            break;
+        {
+            if (navigation_ready())
+            {
+                audio_play_switch();
+                move_grid_down();
+            }
+        }
+        break;
 
         case KEY_LEFT:
         {
-            if (navigation_.keyboard_navigation_enabled())
+            if (navigation_ready())
             {
                 audio_play_switch();
-                switch_right();
+                move_grid_previous();
             }
         }
         break;
 
         case KEY_RIGHT:
         {
-            if (navigation_.keyboard_navigation_enabled())
+            if (navigation_ready())
             {
                 audio_play_switch();
-                switch_left();
+                move_grid_next();
+            }
+        }
+        break;
+
+        case KEY_I:
+        {
+            if (navigation_ready())
+            {
+                audio_play_switch();
+                move_grid_page_previous();
+            }
+        }
+        break;
+
+        case KEY_O:
+        {
+            if (navigation_ready())
+            {
+                audio_play_switch();
+                move_grid_page_next();
             }
         }
         break;
@@ -124,26 +159,18 @@ void UILaunchPage::handle_home_key(lv_event_t *event)
     }
 }
 
-void UILaunchPage::on_left_arrow_clicked(lv_event_t *event) noexcept
-{
-    try {
-        if (UILaunchPage *self = page_from_event(event)) self->switch_right();
-    } catch (...) {
-    }
-}
-
-void UILaunchPage::on_right_arrow_clicked(lv_event_t *event) noexcept
-{
-    try {
-        if (UILaunchPage *self = page_from_event(event)) self->switch_left();
-    } catch (...) {
-    }
-}
-
 void UILaunchPage::on_app_clicked(lv_event_t *event) noexcept
 {
     try {
-        if (UILaunchPage *self = page_from_event(event)) self->launch_selected_app();
+        UILaunchPage *self = page_from_event(event);
+        if (!self) return;
+        lv_obj_t *target = static_cast<lv_obj_t *>(lv_event_get_target(event));
+        for (size_t cell = 0; cell < launcher_grid_layout::kCells; ++cell) {
+            if (self->grid_elements_[cell] != target) continue;
+            self->select_grid_cell(cell);
+            self->launch_selected_app();
+            return;
+        }
     } catch (...) {
     }
 }

@@ -74,3 +74,10 @@ int remove(const char *address)
 }
 
 } // namespace cp0_bluetooth_backend
+
+extern "C" void cp0_bluetooth_power_set_async(int enabled)
+{
+    /* Fire-and-forget: the screen-off staging calls this on the LVGL thread
+     * and must never wait on D-Bus. */
+    cp0_bluez_dbus::set_power_async(enabled, nullptr);
+}

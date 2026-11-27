@@ -9,6 +9,7 @@
 
 #include "cp0_lvgl_app.h"
 #include "cp0_enum_cast.h"
+#include "cp0_status_pause.h"
 #include "hal_lvgl_bsp.h"
 #include "keyboard_input.h"
 #include "launcher_media_controls.h"
@@ -106,6 +107,14 @@ LockscreenBackgroundCache s_background_cache;
 /* Raw backlight value captured when the panel is forced dark, or -1 while the
  * backlight is under normal control. */
 int s_screen_off_backlight_raw = -1;
+/* Deep panel sleep stage: once the black state has held for the configured
+ * panel-sleep delay, the SPI panel itself is blanked (display off + MIPI
+ * sleep), the CPU governor is pinned to powersave and every LVGL timer is
+ * stopped, so the process sleeps on the input semaphore until a key arrives.
+ * Any key reverses the whole stage. */
+bool s_deep_asleep = false;
+/* Tick when the current black state began, or 0 while the panel is lit. */
+uint32_t s_black_since = 0;
 
 /* ---- per-user wallpaper override ---------------------------------------
  * The optional ~/.config/APPLaunch/config.json entry replaces the packaged
@@ -296,6 +305,43 @@ void update_timer_period()
     lv_timer_set_period(s_timer, s_model.hold_pending() ? kHoldPollMs : kIdleCheckMs);
 }
 
+/* Stage 2 of the screen-off sequence, after the black state has held for the
+ * configured delay: blank the panel itself, pin the CPU governor and stop
+ * every LVGL timer - including this file's own - so the process sleeps on the
+ * input semaphore until a key posts it.  Key input does not depend on timers,
+ * so wake-up stays instant. */
+void deep_sleep_enter() noexcept
+{
+    if (s_deep_asleep) return;
+    try {
+        if (cp0_panel_fb_blank(1) != 0)
+            SLOGW("[POWER] panel blank failed; staying on the backlit-dark stage");
+        if (cp0_cpufreq_powersave_set(1) != 0)
+            SLOGW("[POWER] cpufreq powersave unavailable");
+        /* Re-assert the LED (a deferred LED re-registration can relight it
+         * after stage 1) and drop the Bluetooth radio for the idle period. */
+        (void)cp0_status_led_suspend();
+        cp0_bluetooth_power_set_async(0);
+    } catch (...) {
+    }
+    s_deep_asleep = true;
+    lv_timer_enable(false);
+}
+
+/* Reverse of deep_sleep_enter(); idempotent, called from every exit path. */
+void deep_sleep_exit() noexcept
+{
+    if (!s_deep_asleep) return;
+    s_deep_asleep = false;
+    lv_timer_enable(true);
+    try {
+        (void)cp0_cpufreq_powersave_set(0);
+        (void)cp0_panel_fb_blank(0);
+        cp0_bluetooth_power_set_async(1);
+    } catch (...) {
+    }
+}
+
 void suspend_screen_off_backlight() noexcept
 {
     if (s_screen_off_backlight_raw >= 0) return;
@@ -304,18 +350,29 @@ void suspend_screen_off_backlight() noexcept
     } catch (...) {
         s_screen_off_backlight_raw = -1;
     }
+    /* Stage 1: with the backlight gone, the periodic UI refreshers (clock,
+     * status, battery) and the network status polling stand down for the whole
+     * dark period, and the red status LED follows the panel dark.  Wi-Fi
+     * itself stays connected. */
+    cp0_status_pause_set(1);
+    (void)cp0_status_led_suspend();
 }
 
 void release_screen_off_backlight() noexcept
 {
     if (s_screen_off_backlight_raw < 0) return;
+    /* Waking the panel comes first so the restored frame lands on a lit panel. */
+    deep_sleep_exit();
     const int raw = s_screen_off_backlight_raw;
     /* Clear first so a throwing backend cannot latch the panel dark. */
     s_screen_off_backlight_raw = -1;
+    s_black_since = 0;
     try {
         launcher_media_controls::restore_backlight(raw);
     } catch (...) {
     }
+    (void)cp0_status_led_restore();
+    cp0_status_pause_set(0);
 }
 
 void suspend_system_sound() noexcept
@@ -370,8 +427,10 @@ void curtain_exit_anim_exec(void *object, int32_t y) noexcept
 
 void finish_screensaver_exit() noexcept
 {
+    deep_sleep_exit();
     (void)finish_system_sound_prepare();
     release_screen_off_backlight();
+    s_black_since = 0;
     try {
         if (s_overlay) {
             lv_obj_add_flag(s_overlay, LV_OBJ_FLAG_HIDDEN);
@@ -417,14 +476,18 @@ void overlay_delete_cb(lv_event_t *event) noexcept
         s_hint = nullptr;
         s_exiting = false;
         s_model.deactivate();
+        deep_sleep_exit();
         release_screen_off_backlight();
+        s_black_since = 0;
         update_timer_period();
     } catch (...) {
         s_overlay = nullptr;
         if (s_hint) lv_obj_delete(s_hint);
         s_hint = nullptr;
         s_exiting = false;
+        deep_sleep_exit();
         release_screen_off_backlight();
+        s_black_since = 0;
         update_timer_period();
         try {
             s_model.deactivate();
@@ -451,6 +514,24 @@ int timeout_seconds() noexcept
     bool succeeded = false;
     std::string response;
     cp0_signal_config_api({"GetInt", "dark_time", "30"},
+                          [&](int code, std::string data) {
+                              succeeded = code == 0;
+                              response = std::move(data);
+                          });
+    return screensaver_timeout_from_config(succeeded, response);
+    } catch (...) {
+        return screensaver_timeout_from_config(false, {});
+    }
+}
+
+/* Delay before the black state deepens into the panel-sleep stage; 0 keeps the
+ * device on the backlit-dark stage indefinitely. */
+int panel_sleep_seconds() noexcept
+{
+    try {
+    bool succeeded = false;
+    std::string response;
+    cp0_signal_config_api({"GetInt", "panel_sleep_time", "30"},
                           [&](int code, std::string data) {
                               succeeded = code == 0;
                               response = std::move(data);
@@ -569,6 +650,7 @@ void enter_lockscreen()
 
     suspend_system_sound();
     suspend_screen_off_backlight();
+    s_black_since = now;
     play_lockscreen_sound("lock.mp3");
 
     lv_obj_move_foreground(s_overlay);
@@ -584,6 +666,7 @@ void show_lockscreen_panel()
     lv_obj_move_foreground(s_overlay);
     lv_obj_clear_flag(s_overlay, LV_OBJ_FLAG_HIDDEN);
     release_screen_off_backlight();
+    s_black_since = 0;
     show_hint(s_lock.state() == LockscreenState::Armed
                   ? "Press ENTER to unlock"
                   : "Press TAB to unlock");
@@ -595,6 +678,7 @@ void sleep_lockscreen()
     apply_panel(full_screen_panel());
     hide_hint();
     suspend_screen_off_backlight();
+    s_black_since = lv_tick_get();
     play_lockscreen_sound("lock.mp3");
 }
 
@@ -610,6 +694,12 @@ void timer_cb(lv_timer_t *timer) noexcept
         /* The visible lock states fall back to the black screen when idle. */
         if (s_lock.poll(now).sleep)
             sleep_lockscreen();
+        /* While the black state holds, count towards the deep panel sleep. */
+        if (!s_deep_asleep && s_black_since != 0) {
+            const int seconds = panel_sleep_seconds();
+            if (seconds > 0 && now - s_black_since >= static_cast<uint32_t>(seconds) * 1000u)
+                deep_sleep_enter();
+        }
         return;
     }
 
@@ -656,7 +746,9 @@ extern "C" void ui_screensaver_deinit(void)
     }
     cancel_exit_animation();
     (void)finish_system_sound_prepare();
+    deep_sleep_exit();
     release_screen_off_backlight();
+    s_black_since = 0;
     if (s_overlay)
         lv_obj_delete(s_overlay);
     if (s_hint)
@@ -683,6 +775,9 @@ extern "C" int ui_screensaver_filter_key(const struct key_item *item)
         return 1;
 
     if (s_model.active()) {
+        /* Any key wakes the panel first (and reverses the deep-sleep stage);
+         * the lock flow then decides what the key means. */
+        deep_sleep_exit();
         /* The lock screen owns every key while it is up. */
         const LockscreenDecision decision =
             s_lock.handle_key(item->key_code, pressed, released, now);
