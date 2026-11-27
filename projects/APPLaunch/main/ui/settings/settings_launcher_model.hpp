@@ -32,7 +32,8 @@ inline bool is_protected_launcher_app(std::string_view config_key)
 inline bool is_launcher_settings_origin(LauncherAppOrigin origin)
 {
     return origin == LauncherAppOrigin::Builtin ||
-           origin == LauncherAppOrigin::Preinstalled;
+           origin == LauncherAppOrigin::Preinstalled ||
+           origin == LauncherAppOrigin::StoreInstalled;
 }
 
 template <typename Descriptor, typename EnabledPredicate>

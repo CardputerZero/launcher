@@ -230,7 +230,9 @@ void launcher_append_desktop_apps(std::list<app> &apps)
             if (!launcher_app_registry_register_dynamic(
                     candidate.entry.name, candidate.icon_path, config_key, origin))
                 continue;
-            const bool settings_managed = origin == LauncherAppOrigin::Preinstalled;
+            // Every desktop app, preinstalled or installed from the Store, can be hidden from the
+            // carousel in Settings -> Launcher. A missing switch still means shown.
+            const bool settings_managed = true;
             const AppDescriptor descriptor{
                 candidate.entry.name.c_str(), candidate.icon_path.c_str(),
                 config_key.c_str(), settings_managed, !settings_managed, origin};
