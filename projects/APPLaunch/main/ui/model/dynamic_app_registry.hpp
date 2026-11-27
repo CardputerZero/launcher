@@ -22,7 +22,8 @@ struct DynamicAppRegistration {
 
     void bind_descriptor()
     {
-        const bool settings_managed = origin == LauncherAppOrigin::Preinstalled;
+        // Preinstalled and Store-installed desktop apps can both be hidden in Settings -> Launcher.
+        const bool settings_managed = true;
         desc = {label.c_str(), icon.c_str(), config_key.c_str(),
                 settings_managed, !settings_managed, origin};
     }

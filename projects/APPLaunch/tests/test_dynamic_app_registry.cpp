@@ -25,9 +25,9 @@ void assert_entry(const DynamicAppRegistration &entry,
     assert(entry.desc.icon == entry.icon.c_str());
     assert(entry.desc.config_key == entry.config_key.c_str());
     assert(entry.desc.origin == entry.origin);
-    const bool settings_managed = entry.origin == LauncherAppOrigin::Preinstalled;
-    assert(entry.desc.configurable == settings_managed);
-    assert(entry.desc.always_on == !settings_managed);
+    // Preinstalled and Store-installed apps alike can be hidden in Settings -> Launcher.
+    assert(entry.desc.configurable);
+    assert(!entry.desc.always_on);
 }
 
 } // namespace
@@ -97,7 +97,8 @@ int main(int argc, char **argv)
     assert(loader.find("protected_builtin") != std::string::npos);
     assert(loader.find("LauncherAppOrigin::Preinstalled") != std::string::npos);
     assert(loader.find("LauncherAppOrigin::StoreInstalled") != std::string::npos);
-    assert(loader.find("origin == LauncherAppOrigin::Preinstalled") != std::string::npos);
+    // Store-installed apps are switchable too (Settings -> Launcher can hide them).
+    assert(loader.find("const bool settings_managed = true;") != std::string::npos);
     assert(loader.find("parent_path()") != std::string::npos);
     assert(loader.find("if (appended >= LAUNCHER_MAX_DESKTOP_APPS) break;") == std::string::npos);
     assert(loader.find("!enabled || appended >= LAUNCHER_MAX_DESKTOP_APPS") != std::string::npos);
